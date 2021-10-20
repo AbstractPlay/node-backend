@@ -7,8 +7,11 @@ This started from this example:
 Running
 ```sls deploy```
 for the first time will create the DynamoDB (it is completely specified in serverless.yml) and deploy the lambdas. On subsequent runs it will just update the lambdas.
+But don't run this before doing ```npm install```. sls needs to deploy the node_modules folder and unless that has the correct packages stuff don't work.
 
 If you need to delete (or start over) run ```sls remove```.
+
+Create a Games subfolder of api to contain the same files as the games folder of the front end.
 
 Some more useful things:  
 ```sls invoke local --function query```  

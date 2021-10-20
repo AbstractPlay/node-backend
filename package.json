@@ -1,0 +1,23 @@
+{
+  "name": "abstractplay-backend",
+  "version": "1.0.0",
+  "description": "node.js lambda with DynamoDB",
+  "main": "??",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AbstractPlay/node-backend.git"
+  },
+  "author": "Paul van Wamelen",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/AbstractPlay/node-backend/issues"
+  },
+  "homepage": "https://github.com/AbstractPlay/node-backend#readme",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.37.0",
+    "@aws-sdk/lib-dynamodb": "^3.37.0"
+  }
+}
