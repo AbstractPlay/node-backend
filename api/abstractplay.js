@@ -670,14 +670,15 @@ async function submitMove(userid, pars, callback) {
       logGetItemError(err);
       returnError(err, callback);
   }
-  if (game.moves === undefined)
-    engine.initializeGame(game);
+  engine.hydrate(game);
   err = engine.badMoveReason(game, pars.move);
   if (err !== "") {
     logGetItemError(err);
     returnError(err, callback);
   }
-  engine.makeMove(game, pars.move, false);
+  engine.makeMove(game, pars.move);
+  engine.minimize(game);
+  console.log(game);
   const playerIDs = game.players.map(p => p.id);
   const players = await getPlayers(playerIDs);
   // this should be all the info we want to show on the "my games" summary page.
