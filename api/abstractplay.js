@@ -3,7 +3,8 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const crypto = require('crypto');
-const ithaka = require('./Games/Ithaka.js');
+// const ithaka = require('./Games/Ithaka.js');
+const { gameinfo, GameFactory } = require('@abstractplay/gameslib');
 const clnt = new DynamoDBClient({region: 'us-east-1'});
 const ddbDocClient = DynamoDBDocumentClient.from(clnt);
 
@@ -656,29 +657,29 @@ async function submitMove(userid, pars, callback) {
     logGetItemError(error);
     returnError(`Unable to get game ${pars.id} from table ${process.env.GAMES_TABLE}`, callback);
   }
-  // what is the rigth way to do this?
-  let engine = null;
-  let err = "";
-  console.log(data);
   let game = data.Item;
-  switch (game.metaGame) {
-    case "Ithaka":
-      engine = ithaka;
-      break;
-    default:
-      err = "Unknowm meta game: " + game.metaGame;
-      logGetItemError(err);
-      returnError(err, callback);
-  }
-  engine.hydrate(game);
-  err = engine.badMoveReason(game, pars.move);
-  if (err !== "") {
-    logGetItemError(err);
-    returnError(err, callback);
-  }
-  engine.makeMove(game, pars.move);
-  engine.minimize(game);
+  console.log("got game in submitMove:");
   console.log(game);
+  let engine;
+  if (game.state === undefined) {
+    if (gameinfo.get(game.metaGame).playercounts.length > 1)
+      engine = GameFactory(game.metaGame, game.numPlayers);
+    else
+      engine = GameFactory(game.metaGame);
+  } else {
+    engine = GameFactory(game.metaGame, game.state);
+  }
+  let newstate;
+  try {
+    engine.move(pars.move);
+    newstate = engine.serialize();
+  }
+  catch (error) {
+    logGetItemError(error);
+    returnError(`Unable to apply move ${pars.move}`, callback);
+  }
+  game.state = newstate;
+  game.toMove = (game.toMove + 1) % game.players.length;
   const playerIDs = game.players.map(p => p.id);
   const players = await getPlayers(playerIDs);
   // this should be all the info we want to show on the "my games" summary page.
