@@ -24,9 +24,6 @@ module.exports.query = async (event, context, callback) => {
     case "challenge_details":
       await challengeDetails(pars, callback);
       break;
-    case "get_game":
-      await game(pars, callback);
-      break;
     default:
       callback(null, {
         statusCode: 500,
@@ -64,6 +61,9 @@ module.exports.authQuery = async (event, context, callback) => {
     case "submit_move":
       await submitMove(event.cognitoPoolClaims.sub, pars, callback);
       break;
+    case "get_game":
+      await game(event.cognitoPoolClaims.sub, pars, callback);
+      break;
     default:
       callback(null, {
         statusCode: 500,
@@ -77,7 +77,6 @@ module.exports.authQuery = async (event, context, callback) => {
       });
   }
 }
-
 
 async function listGames(callback) {
   console.log("listGames: Scanning meta_games table.");
@@ -153,7 +152,7 @@ async function userNames(callback) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to scan table ${process.env.META_GAMES_TABLE}`, callback);
+    returnError(`Unable to scan table ${process.env.USERS_TABLE}`, callback);
   }
 }
 
@@ -183,7 +182,7 @@ async function challengeDetails(pars, callback) {
   }
 }
 
-async function game(pars, callback) {
+async function game(userid, pars, callback) {
   try {
     const data = await ddbDocClient.send(
       new GetCommand({
@@ -195,9 +194,20 @@ async function game(pars, callback) {
       }));
     console.log("Got:");
     console.log(data);
+    let game = data.Item;
+    // hide other player's simulataneous moves
+    if (gameinfo.get(game.metaGame).simultaneous && game.partialMove !== undefined) {
+      let moves = game.players.map(p => '');
+      for (let i = 0; i < game.players.length; i++) {
+        if (game.players[i].id === userid) {
+          moves[i] = game.partialMove.split(',')[i];
+        }
+      }
+      game.partialMove = moves.join(',');
+    }
     return callback(null, {
       statusCode: 200,
-      body: JSON.stringify(data.Item),
+      body: JSON.stringify(game),
       headers: {
         'content-type': 'application/json',
         'Access-Control-Allow-Origin': '*'
@@ -553,7 +563,16 @@ async function acceptChallenge(userid, challengeId) {
     let playerIDs = challenge.Item.players.map(player => player.id); // This should be updated once we implement different start orders
     playerIDs.push(challenge.Item.challengees.find(c => c.id == userid).id);
     const players = await getPlayers(playerIDs);
-    const whoseTurn = 0;
+    let whoseTurn = 0;
+    let info = gameinfo.get(challenge.Item.metaGame);
+    if (info.simultaneous)
+      whoseTurn = players.map(p => true);
+    let engine;
+    if (info.playercounts.length > 1)
+      engine = GameFactory(challenge.Item.metaGame, game.numPlayers);
+    else
+      engine = GameFactory(challenge.Item.metaGame);
+    const state = engine.serialize();
     const addGame = ddbDocClient.send(new PutCommand({
       TableName: process.env.GAMES_TABLE,
         Item: {
@@ -565,6 +584,7 @@ async function acceptChallenge(userid, challengeId) {
           "clockStart": challenge.Item.clockStart,
           "clockInc": challenge.Item.clockInc,
           "clockMax": challenge.Item.clockMax,
+          "state": state,
           "toMove": whoseTurn
         }
       }));
@@ -580,9 +600,7 @@ async function acceptChallenge(userid, challengeId) {
     let list = [addGame, removeAChallenge(challenge.Item)];
 
     // Update players
-    const toMoveID = players[whoseTurn].id;
     players.forEach(player => {
-      game.onMove = (player.id === toMoveID);
       let games = player.games;
       if (games === undefined)
         games = [];
@@ -597,7 +615,13 @@ async function acceptChallenge(userid, challengeId) {
       );
     });
 
-    await Promise.all(list);
+    try {
+      await Promise.all(list);
+    }
+    catch (error) {
+      logGetItemError(error);
+      returnError('Unable to update players and create game', callback);
+    }
   } else {
     // Still waiting on more players to accept.
     // Update challenge
@@ -661,25 +685,85 @@ async function submitMove(userid, pars, callback) {
   console.log("got game in submitMove:");
   console.log(game);
   let engine;
-  if (game.state === undefined) {
-    if (gameinfo.get(game.metaGame).playercounts.length > 1)
-      engine = GameFactory(game.metaGame, game.numPlayers);
-    else
-      engine = GameFactory(game.metaGame);
-  } else {
-    engine = GameFactory(game.metaGame, game.state);
-  }
+  let info = gameinfo.get(game.metaGame);
+  engine = GameFactory(game.metaGame, game.state);
   let newstate;
-  try {
-    engine.move(pars.move);
-    newstate = engine.serialize();
+  if (info.simultaneous) {
+    let partialMove = game.partialMove;
+    let moves = [];
+    if (partialMove === undefined)
+      moves = game.players.map(p => '');
+    else
+      moves = partialMove.split(',');
+    let cnt = 0;
+    let found = false;
+    for (let i = 0; i < game.numPlayers; i++) {
+      if (game.players[i].id === userid) {
+        found = true;
+        if (moves[i] !== '' || !game.toMove[i]) {
+          logGetItemError('You have already submitted your move for this turn!');
+          returnError('It is not your turn!', callback);
+          return;
+        }
+        moves[i] = pars.move;
+        game.toMove[i] = false;
+      }
+      if (moves[i] !== '')
+        cnt++;
+    }
+    if (!found) {
+      logGetItemError('WTF? You are not participating in this game!');
+      returnError('You are not participating in this game!', callback);
+      return;
+    }
+    if (cnt < game.numPlayers) {
+      // not a complete "turn" yet, just validate and save the new partial move
+      game.partialMove = moves.join(',');
+      console.log(game.partialMove);
+      try {
+        engine.move(game.partialMove, true);
+      }
+      catch (error) {
+        logGetItemError(error);
+        returnError(`Unable to apply move ${pars.move}`, callback);
+        return;
+      }
+    }
+    else {
+      // full move.
+      try {
+        engine.move(moves.join(','));
+        newstate = engine.serialize();
+      }
+      catch (error) {
+        logGetItemError(error);
+        returnError(`Unable to apply move ${pars.move}`, callback);
+        return;
+      }
+      game.state = newstate;
+      game.partialMove = game.players.map(p => '').join(',');
+      game.toMove = game.players.map(p => true);
+    }
   }
-  catch (error) {
-    logGetItemError(error);
-    returnError(`Unable to apply move ${pars.move}`, callback);
+  else {
+    // non simultaneous move game.
+    if (game.players[game.toMove].id !== userid) {
+      logGetItemError('It is not your turn!');
+      returnError('It is not your turn!', callback);
+      return;
+    }
+    try {
+      engine.move(pars.move);
+      newstate = engine.serialize();
+    }
+    catch (error) {
+      logGetItemError(error);
+      returnError(`Unable to apply move ${pars.move}`, callback);
+      return;
+    }
+    game.state = newstate;
+    game.toMove = (game.toMove + 1) % game.players.length;
   }
-  game.state = newstate;
-  game.toMove = (game.toMove + 1) % game.players.length;
   const playerIDs = game.players.map(p => p.id);
   const players = await getPlayers(playerIDs);
   // this should be all the info we want to show on the "my games" summary page.
@@ -717,6 +801,9 @@ async function submitMove(userid, pars, callback) {
 
   try {
     await Promise.all(list);
+
+    if (info.simultaneous)
+      game.partialMove = game.players.map((p, i) => (p.id === userid ? game.partialMove.split(',')[i] : '')).join(',');
 
     return callback(null, {
       statusCode: 200,
