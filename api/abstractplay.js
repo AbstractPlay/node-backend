@@ -3,7 +3,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const crypto = require('crypto');
-// const ithaka = require('./Games/Ithaka.js');
 const { gameinfo, GameFactory } = require('@abstractplay/gameslib');
 const clnt = new DynamoDBClient({region: 'us-east-1'});
 const ddbDocClient = DynamoDBDocumentClient.from(clnt);
@@ -63,6 +62,12 @@ module.exports.authQuery = async (event, context, callback) => {
       break;
     case "get_game":
       await game(event.cognitoPoolClaims.sub, pars, callback);
+      break;
+    case "update_game_settings":
+      await updateGameSettings(event.cognitoPoolClaims.sub, pars, callback);
+      break;
+    case "update_user_settings":
+      await updateUserSettings(event.cognitoPoolClaims.sub, pars, callback);
       break;
     default:
       callback(null, {
@@ -196,7 +201,8 @@ async function game(userid, pars, callback) {
     console.log(data);
     let game = data.Item;
     // hide other player's simulataneous moves
-    if (gameinfo.get(game.metaGame).simultaneous && game.partialMove !== undefined) {
+    const flags = gameinfo.get(game.metaGame).flags;
+    if (flags !== undefined && flags.includes('simultaneous') && game.partialMove !== undefined) {
       let moves = game.players.map(p => '');
       for (let i = 0; i < game.players.length; i++) {
         if (game.players[i].id === userid) {
@@ -217,6 +223,70 @@ async function game(userid, pars, callback) {
   catch (error) {
     logGetItemError(error);
     returnError(`Unable to get game ${pars.id} from table ${process.env.GAMES_TABLE}`, callback);
+  }
+}
+
+async function updateGameSettings(userid, pars, callback) {
+  try {
+    const data = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.GAMES_TABLE,
+        Key: {
+          "id": pars.game,
+          "type": 1
+        },
+      }));
+    console.log("Got:");
+    console.log(data);
+    let game = data.Item;
+    let player = game.players.find(p => p.id === userid);
+    player.settings = pars.settings;
+    try {
+      await ddbDocClient.send(new PutCommand({
+        TableName: process.env.GAMES_TABLE,
+          Item: game
+        }));
+    }
+    catch (error) {
+      logGetItemError(error);
+      returnError(`Unable to update game ${pars.game} from table ${process.env.GAMES_TABLE}`, callback);
+    }
+    return callback(null, {
+      statusCode: 200,
+      headers: {
+        'content-type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  }
+  catch (error) {
+    logGetItemError(error);
+    returnError(`Unable to get or update game ${pars.game} from table ${process.env.META_GAMES_TABLE}`, callback);
+  }
+}
+
+async function updateUserSettings(userid, pars, callback) {
+  try {
+    await ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.USERS_TABLE,
+      Key: { "id": userid },
+      ExpressionAttributeValues: { ":ss": pars.settings },
+      UpdateExpression: "set settings = :ss",
+    }))
+    console.log("Success - user settings updated");
+    callback(null, {
+      statusCode: 200,
+      body: JSON.stringify({
+        message: `Sucessfully stored user settings for user ${userid}`,
+      }),
+      headers: {
+        'content-type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  } catch (err) {
+    logGetItemError(err);
+    returnError(`Unable to store user settings for user ${userid}`, callback);
   }
 }
 
@@ -259,6 +329,7 @@ async function me(userId, callback) {
         id: user.Item.id,
         name: user.Item.name,
         games: user.Item.games,
+        settings: user.Item.settings,
         challengesIssued: data[0],
         challengesReceived: data[1]
       }, Set_toJSON),
@@ -559,19 +630,20 @@ async function acceptChallenge(userid, challengeId) {
   if (challenge.Item.players.length + 1 == challenge.Item.numPlayers) {
     // Enough players accepted. Start game.
     const gameId = crypto.randomUUID();
-    console.log("New game: " + gameId);
     let playerIDs = challenge.Item.players.map(player => player.id); // This should be updated once we implement different start orders
     playerIDs.push(challenge.Item.challengees.find(c => c.id == userid).id);
     const players = await getPlayers(playerIDs);
     let whoseTurn = 0;
     let info = gameinfo.get(challenge.Item.metaGame);
-    if (info.simultaneous)
+    if (info.flags !== undefined && info.flags.includes('simultaneous')) {
       whoseTurn = players.map(p => true);
+    }
+    const variants = challenge.Item.variants;
     let engine;
     if (info.playercounts.length > 1)
-      engine = GameFactory(challenge.Item.metaGame, game.numPlayers);
+      engine = GameFactory(challenge.Item.metaGame, game.numPlayers, undefined, variants);
     else
-      engine = GameFactory(challenge.Item.metaGame);
+      engine = GameFactory(challenge.Item.metaGame, undefined, variants);
     const state = engine.serialize();
     const addGame = ddbDocClient.send(new PutCommand({
       TableName: process.env.GAMES_TABLE,
@@ -687,8 +759,10 @@ async function submitMove(userid, pars, callback) {
   let engine;
   let info = gameinfo.get(game.metaGame);
   engine = GameFactory(game.metaGame, game.state);
+  const flags = gameinfo.get(game.metaGame).flags;
+  const simultaneous = flags !== undefined && flags.includes('simultaneous');
   let newstate;
-  if (info.simultaneous) {
+  if (simultaneous) {
     let partialMove = game.partialMove;
     let moves = [];
     if (partialMove === undefined)
@@ -802,7 +876,7 @@ async function submitMove(userid, pars, callback) {
   try {
     await Promise.all(list);
 
-    if (info.simultaneous)
+    if (simultaneous)
       game.partialMove = game.players.map((p, i) => (p.id === userid ? game.partialMove.split(',')[i] : '')).join(',');
 
     return callback(null, {
