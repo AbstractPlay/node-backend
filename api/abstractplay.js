@@ -762,83 +762,22 @@ async function submitMove(userid, pars, callback) {
   const flags = gameinfo.get(game.metaGame).flags;
   const simultaneous = flags !== undefined && flags.includes('simultaneous');
   let newstate;
-  if (simultaneous) {
-    let partialMove = game.partialMove;
-    let moves = [];
-    if (partialMove === undefined)
-      moves = game.players.map(p => '');
-    else
-      moves = partialMove.split(',');
-    let cnt = 0;
-    let found = false;
-    for (let i = 0; i < game.numPlayers; i++) {
-      if (game.players[i].id === userid) {
-        found = true;
-        if (moves[i] !== '' || !game.toMove[i]) {
-          logGetItemError('You have already submitted your move for this turn!');
-          returnError('It is not your turn!', callback);
-          return;
-        }
-        moves[i] = pars.move;
-        game.toMove[i] = false;
-      }
-      if (moves[i] !== '')
-        cnt++;
-    }
-    if (!found) {
-      logGetItemError('WTF? You are not participating in this game!');
-      returnError('You are not participating in this game!', callback);
-      return;
-    }
-    if (cnt < game.numPlayers) {
-      // not a complete "turn" yet, just validate and save the new partial move
-      game.partialMove = moves.join(',');
-      console.log(game.partialMove);
-      try {
-        engine.move(game.partialMove, true);
-      }
-      catch (error) {
-        logGetItemError(error);
-        returnError(`Unable to apply move ${pars.move}`, callback);
-        return;
-      }
+  try {
+    if (pars.move === "resign") {
+      resign(userid, engine, game, newstate);
+    } else if (simultaneous) {
+      applySimultaneousMove(userid, pars.move, engine, game, newstate);
     }
     else {
-      // full move.
-      try {
-        engine.move(moves.join(','));
-        newstate = engine.serialize();
-      }
-      catch (error) {
-        logGetItemError(error);
-        returnError(`Unable to apply move ${pars.move}`, callback);
-        return;
-      }
-      game.state = newstate;
-      game.partialMove = game.players.map(p => '').join(',');
-      game.toMove = game.players.map(p => true);
+      applyMove(userid, pars.move, engine, game, newstate);
     }
   }
-  else {
-    // non simultaneous move game.
-    if (game.players[game.toMove].id !== userid) {
-      logGetItemError('It is not your turn!');
-      returnError('It is not your turn!', callback);
-      return;
-    }
-    try {
-      engine.move(pars.move);
-      newstate = engine.serialize();
-    }
-    catch (error) {
-      logGetItemError(error);
-      returnError(`Unable to apply move ${pars.move}`, callback);
-      return;
-    }
-    game.state = newstate;
-    game.toMove = (game.toMove + 1) % game.players.length;
+  catch (error) {
+    logGetItemError(error);
+    returnError(`Unable to apply move ${pars.move}`, callback);
   }
   const playerIDs = game.players.map(p => p.id);
+  // TODO: We are updating players and their games. This should be put in some kind of critical section!
   const players = await getPlayers(playerIDs);
   // this should be all the info we want to show on the "my games" summary page.
   const playerGame = {
@@ -892,6 +831,66 @@ async function submitMove(userid, pars, callback) {
     logGetItemError(error);
     returnError(`Unable to update game ${pars.id}`, callback);
   }
+}
+
+function resign(userid, engine, game, newstate) {
+  let player = game.players.findIndex(p => p.id === userid);
+  if (player === undefined)
+    throw new Error(`${userid} isn't playing in this game!`);
+  engine.resign(player + 1);
+  newstate = engine.serialize();
+  game.state = newstate;
+}
+
+function applySimultaneousMove(userid, move, engine, game, newstate) {
+  let partialMove = game.partialMove;
+  let moves = [];
+  if (partialMove === undefined)
+    moves = game.players.map(p => '');
+  else
+    moves = partialMove.split(',');
+  let cnt = 0;
+  let found = false;
+  for (let i = 0; i < game.numPlayers; i++) {
+    if (game.players[i].id === userid) {
+      found = true;
+      if (moves[i] !== '' || !game.toMove[i]) {
+        throw new Error('You have already submitted your move for this turn!');
+      }
+      moves[i] = move;
+      game.toMove[i] = false;
+    }
+    if (moves[i] !== '')
+      cnt++;
+  }
+  if (!found) {
+    throw new Error('You are not participating in this game!');
+  }
+  if (cnt < game.numPlayers) {
+    // not a complete "turn" yet, just validate and save the new partial move
+    game.partialMove = moves.join(',');
+    console.log(game.partialMove);
+    engine.move(game.partialMove, true);
+  }
+  else {
+    // full move.
+    engine.move(moves.join(','));
+    newstate = engine.serialize();
+    game.state = newstate;
+    game.partialMove = game.players.map(p => '').join(',');
+    game.toMove = game.players.map(p => true);
+  }
+}
+
+function applyMove(userid, move, engine, game, newstate) {
+  // non simultaneous move game.
+  if (game.players[game.toMove].id !== userid) {
+    throw new Error('It is not your turn!');
+  }
+  engine.move(move);
+  newstate = engine.serialize();
+  game.state = newstate;
+  game.toMove = (game.toMove + 1) % game.players.length;  
 }
 
 function Set_toJSON(key, value) {
