@@ -1,11 +1,24 @@
 'use strict';
 
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand, DeleteCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const crypto = require('crypto');
 const { gameinfo, GameFactory } = require('@abstractplay/gameslib');
 const clnt = new DynamoDBClient({region: 'us-east-1'});
-const ddbDocClient = DynamoDBDocumentClient.from(clnt);
+const marshallOptions = {
+  // Whether to automatically convert empty strings, blobs, and sets to `null`.
+  convertEmptyValues: false, // false, by default.
+  // Whether to remove undefined values while marshalling.
+  removeUndefinedValues: true, // false, by default.
+  // Whether to convert typeof object to map attribute.
+  convertClassInstanceToMap: false, // false, by default.
+};
+const unmarshallOptions = {
+  // Whether to return numbers as a string instead of converting them to native JavaScript numbers.
+  wrapNumbers: false, // false, by default.
+};
+const translateConfig = { marshallOptions, unmarshallOptions };
+const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
 
 module.exports.query = async (event, context, callback) => {
   console.log(event);
@@ -291,6 +304,7 @@ async function updateUserSettings(userid, pars, callback) {
 }
 
 async function me(userId, callback) {
+  const fixGames = true;
   try {
     const user = await ddbDocClient.send(
       new GetCommand({
@@ -312,6 +326,39 @@ async function me(userId, callback) {
       });
       return;
     }
+    var games = user.Item.games;
+    if (fixGames) {
+      console.log("games before", games);
+      games = await getGamesForUser(userId);
+      console.log("games after", games);
+    }
+    // Check for out-of-time games
+    games.forEach(game => {
+      if (game.clockHard && game.toMove !== '') {
+        if (Array.isArray(game.toMove)) {
+          let minTime = 0;
+          let minIndex = -1;
+          const elapsed = Date.now() - game.lastMoveTime;
+          game.toMove.forEach((p, i) => {
+            if (p && game.players[i].time - elapsed < minTime) {
+              minTime = game.players[i].time - elapsed;
+              minIndex = i;
+            }});
+          if (minIndex !== -1) {
+            game.toMove = '';
+            game.lastMoveTime = game.lastMoveTime + game.players[minIndex].time;
+            timeloss(minIndex, game.id, game.lastMoveTime);
+          }
+        } else {
+          if (game.players[game.toMove].time - (Date.now() - game.lastMoveTime) < 0) {
+            game.lastMoveTime = game.lastMoveTime + game.players[game.toMove].time;
+            const toMove = game.toMove;
+            game.toMove = '';
+            timeloss(toMove, game.id, game.lastMoveTime);
+          }
+        }
+      }
+    });
     let challengesIssuedIDs = [];
     let challengesReceivedIDs = [];
     if (user.Item.challenges !== undefined) {
@@ -326,18 +373,34 @@ async function me(userId, callback) {
     callback(null, {
       statusCode: 200,
       body: JSON.stringify({
-        id: user.Item.id,
-        name: user.Item.name,
-        games: user.Item.games,
-        settings: user.Item.settings,
-        challengesIssued: data[0],
-        challengesReceived: data[1]
+        "id": user.Item.id,
+        "name": user.Item.name,
+        "games": games,
+        "settings": user.Item.settings,
+        "challengesIssued": data[0],
+        "challengesReceived": data[1]
       }, Set_toJSON),
       headers: {
         'content-type': 'application/json',
         'Access-Control-Allow-Origin': '*'
       }
     });
+    // Update last seen date for user
+    if (!fixGames) {
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.USERS_TABLE,
+        Key: { "id": userId },
+        ExpressionAttributeValues: { ":dt": Date.now() },
+        UpdateExpression: "set lastSeen = :dt"
+      }));
+    } else {
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.USERS_TABLE,
+        Key: { "id": userId },
+        ExpressionAttributeValues: { ":dt": Date.now(), ":gs": games },
+        UpdateExpression: "set lastSeen = :dt, games = :gs"
+      }));
+    }
   } catch (err) {
     logGetItemError(err);
     returnError(`Unable to get user data for ${userId}`, callback);
@@ -363,6 +426,50 @@ async function getGames(gameIds) {
     list.push(game.Item);
   });
   return list;
+}
+
+// This is expensive, so only use when things go belly up. E.g. if a game had to be deleted.
+async function getGamesForUser(userId) {
+  let games = [];
+  let result = await 
+    ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.GAMES_TABLE,
+        KeyConditionExpression: "#t = :t",
+        ExpressionAttributeValues: { ":t": 1 },
+        ExpressionAttributeNames: { "#t": "type" },
+        ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime",
+        Limit: 2
+      }));
+  console.log("result", result);
+  processGames(userId, result, games);
+  let last = result.LastEvaluatedKey;
+  console.log("last", last);
+  while (last !== undefined) {
+    result = await 
+      ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.GAMES_TABLE,
+          KeyConditionExpression: "#t = :t",
+          ExpressionAttributeValues: { ":t": 1 },
+          ExpressionAttributeNames: { "#t": "type" },
+          ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime",
+          Limit: 2,
+          ExclusiveStartKey: last
+        }));
+    processGames(userId, result, games);
+    last = result.LastEvaluatedKey;
+    console.log("result", result);
+  }
+  return games;
+}
+
+function processGames(userid, result, games) {
+  result.Items.forEach(game => {
+    if (game.players.some(p => p.id === userid)) {
+      games.push({"id": game.id, "metaGame": game.metaGame, "players": game.players, "clockHard": game.clockHard, "toMove": game.toMove, "lastMoveTime": game.lastMoveTime});
+    }
+  });
 }
 
 async function getChallenges(challengeIds) {
@@ -397,7 +504,13 @@ async function newProfile(userid, pars, callback) {
       "anonymous": pars.anonymous,
       "country": pars.country,
       "tagline": pars.tagline,
-      "challenges" : {}
+      "challenges" : {},
+      "settings": {
+        "all": {
+         "annotate": true,
+         "color": "standard"
+        }
+      }
     };
   try {
     await ddbDocClient.send(new PutCommand({
@@ -434,9 +547,10 @@ async function newChallenge(userid, pars, callback) {
         "challenger": pars.challenger,
         "challengees": pars.challengees, // users that were challenged
         "players": [pars.challenger], // users that have accepted
-        "clockStart": 72,
-        "clockInc": 24,
-        "clockMax": 240
+        "clockStart": pars.clockStart,
+        "clockInc": pars.clockInc,
+        "clockMax": pars.clockMax,
+        "clockHard": pars.clockHard
       }
     }));
 
@@ -641,10 +755,11 @@ async function acceptChallenge(userid, challengeId) {
     const variants = challenge.Item.variants;
     let engine;
     if (info.playercounts.length > 1)
-      engine = GameFactory(challenge.Item.metaGame, game.numPlayers, undefined, variants);
+      engine = GameFactory(challenge.Item.metaGame, challenge.Item.numPlayers, undefined, variants);
     else
       engine = GameFactory(challenge.Item.metaGame, undefined, variants);
     const state = engine.serialize();
+    const now = Date.now();
     const addGame = ddbDocClient.send(new PutCommand({
       TableName: process.env.GAMES_TABLE,
         Item: {
@@ -652,20 +767,24 @@ async function acceptChallenge(userid, challengeId) {
           "type": 1,
           "metaGame": challenge.Item.metaGame,
           "numPlayers": challenge.Item.numPlayers,
-          "players": players.map(p => {return {"id": p.id, "name": p.name}}), // players, in order (todo)
+          "players": players.map(p => {return {"id": p.id, "name": p.name, "time": challenge.Item.clockStart * 3600000 }}), // players, in order (todo)
           "clockStart": challenge.Item.clockStart,
           "clockInc": challenge.Item.clockInc,
           "clockMax": challenge.Item.clockMax,
+          "clockHard": challenge.Item.clockHard,
           "state": state,
-          "toMove": whoseTurn
+          "toMove": whoseTurn,
+          "lastMoveTime": now
         }
       }));
     // this should be all the info we want to show on the "my games" summary page.
     const game = {
       "id": gameId,
       "metaGame": challenge.Item.metaGame,
-      "players": players.map(p => {return {"id": p.id, "name": p.name}}),
-      "toMove": whoseTurn
+      "players": players.map(p => {return {"id": p.id, "name": p.name, "time": challenge.Item.clockStart * 3600000}}),
+      "clockHard": challenge.Item.clockHard,
+      "toMove": whoseTurn,
+      "lastMoveTime": now,
     };
 
     // Now remove the challenge and add the game to all players
@@ -756,37 +875,46 @@ async function submitMove(userid, pars, callback) {
   let game = data.Item;
   console.log("got game in submitMove:");
   console.log(game);
-  let engine;
-  let info = gameinfo.get(game.metaGame);
-  engine = GameFactory(game.metaGame, game.state);
+  let engine = GameFactory(game.metaGame, game.state);
   const flags = gameinfo.get(game.metaGame).flags;
   const simultaneous = flags !== undefined && flags.includes('simultaneous');
-  let newstate;
+  const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
   try {
     if (pars.move === "resign") {
-      resign(userid, engine, game, newstate);
+      resign(userid, engine, game);
     } else if (simultaneous) {
-      applySimultaneousMove(userid, pars.move, engine, game, newstate);
+      applySimultaneousMove(userid, pars.move, engine, game);
     }
     else {
-      applyMove(userid, pars.move, engine, game, newstate);
+      applyMove(userid, pars.move, engine, game);
     }
   }
   catch (error) {
     logGetItemError(error);
     returnError(`Unable to apply move ${pars.move}`, callback);
   }
+  const timestamp = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+  const timeUsed = timestamp - lastMoveTime;
+  console.log("timeUsed", timeUsed);
+  let player = game.players.find(p => p.id === userid);
+  console.log("player", player);
+  player.time = player.time - timeUsed + game.clockInc * 3600000;
+  if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
+  console.log("players", game.players);
   const playerIDs = game.players.map(p => p.id);
   // TODO: We are updating players and their games. This should be put in some kind of critical section!
   const players = await getPlayers(playerIDs);
+
   // this should be all the info we want to show on the "my games" summary page.
   const playerGame = {
     "id": game.id,
     "metaGame": game.metaGame,
     "players": game.players,
-    "toMove": game.toMove
+    "clockHard": game.clockHard,
+    "toMove": game.toMove,
+    "lastMoveTime": timestamp
   };
-
+  game.lastMoveTime = timestamp;
   const updateGame = ddbDocClient.send(new PutCommand({
     TableName: process.env.GAMES_TABLE,
       Item: game
@@ -833,16 +961,74 @@ async function submitMove(userid, pars, callback) {
   }
 }
 
-function resign(userid, engine, game, newstate) {
+function resign(userid, engine, game) {
   let player = game.players.findIndex(p => p.id === userid);
   if (player === undefined)
     throw new Error(`${userid} isn't playing in this game!`);
   engine.resign(player + 1);
-  newstate = engine.serialize();
-  game.state = newstate;
+  game.state = engine.serialize();
+  game.toMove = "";
 }
 
-function applySimultaneousMove(userid, move, engine, game, newstate) {
+async function timeloss(player, gameid, timestamp) {
+  let data = {};
+  try {
+    data = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.GAMES_TABLE,
+        Key: {
+          "id": gameid,
+          "type": 1
+        },
+      }));
+  }
+  catch (error) {
+    logGetItemError(error);
+    returnError(`Unable to get game ${gameid} from table ${process.env.GAMES_TABLE}`, callback);
+  }
+  let game = data.Item;
+  let engine = GameFactory(game.metaGame, game.state);
+  engine.timeout(player + 1);
+  game.state = engine.serialize();
+  game.toMove = "";
+  game.lastMoveTime = timestamp;
+  const playerIDs = game.players.map(p => p.id);
+  // TODO: We are updating players and their games. This should be put in some kind of critical section!
+  const players = await getPlayers(playerIDs);
+
+  // this should be all the info we want to show on the "my games" summary page.
+  const playerGame = {
+    "id": game.id,
+    "metaGame": game.metaGame,
+    "players": game.players,
+    "clockHard": game.clockHard,
+    "toMove": game.toMove,
+    "lastMoveTime": game.lastMoveTime
+  };
+  ddbDocClient.send(new PutCommand({
+    TableName: process.env.GAMES_TABLE,
+      Item: game
+    }));
+
+  // Update players
+  players.forEach(player => {
+    let games = [];
+    player.games.forEach(g => {
+      if (g.id === playerGame.id)
+        games.push(playerGame);
+      else
+        games.push(g)
+    });
+    ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.USERS_TABLE,
+      Key: { "id": player.id },
+      ExpressionAttributeValues: { ":gs": games },
+      UpdateExpression: "set games = :gs",
+    }));
+  });
+}
+
+function applySimultaneousMove(userid, move, engine, game) {
   let partialMove = game.partialMove;
   let moves = [];
   if (partialMove === undefined)
@@ -875,22 +1061,27 @@ function applySimultaneousMove(userid, move, engine, game, newstate) {
   else {
     // full move.
     engine.move(moves.join(','));
-    newstate = engine.serialize();
-    game.state = newstate;
+    game.state = engine.serialize();
     game.partialMove = game.players.map(p => '').join(',');
-    game.toMove = game.players.map(p => true);
+    if (engine.gameover)
+      game.toMove = "";
+    else
+      game.toMove = game.players.map(p => true);
   }
 }
 
-function applyMove(userid, move, engine, game, newstate) {
+function applyMove(userid, move, engine, game) {
   // non simultaneous move game.
   if (game.players[game.toMove].id !== userid) {
     throw new Error('It is not your turn!');
   }
   engine.move(move);
-  newstate = engine.serialize();
-  game.state = newstate;
-  game.toMove = (game.toMove + 1) % game.players.length;  
+  game.state = engine.serialize();
+  if (engine.gameover)
+    game.toMove = "";
+  else
+    game.toMove = (game.toMove + 1) % game.players.length;
+  engine.st
 }
 
 function Set_toJSON(key, value) {

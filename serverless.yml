@@ -137,10 +137,10 @@ resources:
             AttributeType: "N"
         KeySchema:
           -
-            AttributeName: "id"
+            AttributeName: "type"
             KeyType: "HASH"
           -
-            AttributeName: "type"
+            AttributeName: "id"
             KeyType: "RANGE"
         ProvisionedThroughput:
           ReadCapacityUnits: 1
@@ -206,6 +206,7 @@ functions:
       - http:
           path: authQuery
           method: post
+          cors: true
           integration: lambda
           authorizer:
             name: authorizer
@@ -221,6 +222,7 @@ functions:
       - http:
           path: query
           method: get
+          cors: true
 #    The following are a few example events you can configure
 #    NOTE: Please make sure to change your handler code to work with those events
 #    Check the event documentation for details
