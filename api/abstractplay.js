@@ -24,12 +24,6 @@ module.exports.query = async (event, context, callback) => {
   console.log(event);
   const pars = event.queryStringParameters;
   switch (pars.query) {
-    case "list_games":
-      await listGames(callback);
-      break;
-    case "game_names":
-      await gameNames(callback);
-      break;
     case "user_names":
       await userNames(callback);
       break;
@@ -73,7 +67,10 @@ module.exports.authQuery = async (event, context, callback) => {
     case "submit_move":
       await submitMove(event.cognitoPoolClaims.sub, pars, callback);
       break;
-    case "get_game":
+      case "submit_comment":
+        await submitComment(event.cognitoPoolClaims.sub, pars, callback);
+        break;
+      case "get_game":
       await game(event.cognitoPoolClaims.sub, pars, callback);
       break;
     case "update_game_settings":
@@ -96,72 +93,23 @@ module.exports.authQuery = async (event, context, callback) => {
   }
 }
 
-async function listGames(callback) {
-  console.log("listGames: Scanning meta_games table.");
-  try {
-    const data = await ddbDocClient.send(
-      new ScanCommand({
-        TableName: process.env.META_GAMES_TABLE,
-        ExpressionAttributeNames: {"#name": "name"},
-        ProjectionExpression: "#name, description, publisher, sampleRep"
-      }));
-    console.log("Scan succeeded. Got:");
-    console.log(data);
-    return callback(null, {
-      statusCode: 200,
-      body: JSON.stringify(data.Items),
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
-    });
-  }
-  catch (error) {
-    logGetItemError(error);
-    returnError("Unable to scan game table ${process.env.META_GAMES_TABLE}", callback);
-  }
-};
-
-async function gameNames(callback) {
-  console.log("gameNames: Scanning meta_games table.");
-  try {
-    const data = await ddbDocClient.send(
-      new ScanCommand({
-        TableName: process.env.META_GAMES_TABLE,
-        ExpressionAttributeNames: {"#name": "name"},
-        ProjectionExpression: "#name"
-      }));
-    console.log("Scan succeeded. Got:");
-    console.log(data);
-    return callback(null, {
-      statusCode: 200,
-      body: JSON.stringify(data.Items),
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
-    });
-  }
-  catch (error) {
-    logGetItemError(error);
-    returnError(`Unable to scan game table ${process.env.META_GAMES_TABLE}`, callback);
-  }
-};
-
 async function userNames(callback) {
-  console.log("userNames: Scanning users table.");
+  console.log("userNames: Scanning users.");
   try {
     const data = await ddbDocClient.send(
-      new ScanCommand({
-        TableName: process.env.USERS_TABLE,
-        ExpressionAttributeNames: {"#name": "name"},
-        ProjectionExpression: "id, #name"
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "USERS" },
+        ExpressionAttributeNames: { "#pk": "pk", "#name": "name"},
+        ProjectionExpression: "sk, #name"
       }));
+
     console.log("Scan succeeded. Got:");
     console.log(data);
     return callback(null, {
       statusCode: 200,
-      body: JSON.stringify(data.Items),
+      body: JSON.stringify(data.Items.map(u => ({"id": u.sk, "name": u.name}))),
       headers: {
         'content-type': 'application/json',
         'Access-Control-Allow-Origin': '*'
@@ -170,7 +118,7 @@ async function userNames(callback) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to scan table ${process.env.USERS_TABLE}`, callback);
+    returnError(`Unable to scan table ${process.env.ABSTRACT_PLAY_TABLE}`, callback);
   }
 }
 
@@ -178,9 +126,9 @@ async function challengeDetails(pars, callback) {
   try {
     const data = await ddbDocClient.send(
       new GetCommand({
-        TableName: process.env.CHALLENGES_TABLE,
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "id": pars.id
+          "pk": "CHALLENGE#" + pars.id, "sk": "CHALLENGE"
         },
       }));
     console.log("Got:");
@@ -196,23 +144,36 @@ async function challengeDetails(pars, callback) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to get challenge ${pars.id} from table ${process.env.CHALLENGES_TABLE}`, callback);
+    returnError(`Unable to get challenge ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`, callback);
   }
 }
 
 async function game(userid, pars, callback) {
   try {
-    const data = await ddbDocClient.send(
+    const getGame = ddbDocClient.send(
       new GetCommand({
-        TableName: process.env.GAMES_TABLE,
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "id": pars.id,
-          "type": 1
+          "pk": "GAME#" + pars.id,
+          "sk": "GAME"
         },
       }));
+    const getComments = ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "GAME#" + pars.id,
+          "sk": "COMMENTS"
+        },
+      }));
+    const data = await Promise.all([getGame, getComments]);
     console.log("Got:");
     console.log(data);
-    let game = data.Item;
+    let game = data[0].Item;
+    // If the game is over update user to indicate they have seen the game end.
+    if (game.toMove === "" || game.toMove === null) {
+      setSeenTime(userid, pars.id);
+    }
     // hide other player's simulataneous moves
     const flags = gameinfo.get(game.metaGame).flags;
     if (flags !== undefined && flags.includes('simultaneous') && game.partialMove !== undefined) {
@@ -226,7 +187,7 @@ async function game(userid, pars, callback) {
     }
     return callback(null, {
       statusCode: 200,
-      body: JSON.stringify(game),
+      body: JSON.stringify({"game": game, "comments": data[1].Item.comments}),
       headers: {
         'content-type': 'application/json',
         'Access-Control-Allow-Origin': '*'
@@ -235,7 +196,7 @@ async function game(userid, pars, callback) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to get game ${pars.id} from table ${process.env.GAMES_TABLE}`, callback);
+    returnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`, callback);
   }
 }
 
@@ -243,10 +204,10 @@ async function updateGameSettings(userid, pars, callback) {
   try {
     const data = await ddbDocClient.send(
       new GetCommand({
-        TableName: process.env.GAMES_TABLE,
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "id": pars.game,
-          "type": 1
+          "pk": "GAME#" + pars.game,
+          "sk": "GAME"
         },
       }));
     console.log("Got:");
@@ -256,13 +217,13 @@ async function updateGameSettings(userid, pars, callback) {
     player.settings = pars.settings;
     try {
       await ddbDocClient.send(new PutCommand({
-        TableName: process.env.GAMES_TABLE,
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: game
         }));
     }
     catch (error) {
       logGetItemError(error);
-      returnError(`Unable to update game ${pars.game} from table ${process.env.GAMES_TABLE}`, callback);
+      returnError(`Unable to update game ${pars.game} from table ${process.env.ABSTRACT_PLAY_TABLE}`, callback);
     }
     return callback(null, {
       statusCode: 200,
@@ -274,15 +235,57 @@ async function updateGameSettings(userid, pars, callback) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to get or update game ${pars.game} from table ${process.env.META_GAMES_TABLE}`, callback);
+    returnError(`Unable to get or update game ${pars.game} from table ${process.env.ABSTRACT_PLAY_TABLE}`, callback);
   }
+}
+
+async function setSeenTime(userid, gameid) {
+  let user = {};
+  try {
+    user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER#" + userid,
+          "sk": "USER"
+        },
+      }));
+    console.log("got: ");
+    console.log(user);
+    if (user.Item === undefined) {
+      callback(null, {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers: {
+          'content-type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+      return;
+    }
+  } catch (err) {
+    logGetItemError(err);
+    returnError(`Unable to get user data for ${userid}`, callback);
+  }
+
+  let games = user.Item.games;
+  let thegame = games.find(g => g.id == gameid);
+  if (thegame !== undefined) {
+    thegame.seen = Date.now();
+  }
+  ddbDocClient.send(new UpdateCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: { "pk": "USER#" + userid, "sk": "USER" },
+    ExpressionAttributeValues: { ":gs": games },
+    UpdateExpression: "set games = :gs",
+  }));
 }
 
 async function updateUserSettings(userid, pars, callback) {
   try {
     await ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.USERS_TABLE,
-      Key: { "id": userid },
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USER#" + userid, "sk": "USER" },
       ExpressionAttributeValues: { ":ss": pars.settings },
       UpdateExpression: "set settings = :ss",
     }))
@@ -304,13 +307,14 @@ async function updateUserSettings(userid, pars, callback) {
 }
 
 async function me(userId, callback) {
-  const fixGames = true;
+  const fixGames = false;
   try {
     const user = await ddbDocClient.send(
       new GetCommand({
-        TableName: process.env.USERS_TABLE,
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "id": userId
+          "pk": "USER#" + userId,
+          "sk": "USER"
         },
       }));
     console.log("got: ");
@@ -327,6 +331,8 @@ async function me(userId, callback) {
       return;
     }
     var games = user.Item.games;
+    if (games == undefined)
+      games= [];
     if (fixGames) {
       console.log("games before", games);
       games = await getGamesForUser(userId);
@@ -359,6 +365,20 @@ async function me(userId, callback) {
         }
       }
     });
+    // Check for "recently completed games"
+    // As soon as a game is over move it to archive status (game.type = 0).
+    // Remove the game from user's games list 48 hours after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
+    // TODO: Put it back in their list if anyone comments.
+    for (let i = games.length - 1; i >= 0; i-- ) { 
+      if (games[i].toMove === "" || games[i].toMove === null ) {
+        if (games[i].seen !== undefined) {
+          console.log(`since seen for ${games[i].metaGame}`, Date.now() - games[i].seen);
+        }
+        if (games[i].seen !== undefined && Date.now() - games[i].seen > 1 * 3600000) {
+          games.splice(i, 1);
+        }
+      }
+    }
     let challengesIssuedIDs = [];
     let challengesReceivedIDs = [];
     if (user.Item.challenges !== undefined) {
@@ -386,21 +406,12 @@ async function me(userId, callback) {
       }
     });
     // Update last seen date for user
-    if (!fixGames) {
-      await ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.USERS_TABLE,
-        Key: { "id": userId },
-        ExpressionAttributeValues: { ":dt": Date.now() },
-        UpdateExpression: "set lastSeen = :dt"
-      }));
-    } else {
-      await ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.USERS_TABLE,
-        Key: { "id": userId },
-        ExpressionAttributeValues: { ":dt": Date.now(), ":gs": games },
-        UpdateExpression: "set lastSeen = :dt, games = :gs"
-      }));
-    }
+    ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USER#" + userId, "sk": "USER" },
+      ExpressionAttributeValues: { ":dt": Date.now(), ":gs": games },
+      UpdateExpression: "set lastSeen = :dt, games = :gs"
+    }));
   } catch (err) {
     logGetItemError(err);
     returnError(`Unable to get user data for ${userId}`, callback);
@@ -413,10 +424,10 @@ async function getGames(gameIds) {
     games.push(
       ddbDocClient.send(
         new GetCommand({
-          TableName: process.env.GAMES_TABLE,
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
-            "id": id,
-            "type": 1
+            "pk": "GAME#" + id,
+            "sk": "GAME"
           }
         })));
   });
@@ -429,12 +440,13 @@ async function getGames(gameIds) {
 }
 
 // This is expensive, so only use when things go belly up. E.g. if a game had to be deleted.
+// This needs to be changed... Do we really now need to scan the entire table!? Do we need a secondary index? Is it worth it? Oh, maybe maintain a list of current games?
 async function getGamesForUser(userId) {
   let games = [];
   let result = await 
     ddbDocClient.send(
       new QueryCommand({
-        TableName: process.env.GAMES_TABLE,
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
         KeyConditionExpression: "#t = :t",
         ExpressionAttributeValues: { ":t": 1 },
         ExpressionAttributeNames: { "#t": "type" },
@@ -449,7 +461,7 @@ async function getGamesForUser(userId) {
     result = await 
       ddbDocClient.send(
         new QueryCommand({
-          TableName: process.env.GAMES_TABLE,
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
           KeyConditionExpression: "#t = :t",
           ExpressionAttributeValues: { ":t": 1 },
           ExpressionAttributeNames: { "#t": "type" },
@@ -478,9 +490,10 @@ async function getChallenges(challengeIds) {
     challenges.push(
       ddbDocClient.send(
         new GetCommand({
-          TableName: process.env.CHALLENGES_TABLE,
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
-            "id": id
+            "pk": "CHALLENGE#" + id,
+            "sk": "CHALLENGE"
           }
         })
       )
@@ -498,6 +511,8 @@ async function getChallenges(challengeIds) {
 
 async function newProfile(userid, pars, callback) {
   const data = {
+      "pk": "USER#" + userid,
+      "sk": "USER",
       "id": userid,
       "name": pars.name,
       "consent": pars.consent,
@@ -512,12 +527,23 @@ async function newProfile(userid, pars, callback) {
         }
       }
     };
+  // So that we can list all users
+  const data2 = {
+    "pk": "USERS",
+    "sk": userid,
+    "name": pars.name
+  };
   try {
-    await ddbDocClient.send(new PutCommand({
-      TableName: process.env.USERS_TABLE,
+    const insertUser =  ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: data
     }));
-    console.log("Success - item added or updated", data);
+    const insertIntoUserList =  ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Item: data2
+    }));
+    await Promise.all([insertUser, insertIntoUserList]);
+    console.log("Success - user added", data);
     callback(null, {
       statusCode: 200,
       body: JSON.stringify({
@@ -538,8 +564,10 @@ async function newChallenge(userid, pars, callback) {
   const challengeId = crypto.randomUUID();
   console.log(pars);
   const addChallenge = ddbDocClient.send(new PutCommand({
-    TableName: process.env.CHALLENGES_TABLE,
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: {
+        "pk": "CHALLENGE#" + challengeId,
+        "sk": "CHALLENGE",
         "id": challengeId,
         "metaGame": pars.metaGame,
         "numPlayers": pars.numPlayers,
@@ -555,8 +583,8 @@ async function newChallenge(userid, pars, callback) {
     }));
 
   const updateChallenger = ddbDocClient.send(new UpdateCommand({
-    TableName: process.env.USERS_TABLE,
-    Key: { "id": userid },
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: { "pk": "USER#" + userid, "sk": "USER" },
     ExpressionAttributeValues: { ":c": new Set([challengeId]) },
     ExpressionAttributeNames: { "#c": "challenges" },
     UpdateExpression: "add #c.issued :c",
@@ -566,8 +594,8 @@ async function newChallenge(userid, pars, callback) {
   pars.challengees.forEach(challengee => {
     list.push(
       ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.USERS_TABLE,
-        Key: { "id": challengee.id },
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER#" + challengee.id, "sk": "USER" },
         ExpressionAttributeValues: { ":c": new Set([challengeId]) },
         ExpressionAttributeNames: { "#c": "challenges" },
         UpdateExpression: "add #c.received :c",
@@ -662,9 +690,10 @@ async function respondedChallenge(userid, pars, callback) {
 async function removeChallenge(challengeId) {
   const challenge = await ddbDocClient.send(
     new GetCommand({
-      TableName: process.env.CHALLENGES_TABLE,
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: {
-        "id": challengeId
+        "pk": "CHALLENGE#" + challengeId,
+        "sk": "CHALLENGE"
       },
     }));
   if (challenge.Item === undefined) {
@@ -672,14 +701,14 @@ async function removeChallenge(challengeId) {
     console.log("Challenge not found");
     return;
   }
-  await removeAChallenge(challenge.Item);
+  return removeAChallenge(challenge.Item);
 }
 
 async function removeAChallenge(challenge) {
   // Remove from challenger
   const updateChallenger = ddbDocClient.send(new UpdateCommand({
-    TableName: process.env.USERS_TABLE,
-    Key: { "id": challenge.challenger.id },
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: { "pk": "USER#" + challenge.challenger.id, "sk": "USER" },
     ExpressionAttributeValues: { ":c": new Set([challenge.id]) },
     ExpressionAttributeNames: { "#c": "challenges" },
     UpdateExpression: "delete #c.issued :c",
@@ -690,8 +719,8 @@ async function removeAChallenge(challenge) {
   challenge.challengees.forEach(challengee => {
     list.push(
       ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.USERS_TABLE,
-        Key: { "id": challengee.id },
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER#" + challengee.id, "sk": "USER" },
         ExpressionAttributeValues: { ":c": new Set([challenge.id]) },
         ExpressionAttributeNames: { "#c": "challenges" },
         UpdateExpression: "delete #c.received :c",
@@ -703,8 +732,8 @@ async function removeAChallenge(challenge) {
   challenge.players.filter(p => p.id != challenge.challenger.id).forEach(player => {
     list.push(
       ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.USERS_TABLE,
-        Key: { "id": player.id },
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER#" + player.id, "sk": "USER" },
         ExpressionAttributeValues: { ":c": new Set([challenge.id]) },
         ExpressionAttributeNames: { "#c": "challenges" },
         UpdateExpression: "delete #c.accepted :c",
@@ -716,22 +745,21 @@ async function removeAChallenge(challenge) {
   list.push(
     ddbDocClient.send(
       new DeleteCommand({
-        TableName: process.env.CHALLENGES_TABLE,
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "id": challenge.id
+          "pk": "CHALLENGE#" + challenge.id, "sk": "CHALLENGE"
         },
       }))
   );
-
-  await Promise.all(list);
+  return list;
 }
 
 async function acceptChallenge(userid, challengeId) {
   const challenge = await ddbDocClient.send(
     new GetCommand({
-      TableName: process.env.CHALLENGES_TABLE,
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: {
-        "id": challengeId
+        "pk": "CHALLENGE#" + challengeId, "sk": "CHALLENGE"
       },
     }));
 
@@ -761,10 +789,11 @@ async function acceptChallenge(userid, challengeId) {
     const state = engine.serialize();
     const now = Date.now();
     const addGame = ddbDocClient.send(new PutCommand({
-      TableName: process.env.GAMES_TABLE,
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
+          "pk": "GAME#" + gameId,
+          "sk": "GAME",
           "id": gameId,
-          "type": 1,
           "metaGame": challenge.Item.metaGame,
           "numPlayers": challenge.Item.numPlayers,
           "players": players.map(p => {return {"id": p.id, "name": p.name, "time": challenge.Item.clockStart * 3600000 }}), // players, in order (todo)
@@ -774,7 +803,8 @@ async function acceptChallenge(userid, challengeId) {
           "clockHard": challenge.Item.clockHard,
           "state": state,
           "toMove": whoseTurn,
-          "lastMoveTime": now
+          "lastMoveTime": now,
+          "gameStarted": now
         }
       }));
     // this should be all the info we want to show on the "my games" summary page.
@@ -786,9 +816,13 @@ async function acceptChallenge(userid, challengeId) {
       "toMove": whoseTurn,
       "lastMoveTime": now,
     };
-
+    let list = addToGameLists("CURRENTGAMES", game, now);
+    console.log("list:");
+    console.log(list);
+  
     // Now remove the challenge and add the game to all players
-    let list = [addGame, removeAChallenge(challenge.Item)];
+    list.push(addGame);
+    list = list.concat(removeAChallenge(challenge.Item));
 
     // Update players
     players.forEach(player => {
@@ -798,8 +832,8 @@ async function acceptChallenge(userid, challengeId) {
       games.push(game);
       list.push(
         ddbDocClient.send(new UpdateCommand({
-          TableName: process.env.USERS_TABLE,
-          Key: { "id": player.id },
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { "pk": "USER#" + player.id, "sk": "USER" },
           ExpressionAttributeValues: { ":gs": games },
           UpdateExpression: "set games = :gs",
         }))
@@ -819,8 +853,10 @@ async function acceptChallenge(userid, challengeId) {
     const challengees = challenge.Item.challengees.filter(c => c.id != userid);
     const players = challenge.Item.players.push(challenge.Item.challengees.find(c => c.id == userid));
     const updateChallenge = ddbDocClient.send(new PutCommand({
-      TableName: process.env.CHALLENGES_TABLE,
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
+          "pk": "CHALLENGE#" + challengeId,
+          "sk": "CHALLENGE",
           "id": challengeId,
           "challengees": challengees, // users that were challenged
           "players": players // users that have accepted
@@ -828,8 +864,8 @@ async function acceptChallenge(userid, challengeId) {
       }));
     // Update accepter
     const updateAccepter = ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.USERS_TABLE,
-      Key: { "id": userid },
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USER#" + userid, "sk": "USER" },
       ExpressionAttributeValues: { ":c": new Set([challengeId]) },
       ExpressionAttributeNames: { "#c": "challenges" },
       UpdateExpression: "delete #c.received :c, add #c.accepted :c",
@@ -844,9 +880,9 @@ async function getPlayers(playerIDs) {
   const list = playerIDs.map(id =>
     ddbDocClient.send(
       new GetCommand({
-        TableName: process.env.USERS_TABLE,
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "id": id
+          "pk": "USER#" + id, "sk": "USER"
         },
       })
     )
@@ -856,21 +892,90 @@ async function getPlayers(playerIDs) {
   return players.map(player => player.Item);
 }
 
+function addToGameLists(type, game, now) {
+  let work = [];
+  const sk = now + "#" + game.id;
+  work.push(ddbDocClient.send(new PutCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Item: {
+        "pk": type,
+        "sk": sk,
+        ...game}
+    })));
+  work.push(ddbDocClient.send(new PutCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Item: {
+        "pk": type + "#" + game.metaGame,
+        "sk": sk,
+        ...game}
+    })));
+  game.players.forEach(player => {
+    work.push(ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: {
+          "pk": type + "#" + player.id,
+          "sk": sk,
+          ...game}
+      })));
+    work.push(ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: {
+          "pk": type + "#" + game.metaGame + "#" + player.id,
+          "sk": sk,
+          ...game}
+      })));
+  });
+  return work;
+}
+
+function removeFromGameLists(type, metaGame, gameStarted, id, players) {
+  let work = [];
+  const sk = gameStarted + "#" + id;
+  console.log("sk", sk);
+  work.push(ddbDocClient.send(new DeleteCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: {
+      "pk": type, "sk": sk
+    }
+  })));
+  work.push(ddbDocClient.send(new DeleteCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: {
+      "pk": type + "#" + metaGame, "sk": sk
+    }
+  })));
+  players.forEach(player => {
+    work.push(ddbDocClient.send(new DeleteCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        "pk": type + "#" + player.id, "sk": sk
+      }
+    })));
+    work.push(ddbDocClient.send(new DeleteCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+          "pk": type + "#" + metaGame + "#" + player.id, "sk": sk
+      }
+    })));
+  });
+  return work;
+}
+
 async function submitMove(userid, pars, callback) {
   let data = {};
   try {
     data = await ddbDocClient.send(
       new GetCommand({
-        TableName: process.env.GAMES_TABLE,
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "id": pars.id,
-          "type": 1
+          "pk": "GAME#" + pars.id,
+          "sk": "GAME"
         },
       }));
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to get game ${pars.id} from table ${process.env.GAMES_TABLE}`, callback);
+    returnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`, callback);
   }
   let game = data.Item;
   console.log("got game in submitMove:");
@@ -882,10 +987,11 @@ async function submitMove(userid, pars, callback) {
   try {
     if (pars.move === "resign") {
       resign(userid, engine, game);
+    } else if (pars.move === "timeout") {
+      timeout(userid, engine, game);
     } else if (simultaneous) {
       applySimultaneousMove(userid, pars.move, engine, game);
-    }
-    else {
+    } else {
       applyMove(userid, pars.move, engine, game);
     }
   }
@@ -914,26 +1020,43 @@ async function submitMove(userid, pars, callback) {
     "toMove": game.toMove,
     "lastMoveTime": timestamp
   };
+  let myGame = {
+    "id": game.id,
+    "metaGame": game.metaGame,
+    "players": game.players,
+    "clockHard": game.clockHard,
+    "toMove": game.toMove,
+    "lastMoveTime": timestamp
+  };
+  let list = [];
+  if ((game.toMove === "" || game.toMove === null)) {
+    myGame.seen = Date.now();
+    addToGameLists("COMPLETEDGAMES", playerGame, timestamp);
+    removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players);
+  }
   game.lastMoveTime = timestamp;
   const updateGame = ddbDocClient.send(new PutCommand({
-    TableName: process.env.GAMES_TABLE,
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: game
     }));
-  let list = [updateGame];
-
+  list.push(updateGame);
   // Update players
   players.forEach(player => {
     let games = [];
     player.games.forEach(g => {
-      if (g.id === playerGame.id)
-        games.push(playerGame);
+      if (g.id === playerGame.id) {
+        if (player.id === userid)
+          games.push(myGame);
+        else
+          games.push(playerGame);
+      }
       else
         games.push(g)
     });
     list.push(
       ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.USERS_TABLE,
-        Key: { "id": player.id },
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER#" + player.id, "sk": "USER" },
         ExpressionAttributeValues: { ":gs": games },
         UpdateExpression: "set games = :gs",
       }))
@@ -941,7 +1064,7 @@ async function submitMove(userid, pars, callback) {
   });
 
   try {
-    await Promise.all(list);
+    // await Promise.all(list);
 
     if (simultaneous)
       game.partialMove = game.players.map((p, i) => (p.id === userid ? game.partialMove.split(',')[i] : '')).join(',');
@@ -970,21 +1093,53 @@ function resign(userid, engine, game) {
   game.toMove = "";
 }
 
+function timeout(userid, engine, game) {
+  let player = game.players.findIndex(p => p.id === userid);
+  if (game.toMove === '')
+    throw new Error("Can't timeout a game that has already ended");
+  // Find player that timed out
+  let loser;
+  if (Array.isArray(game.toMove)) {
+    let minTime = 0;
+    let minIndex = -1;
+    const elapsed = Date.now() - game.lastMoveTime;
+    game.toMove.forEach((p, i) => {
+      if (p && game.players[i].time - elapsed < minTime) {
+        minTime = game.players[i].time - elapsed;
+        minIndex = i;
+      }});
+    if (minIndex !== -1) {
+      loser = minIndex;
+    } else {
+      throw new Error("Nobody's time is up!");
+    }
+  } else {
+    if (game.players[game.toMove].time - (Date.now() - game.lastMoveTime) < 0) {
+      loser = game.toMove;
+    } else {
+      throw new Error("Opponent's time isn't up!");
+    }
+  }
+  engine.timeout(loser + 1);
+  game.state = engine.serialize();
+  game.toMove = "";
+}
+
 async function timeloss(player, gameid, timestamp) {
   let data = {};
   try {
     data = await ddbDocClient.send(
       new GetCommand({
-        TableName: process.env.GAMES_TABLE,
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "id": gameid,
-          "type": 1
+          "pk": "GAME#" + gameid,
+          "sk": "GAME"
         },
       }));
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to get game ${gameid} from table ${process.env.GAMES_TABLE}`, callback);
+    returnError(`Unable to get game ${gameid} from table ${process.env.ABSTRACT_PLAY_TABLE}`, callback);
   }
   let game = data.Item;
   let engine = GameFactory(game.metaGame, game.state);
@@ -993,7 +1148,7 @@ async function timeloss(player, gameid, timestamp) {
   game.toMove = "";
   game.lastMoveTime = timestamp;
   const playerIDs = game.players.map(p => p.id);
-  // TODO: We are updating players and their games. This should be put in some kind of critical section!
+  // TODO: We are updating players and their games. TODO: implement optimistic locking
   const players = await getPlayers(playerIDs);
 
   // this should be all the info we want to show on the "my games" summary page.
@@ -1006,9 +1161,11 @@ async function timeloss(player, gameid, timestamp) {
     "lastMoveTime": game.lastMoveTime
   };
   ddbDocClient.send(new PutCommand({
-    TableName: process.env.GAMES_TABLE,
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: game
     }));
+  addToGameLists("COMPLETEDGAMES", playerGame, game.lastMoveTime);
+  removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players);
 
   // Update players
   players.forEach(player => {
@@ -1020,8 +1177,8 @@ async function timeloss(player, gameid, timestamp) {
         games.push(g)
     });
     ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.USERS_TABLE,
-      Key: { "id": player.id },
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USER#" + player.id, "sk": "USER" },
       ExpressionAttributeValues: { ":gs": games },
       UpdateExpression: "set games = :gs",
     }));
@@ -1082,6 +1239,40 @@ function applyMove(userid, move, engine, game) {
   else
     game.toMove = (game.toMove + 1) % game.players.length;
   engine.st
+}
+
+async function submitComment(userid, pars, callback) {
+  let data = {};
+  try {
+    data = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "GAME#" + pars.id,
+          "sk": "COMMENTS"
+        },
+      }));
+  }
+  catch (error) {
+    logGetItemError(error);
+    returnError(`Unable to get comments for game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`, callback);
+  }
+  let commentsData = data.Item;
+  console.log("got comments in submitComment:");
+  console.log(commentsData);
+  if (commentsData === undefined) {
+    commentsData = {
+      "pk": "GAME#" + pars.id,
+      "sk": "COMMENTS",
+      "comments": []
+    };
+  }
+  let comment = {"comment": pars.comment, "userId": userid, "moveNumber": pars.moveNumber, "timeStamp": Date.now()};
+  commentsData.comments.push(comment);
+  ddbDocClient.send(new PutCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Item: commentsData
+    }));
 }
 
 function Set_toJSON(key, value) {

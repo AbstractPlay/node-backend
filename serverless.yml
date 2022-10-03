@@ -31,6 +31,7 @@ provider:
     USERS_TABLE: ap-users-${opt:stage, self:provider.stage}
     CHALLENGES_TABLE: ap-challenges-${opt:stage, self:provider.stage}
     GAMES_TABLE: ap-games-${opt:stage, self:provider.stage}
+    ABSTRACT_PLAY_TABLE: abstract-play-${opt:stage, self:provider.stage}
   iam:
     role:
       statements:
@@ -148,6 +149,31 @@ resources:
         StreamSpecification:
           StreamViewType: "NEW_AND_OLD_IMAGES"
         TableName: ${self:provider.environment.GAMES_TABLE}
+    # One table design
+    AbstractGamesDynamoDbTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: "pk"
+            AttributeType: "S"
+          -
+            AttributeName: "sk"
+            AttributeType: "S"
+        KeySchema:
+          -
+            AttributeName: "pk"
+            KeyType: "HASH"
+          -
+            AttributeName: "sk"
+            KeyType: "RANGE"
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        StreamSpecification:
+          StreamViewType: "NEW_AND_OLD_IMAGES"
+        TableName: ${self:provider.environment.ABSTRACT_PLAY_TABLE}
 # you can overwrite defaults here
 #  stage: dev
 #  region: us-east-1
