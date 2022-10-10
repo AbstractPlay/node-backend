@@ -185,9 +185,12 @@ async function game(userid, pars, callback) {
       }
       game.partialMove = moves.join(',');
     }
+    let comments = [];
+    if (data[1].Item !== undefined && data[1].Item.comments)
+      comments = data[1].Item.comments;
     return callback(null, {
       statusCode: 200,
-      body: JSON.stringify({"game": game, "comments": data[1].Item.comments}),
+      body: JSON.stringify({"game": game, "comments": comments}),
       headers: {
         'content-type': 'application/json',
         'Access-Control-Allow-Origin': '*'
@@ -788,6 +791,16 @@ async function acceptChallenge(userid, challengeId) {
       engine = GameFactory(challenge.Item.metaGame, undefined, variants);
     const state = engine.serialize();
     const now = Date.now();
+    let gamePlayers = players.map(p => { return {"id": p.id, "name": p.name, "time": challenge.Item.clockStart * 3600000 }}); // players, in order (todo)
+    if (info.flags !== undefined && info.flags.includes('perspective')) {
+      let rot = 180;
+      if (players.length > 2 && info.flags !== undefined && info.flags.includes('rotate90')) {
+        rot = 90;
+      }
+      for (let i = 1; i < players.length; i++) {
+        gamePlayers[1].settings = {"rotate": i * rot};
+      }
+    }
     const addGame = ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
@@ -796,7 +809,7 @@ async function acceptChallenge(userid, challengeId) {
           "id": gameId,
           "metaGame": challenge.Item.metaGame,
           "numPlayers": challenge.Item.numPlayers,
-          "players": players.map(p => {return {"id": p.id, "name": p.name, "time": challenge.Item.clockStart * 3600000 }}), // players, in order (todo)
+          "players": gamePlayers,
           "clockStart": challenge.Item.clockStart,
           "clockInc": challenge.Item.clockInc,
           "clockMax": challenge.Item.clockMax,
@@ -1004,7 +1017,10 @@ async function submitMove(userid, pars, callback) {
   console.log("timeUsed", timeUsed);
   let player = game.players.find(p => p.id === userid);
   console.log("player", player);
-  player.time = player.time - timeUsed + game.clockInc * 3600000;
+  if (player.time - timeUsed < 0)
+    player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
+  else
+    player.time = player.time - timeUsed + game.clockInc * 3600000;
   if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
   console.log("players", game.players);
   const playerIDs = game.players.map(p => p.id);
