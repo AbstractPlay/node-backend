@@ -1002,6 +1002,8 @@ async function submitMove(userid, pars, callback) {
       resign(userid, engine, game);
     } else if (pars.move === "timeout") {
       timeout(userid, engine, game);
+    } else if (pars.move === "" && pars.draw === "drawaccepted"){
+      drawaccepted(userid, engine, game);
     } else if (simultaneous) {
       applySimultaneousMove(userid, pars.move, engine, game);
     } else {
@@ -1012,17 +1014,25 @@ async function submitMove(userid, pars, callback) {
     logGetItemError(error);
     returnError(`Unable to apply move ${pars.move}`, callback);
   }
+
+  let player = game.players.find(p => p.id === userid);
+  // deal with draw offers
+  if (pars.draw === "drawoffer") {
+    player.draw = "offered";
+  } else {
+    // if a player just moved, other draw offers are declined
+    game.players.forEach(p => delete p.draw);
+  }
   const timestamp = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
   const timeUsed = timestamp - lastMoveTime;
-  console.log("timeUsed", timeUsed);
-  let player = game.players.find(p => p.id === userid);
-  console.log("player", player);
+  // console.log("timeUsed", timeUsed);
+  // console.log("player", player);
   if (player.time - timeUsed < 0)
     player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
   else
     player.time = player.time - timeUsed + game.clockInc * 3600000;
   if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
-  console.log("players", game.players);
+  // console.log("players", game.players);
   const playerIDs = game.players.map(p => p.id);
   // TODO: We are updating players and their games. This should be put in some kind of critical section!
   const players = await getPlayers(playerIDs);
@@ -1110,7 +1120,6 @@ function resign(userid, engine, game) {
 }
 
 function timeout(userid, engine, game) {
-  let player = game.players.findIndex(p => p.id === userid);
   if (game.toMove === '')
     throw new Error("Can't timeout a game that has already ended");
   // Find player that timed out
@@ -1139,6 +1148,16 @@ function timeout(userid, engine, game) {
   engine.timeout(loser + 1);
   game.state = engine.serialize();
   game.toMove = "";
+}
+
+function drawaccepted(userid, engine, game) {
+  let player = game.players.find(p => p.id === userid);
+  player.draw = "accepted";
+  if (game.players.every(p => p.draw === "offered" || p.draw === "accepted")) {
+    engine.draw();
+    game.state = engine.serialize();
+    game.toMove = "";
+  }
 }
 
 async function timeloss(player, gameid, timestamp) {
