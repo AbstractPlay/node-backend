@@ -384,15 +384,19 @@ async function me(userId, callback) {
     }
     let challengesIssuedIDs = [];
     let challengesReceivedIDs = [];
+    let challengesAcceptedIDs = [];
     if (user.Item.challenges !== undefined) {
       if (user.Item.challenges.issued !== undefined)
         challengesIssuedIDs = user.Item.challenges.issued;
       if (user.Item.challenges.received !== undefined)
         challengesReceivedIDs = user.Item.challenges.received;
+      if (user.Item.challenges.accepted !== undefined)
+        challengesAcceptedIDs = user.Item.challenges.accepted;
     }
     const challengesIssued = getChallenges(challengesIssuedIDs);
     const challengesReceived = getChallenges(challengesReceivedIDs);
-    const data = await Promise.all([challengesIssued, challengesReceived]);
+    const challengesAccepted = getChallenges(challengesAcceptedIDs);
+    const data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted]);
     callback(null, {
       statusCode: 200,
       body: JSON.stringify({
@@ -401,7 +405,8 @@ async function me(userId, callback) {
         "games": games,
         "settings": user.Item.settings,
         "challengesIssued": data[0],
-        "challengesReceived": data[1]
+        "challengesReceived": data[1],
+        "challengesAccepted": data[2]
       }, Set_toJSON),
       headers: {
         'content-type': 'application/json',
@@ -574,9 +579,10 @@ async function newChallenge(userid, pars, callback) {
         "id": challengeId,
         "metaGame": pars.metaGame,
         "numPlayers": pars.numPlayers,
+        "seating": pars.seating,
         "variants": pars.variants,
         "challenger": pars.challenger,
-        "challengees": pars.challengees, // users that were challenged
+        "challengees": pars.opponents, // users that were challenged
         "players": [pars.challenger], // users that have accepted
         "clockStart": pars.clockStart,
         "clockInc": pars.clockInc,
@@ -594,7 +600,7 @@ async function newChallenge(userid, pars, callback) {
   }));
 
   let list = [addChallenge, updateChallenger];
-  pars.challengees.forEach(challengee => {
+  pars.opponents.forEach(challengee => {
     list.push(
       ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -758,7 +764,7 @@ async function removeAChallenge(challenge) {
 }
 
 async function acceptChallenge(userid, challengeId) {
-  const challenge = await ddbDocClient.send(
+  const challengeData = await ddbDocClient.send(
     new GetCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: {
@@ -766,39 +772,56 @@ async function acceptChallenge(userid, challengeId) {
       },
     }));
 
-  if (challenge.Item === undefined) {
+  if (challengeData.Item === undefined) {
     // The challenge might have been revoked or rejected by another user (while you were deciding)
     console.log("Challenge not found");
     return;
   }
 
-  if (challenge.Item.players.length + 1 == challenge.Item.numPlayers) {
+  const challenge = challengeData.Item;
+  const challengees = challenge.challengees.filter(c => c.id != userid);
+  if (challengees.length !== challenge.challengees.length - 1) {
+    logGetItemError("userid wasn't a challengee");
+    returnError('Unable to accept challenge', callback);
+  }
+  let players = challenge.players;
+  players.push(challenge.challengees.find(c => c.id == userid));
+  if (players.length === challenge.numPlayers) {
     // Enough players accepted. Start game.
     const gameId = crypto.randomUUID();
-    let playerIDs = challenge.Item.players.map(player => player.id); // This should be updated once we implement different start orders
-    playerIDs.push(challenge.Item.challengees.find(c => c.id == userid).id);
-    const players = await getPlayers(playerIDs);
+    let playerIDs = [];
+    if (challenge.seating === 'random') {
+      playerIDs = players.map(player => player.id);
+      shuffle(playerIDs);
+    } else if (challenge.seating === 's1') {
+      playerIDs.push(challenge.challenger.id);
+      playerIDs.push(userid);
+    } else if (challenge.seating === 's2') {
+      playerIDs.push(userid);
+      playerIDs.push(challenge.challenger.id);
+    }
+    const playersFull = await getPlayers(playerIDs);
     let whoseTurn = 0;
-    let info = gameinfo.get(challenge.Item.metaGame);
+    let info = gameinfo.get(challenge.metaGame);
     if (info.flags !== undefined && info.flags.includes('simultaneous')) {
       whoseTurn = players.map(p => true);
     }
-    const variants = challenge.Item.variants;
+    const variants = challenge.variants;
     let engine;
     if (info.playercounts.length > 1)
-      engine = GameFactory(challenge.Item.metaGame, challenge.Item.numPlayers, undefined, variants);
+      engine = GameFactory(challenge.metaGame, challenge.numPlayers, undefined, variants);
     else
-      engine = GameFactory(challenge.Item.metaGame, undefined, variants);
+      engine = GameFactory(challenge.metaGame, undefined, variants);
     const state = engine.serialize();
     const now = Date.now();
-    let gamePlayers = players.map(p => { return {"id": p.id, "name": p.name, "time": challenge.Item.clockStart * 3600000 }}); // players, in order (todo)
+    let gamePlayers = playersFull.map(p => { return {"id": p.id, "name": p.name, "time": challenge.clockStart * 3600000 }});
     if (info.flags !== undefined && info.flags.includes('perspective')) {
       let rot = 180;
       if (players.length > 2 && info.flags !== undefined && info.flags.includes('rotate90')) {
         rot = 90;
       }
       for (let i = 1; i < players.length; i++) {
-        gamePlayers[1].settings = {"rotate": i * rot};
+        gamePlayers[i].settings = {"rotate": i * rot};
       }
     }
     const addGame = ddbDocClient.send(new PutCommand({
@@ -807,13 +830,13 @@ async function acceptChallenge(userid, challengeId) {
           "pk": "GAME#" + gameId,
           "sk": "GAME",
           "id": gameId,
-          "metaGame": challenge.Item.metaGame,
-          "numPlayers": challenge.Item.numPlayers,
+          "metaGame": challenge.metaGame,
+          "numPlayers": challenge.numPlayers,
           "players": gamePlayers,
-          "clockStart": challenge.Item.clockStart,
-          "clockInc": challenge.Item.clockInc,
-          "clockMax": challenge.Item.clockMax,
-          "clockHard": challenge.Item.clockHard,
+          "clockStart": challenge.clockStart,
+          "clockInc": challenge.clockInc,
+          "clockMax": challenge.clockMax,
+          "clockHard": challenge.clockHard,
           "state": state,
           "toMove": whoseTurn,
           "lastMoveTime": now,
@@ -823,9 +846,9 @@ async function acceptChallenge(userid, challengeId) {
     // this should be all the info we want to show on the "my games" summary page.
     const game = {
       "id": gameId,
-      "metaGame": challenge.Item.metaGame,
-      "players": players.map(p => {return {"id": p.id, "name": p.name, "time": challenge.Item.clockStart * 3600000}}),
-      "clockHard": challenge.Item.clockHard,
+      "metaGame": challenge.metaGame,
+      "players": playersFull.map(p => {return {"id": p.id, "name": p.name, "time": challenge.clockStart * 3600000}}),
+      "clockHard": challenge.clockHard,
       "toMove": whoseTurn,
       "lastMoveTime": now,
     };
@@ -835,10 +858,10 @@ async function acceptChallenge(userid, challengeId) {
   
     // Now remove the challenge and add the game to all players
     list.push(addGame);
-    list = list.concat(removeAChallenge(challenge.Item));
+    list = list.concat(removeAChallenge(challenge));
 
     // Update players
-    players.forEach(player => {
+    playersFull.forEach(player => {
       let games = player.games;
       if (games === undefined)
         games = [];
@@ -863,17 +886,10 @@ async function acceptChallenge(userid, challengeId) {
   } else {
     // Still waiting on more players to accept.
     // Update challenge
-    const challengees = challenge.Item.challengees.filter(c => c.id != userid);
-    const players = challenge.Item.players.push(challenge.Item.challengees.find(c => c.id == userid));
+    challenge.challengees = challengees;
     const updateChallenge = ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: {
-          "pk": "CHALLENGE#" + challengeId,
-          "sk": "CHALLENGE",
-          "id": challengeId,
-          "challengees": challengees, // users that were challenged
-          "players": players // users that have accepted
-        }
+        Item: challenge
       }));
     // Update accepter
     const updateAccepter = ddbDocClient.send(new UpdateCommand({
@@ -881,7 +897,7 @@ async function acceptChallenge(userid, challengeId) {
       Key: { "pk": "USER#" + userid, "sk": "USER" },
       ExpressionAttributeValues: { ":c": new Set([challengeId]) },
       ExpressionAttributeNames: { "#c": "challenges" },
-      UpdateExpression: "delete #c.received :c, add #c.accepted :c",
+      UpdateExpression: "delete #c.received :c add #c.accepted :c",
     }));
 
     await Promise.all([updateChallenge, updateAccepter]);
@@ -1003,7 +1019,7 @@ async function submitMove(userid, pars, callback) {
     } else if (pars.move === "timeout") {
       timeout(userid, engine, game);
     } else if (pars.move === "" && pars.draw === "drawaccepted"){
-      drawaccepted(userid, engine, game);
+      drawaccepted(userid, engine, game, simultaneous);
     } else if (simultaneous) {
       applySimultaneousMove(userid, pars.move, engine, game);
     } else {
@@ -1150,7 +1166,10 @@ function timeout(userid, engine, game) {
   game.toMove = "";
 }
 
-function drawaccepted(userid, engine, game) {
+function drawaccepted(userid, engine, game, simultaneous) {
+  if ((!simultaneous && game.players[game.toMove].id !== userid) || (simultaneous && !game.players.some((p,i) => game.toMove[i] && p.id === userid))) {
+    throw new Error('It is not your turn!');
+  }
   let player = game.players.find(p => p.id === userid);
   player.draw = "accepted";
   if (game.players.every(p => p.draw === "offered" || p.draw === "accepted")) {
@@ -1273,7 +1292,6 @@ function applyMove(userid, move, engine, game) {
     game.toMove = "";
   else
     game.toMove = (game.toMove + 1) % game.players.length;
-  engine.st
 }
 
 async function submitComment(userid, pars, callback) {
@@ -1315,6 +1333,18 @@ function Set_toJSON(key, value) {
     return [...value];
   }
   return value;
+}
+
+function shuffle(array) {
+  let i = array.length,  j;
+
+  while (i > 1) {
+    j = Math.floor(Math.random() * i);
+    i--;
+    var temp = array[i];
+    array[i] = array[j];
+    array[j] = temp;
+  }
 }
 
 function returnError(message, callback) {
