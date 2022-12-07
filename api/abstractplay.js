@@ -165,6 +165,7 @@ async function game(userid, pars, callback) {
           "pk": "GAME#" + pars.id,
           "sk": "COMMENTS"
         },
+        ReturnConsumedCapacity: "INDEXES"
       }));
     const data = await Promise.all([getGame, getComments]);
     console.log("Got:");
@@ -177,13 +178,7 @@ async function game(userid, pars, callback) {
     // hide other player's simulataneous moves
     const flags = gameinfo.get(game.metaGame).flags;
     if (flags !== undefined && flags.includes('simultaneous') && game.partialMove !== undefined) {
-      let moves = game.players.map(p => '');
-      for (let i = 0; i < game.players.length; i++) {
-        if (game.players[i].id === userid) {
-          moves[i] = game.partialMove.split(',')[i];
-        }
-      }
-      game.partialMove = moves.join(',');
+      game.partialMove = game.partialMove.split(',').map((m,i) => game.players[i].id === userid ? m : '').join(',');
     }
     let comments = [];
     if (data[1].Item !== undefined && data[1].Item.comments)
@@ -1052,6 +1047,7 @@ async function submitMove(userid, pars, callback) {
   const playerIDs = game.players.map(p => p.id);
   // TODO: We are updating players and their games. This should be put in some kind of critical section!
   const players = await getPlayers(playerIDs);
+  console.log("got players");
 
   // this should be all the info we want to show on the "my games" summary page.
   const playerGame = {
@@ -1241,11 +1237,7 @@ async function timeloss(player, gameid, timestamp) {
 
 function applySimultaneousMove(userid, move, engine, game) {
   let partialMove = game.partialMove;
-  let moves = [];
-  if (partialMove === undefined)
-    moves = game.players.map(p => '');
-  else
-    moves = partialMove.split(',');
+  let moves = partialMove === undefined ? game.players.map(p => '') : partialMove.split(',');
   let cnt = 0;
   let found = false;
   for (let i = 0; i < game.numPlayers; i++) {
@@ -1286,12 +1278,15 @@ function applyMove(userid, move, engine, game) {
   if (game.players[game.toMove].id !== userid) {
     throw new Error('It is not your turn!');
   }
+  console.log("applyMove", move);
   engine.move(move);
+  console.log("applied");
   game.state = engine.serialize();
   if (engine.gameover)
     game.toMove = "";
   else
     game.toMove = (game.toMove + 1) % game.players.length;
+  console.log("done");
 }
 
 async function submitComment(userid, pars, callback) {
@@ -1320,12 +1315,14 @@ async function submitComment(userid, pars, callback) {
       "comments": []
     };
   }
-  let comment = {"comment": pars.comment, "userId": userid, "moveNumber": pars.moveNumber, "timeStamp": Date.now()};
-  commentsData.comments.push(comment);
-  ddbDocClient.send(new PutCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: commentsData
-    }));
+  if (commentsData.comments.reduce((s, a) => s + 110 + Buffer.byteLength(s.comment,'utf8'), 0) < 360000) {
+    let comment = {"comment": pars.comment.substring(0, 4000), "userId": userid, "moveNumber": pars.moveNumber, "timeStamp": Date.now()};
+    commentsData.comments.push(comment);
+    ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: commentsData
+      }));
+  }
 }
 
 function Set_toJSON(key, value) {
