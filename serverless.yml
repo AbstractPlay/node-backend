@@ -226,7 +226,7 @@ functions:
   #         method: get
   authQuery:
     handler: api/abstractplay.authQuery
-    memorySize: 128
+    memorySize: 1024
     description: Abstract Play queries that need authorization.
     events:
       - http:
