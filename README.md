@@ -4,6 +4,15 @@ Backend for AbstractPlay using severless lambdas written in node.js and using Dy
 This started from this example:  
 ```  https://www.serverless.com/blog/node-rest-api-with-serverless-lambda-and-dynamodb```
 
+## AWS Credentials
+Place your credentials for AWS (the aws_access_key_id and aws_secret_access_key) in ~\.aws\credentials under a profile with name AbstractPlayDev and AbstractPlayProd.
+
+## Cognito 
+Set up a Cognito user group for each of Dev and Prod using all the defaults. Now or after the group is created add a App client. The name doesn't seem to matter, but make sure "Generate client secret" is unchecked. Also uncheck "Enable token revocation", but I don't know if it matters. 
+
+After the pool is created copy the arn to serverless.yml for the authQuery function. Under "App client settings" check "Select all" for Enabled Identity Providers. Add Callback and Sign out URLs. For local debugging of the front end use "http://localhost:3000". TBD for prod. Under OAuth 2.0 check "Authorization code grant", "Implicit grant" and "openid".
+
+## Deployment
 Running
 ```sls deploy```
 for the first time will create the DynamoDB (it is completely specified in serverless.yml) and deploy the lambdas. On subsequent runs it will just update the lambdas.

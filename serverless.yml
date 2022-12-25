@@ -24,13 +24,10 @@ provider:
   name: aws
   runtime: nodejs14.x
   stage: dev
+  profile: AbstractPlayDev
   region: us-east-1
   lambdaHashingVersion: 20201221
   environment:
-    META_GAMES_TABLE: ap-meta-games-${opt:stage, self:provider.stage}
-    USERS_TABLE: ap-users-${opt:stage, self:provider.stage}
-    CHALLENGES_TABLE: ap-challenges-${opt:stage, self:provider.stage}
-    GAMES_TABLE: ap-games-${opt:stage, self:provider.stage}
     ABSTRACT_PLAY_TABLE: abstract-play-${opt:stage, self:provider.stage}
   iam:
     role:
@@ -47,108 +44,6 @@ provider:
 
 resources:
   Resources:
-    MetaGamesDynamoDbTable:
-      Type: 'AWS::DynamoDB::Table'
-      DeletionPolicy: Delete
-      Properties:
-        AttributeDefinitions:
-          -
-            AttributeName: "name"
-            AttributeType: "S"
-        KeySchema:
-          -
-            AttributeName: "name"
-            KeyType: "HASH"
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
-        StreamSpecification:
-          StreamViewType: "NEW_AND_OLD_IMAGES"
-        TableName: ${self:provider.environment.META_GAMES_TABLE}
-    UsersDynamoDbTable:
-      Type: 'AWS::DynamoDB::Table'
-      DeletionPolicy: Delete
-      Properties:
-        AttributeDefinitions:
-          -
-            AttributeName: "id"
-            AttributeType: "S"
-        KeySchema:
-          -
-            AttributeName: "id"
-            KeyType: "HASH"
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
-        StreamSpecification:
-          StreamViewType: "NEW_AND_OLD_IMAGES"
-        TableName: ${self:provider.environment.USERS_TABLE}
-    ChallengesDynamoDbTable:
-      Type: 'AWS::DynamoDB::Table'
-      DeletionPolicy: Delete
-      Properties:
-        AttributeDefinitions:
-          -
-            AttributeName: "id"
-            AttributeType: "S"
-          - # Type is a bitmask. Low order bit is 0 for archived, 1 for active. Next lowest bit is 0 for direct challenge, 1 for
-            # any opponent.
-            AttributeName: "type"
-            AttributeType: "N"
-          -
-            AttributeName: "metaGame"
-            AttributeType: "S"
-        KeySchema:
-          -
-            AttributeName: "id"
-            KeyType: "HASH"
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
-        GlobalSecondaryIndexes:
-          -
-            IndexName: "ChallengeType"
-            KeySchema:
-              -
-                AttributeName: "type"
-                KeyType: "HASH"
-              -
-                AttributeName: "metaGame"
-                KeyType: "RANGE"
-            Projection:
-              NonKeyAttributes:
-                - "id"
-              ProjectionType: "INCLUDE"
-            ProvisionedThroughput:
-              ReadCapacityUnits: 1
-              WriteCapacityUnits: 1
-        StreamSpecification:
-          StreamViewType: "NEW_AND_OLD_IMAGES"
-        TableName: ${self:provider.environment.CHALLENGES_TABLE}
-    GamesDynamoDbTable:
-      Type: 'AWS::DynamoDB::Table'
-      DeletionPolicy: Delete
-      Properties:
-        AttributeDefinitions:
-          -
-            AttributeName: "id"
-            AttributeType: "S"
-          - # 0 for archived, 1 for active.
-            AttributeName: "type"
-            AttributeType: "N"
-        KeySchema:
-          -
-            AttributeName: "type"
-            KeyType: "HASH"
-          -
-            AttributeName: "id"
-            KeyType: "RANGE"
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
-        StreamSpecification:
-          StreamViewType: "NEW_AND_OLD_IMAGES"
-        TableName: ${self:provider.environment.GAMES_TABLE}
     # One table design
     AbstractGamesDynamoDbTable:
       Type: 'AWS::DynamoDB::Table'
@@ -236,7 +131,8 @@ functions:
           integration: lambda
           authorizer:
             name: authorizer
-            arn: arn:aws:cognito-idp:us-east-1:530265870037:userpool/us-east-1_jQP9BEv25
+            arn: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_2zrzbEjoU
+            # arn: arn:aws:cognito-idp:us-east-1:530265870037:userpool/us-east-1_jQP9BEv25
             claims:
               - email
               - 'cognito:username'
