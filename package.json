@@ -5,7 +5,8 @@
   "main": "??",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "deploy": "sls deploy"
+    "deploy_dev": "serverless deploy",
+    "deploy_prod": "serverless --stage prod deploy"
   },
   "repository": {
     "type": "git",
