@@ -4,7 +4,11 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand, DeleteCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const crypto = require('crypto');
 const { gameinfo, GameFactory } = require('@abstractplay/gameslib');
-const clnt = new DynamoDBClient({region: 'us-east-1'});
+const { SESClient, SendEmailCommand, SendEmailRequestFilterSensitiveLog } = require('@aws-sdk/client-ses');
+const REGION = "us-east-1";
+
+const sesClient = new SESClient({ region: REGION });
+const clnt = new DynamoDBClient({region: REGION});
 const marshallOptions = {
   // Whether to automatically convert empty strings, blobs, and sets to `null`.
   convertEmptyValues: false, // false, by default.
@@ -44,8 +48,14 @@ module.exports.query = async (event, context, callback) => {
   }
 }
 
+// This implementation mixes async and use of the callback. This is probably not ideal and raises
+//    WARNING: Callback/response already delivered. Did your function invoke the callback and also return a promise?
+// but it does seem to work and do what I want: in some cases (e.g. when sending e-mails), I'd like the lambda to return data to the front end before worrying about whether e-mails got sent or not. 
+// In some cases DB updates can also be done after the response is sent. Trying to do this with a purely async approach causes the unresolved promises to be completed in the next lambda 
+// invocation and will therefore only work if AWS Lambda chooses to reuse the execution context.
+// Possibly the "right" way to do this is to use a non-async authQuery (with context.callbackWaitsForEmptyEventLoop = false) that calls all the async stuff (using https://javascript.info/task/async-from-regular).
 module.exports.authQuery = async (event, context, callback) => {
-  console.log(event.body);
+  console.log("authQuery: ", event.body.query);
   const query = event.body.query;
   const pars = event.body.pars;
   switch (query) {
@@ -53,11 +63,12 @@ module.exports.authQuery = async (event, context, callback) => {
       await me(event.cognitoPoolClaims.sub, callback);
       break;
     case "new_profile":
-      await newProfile(event.cognitoPoolClaims.sub, pars, callback);
+      await newProfile(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email, pars, callback);
       break;
     case "new_challenge":
       await newChallenge(event.cognitoPoolClaims.sub, pars, callback);
       break;
+      // return newChallenge2(event.cognitoPoolClaims.sub, pars);
     case "challenge_revoke":
       await revokeChallenge(event.cognitoPoolClaims.sub, pars, callback);
       break;
@@ -315,8 +326,6 @@ async function me(userId, callback) {
           "sk": "USER"
         },
       }));
-    console.log("got: ");
-    console.log(user);
     if (user.Item === undefined) {
       callback(null, {
         statusCode: 200,
@@ -512,12 +521,13 @@ async function getChallenges(challengeIds) {
   return list;
 }
 
-async function newProfile(userid, pars, callback) {
+async function newProfile(userid, email, pars, callback) {
   const data = {
       "pk": "USER#" + userid,
       "sk": "USER",
       "id": userid,
       "name": pars.name,
+      "email": email,
       "consent": pars.consent,
       "anonymous": pars.anonymous,
       "country": pars.country,
@@ -565,7 +575,7 @@ async function newProfile(userid, pars, callback) {
 
 async function newChallenge(userid, pars, callback) {
   const challengeId = crypto.randomUUID();
-  console.log(pars);
+  console.log("newChallenge pars:", pars);
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: {
@@ -624,11 +634,108 @@ async function newChallenge(userid, pars, callback) {
     logGetItemError(err);
     returnError("Failed to add challenge", callback);
   }
+  sendChallengedEmail(pars.challenger.name, pars.opponents, pars.metaGame)
+}
+
+/*
+const sleep = (time) => {
+  return new Promise((resolve) => {
+    setTimeout(resolve, time);
+  });
+}
+*/
+
+async function sendChallengedEmail(challenger, opponents, metaGame) {
+  // await sleep(4000);
+  const players = await getPlayers(opponents.map(o => o.id));
+  console.log(players);
+  metaGame = gameinfo.get(metaGame).name;
+  players.forEach(player => {
+    const comm = createSendEmailCommand(player.email, "AbstractPlay challenge", `Dear ${player.name},\r\n\r\n${challenger} has challenged you to a game of ${metaGame}. Please visit https://play.dev.abstractplay.com/ for more details.\r\n\r\nThe AbstractPlay system.`);
+    sesClient.send(comm);
+  })
+}
+
+async function newChallenge2(userid, pars) {
+  const challengeId = crypto.randomUUID();
+  console.log("newChallenge pars:", pars);
+  const addChallenge = ddbDocClient.send(new PutCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Item: {
+        "pk": "CHALLENGE#" + challengeId,
+        "sk": "CHALLENGE",
+        "id": challengeId,
+        "metaGame": pars.metaGame,
+        "numPlayers": pars.numPlayers,
+        "seating": pars.seating,
+        "variants": pars.variants,
+        "challenger": pars.challenger,
+        "challengees": pars.opponents, // users that were challenged
+        "players": [pars.challenger], // users that have accepted
+        "clockStart": pars.clockStart,
+        "clockInc": pars.clockInc,
+        "clockMax": pars.clockMax,
+        "clockHard": pars.clockHard
+      }
+    }));
+
+  const updateChallenger = ddbDocClient.send(new UpdateCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: { "pk": "USER#" + userid, "sk": "USER" },
+    ExpressionAttributeValues: { ":c": new Set([challengeId]) },
+    ExpressionAttributeNames: { "#c": "challenges" },
+    UpdateExpression: "add #c.issued :c",
+  }));
+
+  let list = [addChallenge, updateChallenger];
+  pars.opponents.forEach(challengee => {
+    list.push(
+      ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER#" + challengee.id, "sk": "USER" },
+        ExpressionAttributeValues: { ":c": new Set([challengeId]) },
+        ExpressionAttributeNames: { "#c": "challenges" },
+        UpdateExpression: "add #c.received :c",
+      }))
+    );
+  })
+
+  sendChallengedEmail2(pars.challenger.name, pars.opponents, pars.metaGame)
+
+  try {
+    await Promise.all(list);
+    console.log("Successfully added challenge" + challengeId);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        message: "Successfully added challenge",
+      }),
+      headers: {
+        'content-type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    };
+  } catch (err) {
+    logGetItemError(err);
+    returnError("Failed to add challenge", callback);
+  }
+}
+
+async function sendChallengedEmail2(challenger, opponents, metaGame) {
+  await sleep(4000);
+  const players = await getPlayers(opponents.map(o => o.id));
+  console.log(players);
+  metaGame = gameinfo.get(metaGame).name;
+  players.forEach(player => {
+    const comm = createSendEmailCommand(player.email, "AbstractPlay challenge", `Dear ${player.name},\r\n\r\n${challenger} has challenged you to a game of ${metaGame}. Please visit https://play.dev.abstractplay.com/ for more details.\r\n\r\nThe AbstractPlay system.`);
+    sesClient.send(comm);
+  })
 }
 
 async function revokeChallenge(userid, pars, callback) {
+  let challenge;
   try {
-    await removeChallenge(pars.id);
+    challenge = await removeChallenge(pars.id, challenge);
     console.log("Successfully removed challenge" + pars.id);
     callback(null, {
       statusCode: 200,
@@ -644,6 +751,23 @@ async function revokeChallenge(userid, pars, callback) {
     logGetItemError(err);
     returnError("Failed to remove challenge", callback);
   }
+  // send e-mails
+  console.log(challenge);
+  if (challenge !== undefined && challenge.Item !== undefined) {
+    // Inform challenged
+    let players = await getPlayers(challenge.Item.challengees.map(c => c.id));
+    const metaGame = gameinfo.get(challenge.Item.metaGame).name;
+    players.forEach(player => {
+      const comm = createSendEmailCommand(players[0].email, "AbstractPlay challenge revoked", `Dear ${player.name},\r\n\r\n${challenge.Item.challenger.name} has revoked his ${metaGame} challenge.\r\n\r\nThe AbstractPlay system.`);
+      sesClient.send(comm);  
+    });
+    // Inform players that have already accepted
+    players = await getPlayers(challenge.Item.players.map(c => c.id).filter(id => id !== challenge.Item.challenger.id));
+    players.forEach(player => {
+      const comm = createSendEmailCommand(players[0].email, "AbstractPlay challenge revoked", `Dear ${player.name},\r\n\r\n${challenge.Item.challenger.name} has revoked his ${metaGame} challenge.\r\n\r\nThe AbstractPlay system.`);
+      sesClient.send(comm);  
+    });
+  }
 }
 
 async function respondedChallenge(userid, pars, callback) {
@@ -651,8 +775,9 @@ async function respondedChallenge(userid, pars, callback) {
   const challengeId = pars.id;
   if (response) {
     // challenge was accepted
+    let email;
     try {
-      await acceptChallenge(userid, challengeId);
+      email = await acceptChallenge(userid, challengeId);
       console.log("Challenge" + challengeId + "successfully accepted.");
       callback(null, {
         statusCode: 200,
@@ -668,11 +793,27 @@ async function respondedChallenge(userid, pars, callback) {
       logGetItemError(err);
       returnError("Failed to accept challenge", callback);
     }
+    if (email !== undefined) {
+      try {
+        email.players.forEach((player, ind) => {
+          let body = `Dear ${player.name},\r\n\r\nThe ${email.metaGame} challenge was accepted by all players and the game has started.`;
+          if (ind === 0 || email.simultaneous) {
+            body += " It is your turn to move.";
+          }
+          body += "\r\n\r\nThe AbstractPlay system.";
+          const comm = createSendEmailCommand(player.email, "AbstractPlay game started", body);
+          sesClient.send(comm);  
+        });
+      } catch (err) {
+        logGetItemError(err);
+      }
+    }
   }
   else {
     // challenge was rejected
+    let challenge;
     try {
-      await removeChallenge(pars.id);
+      challenge = removeChallenge(pars.id, userid);
       console.log("Successfully removed challenge" + pars.id);
       callback(null, {
         statusCode: 200,
@@ -687,6 +828,18 @@ async function respondedChallenge(userid, pars, callback) {
     } catch (err) {
       logGetItemError(err);
       returnError("Failed to remove challenge", callback);
+    }
+    // send e-mails
+    console.log(challenge);
+    if (challenge !== undefined && challenge.Item !== undefined) {
+      // Inform everyone (except the decliner).
+      let players = await getPlayers(challenge.Item.challengees.map(c => c.id).filter(id => id !== userid).concat(challenge.Item.players.map(c => c.id)));
+      const quitter = challenge.Item.challengees.find(c => c.id === userid).name;
+      const metaGame = gameinfo.get(challenge.Item.metaGame).name;
+      players.forEach(player => {
+        const comm = createSendEmailCommand(players[0].email, "AbstractPlay challenge rejected", `Dear ${player.name},\r\n\r\n${quitter} has declined the ${metaGame} challenge. The challenge has been removed.\r\n\r\nThe AbstractPlay system.`);
+        sesClient.send(comm);  
+      });
     }
   }
 }
@@ -703,9 +856,10 @@ async function removeChallenge(challengeId) {
   if (challenge.Item === undefined) {
     // The challenge might have been revoked or rejected by another user (while you were deciding)
     console.log("Challenge not found");
-    return;
+    return { challenge, work: []};
   }
-  return removeAChallenge(challenge.Item);
+  await Promise.all(await removeAChallenge(challenge.Item));
+  return challenge;
 }
 
 async function removeAChallenge(challenge) {
@@ -731,7 +885,7 @@ async function removeAChallenge(challenge) {
       }))
     );
   })
-
+  
   // Remove from players that have already accepted
   challenge.players.filter(p => p.id != challenge.challenger.id).forEach(player => {
     list.push(
@@ -755,6 +909,7 @@ async function removeAChallenge(challenge) {
         },
       }))
   );
+
   return list;
 }
 
@@ -853,7 +1008,7 @@ async function acceptChallenge(userid, challengeId) {
   
     // Now remove the challenge and add the game to all players
     list.push(addGame);
-    list = list.concat(removeAChallenge(challenge));
+    list = list.concat(await removeAChallenge(challenge));
 
     // Update players
     playersFull.forEach(player => {
@@ -870,13 +1025,14 @@ async function acceptChallenge(userid, challengeId) {
         }))
       );
     });
-
     try {
       await Promise.all(list);
+      return { metaGame: info.name, players: playersFull, simultaneous: info.flags !== undefined && info.flags.includes('simultaneous') };
     }
     catch (error) {
       logGetItemError(error);
       returnError('Unable to update players and create game', callback);
+      return undefined;
     }
   } else {
     // Still waiting on more players to accept.
@@ -896,11 +1052,12 @@ async function acceptChallenge(userid, challengeId) {
     }));
 
     await Promise.all([updateChallenge, updateAccepter]);
+    return undefined;
   }
 }
 
 async function getPlayers(playerIDs) {
-  console.log(playerIDs);
+  console.log("playerIDs: ", playerIDs);
   const list = playerIDs.map(id =>
     ddbDocClient.send(
       new GetCommand({
@@ -1107,7 +1264,7 @@ async function submitMove(userid, pars, callback) {
     if (simultaneous)
       game.partialMove = game.players.map((p, i) => (p.id === userid ? game.partialMove.split(',')[i] : '')).join(',');
 
-    return callback(null, {
+    callback(null, {
       statusCode: 200,
       body: JSON.stringify(game),
       headers: {
@@ -1119,6 +1276,42 @@ async function submitMove(userid, pars, callback) {
   catch (error) {
     logGetItemError(error);
     returnError(`Unable to update game ${pars.id}`, callback);
+  }
+  try {
+    sendSubmittedMoveEmails(game, pars, simultaneous);
+  }
+  catch (error) {
+    logGetItemError(error);
+  }
+}
+
+async function sendSubmittedMoveEmails(game, pars, simultaneous) {
+  console.log('sendSubmittedMoveEmails game: ', game);
+  if (game.toMove != '') {
+    let playerIds = [];
+    if (!simultaneous) {
+      playerIds.push(game.players[game.toMove].id);
+    }
+    else if (game.toMove.every(b => b === true)) {
+      playerIds = game.players.map(p => p.id);
+    }
+    const players = await getPlayers(playerIds);
+    console.log(players);
+    const metaGame = gameinfo.get(game.metaGame).name;
+    players.forEach(player => {
+      const comm = createSendEmailCommand(player.email, "AbstractPlay: your move", `Dear ${player.name},\r\n\r\nIt is now your move in a game of ${metaGame}. Please visit https://play.dev.abstractplay.com/ for more details.\r\n\r\nThe AbstractPlay system.`);
+      sesClient.send(comm);
+    })
+  }
+  else {
+    const playerIds = game.players.map(p => p.id);
+    const players = await getPlayers(playerIds);
+    console.log(players);
+    const metaGame = gameinfo.get(game.metaGame).name;
+    players.forEach(player => {
+      const comm = createSendEmailCommand(player.email, "AbstractPlay: game over", `Dear ${player.name},\r\n\r\nYour ${metaGame} has ended. Please visit https://play.dev.abstractplay.com/ for more details.\r\n\r\nThe AbstractPlay system.`);
+      sesClient.send(comm);
+    });
   }
 }
 
@@ -1343,6 +1536,29 @@ function shuffle(array) {
     array[j] = temp;
   }
 }
+
+function createSendEmailCommand(toAddress, subject, body) {
+  return new SendEmailCommand({
+    Destination: {
+      ToAddresses: [
+        toAddress
+      ],
+    },
+    Message: {
+      Body: {
+        Text: {
+          Charset: "UTF-8",
+          Data: body
+        },
+      },
+      Subject: {
+        Charset: "UTF-8",
+        Data: subject
+      },
+    },
+    Source: "abstractplay@mail.abstractplay.com"
+  });
+};
 
 function returnError(message, callback) {
   callback(null, {

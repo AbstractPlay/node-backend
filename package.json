@@ -21,6 +21,7 @@
   "dependencies": {
     "@abstractplay/gameslib": "file:../gameslib/abstractplay-gameslib-0.6.0.tgz",
     "@aws-sdk/client-dynamodb": "^3.37.0",
+    "@aws-sdk/client-ses": "^3.245.0",
     "@aws-sdk/lib-dynamodb": "^3.37.0",
     "lodash": "^4.17.21"
   }

@@ -8,7 +8,7 @@ This started from this example:
 Place your credentials for AWS (the aws_access_key_id and aws_secret_access_key) in ~\.aws\credentials under a profile with name AbstractPlayDev and AbstractPlayProd.
 
 ## Cognito 
-Set up a Cognito user group for each of Dev and Prod using all the defaults. Now or after the group is created add a App client. The name doesn't seem to matter, but make sure "Generate client secret" is unchecked. Also uncheck "Enable token revocation", but I don't know if it matters. 
+Set up a Cognito user group for each of Dev and Prod using all the defaults. Now or after the group is created add an App client. The name doesn't seem to matter, but make sure "Generate client secret" is unchecked. Also uncheck "Enable token revocation", but I don't know if it matters. 
 
 After the pool is created copy the arn to serverless.yml for the authQuery function. Under "App client settings" check "Select all" for Enabled Identity Providers. Add Callback and Sign out URLs. For local debugging of the front end use "http://localhost:3000". For dev and prod use https://play.dev.abstractplay.com and https://play.abstractplay.com. Under OAuth 2.0 check "Authorization code grant", "Implicit grant" and "openid".
 

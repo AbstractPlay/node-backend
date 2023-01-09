@@ -23,7 +23,7 @@ frameworkVersion: '3'
 params:
   dev:
     profile: AbstractPlayDev
-    usepool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_2zrzbEjoU
+    userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_2zrzbEjoU
   prod:
     profile: AbstractPlayProd
     userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_YCjgSZHJm
@@ -49,6 +49,8 @@ provider:
             - dynamodb:PutItem
             - dynamodb:UpdateItem
             - dynamodb:DeleteItem
+            - ses:SendEmail
+            - ses:SendRawEmail
           Resource: "*"
 
 resources:
