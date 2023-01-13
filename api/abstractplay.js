@@ -4,9 +4,11 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand, DeleteCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const crypto = require('crypto');
 const { gameinfo, GameFactory } = require('@abstractplay/gameslib');
-const { SESClient, SendEmailCommand, SendEmailRequestFilterSensitiveLog } = require('@aws-sdk/client-ses');
-const REGION = "us-east-1";
+const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
+const i18n = require('i18next');
+const en = require('../locales/en/translation.json');
 
+const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
 const clnt = new DynamoDBClient({region: REGION});
 const marshallOptions = {
@@ -23,7 +25,10 @@ const unmarshallOptions = {
 };
 const translateConfig = { marshallOptions, unmarshallOptions };
 const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
-
+const headers = {
+  'content-type': 'application/json',
+  'Access-Control-Allow-Origin': '*'
+};
 module.exports.query = async (event, context, callback) => {
   console.log(event);
   const pars = event.queryStringParameters;
@@ -40,10 +45,7 @@ module.exports.query = async (event, context, callback) => {
         body: JSON.stringify({
           message: `Unable to execute unknown query '${query}'`
         }),
-        headers: {
-          'content-type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        }
+        headers
       });
   }
 }
@@ -96,10 +98,7 @@ module.exports.authQuery = async (event, context, callback) => {
         body: JSON.stringify({
           message: `Unable to execute unknown query '${query}'`
         }),
-        headers: {
-          'content-type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        }
+        headers
       });
   }
 }
@@ -121,10 +120,7 @@ async function userNames(callback) {
     return callback(null, {
       statusCode: 200,
       body: JSON.stringify(data.Items.map(u => ({"id": u.sk, "name": u.name}))),
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+      headers
     });
   }
   catch (error) {
@@ -147,10 +143,7 @@ async function challengeDetails(pars, callback) {
     return callback(null, {
       statusCode: 200,
       body: JSON.stringify(data.Item),
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+      headers
     });
   }
   catch (error) {
@@ -197,10 +190,7 @@ async function game(userid, pars, callback) {
     return callback(null, {
       statusCode: 200,
       body: JSON.stringify({"game": game, "comments": comments}),
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+      headers
     });
   }
   catch (error) {
@@ -236,10 +226,7 @@ async function updateGameSettings(userid, pars, callback) {
     }
     return callback(null, {
       statusCode: 200,
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+      headers
     });
   }
   catch (error) {
@@ -265,10 +252,7 @@ async function setSeenTime(userid, gameid) {
       callback(null, {
         statusCode: 200,
         body: JSON.stringify({}),
-        headers: {
-          'content-type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        }
+        headers
       });
       return;
     }
@@ -304,10 +288,7 @@ async function updateUserSettings(userid, pars, callback) {
       body: JSON.stringify({
         message: `Sucessfully stored user settings for user ${userid}`,
       }),
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+      headers
     });
   } catch (err) {
     logGetItemError(err);
@@ -330,10 +311,7 @@ async function me(userId, callback) {
       callback(null, {
         statusCode: 200,
         body: JSON.stringify({}),
-        headers: {
-          'content-type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        }
+        headers
       });
       return;
     }
@@ -412,10 +390,7 @@ async function me(userId, callback) {
         "challengesReceived": data[1],
         "challengesAccepted": data[2]
       }, Set_toJSON),
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+      headers
     });
     // Update last seen date for user
     ddbDocClient.send(new UpdateCommand({
@@ -562,10 +537,7 @@ async function newProfile(userid, email, pars, callback) {
       body: JSON.stringify({
         message: `Sucessfully stored user profile for user ${pars.name}`,
       }),
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+      headers
     });
   } catch (err) {
     logGetItemError(err);
@@ -625,109 +597,26 @@ async function newChallenge(userid, pars, callback) {
       body: JSON.stringify({
         message: "Successfully added challenge",
       }),
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+      headers
     });
   } catch (err) {
     logGetItemError(err);
     returnError("Failed to add challenge", callback);
   }
-  sendChallengedEmail(pars.challenger.name, pars.opponents, pars.metaGame)
-}
-
-/*
-const sleep = (time) => {
-  return new Promise((resolve) => {
-    setTimeout(resolve, time);
-  });
-}
-*/
-
-async function sendChallengedEmail(challenger, opponents, metaGame) {
-  // await sleep(4000);
-  const players = await getPlayers(opponents.map(o => o.id));
-  console.log(players);
-  metaGame = gameinfo.get(metaGame).name;
-  players.forEach(player => {
-    const comm = createSendEmailCommand(player.email, "AbstractPlay challenge", `Dear ${player.name},\r\n\r\n${challenger} has challenged you to a game of ${metaGame}. Please visit https://play.dev.abstractplay.com/ for more details.\r\n\r\nThe AbstractPlay system.`);
-    sesClient.send(comm);
-  })
-}
-
-async function newChallenge2(userid, pars) {
-  const challengeId = crypto.randomUUID();
-  console.log("newChallenge pars:", pars);
-  const addChallenge = ddbDocClient.send(new PutCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: {
-        "pk": "CHALLENGE#" + challengeId,
-        "sk": "CHALLENGE",
-        "id": challengeId,
-        "metaGame": pars.metaGame,
-        "numPlayers": pars.numPlayers,
-        "seating": pars.seating,
-        "variants": pars.variants,
-        "challenger": pars.challenger,
-        "challengees": pars.opponents, // users that were challenged
-        "players": [pars.challenger], // users that have accepted
-        "clockStart": pars.clockStart,
-        "clockInc": pars.clockInc,
-        "clockMax": pars.clockMax,
-        "clockHard": pars.clockHard
-      }
-    }));
-
-  const updateChallenger = ddbDocClient.send(new UpdateCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "USER#" + userid, "sk": "USER" },
-    ExpressionAttributeValues: { ":c": new Set([challengeId]) },
-    ExpressionAttributeNames: { "#c": "challenges" },
-    UpdateExpression: "add #c.issued :c",
-  }));
-
-  let list = [addChallenge, updateChallenger];
-  pars.opponents.forEach(challengee => {
-    list.push(
-      ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USER#" + challengee.id, "sk": "USER" },
-        ExpressionAttributeValues: { ":c": new Set([challengeId]) },
-        ExpressionAttributeNames: { "#c": "challenges" },
-        UpdateExpression: "add #c.received :c",
-      }))
-    );
-  })
-
-  sendChallengedEmail2(pars.challenger.name, pars.opponents, pars.metaGame)
-
   try {
-    await Promise.all(list);
-    console.log("Successfully added challenge" + challengeId);
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        message: "Successfully added challenge",
-      }),
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
-    };
-  } catch (err) {
-    logGetItemError(err);
-    returnError("Failed to add challenge", callback);
+    sendChallengedEmail(pars.challenger.name, pars.opponents, pars.metaGame);
+  } catch (error) {
+    logGetItemError(error);
   }
 }
 
-async function sendChallengedEmail2(challenger, opponents, metaGame) {
-  await sleep(4000);
+async function sendChallengedEmail(challenger, opponents, metaGame) {
+  initi18n('fr');
   const players = await getPlayers(opponents.map(o => o.id));
   console.log(players);
   metaGame = gameinfo.get(metaGame).name;
   players.forEach(player => {
-    const comm = createSendEmailCommand(player.email, "AbstractPlay challenge", `Dear ${player.name},\r\n\r\n${challenger} has challenged you to a game of ${metaGame}. Please visit https://play.dev.abstractplay.com/ for more details.\r\n\r\nThe AbstractPlay system.`);
+    const comm = createSendEmailCommand(player.email, player.name,  i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { challenger: challenger, metaGame: metaGame }));
     sesClient.send(comm);
   })
 }
@@ -742,29 +631,26 @@ async function revokeChallenge(userid, pars, callback) {
       body: JSON.stringify({
         message: "Successfully removed challenge" + pars.id
       }),
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+      headers
     });
   } catch (err) {
     logGetItemError(err);
     returnError("Failed to remove challenge", callback);
   }
   // send e-mails
-  console.log(challenge);
   if (challenge !== undefined && challenge.Item !== undefined) {
+    initi18n('fr');
     // Inform challenged
     let players = await getPlayers(challenge.Item.challengees.map(c => c.id));
     const metaGame = gameinfo.get(challenge.Item.metaGame).name;
     players.forEach(player => {
-      const comm = createSendEmailCommand(players[0].email, "AbstractPlay challenge revoked", `Dear ${player.name},\r\n\r\n${challenge.Item.challenger.name} has revoked his ${metaGame} challenge.\r\n\r\nThe AbstractPlay system.`);
+      const comm = createSendEmailCommand(players[0].email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.Item.challenger.name, metaGame}));
       sesClient.send(comm);  
     });
     // Inform players that have already accepted
     players = await getPlayers(challenge.Item.players.map(c => c.id).filter(id => id !== challenge.Item.challenger.id));
     players.forEach(player => {
-      const comm = createSendEmailCommand(players[0].email, "AbstractPlay challenge revoked", `Dear ${player.name},\r\n\r\n${challenge.Item.challenger.name} has revoked his ${metaGame} challenge.\r\n\r\nThe AbstractPlay system.`);
+      const comm = createSendEmailCommand(players[0].email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.Item.challenger.name, metaGame}));
       sesClient.send(comm);  
     });
   }
@@ -784,24 +670,21 @@ async function respondedChallenge(userid, pars, callback) {
         body: JSON.stringify({
           message: "Challenge" + challengeId + "successfully accepted."
         }),
-        headers: {
-          'content-type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        }
+        headers
       });
     } catch (err) {
       logGetItemError(err);
       returnError("Failed to accept challenge", callback);
     }
     if (email !== undefined) {
+      initi18n('fr');
       try {
         email.players.forEach((player, ind) => {
-          let body = `Dear ${player.name},\r\n\r\nThe ${email.metaGame} challenge was accepted by all players and the game has started.`;
+          let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
           if (ind === 0 || email.simultaneous) {
-            body += " It is your turn to move.";
+            body += " " + i18n.t("YourMove");
           }
-          body += "\r\n\r\nThe AbstractPlay system.";
-          const comm = createSendEmailCommand(player.email, "AbstractPlay game started", body);
+          const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), body);
           sesClient.send(comm);  
         });
       } catch (err) {
@@ -813,17 +696,14 @@ async function respondedChallenge(userid, pars, callback) {
     // challenge was rejected
     let challenge;
     try {
-      challenge = removeChallenge(pars.id, userid);
+      challenge = await removeChallenge(pars.id, userid);
       console.log("Successfully removed challenge" + pars.id);
       callback(null, {
         statusCode: 200,
         body: JSON.stringify({
           message: "Successfully removed challenge" + pars.id
         }),
-        headers: {
-          'content-type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        }
+        headers
       });
     } catch (err) {
       logGetItemError(err);
@@ -832,12 +712,13 @@ async function respondedChallenge(userid, pars, callback) {
     // send e-mails
     console.log(challenge);
     if (challenge !== undefined && challenge.Item !== undefined) {
-      // Inform everyone (except the decliner).
+      initi18n('fr');
+      // Inform everyone (except the decliner, he knows).
       let players = await getPlayers(challenge.Item.challengees.map(c => c.id).filter(id => id !== userid).concat(challenge.Item.players.map(c => c.id)));
       const quitter = challenge.Item.challengees.find(c => c.id === userid).name;
       const metaGame = gameinfo.get(challenge.Item.metaGame).name;
       players.forEach(player => {
-        const comm = createSendEmailCommand(players[0].email, "AbstractPlay challenge rejected", `Dear ${player.name},\r\n\r\n${quitter} has declined the ${metaGame} challenge. The challenge has been removed.\r\n\r\nThe AbstractPlay system.`);
+        const comm = createSendEmailCommand(players[0].email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame }));
         sesClient.send(comm);  
       });
     }
@@ -1267,10 +1148,7 @@ async function submitMove(userid, pars, callback) {
     callback(null, {
       statusCode: 200,
       body: JSON.stringify(game),
-      headers: {
-        'content-type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+      headers
     });
   }
   catch (error) {
@@ -1286,7 +1164,7 @@ async function submitMove(userid, pars, callback) {
 }
 
 async function sendSubmittedMoveEmails(game, pars, simultaneous) {
-  console.log('sendSubmittedMoveEmails game: ', game);
+  initi18n('fr');
   if (game.toMove != '') {
     let playerIds = [];
     if (!simultaneous) {
@@ -1299,7 +1177,7 @@ async function sendSubmittedMoveEmails(game, pars, simultaneous) {
     console.log(players);
     const metaGame = gameinfo.get(game.metaGame).name;
     players.forEach(player => {
-      const comm = createSendEmailCommand(player.email, "AbstractPlay: your move", `Dear ${player.name},\r\n\r\nIt is now your move in a game of ${metaGame}. Please visit https://play.dev.abstractplay.com/ for more details.\r\n\r\nThe AbstractPlay system.`);
+      const comm = createSendEmailCommand(player.email, player.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBody", { metaGame }));
       sesClient.send(comm);
     })
   }
@@ -1309,7 +1187,7 @@ async function sendSubmittedMoveEmails(game, pars, simultaneous) {
     console.log(players);
     const metaGame = gameinfo.get(game.metaGame).name;
     players.forEach(player => {
-      const comm = createSendEmailCommand(player.email, "AbstractPlay: game over", `Dear ${player.name},\r\n\r\nYour ${metaGame} has ended. Please visit https://play.dev.abstractplay.com/ for more details.\r\n\r\nThe AbstractPlay system.`);
+      const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), i18n.t("GameOverBody", { metaGame }));
       sesClient.send(comm);
     });
   }
@@ -1537,7 +1415,8 @@ function shuffle(array) {
   }
 }
 
-function createSendEmailCommand(toAddress, subject, body) {
+function createSendEmailCommand(toAddress, player, subject, body) {
+  const fullbody =  i18n.t("DearPlayer", { player }) + '\r\n\r\n' + body + "\r\n\r\n" + i18n.t("EmailOut");
   return new SendEmailCommand({
     Destination: {
       ToAddresses: [
@@ -1548,7 +1427,7 @@ function createSendEmailCommand(toAddress, subject, body) {
       Body: {
         Text: {
           Charset: "UTF-8",
-          Data: body
+          Data: fullbody
         },
       },
       Subject: {
@@ -1560,16 +1439,26 @@ function createSendEmailCommand(toAddress, subject, body) {
   });
 };
 
+function initi18n(language) {
+  i18n.init({
+    lng: language,
+    fallbackLng: 'en',
+    debug: true,
+    resources: {
+      en: {
+        translation: en
+      }
+    }
+  });
+}
+
 function returnError(message, callback) {
   callback(null, {
     statusCode: 500,
     body: JSON.stringify({
       message: message
     }),
-    headers: {
-      'content-type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    }
+    headers
   });
 }
 
