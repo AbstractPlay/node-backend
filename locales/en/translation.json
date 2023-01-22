@@ -12,6 +12,6 @@
   "GameStartedBody": "The {{metaGame}} challenge was accepted by all players and the game has started.",
   "YourMove": "It is your turn to move.",
   "YourMoveBody": "It is now your move in a game of {{metaGame}}. Please visit https://play.dev.abstractplay.com/ for more details.",
-  "GameOverBody": "Your {{metaGame}} has ended. Please visit https://play.dev.abstractplay.com/ for more details.",
+  "GameOverBody": "Your {{metaGame}} game has ended. Please visit https://play.dev.abstractplay.com/ for more details.",
   "EmailOut": "The AbstractPlay system."
 }

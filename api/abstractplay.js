@@ -4,13 +4,15 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand, DeleteCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const crypto = require('crypto');
 const { gameinfo, GameFactory } = require('@abstractplay/gameslib');
-const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
+const { SESClient, SendEmailCommand, UpdateCustomVerificationEmailTemplateCommand } = require('@aws-sdk/client-ses');
 const i18n = require('i18next');
 const en = require('../locales/en/translation.json');
+const fr = require('../locales/fr/translation.json');
+const it = require('../locales/it/translation.json');
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
-const clnt = new DynamoDBClient({region: REGION});
+const clnt = new DynamoDBClient({ region: REGION });
 const marshallOptions = {
   // Whether to automatically convert empty strings, blobs, and sets to `null`.
   convertEmptyValues: false, // false, by default.
@@ -62,7 +64,13 @@ module.exports.authQuery = async (event, context, callback) => {
   const pars = event.body.pars;
   switch (query) {
     case "me":
-      await me(event.cognitoPoolClaims.sub, callback);
+      await me(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email, callback);
+      break;
+    case "my_settings":
+      await mySettings(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email, callback);
+      break;
+    case "new_setting":
+      await newSetting(event.cognitoPoolClaims.sub, pars, callback);
       break;
     case "new_profile":
       await newProfile(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email, pars, callback);
@@ -112,10 +120,11 @@ async function userNames(callback) {
         KeyConditionExpression: "#pk = :pk",
         ExpressionAttributeValues: { ":pk": "USERS" },
         ExpressionAttributeNames: { "#pk": "pk", "#name": "name"},
-        ProjectionExpression: "sk, #name"
+        ProjectionExpression: "sk, #name",
+        ReturnConsumedCapacity: "INDEXES"
       }));
 
-    console.log("Scan succeeded. Got:");
+    console.log("Query succeeded. Got:");
     console.log(data);
     return callback(null, {
       statusCode: 200,
@@ -125,7 +134,7 @@ async function userNames(callback) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to scan table ${process.env.ABSTRACT_PLAY_TABLE}`, callback);
+    returnError(`Unable to query table ${process.env.ABSTRACT_PLAY_TABLE}`, callback);
   }
 }
 
@@ -296,7 +305,7 @@ async function updateUserSettings(userid, pars, callback) {
   }
 }
 
-async function me(userId, callback) {
+async function me(userId, email, callback) {
   const fixGames = false;
   try {
     const user = await ddbDocClient.send(
@@ -315,6 +324,8 @@ async function me(userId, callback) {
       });
       return;
     }
+    if (user.Item.email !== email)
+      updateUserEMail(userId, email);
     var games = user.Item.games;
     if (games == undefined)
       games= [];
@@ -384,6 +395,7 @@ async function me(userId, callback) {
       body: JSON.stringify({
         "id": user.Item.id,
         "name": user.Item.name,
+        "language": user.Item.language,
         "games": games,
         "settings": user.Item.settings,
         "challengesIssued": data[0],
@@ -402,6 +414,103 @@ async function me(userId, callback) {
   } catch (err) {
     logGetItemError(err);
     returnError(`Unable to get user data for ${userId}`, callback);
+  }
+}
+
+async function updateUserEMail(userid, newMail) {
+  ddbDocClient.send(new UpdateCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: { "pk": "USER#" + userid, "sk": "USER" },
+    ExpressionAttributeValues: { ":e": newMail },
+    UpdateExpression: "set email = :e",
+  }));
+}
+
+async function mySettings(userId, email, callback) {
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER#" + userId,
+          "sk": "USER"
+        },
+        ExpressionAttributeNames: { "#name": "name", "#language": "language" },
+        ProjectionExpression: "id,#name,email,#language",
+      }));
+    if (user.Item === undefined) {
+      callback(null, {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      });
+      return;
+    }
+    if (user.Item.email !== email)
+      updateUserEMail(userId, email);
+
+    console.log("mySettings Item: ", user.Item);
+    callback(null, {
+      statusCode: 200,
+      body: JSON.stringify({
+        "id": user.Item.id,
+        "name": user.Item.name,
+        "email": email,
+        "language": user.Item.language
+      }, Set_toJSON),
+      headers
+    });
+  } catch (err) {
+    logGetItemError(err);
+    returnError(`Unable to get user data for ${userId}`, callback);
+  }
+}
+
+async function newSetting(userId, pars, callback) {
+  let attr = '';
+  let val = '';
+  switch (pars.attribute) {
+    case "name":
+      attr = "name";
+      val = pars.value;
+      break;
+    case "language":
+      attr = "language";
+      val = pars.value;
+      break;
+    default:
+      return;
+  }
+  console.log("attr, val: ", attr, val);
+  let work = [];
+  work.push(ddbDocClient.send(new UpdateCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: { "pk": "USER#" + userId, "sk": "USER" },
+    ExpressionAttributeValues: { ":v": val },
+    ExpressionAttributeNames: { "#a": attr },
+    UpdateExpression: "set #a = :v"
+  })));
+  if (pars.attribute === "name") {
+    work.push(ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USERS", "sk": userId },
+      ExpressionAttributeValues: { ":newname": val },
+      ExpressionAttributeNames: { "#name": "name" },
+      UpdateExpression: "set #name = :newname"
+    })));
+  }
+  try {
+    await Promise.all(work);
+    console.log("attr, val: ", attr, val, " updated");
+    callback(null, {
+      statusCode: 200,
+      body: JSON.stringify({
+        "result": "success"
+      }, Set_toJSON),
+      headers
+    });
+  } catch (err) {
+    logGetItemError(err);
   }
 }
 
@@ -611,14 +720,16 @@ async function newChallenge(userid, pars, callback) {
 }
 
 async function sendChallengedEmail(challenger, opponents, metaGame) {
-  initi18n('fr');
   const players = await getPlayers(opponents.map(o => o.id));
   console.log(players);
   metaGame = gameinfo.get(metaGame).name;
-  players.forEach(player => {
-    const comm = createSendEmailCommand(player.email, player.name,  i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { challenger: challenger, metaGame: metaGame }));
+  await initi18n('en');
+  await changeLanguageForPlayer(player);
+  for (const player of players) {
+    await changeLanguageForPlayer(player);
+    const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { challenger: challenger, metaGame: metaGame }));
     sesClient.send(comm);
-  })
+  }
 }
 
 async function revokeChallenge(userid, pars, callback) {
@@ -639,20 +750,22 @@ async function revokeChallenge(userid, pars, callback) {
   }
   // send e-mails
   if (challenge !== undefined && challenge.Item !== undefined) {
-    initi18n('fr');
+    await initi18n('en');
     // Inform challenged
     let players = await getPlayers(challenge.Item.challengees.map(c => c.id));
     const metaGame = gameinfo.get(challenge.Item.metaGame).name;
-    players.forEach(player => {
-      const comm = createSendEmailCommand(players[0].email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.Item.challenger.name, metaGame}));
+    for (const player of players) {
+      await changeLanguageForPlayer(player);
+      const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.Item.challenger.name, metaGame}));
       sesClient.send(comm);  
-    });
+    };
     // Inform players that have already accepted
     players = await getPlayers(challenge.Item.players.map(c => c.id).filter(id => id !== challenge.Item.challenger.id));
-    players.forEach(player => {
-      const comm = createSendEmailCommand(players[0].email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.Item.challenger.name, metaGame}));
+    for (const player of players) {
+      await changeLanguageForPlayer(player);
+      const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.Item.challenger.name, metaGame}));
       sesClient.send(comm);  
-    });
+    };
   }
 }
 
@@ -677,16 +790,17 @@ async function respondedChallenge(userid, pars, callback) {
       returnError("Failed to accept challenge", callback);
     }
     if (email !== undefined) {
-      initi18n('fr');
+      await initi18n('en');
       try {
-        email.players.forEach((player, ind) => {
+        for (const [player, ind] of email.players.entries()) {
+          await changeLanguageForPlayer(player);
           let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
           if (ind === 0 || email.simultaneous) {
             body += " " + i18n.t("YourMove");
           }
           const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), body);
           sesClient.send(comm);  
-        });
+        };
       } catch (err) {
         logGetItemError(err);
       }
@@ -712,15 +826,16 @@ async function respondedChallenge(userid, pars, callback) {
     // send e-mails
     console.log(challenge);
     if (challenge !== undefined && challenge.Item !== undefined) {
-      initi18n('fr');
+      await initi18n('en');
       // Inform everyone (except the decliner, he knows).
       let players = await getPlayers(challenge.Item.challengees.map(c => c.id).filter(id => id !== userid).concat(challenge.Item.players.map(c => c.id)));
       const quitter = challenge.Item.challengees.find(c => c.id === userid).name;
       const metaGame = gameinfo.get(challenge.Item.metaGame).name;
-      players.forEach(player => {
-        const comm = createSendEmailCommand(players[0].email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame }));
+      for (const player of players) {
+        await changeLanguageForPlayer(player);
+        const comm = createSendEmailCommand(players.email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame }));
         sesClient.send(comm);  
-      });
+      };
     }
   }
 }
@@ -1164,7 +1279,7 @@ async function submitMove(userid, pars, callback) {
 }
 
 async function sendSubmittedMoveEmails(game, pars, simultaneous) {
-  initi18n('fr');
+  await initi18n('en');
   if (game.toMove != '') {
     let playerIds = [];
     if (!simultaneous) {
@@ -1176,20 +1291,22 @@ async function sendSubmittedMoveEmails(game, pars, simultaneous) {
     const players = await getPlayers(playerIds);
     console.log(players);
     const metaGame = gameinfo.get(game.metaGame).name;
-    players.forEach(player => {
+    for (const player of players) {
+      await changeLanguageForPlayer(player);
       const comm = createSendEmailCommand(player.email, player.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBody", { metaGame }));
       sesClient.send(comm);
-    })
+    }
   }
   else {
     const playerIds = game.players.map(p => p.id);
     const players = await getPlayers(playerIds);
     console.log(players);
     const metaGame = gameinfo.get(game.metaGame).name;
-    players.forEach(player => {
-      const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), i18n.t("GameOverBody", { metaGame }));
+    for (const player of players) {
+      await changeLanguageForPlayer(player);
+      const comm = createSendEmailCommand(player.email, player.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBody", { metaGame }));
       sesClient.send(comm);
-    });
+    };
   }
 }
 
@@ -1415,6 +1532,16 @@ function shuffle(array) {
   }
 }
 
+async function changeLanguageForPlayer(player) {
+  var lng = "en";
+  if (player.language !== undefined)
+    lng = player.language;
+  if (i18n.language !== lng) {
+    await i18n.changeLanguage(lng);
+    console.log(`changed language to ${lng}`);
+  }
+}
+
 function createSendEmailCommand(toAddress, player, subject, body) {
   const fullbody =  i18n.t("DearPlayer", { player }) + '\r\n\r\n' + body + "\r\n\r\n" + i18n.t("EmailOut");
   return new SendEmailCommand({
@@ -1439,14 +1566,20 @@ function createSendEmailCommand(toAddress, player, subject, body) {
   });
 };
 
-function initi18n(language) {
-  i18n.init({
+async function initi18n(language) {
+  await i18n.init({
     lng: language,
     fallbackLng: 'en',
     debug: true,
     resources: {
       en: {
         translation: en
+      },
+      fr: {
+        translation: fr
+      },
+      it: {
+        translation: it
       }
     }
   });
