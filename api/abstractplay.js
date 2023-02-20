@@ -857,7 +857,7 @@ async function sendChallengedEmail(challenger, opponents, metaGame) {
   await initi18n('en');
   for (const player of players) {
     await changeLanguageForPlayer(player);
-    const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { challenger: challenger, metaGame: metaGame }));
+    const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { challenger, metaGame, "interpolation": {"escapeValue": false} }));
     sesClient.send(comm);
   }
 }
@@ -888,14 +888,14 @@ async function revokeChallenge(userid, pars, callback) {
     const metaGame = gameinfo.get(challenge.metaGame).name;
     for (const player of players) {
       await changeLanguageForPlayer(player);
-      const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}));
+      const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
       sesClient.send(comm);  
     };
     // Inform players that have already accepted
     players = await getPlayers(challenge.players.map(c => c.id).filter(id => id !== challenge.challenger.id));
     for (const player of players) {
       await changeLanguageForPlayer(player);
-      const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}));
+      const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
       sesClient.send(comm);  
     };
   }
@@ -930,7 +930,7 @@ async function respondedChallenge(userid, pars, callback) {
         for (const [ind, player] of email.players.entries()) {
           await changeLanguageForPlayer(player);
           console.log(player);
-          let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
+          let body = i18n.t("GameStartedBody", { metaGame: email.metaGame, "interpolation": {"escapeValue": false} });
           if (ind === 0 || email.simultaneous) {
             body += " " + i18n.t("YourMove");
           }
@@ -971,7 +971,7 @@ async function respondedChallenge(userid, pars, callback) {
       const metaGame = gameinfo.get(challenge.metaGame).name;
       for (const player of players) {
         await changeLanguageForPlayer(player);
-        const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame }));
+        const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame, "interpolation": {"escapeValue": false} }));
         sesClient.send(comm);  
       };
     }
@@ -1170,6 +1170,7 @@ async function acceptChallenge(userid, metaGame, challengeId, standing) {
           "id": gameId,
           "metaGame": challenge.metaGame,
           "numPlayers": challenge.numPlayers,
+          "rated": challenge.rated === true,
           "players": gamePlayers,
           "clockStart": challenge.clockStart,
           "clockInc": challenge.clockInc,
@@ -1443,7 +1444,6 @@ async function submitMove(userid, pars, callback) {
   const playerIDs = game.players.map(p => p.id);
   // TODO: We are updating players and their games. This should be put in some kind of critical section!
   const players = await getPlayers(playerIDs);
-  console.log("got players");
 
   // this should be all the info we want to show on the "my games" summary page.
   const playerGame = {
@@ -1463,7 +1463,9 @@ async function submitMove(userid, pars, callback) {
     "lastMoveTime": timestamp
   };
   let list = [];
+  let newRatings = null;
   if ((game.toMove === "" || game.toMove === null)) {
+    newRatings = updateRatings(game, players);
     myGame.seen = Date.now();
     addToGameLists("COMPLETEDGAMES", playerGame, timestamp);
     removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players);
@@ -1475,7 +1477,7 @@ async function submitMove(userid, pars, callback) {
     }));
   list.push(updateGame);
   // Update players
-  players.forEach(player => {
+  players.forEach((player, ind) => {
     let games = [];
     player.games.forEach(g => {
       if (g.id === playerGame.id) {
@@ -1487,14 +1489,25 @@ async function submitMove(userid, pars, callback) {
       else
         games.push(g)
     });
-    list.push(
-      ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USER#" + player.id, "sk": "USER" },
-        ExpressionAttributeValues: { ":gs": games },
-        UpdateExpression: "set games = :gs",
-      }))
-    );
+    if (newRatings === null) {
+      list.push(
+        ddbDocClient.send(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { "pk": "USER#" + player.id, "sk": "USER" },
+          ExpressionAttributeValues: { ":gs": games },
+          UpdateExpression: "set games = :gs",
+        }))
+      );
+    } else {
+      list.push(
+        ddbDocClient.send(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { "pk": "USER#" + player.id, "sk": "USER" },
+          ExpressionAttributeValues: { ":gs": games, ":rs": newRatings[ind] },
+          UpdateExpression: "set games = :gs, ratings = :rs"
+        }))
+      );
+    }
   });
 
   try {
@@ -1514,14 +1527,75 @@ async function submitMove(userid, pars, callback) {
     returnError(`Unable to update game ${pars.id}`, callback);
   }
   try {
-    sendSubmittedMoveEmails(game, pars, simultaneous);
+    sendSubmittedMoveEmails(game, players, simultaneous, newRatings);
   }
   catch (error) {
     logGetItemError(error);
   }
 }
 
-async function sendSubmittedMoveEmails(game, pars, simultaneous) {
+function updateRatings(game, players) {
+  console.log("game.numMoves", game.numMoves);
+  if (!game.rated || game.numMoves < 3)
+    return null;
+  if (game.numPlayers !== 2)
+    throw new Error(`Only 2 player games can be rated, game ${game.id}`);
+  let rating1 = {rating: 1200, N: 0, wins: 0, draws: 0}
+  let rating2 = {rating: 1200, N: 0, wins: 0, draws: 0}
+  if (players[0].ratings !== undefined && players[0].ratings[game.metaGame] !== undefined)
+    rating1 = players[0].ratings[game.metaGame];
+  if (players[1].ratings !== undefined && players[1].ratings[game.metaGame] !== undefined)
+    rating2 = players[1].ratings[game.metaGame];
+  let score;
+  if (Array.isArray(game.winner)) {
+    if (game.winner.length == 1) {
+      if (game.winner[0] === 1) {
+        score = 1;
+        rating1.wins += 1;
+      } else if (game.winner[0] === 2) {
+        score = 0;
+        rating2.wins += 1;
+      } else {
+        throw new Error(`Winner ([${game.winner[0]}]) not in expected format, game ${game.id}`);
+      }
+    } else if (game.winner.length == 2) {
+      if (game.winner.includes(1) && game.winner.includes(2)) {
+        score = 0.5;
+        rating1.draws += 1;
+        rating2.draws += 1;
+      } else {
+        throw new Error(`Winner ([${game.winner[0]}, ${game.winner[1]}]) not in expected format, game ${game.id}`);
+      }
+    } else {
+      throw new Error(`Winner has length ${game.winner.length}, this is not expected, game ${game.id}`);
+    }
+  } else {
+    throw new Error(`Winner is not an array!? Game ${game.id}`);
+  }
+  const expectedScore = 1 / (1 + Math.pow(10, (rating2.rating - rating1.rating) / 400)); // player 1's expected score;
+  const E2 = 1 / (1 + Math.pow(10, (rating1.rating - rating2.rating) / 400));
+  console.log(`E = ${expectedScore}, E2 = ${E2}`);
+  rating1.rating += getK(rating1.N) * (score - expectedScore);
+  rating2.rating += getK(rating2.N) * (expectedScore - score);
+  rating1.N += 1;
+  rating2.N += 1;
+  let ratings1 = players[0].ratings === undefined ? {} : players[0].ratings;
+  let ratings2 = players[1].ratings === undefined ? {} : players[1].ratings;
+  ratings1[game.metaGame] = rating1;
+  ratings2[game.metaGame] = rating2;
+  return [ratings1, ratings2];
+}
+
+function getK(N) {
+  return (
+    N < 10 ? 40 
+    : N < 20 ? 30 
+    : N < 40 ? 25 
+    : 20
+  );
+}
+
+async function sendSubmittedMoveEmails(game, players0, simultaneous, newRatings) {
   await initi18n('en');
   if (game.toMove !== '') {
     let playerIds = [];
@@ -1531,23 +1605,26 @@ async function sendSubmittedMoveEmails(game, pars, simultaneous) {
     else if (game.toMove.every(b => b === true)) {
       playerIds = game.players.map(p => p.id);
     }
-    const players = await getPlayers(playerIds);
-    console.log(players);
+    const players = players0.filter(p => playerIds.includes(p.id));
     const metaGame = gameinfo.get(game.metaGame).name;
     for (const player of players) {
       await changeLanguageForPlayer(player);
-      const comm = createSendEmailCommand(player.email, player.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBody", { metaGame }));
+      const comm = createSendEmailCommand(player.email, player.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBody", { metaGame, "interpolation": {"escapeValue": false} }));
       sesClient.send(comm);
     }
   } else {
     // Game over
     const playerIds = game.players.map(p => p.id);
-    const players = await getPlayers(playerIds);
-    console.log(players);
+    const players = players0.filter(p => playerIds.includes(p.id));
     const metaGame = gameinfo.get(game.metaGame).name;
-    for (const player of players) {
+    for (const [ind, player] of players.entries()) {
       await changeLanguageForPlayer(player);
-      const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), i18n.t("GameOverBody", { metaGame }));
+      let body;
+      if (newRatings != null)
+        body = i18n.t("GameOverWithRatingBody", { metaGame, "rating" : `${Math.round(newRatings[ind][game.metaGame].rating)}`, "interpolation": {"escapeValue": false} });
+      else
+        body = i18n.t("GameOverBody", { metaGame, "interpolation": {"escapeValue": false} });
+      const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), body);
       sesClient.send(comm);
     };
   }
@@ -1560,6 +1637,8 @@ function resign(userid, engine, game) {
   engine.resign(player + 1);
   game.state = engine.serialize();
   game.toMove = "";
+  game.winner = engine.winner;
+  game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
 }
 
 function timeout(userid, engine, game) {
@@ -1591,6 +1670,8 @@ function timeout(userid, engine, game) {
   engine.timeout(loser + 1);
   game.state = engine.serialize();
   game.toMove = "";
+  game.winner = engine.winner;
+  game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
 }
 
 function drawaccepted(userid, engine, game, simultaneous) {
@@ -1603,6 +1684,8 @@ function drawaccepted(userid, engine, game, simultaneous) {
     engine.draw();
     game.state = engine.serialize();
     game.toMove = "";
+    game.winner = engine.winner;
+    game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   }
 }
 
@@ -1627,6 +1710,8 @@ async function timeloss(player, gameid, timestamp) {
   engine.timeout(player + 1);
   game.state = engine.serialize();
   game.toMove = "";
+  game.winner = engine.winner;
+  game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   game.lastMoveTime = timestamp;
   const playerIDs = game.players.map(p => p.id);
   // TODO: We are updating players and their games. TODO: implement optimistic locking
@@ -1647,9 +1732,10 @@ async function timeloss(player, gameid, timestamp) {
     }));
   addToGameLists("COMPLETEDGAMES", playerGame, game.lastMoveTime);
   removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players);
+  newRatings = updateRatings(game, players);
 
   // Update players
-  players.forEach(player => {
+  players.forEach((player, ind) => {
     let games = [];
     player.games.forEach(g => {
       if (g.id === playerGame.id)
@@ -1657,12 +1743,21 @@ async function timeloss(player, gameid, timestamp) {
       else
         games.push(g)
     });
-    ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USER#" + player.id, "sk": "USER" },
-      ExpressionAttributeValues: { ":gs": games },
-      UpdateExpression: "set games = :gs",
-    }));
+    if (newRatings === null) {
+      ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER#" + player.id, "sk": "USER" },
+        ExpressionAttributeValues: { ":gs": games },
+        UpdateExpression: "set games = :gs"
+      }));
+    } else {
+      ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER#" + player.id, "sk": "USER" },
+        ExpressionAttributeValues: { ":gs": games, ":rs": newRatings[ind] },
+        UpdateExpression: "set games = :gs, ratings = :rs"
+      }));
+    }
   });
 }
 
@@ -1697,8 +1792,11 @@ function applySimultaneousMove(userid, move, engine, game) {
     engine.move(moves.join(','));
     game.state = engine.serialize();
     game.partialMove = game.players.map(p => '').join(',');
-    if (engine.gameover)
+    if (engine.gameover) {
       game.toMove = "";
+      game.winner = engine.winner;
+      game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+    }
     else
       game.toMove = game.players.map(p => true);
   }
@@ -1713,8 +1811,11 @@ function applyMove(userid, move, engine, game) {
   engine.move(move);
   console.log("applied");
   game.state = engine.serialize();
-  if (engine.gameover)
+  if (engine.gameover) {
     game.toMove = "";
+    game.winner = engine.winner;
+    game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+  }
   else
     game.toMove = (game.toMove + 1) % game.players.length;
   console.log("done");
@@ -1851,7 +1952,7 @@ async function changeLanguageForPlayer(player) {
 }
 
 function createSendEmailCommand(toAddress, player, subject, body) {
-  console.log("toAddress", toAddress, "player", player);
+  console.log("toAddress", toAddress, "player", player, "body", body);
   const fullbody =  i18n.t("DearPlayer", { player }) + '\r\n\r\n' + body + "\r\n\r\n" + i18n.t("EmailOut");
   return new SendEmailCommand({
     Destination: {

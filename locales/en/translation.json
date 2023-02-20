@@ -13,5 +13,6 @@
   "YourMove": "It is your turn to move.",
   "YourMoveBody": "It is now your move in a game of {{metaGame}}. Please visit https://play.dev.abstractplay.com/ for more details.",
   "GameOverBody": "Your {{metaGame}} game has ended. Please visit https://play.dev.abstractplay.com/ for more details.",
+  "GameOverWithRatingBody": "Your {{metaGame}} game has ended. Your new rating is {{rating}}. Please visit https://play.dev.abstractplay.com/ for more details.",
   "EmailOut": "The AbstractPlay system."
 }
