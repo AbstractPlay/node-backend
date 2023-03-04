@@ -1,14 +1,16 @@
 'use strict';
 
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand, UpdateCommand, DeleteCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-const crypto = require('crypto');
-const { gameinfo, GameFactory } = require('@abstractplay/gameslib');
-const { SESClient, SendEmailCommand, UpdateCustomVerificationEmailTemplateCommand } = require('@aws-sdk/client-ses');
-const i18n = require('i18next');
-const en = require('../locales/en/translation.json');
-const fr = require('../locales/fr/translation.json');
-const it = require('../locales/it/translation.json');
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
+// import crypto from 'crypto';
+import { v4 as uuid } from 'uuid';
+import { gameinfo, GameFactory, GameBase } from '@abstractplay/gameslib';
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import i18n from 'i18next';
+import en from '../locales/en/translation.json';
+import fr from '../locales/fr/translation.json';
+import it from '../locales/it/translation.json';
+import { EntropyGame } from '@abstractplay/gameslib/build/src/games';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -31,74 +33,163 @@ const headers = {
   'content-type': 'application/json',
   'Access-Control-Allow-Origin': '*'
 };
-module.exports.query = async (event) => {
+
+// Types
+type Challenge = {
+  metaGame: string;
+  standing?: boolean;
+  challenger: User; 
+  players: User[];
+  challengees?: User[]; 
+}
+
+type FullChallenge = {
+  metaGame: string;
+  numPlayers: number;
+  standing?: boolean;
+  seating: string;
+  variants: string;
+  challenger: User;
+  challengees?: User[]; // players who were challenged
+  players?: User[]; // players that have accepted
+  clockStart: number;
+  clockInc: number;
+  clockMax: number;
+  clockHard: boolean;
+  rated: boolean;
+}
+
+type User = {
+  id: string;
+  name: string;
+  time?: number;
+  settings?: any;
+  draw?: string;
+}
+
+type FullUser = {
+  id: string;
+  name: string;
+  email: string;
+  games: Game[];
+  challenges: {
+    issued: string[];
+    received: string[];
+    accepted: string[];
+    standing: string[];
+  }
+  admin: boolean | undefined;
+  language: string;
+  settings: any;
+  ratings?: {
+    [metaGame: string]: Rating
+  };
+}
+
+type Rating = {
+  rating: number;
+  N: number;
+  wins: number;
+  draws: number;
+}
+
+type Game = {
+  id : string;
+  metaGame: string;
+  players: User[];
+  lastMoveTime: number;
+  clockHard: boolean;
+  toMove: string | boolean[];
+  seen?: number;
+}
+
+type FullGame = {
+  pk: string;
+  sk: string;
+  id: string;
+  clockHard: boolean;
+  clockInc: number;
+  clockMax: number;
+  clockStart: number;
+  gameStarted: number;
+  lastMoveTime: number;
+  metaGame: string;
+  numPlayers: number;
+  players: User[];
+  state: string;
+  toMove: string | boolean[];
+  partialMove?: string;
+  winner?: number[];
+  numMoves?: number;
+  rated?: boolean;
+}
+
+type Comment = {
+  comment: string;
+  userId: string;
+  moveNumber: number;
+  timeStamp: number;
+}
+
+module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
   const pars = event.queryStringParameters;
   console.log(pars);
   switch (pars.query) {
     case "user_names":
-      return await userNames(callback);
+      return await userNames();
     case "challenge_details":
-      return await challengeDetails(pars, callback);
+      return await challengeDetails(pars);
     case "standing_challenges":
-      return await standingChallenges(pars, callback);
+      return await standingChallenges(pars);
     case "meta_games":
-      return await metaGamesDetails(pars, callback);
+      return await metaGamesDetails();
     default:
       return {
         statusCode: 500,
         body: JSON.stringify({
-          message: `Unable to execute unknown query '${query}'`
+          message: `Unable to execute unknown query '${pars.query}'`
         }),
         headers
       };
   }
 }
 
-// This implementation mixes async and use of the callback. This is probably not ideal and raises
-//    WARNING: Callback/response already delivered. Did your function invoke the callback and also return a promise?
-// but it does seem to work and do what I want: in some cases (e.g. when sending e-mails), I'd like the lambda to return data to the front end before worrying about whether e-mails got sent or not. 
-// In some cases DB updates can also be done after the response is sent. Trying to do this with a purely async approach causes the unresolved promises to be completed in the next lambda 
-// invocation and will therefore only work if AWS Lambda chooses to reuse the execution context.
-// Possibly the "right" way to do this is to use a non-async authQuery (with context.callbackWaitsForEmptyEventLoop = false) that calls all the async stuff (using https://javascript.info/task/async-from-regular).
-//
-// On reading all this again, I think we need to fix this. Even if we make things non-async and try to use context.callbackWaitsForEmptyEventLoop = false, we still have "any outstanding events continue to run 
-//  during the next invocation."
 // So it looks like there is no way to "run and forget", you need to finish all work before returning a response to the front end. :(
-// 
-module.exports.authQuery = async (event, context, callback) => {
+// Make sure the @typescript-eslint/no-floating-promises linter rule passes, otherwise promise might (at best?) only be fullfilled on the next call to the API...
+module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cognitoPoolClaims: { sub: any; email: any; }; }) => {
   console.log("authQuery: ", event.body.query);
   const query = event.body.query;
   const pars = event.body.pars;
   switch (query) {
     case "me":
-      return await me(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email, callback);
+      return await me(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email);
     case "my_settings":
-      return await mySettings(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email, callback);
+      return await mySettings(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email);
     case "new_setting":
-      return await newSetting(event.cognitoPoolClaims.sub, pars, callback);
+      return await newSetting(event.cognitoPoolClaims.sub, pars);
     case "new_profile":
-      return await newProfile(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email, pars, callback);
+      return await newProfile(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email, pars);
     case "new_challenge":
-      return await newChallenge(event.cognitoPoolClaims.sub, pars, callback);
+      return await newChallenge(event.cognitoPoolClaims.sub, pars);
     case "challenge_revoke":
-      return await revokeChallenge(event.cognitoPoolClaims.sub, pars, callback);
+      return await revokeChallenge(event.cognitoPoolClaims.sub, pars);
     case "challenge_response":
-      return await respondedChallenge(event.cognitoPoolClaims.sub, pars, callback);
+      return await respondedChallenge(event.cognitoPoolClaims.sub, pars);
     case "submit_move":
-      return await submitMove(event.cognitoPoolClaims.sub, pars, callback);
+      return await submitMove(event.cognitoPoolClaims.sub, pars);
     case "submit_comment":
-      return await submitComment(event.cognitoPoolClaims.sub, pars, callback);
+      return await submitComment(event.cognitoPoolClaims.sub, pars);
     case "get_game":
-      return await game(event.cognitoPoolClaims.sub, pars, callback);
+      return await game(event.cognitoPoolClaims.sub, pars);
     case "update_game_settings":
-      return await updateGameSettings(event.cognitoPoolClaims.sub, pars, callback);
+      return await updateGameSettings(event.cognitoPoolClaims.sub, pars);
     case "update_user_settings":
-      return await updateUserSettings(event.cognitoPoolClaims.sub, pars, callback);
+      return await updateUserSettings(event.cognitoPoolClaims.sub, pars);
     case "update_meta_game_counts":
-      return await updateMetaGameCounts(event.cognitoPoolClaims.sub, pars, callback);
+      return await updateMetaGameCounts(event.cognitoPoolClaims.sub);
     case "test_async":
-      return await testAsync(event.cognitoPoolClaims.sub, pars, callback);
+      return await testAsync(event.cognitoPoolClaims.sub, pars);
     default:
       return {
         statusCode: 500,
@@ -125,19 +216,23 @@ async function userNames() {
 
     console.log("Query succeeded. Got:");
     console.log(data);
+    const users = data.Items;
+    if (users == undefined) {
+      throw new Error("Found no users?");
+    }
     return {
       statusCode: 200,
-      body: JSON.stringify(data.Items.map(u => ({"id": u.sk, "name": u.name}))),
+      body: JSON.stringify(users.map(u => ({"id": u.sk, "name": u.name}))),
       headers
     };
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to query table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    return formatReturnError(`Unable to query table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
 }
 
-async function challengeDetails(pars) {
+async function challengeDetails(pars: { id: string; }) {
   try {
     const data = await ddbDocClient.send(
       new GetCommand({
@@ -156,11 +251,11 @@ async function challengeDetails(pars) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to get challenge ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    return formatReturnError(`Unable to get challenge ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
 }
 
-async function standingChallenges(pars) {
+async function standingChallenges(pars: { metaGame: any; }) {
   const game = pars.metaGame;
   console.log(game);
   try {
@@ -179,11 +274,11 @@ async function standingChallenges(pars) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to get standing challenges for ${pars.metaGame}`);
+    return formatReturnError(`Unable to get standing challenges for ${pars.metaGame}`);
   }
 }
 
-async function metaGamesDetails(pars) {
+async function metaGamesDetails() {
   try {
     const data = await ddbDocClient.send(
       new GetCommand({
@@ -202,11 +297,11 @@ async function metaGamesDetails(pars) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError("Unable to get meta game details.");
+    return formatReturnError("Unable to get meta game details.");
   }
 }
 
-async function game(userid, pars) {
+async function game(userid: any, pars: { id: string; }) {
   try {
     const getGame = ddbDocClient.send(
       new GetCommand({
@@ -228,7 +323,9 @@ async function game(userid, pars) {
     const gameData = await getGame;
     console.log("Got:");
     console.log(gameData);
-    let game = gameData.Item;
+    const game = gameData.Item as FullGame;
+    if (game === undefined)
+      throw new Error(`Game ${pars.id} not found`);
     // If the game is over update user to indicate they have seen the game end.
     let work;
     if (game.toMove === "" || game.toMove === null) {
@@ -237,7 +334,7 @@ async function game(userid, pars) {
     // hide other player's simulataneous moves
     const flags = gameinfo.get(game.metaGame).flags;
     if (flags !== undefined && flags.includes('simultaneous') && game.partialMove !== undefined) {
-      game.partialMove = game.partialMove.split(',').map((m,i) => game.players[i].id === userid ? m : '').join(',');
+      game.partialMove = game.partialMove.split(',').map((m: string, i: number) => (game.players[i].id === userid ? m : '')).join(',');
     }
     let comments = [];
     const commentData = await getComments;
@@ -252,11 +349,11 @@ async function game(userid, pars) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
 }
 
-async function updateGameSettings(userid, pars) {
+async function updateGameSettings(userid: string, pars: { game: string; settings: any; }) {
   try {
     const data = await ddbDocClient.send(
       new GetCommand({
@@ -268,8 +365,12 @@ async function updateGameSettings(userid, pars) {
       }));
     console.log("Got:");
     console.log(data);
-    let game = data.Item;
-    let player = game.players.find(p => p.id === userid);
+    const game = data.Item as Game;
+    if (game === undefined)
+      throw new Error(`updateGameSettings: game ${pars.game} not found`);
+    const player = game.players.find((p: { id: any; }) => p.id === userid);
+    if (player === undefined)
+      throw new Error(`updateGameSettings: player ${userid} isn't playing in game ${pars.game}`);
     player.settings = pars.settings;
     try {
       await ddbDocClient.send(new PutCommand({
@@ -279,7 +380,7 @@ async function updateGameSettings(userid, pars) {
     }
     catch (error) {
       logGetItemError(error);
-      returnError(`Unable to update game ${pars.game} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+      return formatReturnError(`Unable to update game ${pars.game} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
     }
     return {
       statusCode: 200,
@@ -288,14 +389,14 @@ async function updateGameSettings(userid, pars) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to get or update game ${pars.game} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    return formatReturnError(`Unable to get or update game ${pars.game} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
 }
 
-async function setSeenTime(userid, gameid) {
-  let user = {};
+async function setSeenTime(userid: string, gameid: any) {
+  let user: FullUser;
   try {
-    user = await ddbDocClient.send(
+    const userData = await ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
@@ -303,15 +404,16 @@ async function setSeenTime(userid, gameid) {
           "sk": "USER"
         },
       }));
-    if (user.Item === undefined)
+    if (userData.Item === undefined)
       throw new Error(`setSeenTime, no user?? ${userid}`);
+    user = userData.Item as FullUser;
   } catch (err) {
     logGetItemError(err);
     throw new Error(`setSeenTime, no user?? ${userid}`);
   }
 
-  let games = user.Item.games;
-  let thegame = games.find(g => g.id == gameid);
+  const games = user.games;
+  const thegame = games.find((g: { id: any; }) => g.id == gameid);
   if (thegame !== undefined) {
     thegame.seen = Date.now();
   }
@@ -323,7 +425,7 @@ async function setSeenTime(userid, gameid) {
   }));
 }
 
-async function updateUserSettings(userid, pars) {
+async function updateUserSettings(userid: string, pars: { settings: any; }) {
   try {
     await ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -341,14 +443,14 @@ async function updateUserSettings(userid, pars) {
     };
   } catch (err) {
     logGetItemError(err);
-    returnError(`Unable to store user settings for user ${userid}`);
+    return formatReturnError(`Unable to store user settings for user ${userid}`);
   }
 }
 
-async function me(userId, email) {
+async function me(userId: string, email: any) {
   const fixGames = false;
   try {
-    const user = await ddbDocClient.send(
+    const userData = await ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
@@ -356,17 +458,18 @@ async function me(userId, email) {
           "sk": "USER"
         },
       }));
-    if (user.Item === undefined) {
+    if (userData.Item === undefined) {
       return {
         statusCode: 200,
         body: JSON.stringify({}),
         headers
       };
     }
-    let work = [];
-    if (user.Item.email !== email)
+    const user = userData.Item as FullUser;
+    const work: Promise<any>[] = [];
+    if (user.email !== email)
       work.push(updateUserEMail(userId, email));
-    var games = user.Item.games;
+    let games = user.games;
     if (games == undefined)
       games= [];
     if (fixGames) {
@@ -375,26 +478,26 @@ async function me(userId, email) {
       console.log("games after", games);
     }
     // Check for out-of-time games
-    games.forEach(game => {
+    games.forEach((game: Game) => {
       if (game.clockHard && game.toMove !== '') {
         if (Array.isArray(game.toMove)) {
           let minTime = 0;
           let minIndex = -1;
           const elapsed = Date.now() - game.lastMoveTime;
-          game.toMove.forEach((p, i) => {
-            if (p && game.players[i].time - elapsed < minTime) {
-              minTime = game.players[i].time - elapsed;
+          game.toMove.forEach((p: any, i: number) => {
+            if (p && game.players[i].time! - elapsed < minTime) {
+              minTime = game.players[i].time! - elapsed;
               minIndex = i;
             }});
           if (minIndex !== -1) {
             game.toMove = '';
-            game.lastMoveTime = game.lastMoveTime + game.players[minIndex].time;
+            game.lastMoveTime = game.lastMoveTime + game.players[minIndex].time!;
             work.push(timeloss(minIndex, game.id, game.lastMoveTime));
           }
         } else {
-          if (game.players[game.toMove].time - (Date.now() - game.lastMoveTime) < 0) {
-            game.lastMoveTime = game.lastMoveTime + game.players[game.toMove].time;
-            const toMove = game.toMove;
+          const toMove = parseInt(game.toMove);
+          if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
+            game.lastMoveTime = game.lastMoveTime + game.players[toMove].time!;
             game.toMove = '';
             work.push(timeloss(toMove, game.id, game.lastMoveTime));
           }
@@ -407,27 +510,24 @@ async function me(userId, email) {
     // TODO: Put it back in their list if anyone comments.
     for (let i = games.length - 1; i >= 0; i-- ) { 
       if (games[i].toMove === "" || games[i].toMove === null ) {
-        if (games[i].seen !== undefined) {
-          console.log(`since seen for ${games[i].metaGame}`, Date.now() - games[i].seen);
-        }
-        if (games[i].seen !== undefined && Date.now() - games[i].seen > 1 * 3600000) {
+        if (games[i].seen !== undefined && Date.now() - (games[i].seen || 0) > 1 * 3600000) {
           games.splice(i, 1);
         }
       }
     }
-    let challengesIssuedIDs = [];
-    let challengesReceivedIDs = [];
-    let challengesAcceptedIDs = [];
-    let standingChallengeIDs = [];
-    if (user.Item.challenges !== undefined) {
-      if (user.Item.challenges.issued !== undefined)
-        challengesIssuedIDs = user.Item.challenges.issued;
-      if (user.Item.challenges.received !== undefined)
-        challengesReceivedIDs = user.Item.challenges.received;
-      if (user.Item.challenges.accepted !== undefined)
-        challengesAcceptedIDs = user.Item.challenges.accepted;
-      if (user.Item.challenges.standing !== undefined)
-        standingChallengeIDs = user.Item.challenges.standing;
+    let challengesIssuedIDs: string[] = [];
+    let challengesReceivedIDs: string[] = [];
+    let challengesAcceptedIDs: string[] = [];
+    let standingChallengeIDs: string[] = [];
+    if (user.challenges !== undefined) {
+      if (user.challenges.issued !== undefined)
+        challengesIssuedIDs = user.challenges.issued;
+      if (user.challenges.received !== undefined)
+        challengesReceivedIDs = user.challenges.received;
+      if (user.challenges.accepted !== undefined)
+        challengesAcceptedIDs = user.challenges.accepted;
+      if (user.challenges.standing !== undefined)
+        standingChallengeIDs = user.challenges.standing;
     }
     const challengesIssued = getChallenges(challengesIssuedIDs);
     const challengesReceived = getChallenges(challengesReceivedIDs);
@@ -445,12 +545,12 @@ async function me(userId, email) {
     return {
       statusCode: 200,
       body: JSON.stringify({
-        "id": user.Item.id,
-        "name": user.Item.name,
-        "admin": (user.Item.admin === true),
-        "language": user.Item.language,
+        "id": user.id,
+        "name": user.name,
+        "admin": (user.admin === true),
+        "language": user.language,
         "games": games,
-        "settings": user.Item.settings,
+        "settings": user.settings,
         "challengesIssued": data[0].map(d => d.Item),
         "challengesReceived": data[1].map(d => d.Item),
         "challengesAccepted": data[2].map(d => d.Item),
@@ -460,11 +560,11 @@ async function me(userId, email) {
     };
   } catch (err) {
     logGetItemError(err);
-    returnError(`Unable to get user data for ${userId}`);
+    return formatReturnError(`Unable to get user data for ${userId}`);
   }
 }
 
-async function updateUserEMail(userid, newMail) {
+async function updateUserEMail(userid: string, newMail: any) {
   return ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "USER#" + userid, "sk": "USER" },
@@ -473,7 +573,7 @@ async function updateUserEMail(userid, newMail) {
   }));
 }
 
-async function mySettings(userId, email) {
+async function mySettings(userId: string, email: any) {
   try {
     const user = await ddbDocClient.send(
       new GetCommand({
@@ -503,11 +603,11 @@ async function mySettings(userId, email) {
     };
   } catch (err) {
     logGetItemError(err);
-    returnError(`Unable to get user data for ${userId}`);
+    return formatReturnError(`Unable to get user data for ${userId}`);
   }
 }
 
-async function newSetting(userId, pars, callback) {
+async function newSetting(userId: string, pars: { attribute: string; value: string; }) {
   let attr = '';
   let val = '';
   switch (pars.attribute) {
@@ -523,7 +623,7 @@ async function newSetting(userId, pars, callback) {
       return;
   }
   console.log("attr, val: ", attr, val);
-  let work = [];
+  const work = [];
   work.push(ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "USER#" + userId, "sk": "USER" },
@@ -555,30 +655,9 @@ async function newSetting(userId, pars, callback) {
   }
 }
 
-async function getGames(gameIds) {
-  let games = [];
-  gameIds.forEach(id => {
-    games.push(
-      ddbDocClient.send(
-        new GetCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "GAME#" + id,
-            "sk": "GAME"
-          }
-        })));
-  });
-  const games2 = await Promise.all(games);
-  let list = [];
-  games2.forEach(game => {
-    list.push(game.Item);
-  });
-  return list;
-}
-
 // This is expensive, so only use when things go belly up. E.g. if a game had to be deleted.
-async function getGamesForUser(userId) {
-  let games = [];
+async function getGamesForUser(userId: any) {
+  const games: Game[] = [];
   gameinfo.forEach(async (game) => {
     let result = await ddbDocClient.send(
       new QueryCommand({
@@ -612,17 +691,20 @@ async function getGamesForUser(userId) {
   return games;
 }
 
-function processGames(userid, result, games) {
-  result.Items.forEach(game => {
-    if (game.players.some(p => p.id === userid)) {
+function processGames(userid: any, result: QueryCommandOutput, games: Game[]) {
+  if (result.Items === undefined)
+    throw new Error("processGames: no games found!?");
+  const fullGames = result.Items as FullGame[];
+  fullGames.forEach((game: { players: any[]; id: any; metaGame: any; clockHard: any; toMove: any; lastMoveTime: any; }) => {
+    if (game.players.some((p: { id: any; }) => p.id === userid)) {
       games.push({"id": game.id, "metaGame": game.metaGame, "players": game.players, "clockHard": game.clockHard, "toMove": game.toMove, "lastMoveTime": game.lastMoveTime});
     }
   });
 }
 
-async function getChallenges(challengeIds) {
-  const challenges = [];
-  challengeIds.forEach(id => {
+async function getChallenges(challengeIds: string[]) {
+  const challenges: any[] = [];
+  challengeIds.forEach((id: string) => {
     const ind = id.indexOf('#'); // neither metaGame ids, not guids can contain '#'s.
     if (ind > -1) {
       const metaGame = id.substring(0, ind);
@@ -655,7 +737,7 @@ async function getChallenges(challengeIds) {
   return Promise.all(challenges);
 }
 
-async function newProfile(userid, email, pars) {
+async function newProfile(userid: string, email: any, pars: { name: any; consent: any; anonymous: any; country: any; tagline: any; }) {
   const data = {
       "pk": "USER#" + userid,
       "sk": "USER",
@@ -700,35 +782,35 @@ async function newProfile(userid, email, pars) {
     };
   } catch (err) {
     logGetItemError(err);
-    returnError(`Unable to store user profile for user ${pars.name}`);
+    return formatReturnError(`Unable to store user profile for user ${pars.name}`);
   }
 }
 
-async function newChallenge(userid, pars) {
-  console.log("newChallenge pars:", pars);
-  if (pars.standing) {
-    return await newStandingChallenge(userid, pars);
+async function newChallenge(userid: string, challenge: FullChallenge) {
+  console.log("newChallenge challenge:", challenge);
+  if (challenge.standing) {
+    return await newStandingChallenge(userid, challenge);
   }
-  const challengeId = crypto.randomUUID();
+  const challengeId = uuid();
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: {
         "pk": "CHALLENGE#" + challengeId,
         "sk": "CHALLENGE",
         "id": challengeId,
-        "metaGame": pars.metaGame,
-        "numPlayers": pars.numPlayers,
-        "standing": pars.standing,
-        "seating": pars.seating,
-        "variants": pars.variants,
-        "challenger": pars.challenger,
-        "challengees": pars.opponents, // users that were challenged
-        "players": [pars.challenger], // users that have accepted
-        "clockStart": pars.clockStart,
-        "clockInc": pars.clockInc,
-        "clockMax": pars.clockMax,
-        "clockHard": pars.clockHard,
-        "rated": pars.rated
+        "metaGame": challenge.metaGame,
+        "numPlayers": challenge.numPlayers,
+        "standing": challenge.standing,
+        "seating": challenge.seating,
+        "variants": challenge.variants,
+        "challenger": challenge.challenger,
+        "challengees": challenge.challengees, // users that were challenged
+        "players": [challenge.challenger], // users that have accepted
+        "clockStart": challenge.clockStart,
+        "clockInc": challenge.clockInc,
+        "clockMax": challenge.clockMax,
+        "clockHard": challenge.clockHard,
+        "rated": challenge.rated
       }
     }));
 
@@ -740,25 +822,26 @@ async function newChallenge(userid, pars) {
     UpdateExpression: "add #c.issued :c",
   }));
 
-  let list = [addChallenge, updateChallenger];
-  pars.opponents.forEach(challengee => {
-    list.push(
-      ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USER#" + challengee.id, "sk": "USER" },
-        ExpressionAttributeValues: { ":c": new Set([challengeId]) },
-        ExpressionAttributeNames: { "#c": "challenges" },
-        UpdateExpression: "add #c.received :c",
-      }))
-    );
-  })
-  try {
-    list.push(sendChallengedEmail(pars.challenger.name, pars.opponents, pars.metaGame));
-  } catch (error) {
-    logGetItemError(error);
-    throw new Error("newChallenge: Failed to send emails");
+  const list: Promise<any>[] = [addChallenge, updateChallenger];
+  if (challenge.challengees !== undefined) {
+    challenge.challengees.forEach((challengee: { id: string; }) => {
+      list.push(
+        ddbDocClient.send(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { "pk": "USER#" + challengee.id, "sk": "USER" },
+          ExpressionAttributeValues: { ":c": new Set([challengeId]) },
+          ExpressionAttributeNames: { "#c": "challenges" },
+          UpdateExpression: "add #c.received :c",
+        }))
+      );
+    })
+    try {
+      list.push(sendChallengedEmail(challenge.challenger.name, challenge.challengees, challenge.metaGame));
+    } catch (error) {
+      logGetItemError(error);
+      throw new Error("newChallenge: Failed to send emails");
+    }
   }
-
   try {
     await Promise.all(list);
     console.log("Successfully added challenge" + challengeId);
@@ -771,42 +854,42 @@ async function newChallenge(userid, pars) {
     };
   } catch (err) {
     logGetItemError(err);
-    returnError("Failed to add challenge");
+    return formatReturnError("Failed to add challenge");
   }
 }
 
-async function newStandingChallenge(userid, pars) {
-  const challengeId = crypto.randomUUID();
+async function newStandingChallenge(userid: string, challenge: FullChallenge) {
+  const challengeId = uuid();
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: {
-        "pk": "STANDINGCHALLENGE#" + pars.metaGame,
+        "pk": "STANDINGCHALLENGE#" + challenge.metaGame,
         "sk": challengeId,
         "id": challengeId,
-        "metaGame": pars.metaGame,
-        "numPlayers": pars.numPlayers,
-        "standing": pars.standing,
-        "seating": pars.seating,
-        "variants": pars.variants,
-        "challenger": pars.challenger,
-        "players": [pars.challenger], // users that have accepted
-        "clockStart": pars.clockStart,
-        "clockInc": pars.clockInc,
-        "clockMax": pars.clockMax,
-        "clockHard": pars.clockHard,
-        "rated": pars.rated
+        "metaGame": challenge.metaGame,
+        "numPlayers": challenge.numPlayers,
+        "standing": challenge.standing,
+        "seating": challenge.seating,
+        "variants": challenge.variants,
+        "challenger": challenge.challenger,
+        "players": [challenge.challenger], // users that have accepted
+        "clockStart": challenge.clockStart,
+        "clockInc": challenge.clockInc,
+        "clockMax": challenge.clockMax,
+        "clockHard": challenge.clockHard,
+        "rated": challenge.rated
       }
     }));
 
   const updateChallenger = ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "USER#" + userid, "sk": "USER" },
-    ExpressionAttributeValues: { ":c": new Set([pars.metaGame + '#' + challengeId]) },
+    ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challengeId]) },
     ExpressionAttributeNames: { "#c": "challenges" },
     UpdateExpression: "add #c.standing :c",
   }));
   
-  const updateStandingChallengeCnt = updateStandingChallengeCount(pars.metaGame, 1);
+  const updateStandingChallengeCnt = updateStandingChallengeCount(challenge.metaGame, 1);
   
   try {
     await Promise.all([addChallenge, updateChallenger, updateStandingChallengeCnt]);
@@ -820,86 +903,94 @@ async function newStandingChallenge(userid, pars) {
     };
   } catch (err) {
     logGetItemError(err);
-    returnError("Failed to add challenge");
+    return formatReturnError("Failed to add challenge");
   }
 }
 
-async function sendChallengedEmail(challenger, opponents, metaGame) {
-  const players = await getPlayers(opponents.map(o => o.id));
+async function sendChallengedEmail(challengerName: string, opponents: User[], metaGame: string) {
+  const players: FullUser[] = await getPlayers(opponents.map((o: { id: any; }) => o.id));
   console.log(players);
   metaGame = gameinfo.get(metaGame).name;
   await initi18n('en');
-  let work = [];
+  const work: Promise<any>[] = [];
   for (const player of players) {
     await changeLanguageForPlayer(player);
-    const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { challenger, metaGame, "interpolation": {"escapeValue": false} }));
+    const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { challengerName, metaGame, "interpolation": {"escapeValue": false} }));
     work.push(sesClient.send(comm));
   }
   return Promise.all(work);
 }
 
-async function revokeChallenge(userid, pars, callback) {
-  let challenge;
-  let work;
+async function revokeChallenge(userid: any, pars: { id: string; metaGame: string; standing: boolean; }) {
+  let challenge: Challenge | undefined;
+  const work: Promise<any>[] = [];
+  let work1 : Promise<any> | undefined;
   try {
-    [challenge, work] = await removeChallenge(pars.id, pars.metaGame, pars.standing === true, true, userid);
+    ({challenge, work : work1} = await removeChallenge(pars.id, pars.metaGame, pars.standing === true, true, userid));
   } catch (err) {
     logGetItemError(err);
-    returnError("Failed to remove challenge", callback);
+    return formatReturnError("Failed to remove challenge");
   }
+  if (work1 !== undefined)
+    work.push(work1);
   // send e-mails
-  if (challenge !== undefined) {
+  if (challenge) {
+    const metaGame = gameinfo.get(challenge.metaGame).name;
     await initi18n('en');
     // Inform challenged
-    let players = await getPlayers(challenge.challengees.map(c => c.id));
-    const metaGame = gameinfo.get(challenge.metaGame).name;
-    for (const player of players) {
-      await changeLanguageForPlayer(player);
-      const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
-      work.push(sesClient.send(comm));
-    };
+    if (challenge.challengees) {
+      const players: FullUser[] = await getPlayers(challenge.challengees.map((c: { id: any; }) => c.id));
+      for (const player of players) {
+        await changeLanguageForPlayer(player);
+        const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
+        work.push(sesClient.send(comm));
+      }
+    }
     // Inform players that have already accepted
-    players = await getPlayers(challenge.players.map(c => c.id).filter(id => id !== challenge.challenger.id));
-    for (const player of players) {
-      await changeLanguageForPlayer(player);
-      const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
-      work.push(sesClient.send(comm));
-    };
+    if (challenge.players) {
+      const players = await getPlayers(challenge.players.map((c: { id: any; }) => c.id).filter((id: any) => id !== challenge!.challenger.id));
+      for (const player of players) {
+        await changeLanguageForPlayer(player);
+        const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
+        work.push(sesClient.send(comm));
+      }
+    }
   }
 
-  await work;
+  await Promise.all(work);
   console.log("Successfully removed challenge" + pars.id);
-  callback(null, {
+  return {
     statusCode: 200,
     body: JSON.stringify({
       message: "Successfully removed challenge" + pars.id
     }),
     headers
-  });
-
+  };
 }
 
-async function respondedChallenge(userid, pars, callback) {
+async function respondedChallenge(userid: string, pars: { response: boolean; id: string; standing?: boolean; metaGame: string; }) {
   const response = pars.response;
   const challengeId = pars.id;
   const standing = pars.standing === true;
   const metaGame = pars.metaGame;
+  let ret: any;
+  const work: Promise<any>[] = [];
   if (response) {
     // challenge was accepted
     let email;
     try {
       email = await acceptChallenge(userid, metaGame, challengeId, standing);
       console.log("Challenge" + challengeId + "successfully accepted.");
-      callback(null, {
+      ret = {
         statusCode: 200,
         body: JSON.stringify({
           message: "Challenge " + challengeId + " successfully accepted."
         }),
         headers
-      });
+      };
     } catch (err) {
       logGetItemError(err);
-      returnError("Failed to accept challenge", callback);
+      return formatReturnError("Failed to accept challenge");
     }
     if (email !== undefined) {
       console.log(email);
@@ -913,50 +1004,51 @@ async function respondedChallenge(userid, pars, callback) {
             body += " " + i18n.t("YourMove");
           }
           const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), body);
-          sesClient.send(comm);  
-        };
+          work.push(sesClient.send(comm));
+        }
       } catch (err) {
         logGetItemError(err);
       }
     }
-  }
-  else {
+  } else {
     // challenge was rejected
-    let challenge;
-    let work;
+    let challenge: Challenge | undefined;
+    let work2: Promise<any> | undefined;
     try {
-      [challenge, work] = await removeChallenge(pars.id, pars.metaGame, standing, false, userid);
-      await work;
+      ({challenge, work: work2} = await removeChallenge(pars.id, pars.metaGame, standing, false, userid));
+      await work2;
       console.log("Successfully removed challenge " + pars.id);
-      callback(null, {
+      ret = {
         statusCode: 200,
         body: JSON.stringify({
           message: "Successfully removed challenge " + pars.id
         }),
         headers
-      });
+      };
     } catch (err) {
       logGetItemError(err);
-      returnError("Failed to remove challenge", callback);
+      return formatReturnError("Failed to remove challenge");
     }
     // send e-mails
     console.log(challenge);
     if (challenge !== undefined) {
       await initi18n('en');
       // Inform everyone (except the decliner, he knows).
-      let players = await getPlayers(challenge.challengees.map(c => c.id).filter(id => id !== userid).concat(challenge.players.map(c => c.id)));
-      const quitter = challenge.challengees.find(c => c.id === userid).name;
+      const players: FullUser[] = await getPlayers(challenge.challengees!.map(c => c.id).filter(id => id !== userid).concat(challenge.players.map(c => c.id)));
+      const quitter = challenge.challengees!.find(c => c.id === userid)!.name;
       const metaGame = gameinfo.get(challenge.metaGame).name;
       for (const player of players) {
         await changeLanguageForPlayer(player);
         const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame, "interpolation": {"escapeValue": false} }));
-        sesClient.send(comm);  
-      };
+        work.push(sesClient.send(comm));
+      }
     }
   }
+  await Promise.all(work);
+  return ret;
 }
 
-async function removeChallenge(challengeId, metaGame, standing, revoked, quitter) {
+async function removeChallenge(challengeId: string, metaGame: string, standing: boolean, revoked: boolean, quitter: string) {
   const chall = await ddbDocClient.send(
     new GetCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -968,19 +1060,19 @@ async function removeChallenge(challengeId, metaGame, standing, revoked, quitter
   if (chall.Item === undefined) {
     // The challenge might have been revoked or rejected by another user (while you were deciding)
     console.log("Challenge not found");
-    return [undefined, undefined];
+    return {"challenge": undefined, "work": undefined};
   }
-  const challenge = chall.Item;
+  const challenge = chall.Item as Challenge;
   if (revoked && challenge.challenger.id !== quitter)
     throw new Error(`${quitter} tried to revoke a challenge that they did not create.`);
-  if (!revoked && !(challenge.players.find(p => p.id === quitter) || (challenge.standing !== true && challenge.challengees.find(p => p.id === quitter))))
+  if (!revoked && !(challenge.players.find((p: { id: any; }) => p.id === quitter) || (!standing && challenge.challengees!.find((p: { id: any; }) => p.id === quitter))))
     throw new Error(`${quitter} tried to leave a challenge that they are not part of.`);
-  return [challenge, removeAChallenge(challenge, standing, revoked, false, quitter)];
+  return {challenge, "work": removeAChallenge(challenge, standing, revoked, false, quitter)};
 }
 
 // Remove the challenge either because the game has started, or someone withrew: either challenger revoked the challenge or someone withdrew an acceptance, or didn't accept the challenge.
-async function removeAChallenge(challenge, standing, revoked, started, quitter) {
-  let list = [];
+async function removeAChallenge(challenge: { [x: string]: any; challenger?: any; id?: any; challengees?: any; numPlayers?: any; metaGame?: any; players?: any; }, standing: any, revoked: boolean, started: boolean, quitter: string) {
+  const list: Promise<any>[] = [];
   if (!standing) {
     // Remove from challenger
     const updateChallenger = ddbDocClient.send(new UpdateCommand({
@@ -992,7 +1084,7 @@ async function removeAChallenge(challenge, standing, revoked, started, quitter) 
     }));
     list.push(updateChallenger);
     // Remove from challenged
-    challenge.challengees.forEach(challengee => {
+    challenge.challengees.forEach((challengee: { id: string; }) => {
       list.push(
         ddbDocClient.send(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -1022,11 +1114,11 @@ async function removeAChallenge(challenge, standing, revoked, started, quitter) 
   // Remove from players that have already accepted
   let playersToUpdate = [];
   if (standing || revoked || started) {
-    playersToUpdate = challenge.players.filter(p => p.id != challenge.challenger.id);
+    playersToUpdate = challenge.players.filter((p: { id: any; }) => p.id != challenge.challenger.id);
   } else {
     playersToUpdate = [{"id": quitter}];
   }
-  playersToUpdate.forEach(player => {
+  playersToUpdate.forEach((player: { id: string; }) => {
     console.log(`removing challenge ${standing ? challenge.metaGame + '#' + challenge.id : challenge.id} from ${player.id}`);
     list.push(
       ddbDocClient.send(new UpdateCommand({
@@ -1069,7 +1161,7 @@ async function removeAChallenge(challenge, standing, revoked, started, quitter) 
   return Promise.all(list);
 }
 
-async function updateStandingChallengeCount(metaGame, diff) {
+async function updateStandingChallengeCount(metaGame: any, diff: number) {
   return ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "METAGAMES", "sk": "COUNTS" },
@@ -1079,7 +1171,7 @@ async function updateStandingChallengeCount(metaGame, diff) {
   }));
 }
 
-async function acceptChallenge(userid, metaGame, challengeId, standing) {
+async function acceptChallenge(userid: string, metaGame: string, challengeId: string, standing: boolean) {
   const challengeData = await ddbDocClient.send(
     new GetCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -1094,19 +1186,19 @@ async function acceptChallenge(userid, metaGame, challengeId, standing) {
     return;
   }
 
-  const challenge = challengeData.Item;
-  const challengees = standing ? undefined : challenge.challengees.filter(c => c.id != userid);
-  if (!standing && challengees.length !== challenge.challengees.length - 1) {
-    logGetItemError("userid wasn't a challengee");
-    returnError('Unable to accept challenge', callback);
+  const challenge = challengeData.Item as FullChallenge;
+  const challengees = standing || !challenge.challengees ? [] : challenge.challengees.filter((c: { id: any; }) => c.id != userid);
+  if (!standing && challengees.length !== (challenge.challengees ? challenge.challengees.length : 0) - 1) {
+    logGetItemError(`userid ${userid} wasn't a challengee, challenge ${challengeId}`);
+    throw new Error("Can't accept a challenge if you weren't challenged");
   }
-  let players = challenge.players;
-  if (challenge.players.length === challenge.numPlayers - 1) {
+  const players = challenge.players;
+  if ((players ? players.length : 0) === challenge.numPlayers - 1) {
     // Enough players accepted. Start game.
-    const gameId = crypto.randomUUID();
-    let playerIDs = [];
+    const gameId = uuid();
+    let playerIDs: string[] = [];
     if (challenge.seating === 'random') {
-      playerIDs = players.map(player => player.id);
+      playerIDs = players!.map(player => player.id) as string[];
       playerIDs.push(userid);
       shuffle(playerIDs);
     } else if (challenge.seating === 's1') {
@@ -1117,10 +1209,10 @@ async function acceptChallenge(userid, metaGame, challengeId, standing) {
       playerIDs.push(challenge.challenger.id);
     }
     const playersFull = await getPlayers(playerIDs);
-    let whoseTurn = 0;
-    let info = gameinfo.get(challenge.metaGame);
+    let whoseTurn: string | boolean[] = "0";
+    const info = gameinfo.get(challenge.metaGame);
     if (info.flags !== undefined && info.flags.includes('simultaneous')) {
-      whoseTurn = playerIDs.map(p => true);
+      whoseTurn = playerIDs.map(() => true);
     }
     const variants = challenge.variants;
     let engine;
@@ -1128,9 +1220,11 @@ async function acceptChallenge(userid, metaGame, challengeId, standing) {
       engine = GameFactory(challenge.metaGame, challenge.numPlayers, undefined, variants);
     else
       engine = GameFactory(challenge.metaGame, undefined, variants);
+    if (!engine)
+      throw new Error(`Unknown metaGame ${challenge.metaGame}`);
     const state = engine.serialize();
     const now = Date.now();
-    let gamePlayers = playersFull.map(p => { return {"id": p.id, "name": p.name, "time": challenge.clockStart * 3600000 }});
+    const gamePlayers = playersFull.map(p => { return {"id": p.id, "name": p.name, "time": challenge.clockStart * 3600000 }}) as User[];
     if (info.flags !== undefined && info.flags.includes('perspective')) {
       let rot = 180;
       if (playerIDs.length > 2 && info.flags !== undefined && info.flags.includes('rotate90')) {
@@ -1168,14 +1262,13 @@ async function acceptChallenge(userid, metaGame, challengeId, standing) {
       "clockHard": challenge.clockHard,
       "toMove": whoseTurn,
       "lastMoveTime": now,
-    };
-    let list = addToGameLists("CURRENTGAMES", game, now);
-    console.log("list:");
-    console.log(list);
+    } as Game;
+    const list: Promise<any>[] = [];
+    list.push(addToGameLists("CURRENTGAMES", game, now));
   
     // Now remove the challenge and add the game to all players
     list.push(addGame);
-    list.push(removeAChallenge(challenge, standing, false, true, null));
+    list.push(removeAChallenge(challenge, standing, false, true, ''));
 
     // Update players
     playersFull.forEach(player => {
@@ -1198,33 +1291,32 @@ async function acceptChallenge(userid, metaGame, challengeId, standing) {
     }
     catch (error) {
       logGetItemError(error);
-      returnError('Unable to update players and create game', callback);
-      return undefined;
+      throw new Error('Unable to update players and create game');
     }
   } else {
     // Still waiting on more players to accept.
     // Update challenge
-    let newplayer;
+    let newplayer: User | undefined;
     if (standing) {
       const playerFull = await getPlayers([userid]);
       newplayer = {"id" : playerFull[0].id, "name": playerFull[0].name };
     } else {
-      newplayer = challenge.challengees.find(c => c.id == userid)
+      newplayer = challenge.challengees!.find(c => c.id == userid);
+      if (!newplayer)
+        throw new Error("Can't accept a challenge if you weren't challenged");
     }
-    let updateChallenge;
-    if (!standing || challenge.numPlayers == 2 || players.length !== 1) {
+    let updateChallenge: Promise<any>;
+    if (!standing || challenge.numPlayers == 2 || (players && players.length !== 1)) {
       challenge.challengees = challengees;
-      players.push(newplayer);
+      players!.push(newplayer);
       updateChallenge = ddbDocClient.send(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: challenge
         }));
     } else {
       // need to duplicate the challenge, because numPlayers > 2 and we have our first accepter
-      [challengeId, updateChallenge] = await duplicateStandingChallenge(challenge, newplayer);
+      ({challengeId, work: updateChallenge} = await duplicateStandingChallenge(challenge, newplayer));
     }
-    console.log("challengeID", challengeId);
-    console.log("updateChallenge", updateChallenge);
     // Update accepter
     const updateAccepter = ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -1235,12 +1327,12 @@ async function acceptChallenge(userid, metaGame, challengeId, standing) {
     }));
 
     await Promise.all([updateChallenge, updateAccepter]);
-    return undefined;
+    return;
   }
 }
 
-async function duplicateStandingChallenge(challenge, newplayer) {
-  const challengeId = crypto.randomUUID();
+async function duplicateStandingChallenge(challenge: { [x: string]: any; metaGame?: any; numPlayers?: any; standing?: any; seating?: any; variants?: any; challenger?: any; clockStart?: any; clockInc?: any; clockMax?: any; clockHard?: any; rated?: any; }, newplayer: any) {
+  const challengeId = uuid();
   console.log("Duplicate challenge with newplayer", newplayer);
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -1273,11 +1365,11 @@ async function duplicateStandingChallenge(challenge, newplayer) {
     UpdateExpression: "add #c.standing :c",
   }));
     
-  return [challengeId, Promise.all([addChallenge, updateStandingChallengeCnt, updateChallenger])];
+  return {challengeId, "work": Promise.all([addChallenge, updateStandingChallengeCnt, updateChallenger])};
 }
 
-async function getPlayers(playerIDs) {
-  const list = playerIDs.map(id =>
+async function getPlayers(playerIDs: string[]) {
+  const list = playerIDs.map((id: string) =>
     ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -1288,11 +1380,11 @@ async function getPlayers(playerIDs) {
     )
   );
   const players = await Promise.all(list);
-  return players.map(player => player.Item);
+  return players.map(player => player.Item as FullUser);
 }
 
-function addToGameLists(type, game, now) {
-  let work = [];
+function addToGameLists(type: string, game: Game, now: number) {
+  const work: Promise<any>[] = [];
   const sk = now + "#" + game.id;
   work.push(ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -1308,7 +1400,7 @@ function addToGameLists(type, game, now) {
         "sk": sk,
         ...game}
     })));
-  game.players.forEach(player => {
+  game.players.forEach((player: { id: string; }) => {
     work.push(ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
@@ -1327,8 +1419,8 @@ function addToGameLists(type, game, now) {
   return Promise.all(work);
 }
 
-function removeFromGameLists(type, metaGame, gameStarted, id, players) {
-  let work = [];
+function removeFromGameLists(type: string, metaGame: string, gameStarted: number, id: string, players: any[]) {
+  const work: Promise<any>[] = [];
   const sk = gameStarted + "#" + id;
   console.log("sk", sk);
   work.push(ddbDocClient.send(new DeleteCommand({
@@ -1343,7 +1435,7 @@ function removeFromGameLists(type, metaGame, gameStarted, id, players) {
       "pk": type + "#" + metaGame, "sk": sk
     }
   })));
-  players.forEach(player => {
+  players.forEach((player: { id: string; }) => {
     work.push(ddbDocClient.send(new DeleteCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: {
@@ -1360,8 +1452,8 @@ function removeFromGameLists(type, metaGame, gameStarted, id, players) {
   return Promise.all(work);
 }
 
-async function submitMove(userid, pars, callback) {
-  let data = {};
+async function submitMove(userid: string, pars: { id: string; move: string; draw: string; }) {
+  let data: any;
   try {
     data = await ddbDocClient.send(
       new GetCommand({
@@ -1374,12 +1466,16 @@ async function submitMove(userid, pars, callback) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`, callback);
+    return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
-  let game = data.Item;
+  if (!data.Item)
+    throw new Error(`No game ${pars.id} in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  const game = data.Item as FullGame;
   console.log("got game in submitMove:");
   console.log(game);
-  let engine = GameFactory(game.metaGame, game.state);
+  const engine = GameFactory(game.metaGame, game.state);
+  if (!engine)
+    throw new Error(`Unknown metaGame ${game.metaGame}`);
   const flags = gameinfo.get(game.metaGame).flags;
   const simultaneous = flags !== undefined && flags.includes('simultaneous');
   const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
@@ -1398,10 +1494,12 @@ async function submitMove(userid, pars, callback) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to apply move ${pars.move}`, callback);
+    return formatReturnError(`Unable to apply move ${pars.move}`);
   }
 
-  let player = game.players.find(p => p.id === userid);
+  const player = game.players.find(p => p.id === userid);
+  if (!player)
+    throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
   // deal with draw offers
   if (pars.draw === "drawoffer") {
     player.draw = "offered";
@@ -1413,13 +1511,13 @@ async function submitMove(userid, pars, callback) {
   const timeUsed = timestamp - lastMoveTime;
   // console.log("timeUsed", timeUsed);
   // console.log("player", player);
-  if (player.time - timeUsed < 0)
+  if (player.time! - timeUsed < 0)
     player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
   else
-    player.time = player.time - timeUsed + game.clockInc * 3600000;
+    player.time = player.time! - timeUsed + game.clockInc * 3600000;
   if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
   // console.log("players", game.players);
-  const playerIDs = game.players.map(p => p.id);
+  const playerIDs = game.players.map((p: { id: any; }) => p.id);
   // TODO: We are updating players and their games. This should be put in some kind of critical section!
   const players = await getPlayers(playerIDs);
 
@@ -1431,22 +1529,22 @@ async function submitMove(userid, pars, callback) {
     "clockHard": game.clockHard,
     "toMove": game.toMove,
     "lastMoveTime": timestamp
-  };
-  let myGame = {
+  } as Game;
+  const myGame = {
     "id": game.id,
     "metaGame": game.metaGame,
     "players": game.players,
     "clockHard": game.clockHard,
     "toMove": game.toMove,
     "lastMoveTime": timestamp
-  };
-  let list = [];
-  let newRatings = null;
+  } as Game;
+  const list: Promise<any>[] = [];
+  let newRatings: any[] | null = null;
   if ((game.toMove === "" || game.toMove === null)) {
     newRatings = updateRatings(game, players);
     myGame.seen = Date.now();
-    addToGameLists("COMPLETEDGAMES", playerGame, timestamp);
-    removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players);
+    list.push(addToGameLists("COMPLETEDGAMES", playerGame, timestamp));
+    list.push(removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players));
   }
   game.lastMoveTime = timestamp;
   const updateGame = ddbDocClient.send(new PutCommand({
@@ -1456,7 +1554,7 @@ async function submitMove(userid, pars, callback) {
   list.push(updateGame);
   // Update players
   players.forEach((player, ind) => {
-    let games = [];
+    const games: Game[] = [];
     player.games.forEach(g => {
       if (g.id === playerGame.id) {
         if (player.id === userid)
@@ -1488,38 +1586,26 @@ async function submitMove(userid, pars, callback) {
     }
   });
 
-  try {
-    // await Promise.all(list);
+  if (simultaneous)
+    game.partialMove = game.players.map((p: User, i: number) => (p.id === userid ? game.partialMove!.split(',')[i] : '')).join(',');
 
-    if (simultaneous)
-      game.partialMove = game.players.map((p, i) => (p.id === userid ? game.partialMove.split(',')[i] : '')).join(',');
-
-    callback(null, {
+  list.push(sendSubmittedMoveEmails(game, players, simultaneous, newRatings));
+  await Promise.all(list);
+  return {
       statusCode: 200,
       body: JSON.stringify(game),
       headers
-    });
-  }
-  catch (error) {
-    logGetItemError(error);
-    returnError(`Unable to update game ${pars.id}`, callback);
-  }
-  try {
-    sendSubmittedMoveEmails(game, players, simultaneous, newRatings);
-  }
-  catch (error) {
-    logGetItemError(error);
-  }
+    };
 }
 
-function updateRatings(game, players) {
+function updateRatings(game: FullGame, players: FullUser[]) {
   console.log("game.numMoves", game.numMoves);
-  if (!game.rated || game.numMoves < 3)
+  if ((game.rated && !game.rated) || (game.numMoves && game.numMoves < 3))
     return null;
   if (game.numPlayers !== 2)
     throw new Error(`Only 2 player games can be rated, game ${game.id}`);
-  let rating1 = {rating: 1200, N: 0, wins: 0, draws: 0}
-  let rating2 = {rating: 1200, N: 0, wins: 0, draws: 0}
+  let rating1: Rating = {rating: 1200, N: 0, wins: 0, draws: 0}
+  let rating2: Rating = {rating: 1200, N: 0, wins: 0, draws: 0}
   if (players[0].ratings !== undefined && players[0].ratings[game.metaGame] !== undefined)
     rating1 = players[0].ratings[game.metaGame];
   if (players[1].ratings !== undefined && players[1].ratings[game.metaGame] !== undefined)
@@ -1557,14 +1643,14 @@ function updateRatings(game, players) {
   rating2.rating += getK(rating2.N) * (expectedScore - score);
   rating1.N += 1;
   rating2.N += 1;
-  let ratings1 = players[0].ratings === undefined ? {} : players[0].ratings;
-  let ratings2 = players[1].ratings === undefined ? {} : players[1].ratings;
+  const ratings1 = players[0].ratings === undefined ? {} : players[0].ratings;
+  const ratings2 = players[1].ratings === undefined ? {} : players[1].ratings;
   ratings1[game.metaGame] = rating1;
   ratings2[game.metaGame] = rating2;
   return [ratings1, ratings2];
 }
 
-function getK(N) {
+function getK(N: number) {
   return (
     N < 10 ? 40 
     : N < 20 ? 30 
@@ -1573,14 +1659,15 @@ function getK(N) {
   );
 }
 
-async function sendSubmittedMoveEmails(game, players0, simultaneous, newRatings) {
+async function sendSubmittedMoveEmails(game: FullGame, players0: any[], simultaneous: any, newRatings: any[] | null) {
   await initi18n('en');
+  const work: Promise<any>[] =  [];
   if (game.toMove !== '') {
-    let playerIds = [];
+    let playerIds: any[] = [];
     if (!simultaneous) {
-      playerIds.push(game.players[game.toMove].id);
+      playerIds.push(game.players[parseInt(game.toMove as string)].id);
     }
-    else if (game.toMove.every(b => b === true)) {
+    else if ((game.toMove as boolean[]).every(b => b === true)) {
       playerIds = game.players.map(p => p.id);
     }
     const players = players0.filter(p => playerIds.includes(p.id));
@@ -1588,12 +1675,12 @@ async function sendSubmittedMoveEmails(game, players0, simultaneous, newRatings)
     for (const player of players) {
       await changeLanguageForPlayer(player);
       const comm = createSendEmailCommand(player.email, player.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBody", { metaGame, "interpolation": {"escapeValue": false} }));
-      sesClient.send(comm);
+      work.push(sesClient.send(comm));
     }
   } else {
     // Game over
-    const playerIds = game.players.map(p => p.id);
-    const players = players0.filter(p => playerIds.includes(p.id));
+    const playerIds = game.players.map((p: { id: any; }) => p.id);
+    const players = players0.filter((p: { id: any; }) => playerIds.includes(p.id));
     const metaGame = gameinfo.get(game.metaGame).name;
     for (const [ind, player] of players.entries()) {
       await changeLanguageForPlayer(player);
@@ -1603,13 +1690,14 @@ async function sendSubmittedMoveEmails(game, players0, simultaneous, newRatings)
       else
         body = i18n.t("GameOverBody", { metaGame, "interpolation": {"escapeValue": false} });
       const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), body);
-      sesClient.send(comm);
-    };
+      work.push(sesClient.send(comm));
+    }
   }
+  return Promise.all(work);
 }
 
-function resign(userid, engine, game) {
-  let player = game.players.findIndex(p => p.id === userid);
+function resign(userid: any, engine: GameBase, game: FullGame) {
+  const player = game.players.findIndex((p: { id: any; }) => p.id === userid);
   if (player === undefined)
     throw new Error(`${userid} isn't playing in this game!`);
   engine.resign(player + 1);
@@ -1619,18 +1707,18 @@ function resign(userid, engine, game) {
   game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
 }
 
-function timeout(userid, engine, game) {
+function timeout(userid: string, engine: GameBase, game: FullGame) {
   if (game.toMove === '')
     throw new Error("Can't timeout a game that has already ended");
   // Find player that timed out
-  let loser;
+  let loser: number;
   if (Array.isArray(game.toMove)) {
     let minTime = 0;
     let minIndex = -1;
     const elapsed = Date.now() - game.lastMoveTime;
-    game.toMove.forEach((p, i) => {
-      if (p && game.players[i].time - elapsed < minTime) {
-        minTime = game.players[i].time - elapsed;
+    game.toMove.forEach((p: any, i: number) => {
+      if (p && game.players[i].time! - elapsed < minTime) {
+        minTime = game.players[i].time! - elapsed;
         minIndex = i;
       }});
     if (minIndex !== -1) {
@@ -1639,8 +1727,8 @@ function timeout(userid, engine, game) {
       throw new Error("Nobody's time is up!");
     }
   } else {
-    if (game.players[game.toMove].time - (Date.now() - game.lastMoveTime) < 0) {
-      loser = game.toMove;
+    if (game.players[parseInt(game.toMove)].time! - (Date.now() - game.lastMoveTime) < 0) {
+      loser = parseInt(game.toMove);
     } else {
       throw new Error("Opponent's time isn't up!");
     }
@@ -1652,11 +1740,13 @@ function timeout(userid, engine, game) {
   game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
 }
 
-function drawaccepted(userid, engine, game, simultaneous) {
-  if ((!simultaneous && game.players[game.toMove].id !== userid) || (simultaneous && !game.players.some((p,i) => game.toMove[i] && p.id === userid))) {
+function drawaccepted(userid: string, engine: GameBase, game: FullGame, simultaneous: boolean) {
+  if ((!simultaneous && game.players[parseInt(game.toMove as string)].id !== userid) || (simultaneous && !game.players.some((p: User, i: number) => game.toMove[i] && p.id === userid))) {
     throw new Error('It is not your turn!');
   }
-  let player = game.players.find(p => p.id === userid);
+  const player = game.players.find((p: { id: any; }) => p.id === userid);
+  if (!player)
+    throw new Error("You can't accept a draw in a game you aren't playig in!");
   player.draw = "accepted";
   if (game.players.every(p => p.draw === "offered" || p.draw === "accepted")) {
     engine.draw();
@@ -1667,8 +1757,8 @@ function drawaccepted(userid, engine, game, simultaneous) {
   }
 }
 
-async function timeloss(player, gameid, timestamp) {
-  let data = {};
+async function timeloss(player: number, gameid: string, timestamp: number) {
+  let data: any;
   try {
     data = await ddbDocClient.send(
       new GetCommand({
@@ -1683,15 +1773,20 @@ async function timeloss(player, gameid, timestamp) {
     logGetItemError(error);
     throw new Error(`Unable to get game ${gameid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
-  let game = data.Item;
-  let engine = GameFactory(game.metaGame, game.state);
+  if (!data.Item)
+    throw new Error(`No game ${gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+
+  const game = data.Item as FullGame;
+  const engine = GameFactory(game.metaGame, game.state);
+  if (!engine)
+    throw new Error(`Unknown metaGame ${game.metaGame}`);
   engine.timeout(player + 1);
   game.state = engine.serialize();
   game.toMove = "";
   game.winner = engine.winner;
   game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   game.lastMoveTime = timestamp;
-  const playerIDs = game.players.map(p => p.id);
+  const playerIDs = game.players.map((p: { id: any; }) => p.id);
   // TODO: We are updating players and their games. TODO: implement optimistic locking
   const players = await getPlayers(playerIDs);
 
@@ -1703,19 +1798,19 @@ async function timeloss(player, gameid, timestamp) {
     "clockHard": game.clockHard,
     "toMove": game.toMove,
     "lastMoveTime": game.lastMoveTime
-  };
-  let work = [];
+  } as Game;
+  const work: Promise<any>[] = [];
   work.push(ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: game
     })));
   work.push(addToGameLists("COMPLETEDGAMES", playerGame, game.lastMoveTime));
   work.push(removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players));
-  newRatings = updateRatings(game, players);
+  const newRatings = updateRatings(game, players);
 
   // Update players
   players.forEach((player, ind) => {
-    let games = [];
+    const games: Game[] = [];
     player.games.forEach(g => {
       if (g.id === playerGame.id)
         games.push(playerGame);
@@ -1741,9 +1836,9 @@ async function timeloss(player, gameid, timestamp) {
   return Promise.all(work);
 }
 
-function applySimultaneousMove(userid, move, engine, game) {
-  let partialMove = game.partialMove;
-  let moves = partialMove === undefined ? game.players.map(p => '') : partialMove.split(',');
+function applySimultaneousMove(userid: string, move: string, engine: GameBase, game: FullGame) {
+  const partialMove = game.partialMove;
+  const moves = partialMove === undefined ? game.players.map(() => '') : partialMove.split(',');
   let cnt = 0;
   let found = false;
   for (let i = 0; i < game.numPlayers; i++) {
@@ -1753,7 +1848,7 @@ function applySimultaneousMove(userid, move, engine, game) {
         throw new Error('You have already submitted your move for this turn!');
       }
       moves[i] = move;
-      game.toMove[i] = false;
+      (game.toMove as boolean[])[i] = false;
     }
     if (moves[i] !== '')
       cnt++;
@@ -1765,26 +1860,29 @@ function applySimultaneousMove(userid, move, engine, game) {
     // not a complete "turn" yet, just validate and save the new partial move
     game.partialMove = moves.join(',');
     console.log(game.partialMove);
-    engine.move(game.partialMove, true);
+    if (game.metaGame === "entropy") // need to fix this...
+      (engine as EntropyGame).move(game.partialMove, true);
+    else
+      engine.move(game.partialMove);
   }
   else {
     // full move.
     engine.move(moves.join(','));
     game.state = engine.serialize();
-    game.partialMove = game.players.map(p => '').join(',');
+    game.partialMove = game.players.map(() => '').join(',');
     if (engine.gameover) {
       game.toMove = "";
       game.winner = engine.winner;
       game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
     }
     else
-      game.toMove = game.players.map(p => true);
+      game.toMove = game.players.map(() => true);
   }
 }
 
-function applyMove(userid, move, engine, game) {
+function applyMove(userid: string, move: string, engine: GameBase, game: FullGame) {
   // non simultaneous move game.
-  if (game.players[game.toMove].id !== userid) {
+  if (game.players[parseInt(game.toMove as string)].id !== userid) {
     throw new Error('It is not your turn!');
   }
   console.log("applyMove", move);
@@ -1797,12 +1895,12 @@ function applyMove(userid, move, engine, game) {
     game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   }
   else
-    game.toMove = (game.toMove + 1) % game.players.length;
+    game.toMove = `${(parseInt(game.toMove as string) + 1) % game.players.length}`;
   console.log("done");
 }
 
-async function submitComment(userid, pars, callback) {
-  let data = {};
+async function submitComment(userid: string, pars: { id: string; comment: string; moveNumber: number; }) {
+  let data: any;
   try {
     data = await ddbDocClient.send(
       new GetCommand({
@@ -1815,29 +1913,32 @@ async function submitComment(userid, pars, callback) {
   }
   catch (error) {
     logGetItemError(error);
-    returnError(`Unable to get comments for game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`, callback);
+    return formatReturnError(`Unable to get comments for game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
-  let commentsData = data.Item;
+  const commentsData = data.Item;
   console.log("got comments in submitComment:");
   console.log(commentsData);
-  if (commentsData === undefined) {
-    commentsData = {
-      "pk": "GAME#" + pars.id,
-      "sk": "COMMENTS",
-      "comments": []
-    };
-  }
-  if (commentsData.comments.reduce((s, a) => s + 110 + Buffer.byteLength(s.comment,'utf8'), 0) < 360000) {
-    let comment = {"comment": pars.comment.substring(0, 4000), "userId": userid, "moveNumber": pars.moveNumber, "timeStamp": Date.now()};
-    commentsData.comments.push(comment);
-    ddbDocClient.send(new PutCommand({
+  let comments: Comment[];
+  if (commentsData === undefined)
+    comments= []
+  else
+    comments = commentsData.comments;
+
+  if (comments.reduce((s: number, a: Comment) => s + 110 + Buffer.byteLength(a.comment,'utf8'), 0) < 360000) {
+    const comment: Comment = {"comment": pars.comment.substring(0, 4000), "userId": userid, "moveNumber": pars.moveNumber, "timeStamp": Date.now()};
+    comments.push(comment);
+    await ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: commentsData
+        Item: {
+          "pk": "GAME#" + pars.id,
+          "sk": "COMMENTS",
+          "comments": comments
+        }
       }));
   }
 }
 
-async function updateMetaGameCounts(userId, pars, callback) {
+async function updateMetaGameCounts(userId: string) {
   // Make sure people aren't getting clever
   try {
     const user = await ddbDocClient.send(
@@ -1849,15 +1950,14 @@ async function updateMetaGameCounts(userId, pars, callback) {
         },
       }));
     if (user.Item === undefined || user.Item.admin !== true) {
-      callback(null, {
+      return {
         statusCode: 200,
         body: JSON.stringify({}),
         headers
-      });
-      return;
+      };
     }
 
-    let games = [];
+    const games: string[] = [];
     gameinfo.forEach((game) => games.push(game.uid));
     const currentgames = games.map(game => ddbDocClient.send(
         new QueryCommand({
@@ -1882,8 +1982,17 @@ async function updateMetaGameCounts(userId, pars, callback) {
       })));
     const work = await Promise.all([Promise.all(currentgames), Promise.all(completedgames), Promise.all(standingchallenges)]);
     console.log("work", work);
-    let metaGameCounts = {};
-    games.forEach((game, ind) => metaGameCounts[game] = { "currentgames": work[0][ind].Items.length, "completedgames": work[1][ind].Items.length, "standingchallenges": work[2][ind].Items.length });
+    const metaGameCounts: {
+      [metaGame: string]: {
+        currentgames: number;
+        completedgames: number;
+        standingchallenges: number;
+      }
+    } = {};
+    games.forEach((game, ind) => metaGameCounts[game] = { 
+      "currentgames": work[0][ind].Items ? work[0][ind].Items!.length : 0, 
+      "completedgames": work[1][ind].Items ? work[1][ind].Items!.length : 0, 
+      "standingchallenges": work[2][ind].Items ? work[2][ind].Items!.length : 0 });
     console.log(metaGameCounts);
     await ddbDocClient.send(
       new PutCommand({
@@ -1895,14 +2004,13 @@ async function updateMetaGameCounts(userId, pars, callback) {
           }
         })
     );
-
   } catch (err) {
     logGetItemError(err);
-    returnError(`Unable to update meta game counts ${userId}`, callback);
+    return formatReturnError(`Unable to update meta game counts ${userId}`);
   }
 }
 
-async function testAsync(userId, pars, callback) {
+async function testAsync(userId: string, pars: { N: number; }) {
   // Make sure people aren't getting clever
   try {
     const user = await ddbDocClient.send(
@@ -1914,12 +2022,11 @@ async function testAsync(userId, pars, callback) {
         },
       }));
     if (user.Item === undefined || user.Item.admin !== true) {
-      callback(null, {
+      return {
         statusCode: 200,
         body: JSON.stringify({}),
         headers
-      });
-      return;
+      };
     }
     /*
     callback(null, {
@@ -1929,7 +2036,8 @@ async function testAsync(userId, pars, callback) {
     });
     */
     console.log(`Calling makeWork with ${pars.N}`);
-    makeWork();
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    makeWork(); 
     console.log('Done calling makeWork');
     return {
       statusCode: 200,
@@ -1938,7 +2046,7 @@ async function testAsync(userId, pars, callback) {
     };
   } catch (err) {
     logGetItemError(err);
-    returnError(`Unable to test_async ${userId}`, callback);
+    return formatReturnError(`Unable to test_async ${userId}`);
   }
 }
 
@@ -1952,27 +2060,27 @@ function makeWork() {
   });
 }
 
-function Set_toJSON(key, value) {
+function Set_toJSON(key: any, value: any) {
   if (typeof value === 'object' && value instanceof Set) {
     return [...value];
   }
   return value;
 }
 
-function shuffle(array) {
+function shuffle(array: any[]) {
   let i = array.length,  j;
 
   while (i > 1) {
     j = Math.floor(Math.random() * i);
     i--;
-    var temp = array[i];
+    const temp = array[i];
     array[i] = array[j];
     array[j] = temp;
   }
 }
 
-async function changeLanguageForPlayer(player) {
-  var lng = "en";
+async function changeLanguageForPlayer(player: { language: string | undefined; }) {
+  let lng = "en";
   if (player.language !== undefined)
     lng = player.language;
   if (i18n.language !== lng) {
@@ -1981,7 +2089,7 @@ async function changeLanguageForPlayer(player) {
   }
 }
 
-function createSendEmailCommand(toAddress, player, subject, body) {
+function createSendEmailCommand(toAddress: string, player: any, subject: any, body: string) {
   console.log("toAddress", toAddress, "player", player, "body", body);
   const fullbody =  i18n.t("DearPlayer", { player }) + '\r\n\r\n' + body + "\r\n\r\n" + i18n.t("EmailOut");
   return new SendEmailCommand({
@@ -2004,9 +2112,9 @@ function createSendEmailCommand(toAddress, player, subject, body) {
     },
     Source: "abstractplay@mail.abstractplay.com"
   });
-};
+}
 
-async function initi18n(language) {
+async function initi18n(language: string) {
   await i18n.init({
     lng: language,
     fallbackLng: 'en',
@@ -2025,7 +2133,7 @@ async function initi18n(language) {
   });
 }
 
-function returnError(message) {
+function formatReturnError(message: string) {
   return {
     statusCode: 500,
     body: JSON.stringify({
@@ -2037,53 +2145,21 @@ function returnError(message) {
 
 // Handles errors during GetItem execution. Use recommendations in error messages below to
 // add error handling specific to your application use-case.
-function logGetItemError(err) {
+function logGetItemError(err: unknown) {
   if (!err) {
     console.error('Encountered error object was empty');
     return;
   }
-  if (!err.code) {
+  if (!(err as { code: any; message: any; }).code) {
     console.error(`An exception occurred, investigate and configure retry strategy. Error: ${JSON.stringify(err)}`);
     console.error(err);
     return;
   }
   // here are no API specific errors to handle for GetItem, common DynamoDB API errors are handled below
-  handleCommonErrors(err);
+  handleCommonErrors(err as { code: any; message: any; });
 }
 
-// Handles errors during PutItem execution. Use recommendations in error messages below to
-// add error handling specific to your application use-case.
-function handlePutItemError(table, err) {
-  console.error("An exception occurred while putting an item in table " + table);
-  if (!err) {
-    console.error('Encountered error object was empty');
-    return;
-  }
-  if (!err.code) {
-    console.error("Error:");
-    console.error(err);
-    return;
-  }
-  switch (err.code) {
-    case 'ConditionalCheckFailedException':
-      console.error(`Condition check specified in the operation failed, review and update the condition check before retrying. Error: ${err.message}`);
-      return;
-    case 'TransactionConflictException':
-      console.error(`Operation was rejected because there is an ongoing transaction for the item, generally safe to retry ' +
-       'with exponential back-off. Error: ${err.message}`);
-       return;
-    case 'ItemCollectionSizeLimitExceededException':
-      console.error(`An item collection is too large, you're using Local Secondary Index and exceeded size limit of` +
-        `items per partition key. Consider using Global Secondary Index instead. Error: ${err.message}`);
-      return;
-    default:
-      break;
-    // Common DynamoDB API errors are handled below
-  }
-  handleCommonErrors(err);
-}
-
-function handleCommonErrors(err) {
+function handleCommonErrors(err: { code: any; message: any; }) {
   switch (err.code) {
     case 'InternalServerError':
       console.error(`Internal Server Error, generally safe to retry with exponential back-off. Error: ${err.message}`);

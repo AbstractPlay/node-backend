@@ -5,8 +5,12 @@
   "main": "??",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "build-ts": "tsc",
+    "build": "eslint && npm run build-ts",
     "deploy_dev": "serverless deploy",
-    "deploy_prod": "serverless --stage prod deploy"
+    "deploy_prod": "serverless --stage prod deploy",
+    "full-deploy_dev": "npm run build && serverless deploy",
+    "full-deploy_prod": "npm run build && serverless --stage prod deploy"
   },
   "repository": {
     "type": "git",
@@ -27,6 +31,12 @@
     "lodash": "^4.17.21"
   },
   "devDependencies": {
-    "eslint": "^8.34.0"
+    "@aws-sdk/types": "^3.272.0",
+    "@types/node": "^18.14.1",
+    "@types/uuid": "^9.0.1",
+    "@typescript-eslint/eslint-plugin": "^5.53.0",
+    "@typescript-eslint/parser": "^5.53.0",
+    "eslint": "^8.34.0",
+    "typescript": "^4.9.5"
   }
 }
