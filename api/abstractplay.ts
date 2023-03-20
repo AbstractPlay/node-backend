@@ -142,8 +142,12 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return await challengeDetails(pars);
     case "standing_challenges":
       return await standingChallenges(pars);
+    case "games":
+      return await games(pars);
     case "meta_games":
       return await metaGamesDetails();
+    case "get_game":
+      return await game("", pars);  
     default:
       return {
         statusCode: 500,
@@ -155,7 +159,7 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
   }
 }
 
-// So it looks like there is no way to "run and forget", you need to finish all work before returning a response to the front end. :(
+// It looks like there is no way to "run and forget", you need to finish all work before returning a response to the front end. :(
 // Make sure the @typescript-eslint/no-floating-promises linter rule passes, otherwise promise might (at best?) only be fullfilled on the next call to the API...
 module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cognitoPoolClaims: { sub: any; email: any; }; }) => {
   console.log("authQuery: ", event.body.query);
@@ -163,7 +167,7 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
   const pars = event.body.pars;
   switch (query) {
     case "me":
-      return await me(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email);
+      return await me(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email, pars);
     case "my_settings":
       return await mySettings(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email);
     case "new_setting":
@@ -255,7 +259,38 @@ async function challengeDetails(pars: { id: string; }) {
   }
 }
 
-async function standingChallenges(pars: { metaGame: any; }) {
+async function games(pars: { metaGame: string, type: string; }) {
+  const game = pars.metaGame;
+  console.log(game);
+  let type2: string;
+  if (pars.type === "current") {
+    type2 = "CURRENTGAMES";
+  } else if (pars.type === "completed") {
+    type2 = "COMPLETEDGAMES";
+  } else {
+    return formatReturnError(`Unknown type ${pars.type}`);
+  }
+  try {
+    const gamesData = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": type2 + "#" + game },
+        ExpressionAttributeNames: { "#pk": "pk" }
+      }));
+    return {
+      statusCode: 200,
+      body: JSON.stringify(gamesData.Items),
+      headers
+    };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get games for ${pars.metaGame}`);
+  }
+}
+
+async function standingChallenges(pars: { metaGame: string; }) {
   const game = pars.metaGame;
   console.log(game);
   try {
@@ -301,7 +336,7 @@ async function metaGamesDetails() {
   }
 }
 
-async function game(userid: any, pars: { id: string; }) {
+async function game(userid: string, pars: { id: string; }) {
   try {
     const getGame = ddbDocClient.send(
       new GetCommand({
@@ -328,7 +363,7 @@ async function game(userid: any, pars: { id: string; }) {
       throw new Error(`Game ${pars.id} not found`);
     // If the game is over update user to indicate they have seen the game end.
     let work;
-    if (game.toMove === "" || game.toMove === null) {
+    if ((game.toMove === "" || game.toMove === null) && userid !== "") {
       work = setSeenTime(userid, pars.id);
     }
     // hide other player's simulataneous moves
@@ -447,7 +482,7 @@ async function updateUserSettings(userid: string, pars: { settings: any; }) {
   }
 }
 
-async function me(userId: string, email: any) {
+async function me(userId: string, email: any, pars: { size: string }) {
   const fixGames = false;
   try {
     const userData = await ddbDocClient.send(
@@ -510,7 +545,7 @@ async function me(userId: string, email: any) {
     // TODO: Put it back in their list if anyone comments.
     for (let i = games.length - 1; i >= 0; i-- ) { 
       if (games[i].toMove === "" || games[i].toMove === null ) {
-        if (games[i].seen !== undefined && Date.now() - (games[i].seen || 0) > 1 * 3600000) {
+        if (games[i].seen !== undefined && Date.now() - (games[i].seen || 0) > 48 * 3600000) {
           games.splice(i, 1);
         }
       }
@@ -529,11 +564,14 @@ async function me(userId: string, email: any) {
       if (user.challenges.standing !== undefined)
         standingChallengeIDs = user.challenges.standing;
     }
-    const challengesIssued = getChallenges(challengesIssuedIDs);
-    const challengesReceived = getChallenges(challengesReceivedIDs);
-    const challengesAccepted = getChallenges(challengesAcceptedIDs);
-    const standingChallenges = getChallenges(standingChallengeIDs);
-    const data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges]);
+    let data = null;
+    if (!pars || !pars.size || pars.size !== "small") {
+      const challengesIssued = getChallenges(challengesIssuedIDs);
+      const challengesReceived = getChallenges(challengesReceivedIDs);
+      const challengesAccepted = getChallenges(challengesAcceptedIDs);
+      const standingChallenges = getChallenges(standingChallengeIDs);
+      data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges]);
+    }
     // Update last seen date for user
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -542,22 +580,37 @@ async function me(userId: string, email: any) {
       UpdateExpression: "set lastSeen = :dt, games = :gs"
     })));
     await Promise.all(work);
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        "id": user.id,
-        "name": user.name,
-        "admin": (user.admin === true),
-        "language": user.language,
-        "games": games,
-        "settings": user.settings,
-        "challengesIssued": data[0].map(d => d.Item),
-        "challengesReceived": data[1].map(d => d.Item),
-        "challengesAccepted": data[2].map(d => d.Item),
-        "standingChallenges": data[3].map(d => d.Item)
-      }, Set_toJSON),
-      headers
-    };
+    if (data) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          "id": user.id,
+          "name": user.name,
+          "admin": (user.admin === true),
+          "language": user.language,
+          "games": games,
+          "settings": user.settings,
+          "challengesIssued": data[0].map(d => d.Item),
+          "challengesReceived": data[1].map(d => d.Item),
+          "challengesAccepted": data[2].map(d => d.Item),
+          "standingChallenges": data[3].map(d => d.Item)
+        }, Set_toJSON),
+        headers
+      };
+    } else {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          "id": user.id,
+          "name": user.name,
+          "admin": (user.admin === true),
+          "language": user.language,
+          "games": games,
+          "settings": user.settings
+        }, Set_toJSON),
+        headers
+      }
+    }
   } catch (err) {
     logGetItemError(err);
     return formatReturnError(`Unable to get user data for ${userId}`);
@@ -1416,6 +1469,22 @@ function addToGameLists(type: string, game: Game, now: number) {
           ...game}
       })));
   });
+  if (type === "CURRENTGAMES")
+    work.push(ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+      ExpressionAttributeNames: { "#g": game.metaGame },
+      ExpressionAttributeValues: {":n": 1},
+      UpdateExpression: "add #g.currentgames :n"
+    })));
+  else
+    work.push(ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+      ExpressionAttributeNames: { "#g": game.metaGame },
+      ExpressionAttributeValues: {":n": 1},
+      UpdateExpression: "add #g.completedgames :n"
+    })));
   return Promise.all(work);
 }
 
@@ -1449,6 +1518,23 @@ function removeFromGameLists(type: string, metaGame: string, gameStarted: number
       }
     })));
   });
+  if (type === "CURRENTGAMES")
+    work.push(ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+      ExpressionAttributeNames: { "#g": metaGame },
+      ExpressionAttributeValues: {":n": -1},
+      UpdateExpression: "add #g.currentgames :n"
+    })));
+  else
+    work.push(ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+      ExpressionAttributeNames: { "#g": metaGame },
+      ExpressionAttributeValues: {":n": -1},
+      UpdateExpression: "add #g.completedgames :n"
+    })));
+
   return Promise.all(work);
 }
 
@@ -1543,7 +1629,8 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
   if ((game.toMove === "" || game.toMove === null)) {
     newRatings = updateRatings(game, players);
     myGame.seen = Date.now();
-    list.push(addToGameLists("COMPLETEDGAMES", playerGame, timestamp));
+    if (game.numMoves && game.numMoves > game.numPlayers)
+      list.push(addToGameLists("COMPLETEDGAMES", playerGame, timestamp));
     list.push(removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players));
   }
   game.lastMoveTime = timestamp;
@@ -1600,7 +1687,7 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
 
 function updateRatings(game: FullGame, players: FullUser[]) {
   console.log("game.numMoves", game.numMoves);
-  if ((game.rated && !game.rated) || (game.numMoves && game.numMoves < 3))
+  if (!game.rated || (game.numMoves && game.numMoves <= game.numPlayers))
     return null;
   if (game.numPlayers !== 2)
     throw new Error(`Only 2 player games can be rated, game ${game.id}`);
@@ -1804,7 +1891,8 @@ async function timeloss(player: number, gameid: string, timestamp: number) {
     TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: game
     })));
-  work.push(addToGameLists("COMPLETEDGAMES", playerGame, game.lastMoveTime));
+  if (game.numMoves && game.numMoves > game.numPlayers)
+    work.push(addToGameLists("COMPLETEDGAMES", playerGame, game.lastMoveTime));
   work.push(removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players));
   const newRatings = updateRatings(game, players);
 
