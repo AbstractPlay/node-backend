@@ -1,7 +1,7 @@
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, QueryCommandInput, ScanCommand } from '@aws-sdk/lib-dynamodb';
 // import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase } from '@abstractplay/gameslib';
@@ -35,6 +35,15 @@ const headers = {
 };
 
 // Types
+type MetaGameCounts = {
+  [metaGame: string]: {
+    currentgames: number;
+    completedgames: number;
+    standingchallenges: number;
+    ratings: Set<string>;
+  }
+}
+
 type Challenge = {
   metaGame: string;
   standing?: boolean;
@@ -44,6 +53,8 @@ type Challenge = {
 }
 
 type FullChallenge = {
+  pk?: string,
+  sk?: string,
   metaGame: string;
   numPlayers: number;
   standing?: boolean;
@@ -68,6 +79,8 @@ type User = {
 }
 
 type FullUser = {
+  pk?: string,
+  sk?: string,
   id: string;
   name: string;
   email: string;
@@ -192,6 +205,10 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await updateUserSettings(event.cognitoPoolClaims.sub, pars);
     case "update_meta_game_counts":
       return await updateMetaGameCounts(event.cognitoPoolClaims.sub);
+    case "update_meta_game_ratings":
+      return await updateMetaGameRatings(event.cognitoPoolClaims.sub);
+    case "onetime_fix":
+      return await onetimeFix(event.cognitoPoolClaims.sub);
     case "test_async":
       return await testAsync(event.cognitoPoolClaims.sub, pars);
     default:
@@ -1670,6 +1687,25 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
           UpdateExpression: "set games = :gs, ratings = :rs"
         }))
       );
+
+      list.push(ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: { 
+          "pk": "RATINGS#" + game.metaGame + "#" + player.id,
+          "sk": newRatings[ind].rating,
+          "id": player.id,
+          "name": player.name,
+          "rating": newRatings[ind]
+        }
+      })));
+        
+      list.push(ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+        ExpressionAttributeNames: { "#g": game.metaGame },
+        ExpressionAttributeValues: {":p": player.id},
+        UpdateExpression: "add #g.ratedplayers :p",
+      })));
     }
   });
 
@@ -1919,6 +1955,25 @@ async function timeloss(player: number, gameid: string, timestamp: number) {
         ExpressionAttributeValues: { ":gs": games, ":rs": newRatings[ind] },
         UpdateExpression: "set games = :gs, ratings = :rs"
       })));
+
+      work.push(ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: { 
+          "pk": "RATINGS#" + game.metaGame + "#" + player.id,
+          "sk": newRatings[ind].rating,
+          "id": player.id,
+          "name": player.name,
+          "rating": newRatings[ind]
+        }
+      })));
+
+      work.push(ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+        ExpressionAttributeNames: { "#g": game.metaGame },
+        ExpressionAttributeValues: {":p": player.id},
+        UpdateExpression: "add #g.ratedplayers :p",
+      })));
     }
   });
   return Promise.all(work);
@@ -2045,6 +2100,14 @@ async function updateMetaGameCounts(userId: string) {
       };
     }
 
+    const metaGamesDataWork = ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "METAGAMES", "sk": "COUNTS"
+        },
+      }));
+
     const games: string[] = [];
     gameinfo.forEach((game) => games.push(game.uid));
     const currentgames = games.map(game => ddbDocClient.send(
@@ -2068,19 +2131,28 @@ async function updateMetaGameCounts(userId: string) {
         ExpressionAttributeValues: { ":pk": "STANDINGCHALLENGE#" + game },
         ExpressionAttributeNames: { "#pk": "pk" }
       })));
+
+    const metaGamesData = await metaGamesDataWork;
+    const metaGameCounts = metaGamesData.Item as MetaGameCounts;
+  
     const work = await Promise.all([Promise.all(currentgames), Promise.all(completedgames), Promise.all(standingchallenges)]);
     console.log("work", work);
-    const metaGameCounts: {
-      [metaGame: string]: {
-        currentgames: number;
-        completedgames: number;
-        standingchallenges: number;
+
+    games.forEach((game, ind) => {
+      if (metaGameCounts[game] === undefined) {
+        metaGameCounts[game] = { 
+          "currentgames": work[0][ind].Items ? work[0][ind].Items!.length : 0, 
+          "completedgames": work[1][ind].Items ? work[1][ind].Items!.length : 0, 
+          "standingchallenges": work[2][ind].Items ? work[2][ind].Items!.length : 0,
+          "ratings": new Set<string>()
+        };
+      } else {
+        metaGameCounts[game].currentgames = work[0][ind].Items ? work[0][ind].Items!.length : 0;
+        metaGameCounts[game].completedgames = work[1][ind].Items ? work[1][ind].Items!.length : 0;
+        metaGameCounts[game].standingchallenges = work[2][ind].Items ? work[2][ind].Items!.length : 0;
       }
-    } = {};
-    games.forEach((game, ind) => metaGameCounts[game] = { 
-      "currentgames": work[0][ind].Items ? work[0][ind].Items!.length : 0, 
-      "completedgames": work[1][ind].Items ? work[1][ind].Items!.length : 0, 
-      "standingchallenges": work[2][ind].Items ? work[2][ind].Items!.length : 0 });
+    });
+
     console.log(metaGameCounts);
     await ddbDocClient.send(
       new PutCommand({
@@ -2092,6 +2164,232 @@ async function updateMetaGameCounts(userId: string) {
           }
         })
     );
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to update meta game counts ${userId}`);
+  }
+}
+
+async function updateMetaGameRatings(userId: string) {
+  // Make sure people aren't getting clever
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER#" + userId,
+          "sk": "USER"
+        },
+      }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+
+    const metaGamesDataWork = ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "METAGAMES", "sk": "COUNTS"
+        },
+      }));
+
+    const data = await ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "begins_with(#pk, :pk)",
+          ExpressionAttributeValues: { ":pk": "USER#" },
+          ExpressionAttributeNames: { "#pk": "pk" }
+        }));
+    if (data.Items === undefined) {
+      return;
+    }
+    let ratings: {
+      [metaGame: string]: {player: string, name: string, rating: Rating}[];
+    } = {};
+    const users = data.Items as FullUser[];
+    users.forEach(player => { 
+      if (player.ratings) {
+        Object.keys(player.ratings).forEach(metaGame => {
+          if (ratings[metaGame] === undefined) 
+            ratings[metaGame] = [];
+          ratings[metaGame].push({player: player.id, name: player.name, rating: player.ratings![metaGame]});
+        });
+      }
+    });
+
+    let work: Promise<any>[] = [];
+    const metaGamesData = await metaGamesDataWork;
+    const metaGameCounts = metaGamesData.Item as MetaGameCounts;
+    Object.keys(ratings).forEach(metaGame => {
+      if (metaGameCounts[metaGame] === undefined) 
+        metaGameCounts[metaGame] = {currentgames: 0, completedgames: 0, standingchallenges: 0, ratings: new Set()};
+      ratings[metaGame].forEach(rating => {
+        metaGameCounts[metaGame].ratings!.add(rating.player);
+        work.push(ddbDocClient.send(
+          new PutCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Item: {
+                "pk": "RATINGS#" + metaGame + "#" + rating.player,
+                "sk": rating.rating.rating,
+                "id": rating.player,
+                "name": rating.name,
+                "rating": rating.rating
+              }
+            })
+        ));
+      });
+    });
+      
+    work.push(ddbDocClient.send(
+      new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: {
+            "pk": "METAGAMES",
+            "sk": "COUNTS",
+            ...metaGameCounts
+          }
+        })
+    ));
+    await Promise.all(work);
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to update meta game counts ${userId}`);
+  }
+}
+
+async function onetimeFix(userId: string) {
+  // Make sure people aren't getting clever
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER#" + userId,
+          "sk": "USER"
+        },
+      }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+    
+    // Fix GAME
+    let input: QueryCommandInput = {
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      FilterExpression: "begins_with(#pk, :g) and #sk = :s",
+      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      ExpressionAttributeValues: { ":g": "GAME#", ":s": "GAME" }
+    }
+    let data = await ddbDocClient.send(new ScanCommand(input));
+    console.log(`Found ${data.Items?.length} games`);
+    if (data.Items !== undefined) {
+      let work: Promise<any>[] = [];
+      data.Items.forEach(item => {
+        const game = item as unknown as FullGame;
+        const {pk, sk, ...game2} = game;
+        work.push(ddbDocClient.send(
+          new PutCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Item: {
+                "pk": "GAME",
+                "sk": game.id,
+                ...game2
+              }
+          })
+        ));
+      });
+      await Promise.all(work);
+      console.log(`Fixed ${data.Items.length} games`);
+    }
+
+    // Fix GAME COMMENTS
+    input = {
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      FilterExpression: "begins_with(#pk, :g) and #sk = :s",
+      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      ExpressionAttributeValues: { ":g": "GAME#", ":s": "COMMENTS" }
+    }
+    data = await ddbDocClient.send(new ScanCommand(input));
+    if (data.Items !== undefined) {
+      let work: Promise<any>[] = [];
+      data.Items.forEach(comment => {
+        work.push(ddbDocClient.send(
+          new PutCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Item: {
+                "pk": "GAMECOMMENTS",
+                "sk": (comment.pk as unknown as string).substring(5),
+                "comments": comment.comments
+              }
+            })
+        ));
+      });
+      await Promise.all(work);
+      console.log(`Fixed ${data.Items.length} game comments`);
+    }
+
+    // Fix USER
+    input = {
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      FilterExpression: "begins_with(#pk, :g) and #sk = :s",
+      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      ExpressionAttributeValues: { ":g": "USER#", ":s": "USER" }
+    }
+    data = await ddbDocClient.send(new ScanCommand(input));
+    if (data.Items !== undefined) {
+      let work: Promise<any>[] = [];
+      data.Items.forEach(item => {
+        const user = item as unknown as FullUser;
+        const {pk, sk, ...user2} = user;
+        work.push(ddbDocClient.send(
+          new PutCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Item: {
+                "pk": "USER",
+                "sk": user.id,
+                ...user2
+              }
+            })
+        ));
+      });
+      await Promise.all(work);
+      console.log(`Fixed ${data.Items.length} users`);
+    }
+
+    // Fix CHALLENGE
+    input = {
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      FilterExpression: "begins_with(#pk, :c) and #sk = :s",
+      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      ExpressionAttributeValues: { ":c": "CHALLENGE#", ":s": "CHALLENGE" }
+    }
+    data = await ddbDocClient.send(new ScanCommand(input));
+    if (data.Items !== undefined) {
+      let work: Promise<any>[] = [];
+      data.Items.forEach(item => {
+        const challenge = item as unknown as FullChallenge;
+        const {pk, sk, ...challenge2} = challenge;
+        work.push(ddbDocClient.send(
+          new PutCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Item: {
+                "pk": "CHALLENGE",
+                "sk": challenge.pk?.substring(10),
+                ...challenge2
+              }
+            })
+        ));
+      });
+      await Promise.all(work);
+      console.log(`Fixed ${data.Items.length} challenges`);
+    }
   } catch (err) {
     logGetItemError(err);
     return formatReturnError(`Unable to update meta game counts ${userId}`);
