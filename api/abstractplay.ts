@@ -40,7 +40,7 @@ type MetaGameCounts = {
     currentgames: number;
     completedgames: number;
     standingchallenges: number;
-    ratings: Set<string>;
+    ratings?: Set<string>;
   }
 }
 
@@ -157,6 +157,8 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return await standingChallenges(pars);
     case "games":
       return await games(pars);
+    case "ratings":
+      return await ratings(pars);
     case "meta_games":
       return await metaGamesDetails();
     case "get_game":
@@ -259,7 +261,7 @@ async function challengeDetails(pars: { id: string; }) {
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "CHALLENGE#" + pars.id, "sk": "CHALLENGE"
+          "pk": "CHALLENGE", "sk": pars.id
         },
       }));
     console.log("Got:");
@@ -307,6 +309,28 @@ async function games(pars: { metaGame: string, type: string; }) {
   }
 }
 
+async function ratings(pars: { metaGame: string }) {
+  const game = pars.metaGame;
+  try {
+    const ratingsData = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "RATINGS#" + game },
+        ExpressionAttributeNames: { "#pk": "pk" }
+      }));
+    return {
+      statusCode: 200,
+      body: JSON.stringify(ratingsData.Items),
+      headers
+    };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get ratings for ${pars.metaGame}`);
+  }
+}
+
 async function standingChallenges(pars: { metaGame: string; }) {
   const game = pars.metaGame;
   console.log(game);
@@ -339,11 +363,14 @@ async function metaGamesDetails() {
           "pk": "METAGAMES", "sk": "COUNTS"
         },
       }));
-    console.log("Got:");
-    console.log(data);
+    const details = data.Item as MetaGameCounts;
+    // Change every "ratings" to the number of elements in the Set.
+    const details2 = Object.keys(details)
+      .filter(key => key !== "pk" && key !== "sk")
+      .reduce( (a, k) => ({...a, [k]: { ...details[k], "ratings" : details[k].ratings ? details[k].ratings!.size : 0}}), {})
     return {
       statusCode: 200,
-      body: JSON.stringify(data.Item),
+      body: JSON.stringify(details2),
       headers
     };
   }
@@ -359,16 +386,16 @@ async function game(userid: string, pars: { id: string; }) {
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "GAME#" + pars.id,
-          "sk": "GAME"
+          "pk": "GAME",
+          "sk": pars.id
         },
       }));
     const getComments = ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "GAME#" + pars.id,
-          "sk": "COMMENTS"
+          "pk": "GAMECOMMENTS",
+          "sk": pars.id
         },
         ReturnConsumedCapacity: "INDEXES"
       }));
@@ -411,8 +438,8 @@ async function updateGameSettings(userid: string, pars: { game: string; settings
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "GAME#" + pars.game,
-          "sk": "GAME"
+          "pk": "GAME",
+          "sk": pars.game
         },
       }));
     console.log("Got:");
@@ -452,8 +479,8 @@ async function setSeenTime(userid: string, gameid: any) {
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "USER#" + userid,
-          "sk": "USER"
+          "pk": "USER",
+          "sk": userid
         },
       }));
     if (userData.Item === undefined)
@@ -471,7 +498,7 @@ async function setSeenTime(userid: string, gameid: any) {
   }
   return ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "USER#" + userid, "sk": "USER" },
+    Key: { "pk": "USER", "sk": userid },
     ExpressionAttributeValues: { ":gs": games },
     UpdateExpression: "set games = :gs",
   }));
@@ -481,7 +508,7 @@ async function updateUserSettings(userid: string, pars: { settings: any; }) {
   try {
     await ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USER#" + userid, "sk": "USER" },
+      Key: { "pk": "USER", "sk": userid },
       ExpressionAttributeValues: { ":ss": pars.settings },
       UpdateExpression: "set settings = :ss",
     }))
@@ -506,8 +533,8 @@ async function me(userId: string, email: any, pars: { size: string }) {
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "USER#" + userId,
-          "sk": "USER"
+          "pk": "USER",
+          "sk": userId
         },
       }));
     if (userData.Item === undefined) {
@@ -592,7 +619,7 @@ async function me(userId: string, email: any, pars: { size: string }) {
     // Update last seen date for user
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USER#" + userId, "sk": "USER" },
+      Key: { "pk": "USER", "sk": userId },
       ExpressionAttributeValues: { ":dt": Date.now(), ":gs": games },
       UpdateExpression: "set lastSeen = :dt, games = :gs"
     })));
@@ -637,7 +664,7 @@ async function me(userId: string, email: any, pars: { size: string }) {
 async function updateUserEMail(userid: string, newMail: any) {
   return ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "USER#" + userid, "sk": "USER" },
+    Key: { "pk": "USER", "sk": userid },
     ExpressionAttributeValues: { ":e": newMail },
     UpdateExpression: "set email = :e",
   }));
@@ -649,8 +676,8 @@ async function mySettings(userId: string, email: any) {
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "USER#" + userId,
-          "sk": "USER"
+          "pk": "USER",
+          "sk": userId
         },
         ExpressionAttributeNames: { "#name": "name", "#language": "language" },
         ProjectionExpression: "id,#name,email,#language",
@@ -696,7 +723,7 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
   const work = [];
   work.push(ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "USER#" + userId, "sk": "USER" },
+    Key: { "pk": "USER", "sk": userId },
     ExpressionAttributeValues: { ":v": val },
     ExpressionAttributeNames: { "#a": attr },
     UpdateExpression: "set #a = :v"
@@ -796,8 +823,8 @@ async function getChallenges(challengeIds: string[]) {
           new GetCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: {
-              "pk": "CHALLENGE#" + id,
-              "sk": "CHALLENGE"
+              "pk": "CHALLENGE",
+              "sk": id
             }
           })
         )
@@ -809,8 +836,8 @@ async function getChallenges(challengeIds: string[]) {
 
 async function newProfile(userid: string, email: any, pars: { name: any; consent: any; anonymous: any; country: any; tagline: any; }) {
   const data = {
-      "pk": "USER#" + userid,
-      "sk": "USER",
+      "pk": "USER",
+      "sk": userid,
       "id": userid,
       "name": pars.name,
       "email": email,
@@ -865,8 +892,8 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: {
-        "pk": "CHALLENGE#" + challengeId,
-        "sk": "CHALLENGE",
+        "pk": "CHALLENGE",
+        "sk": challengeId,
         "id": challengeId,
         "metaGame": challenge.metaGame,
         "numPlayers": challenge.numPlayers,
@@ -886,7 +913,7 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
 
   const updateChallenger = ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "USER#" + userid, "sk": "USER" },
+    Key: { "pk": "USER", "sk": userid },
     ExpressionAttributeValues: { ":c": new Set([challengeId]) },
     ExpressionAttributeNames: { "#c": "challenges" },
     UpdateExpression: "add #c.issued :c",
@@ -898,7 +925,7 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
       list.push(
         ddbDocClient.send(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "USER#" + challengee.id, "sk": "USER" },
+          Key: { "pk": "USER", "sk": challengee.id },
           ExpressionAttributeValues: { ":c": new Set([challengeId]) },
           ExpressionAttributeNames: { "#c": "challenges" },
           UpdateExpression: "add #c.received :c",
@@ -953,7 +980,7 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
 
   const updateChallenger = ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "USER#" + userid, "sk": "USER" },
+    Key: { "pk": "USER", "sk": userid },
     ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challengeId]) },
     ExpressionAttributeNames: { "#c": "challenges" },
     UpdateExpression: "add #c.standing :c",
@@ -1123,8 +1150,8 @@ async function removeChallenge(challengeId: string, metaGame: string, standing: 
     new GetCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: {
-        "pk": standing ? "STANDINGCHALLENGE#" + metaGame : "CHALLENGE#" + challengeId,
-        "sk": standing ? challengeId : "CHALLENGE"
+        "pk": standing ? "STANDINGCHALLENGE#" + metaGame : "CHALLENGE",
+        "sk": challengeId
       },
     }));
   if (chall.Item === undefined) {
@@ -1147,7 +1174,7 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
     // Remove from challenger
     const updateChallenger = ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USER#" + challenge.challenger.id, "sk": "USER" },
+      Key: { "pk": "USER", "sk": challenge.challenger.id },
       ExpressionAttributeValues: { ":c": new Set([challenge.id]) },
       ExpressionAttributeNames: { "#c": "challenges" },
       UpdateExpression: "delete #c.issued :c",
@@ -1158,7 +1185,7 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
       list.push(
         ddbDocClient.send(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "USER#" + challengee.id, "sk": "USER" },
+          Key: { "pk": "USER", "sk": challengee.id },
           ExpressionAttributeValues: { ":c": new Set([challenge.id]) },
           ExpressionAttributeNames: { "#c": "challenges" },
           UpdateExpression: "delete #c.received :c",
@@ -1173,7 +1200,7 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
     console.log(`removing duplicated challenge ${standing ? challenge.metaGame + '#' + challenge.id : challenge.id} from challenger ${challenge.challenger.id}`);
     const updateChallenger = ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USER#" + challenge.challenger.id, "sk": "USER" },
+      Key: { "pk": "USER", "sk": challenge.challenger.id },
       ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challenge.id]) },
       ExpressionAttributeNames: { "#c": "challenges" },
       UpdateExpression: "delete #c.standing :c",
@@ -1193,7 +1220,7 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
     list.push(
       ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USER#" + player.id, "sk": "USER" },
+        Key: { "pk": "USER", "sk": player.id },
         ExpressionAttributeValues: { ":c": new Set([standing ? challenge.metaGame + '#' + challenge.id : challenge.id]) },
         ExpressionAttributeNames: { "#c": "challenges" },
         UpdateExpression: "delete #c.accepted :c",
@@ -1208,7 +1235,7 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
         new DeleteCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
-            "pk": "CHALLENGE#" + challenge.id, "sk": "CHALLENGE"
+            "pk": "CHALLENGE", "sk": challenge.id
           },
         }))
     );
@@ -1246,7 +1273,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     new GetCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: {
-        "pk": standing ? "STANDINGCHALLENGE#" + metaGame : "CHALLENGE#" + challengeId, "sk": standing ? challengeId : "CHALLENGE"
+        "pk": standing ? "STANDINGCHALLENGE#" + metaGame : "CHALLENGE", "sk": challengeId
       },
     }));
 
@@ -1307,8 +1334,8 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     const addGame = ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
-          "pk": "GAME#" + gameId,
-          "sk": "GAME",
+          "pk": "GAME",
+          "sk": gameId,
           "id": gameId,
           "metaGame": challenge.metaGame,
           "numPlayers": challenge.numPlayers,
@@ -1349,7 +1376,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       list.push(
         ddbDocClient.send(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "USER#" + player.id, "sk": "USER" },
+          Key: { "pk": "USER", "sk": player.id },
           ExpressionAttributeValues: { ":gs": games },
           UpdateExpression: "set games = :gs",
         }))
@@ -1390,7 +1417,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     // Update accepter
     const updateAccepter = ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USER#" + userid, "sk": "USER" },
+      Key: { "pk": "USER", "sk": userid },
       ExpressionAttributeValues: { ":c": new Set([standing ? challenge.metaGame + '#' + challengeId : challengeId]) },
       ExpressionAttributeNames: { "#c": "challenges" },
       UpdateExpression: "delete #c.received :c add #c.accepted :c",
@@ -1429,7 +1456,7 @@ async function duplicateStandingChallenge(challenge: { [x: string]: any; metaGam
   
   const updateChallenger = ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "USER#" + challenge.challenger.id, "sk": "USER" },
+    Key: { "pk": "USER", "sk": challenge.challenger.id },
     ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challengeId]) },
     ExpressionAttributeNames: { "#c": "challenges" },
     UpdateExpression: "add #c.standing :c",
@@ -1444,7 +1471,7 @@ async function getPlayers(playerIDs: string[]) {
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "USER#" + id, "sk": "USER"
+          "pk": "USER", "sk": id
         },
       })
     )
@@ -1562,8 +1589,8 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "GAME#" + pars.id,
-          "sk": "GAME"
+          "pk": "GAME",
+          "sk": pars.id
         },
       }));
   }
@@ -1673,7 +1700,7 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
       list.push(
         ddbDocClient.send(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "USER#" + player.id, "sk": "USER" },
+          Key: { "pk": "USER", "sk": player.id },
           ExpressionAttributeValues: { ":gs": games },
           UpdateExpression: "set games = :gs",
         }))
@@ -1682,7 +1709,7 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
       list.push(
         ddbDocClient.send(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "USER#" + player.id, "sk": "USER" },
+          Key: { "pk": "USER", "sk": player.id },
           ExpressionAttributeValues: { ":gs": games, ":rs": newRatings[ind] },
           UpdateExpression: "set games = :gs, ratings = :rs"
         }))
@@ -1887,8 +1914,8 @@ async function timeloss(player: number, gameid: string, timestamp: number) {
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "GAME#" + gameid,
-          "sk": "GAME"
+          "pk": "GAME",
+          "sk": gameid
         },
       }));
   }
@@ -1944,14 +1971,14 @@ async function timeloss(player: number, gameid: string, timestamp: number) {
     if (newRatings === null) {
       work.push(ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USER#" + player.id, "sk": "USER" },
+        Key: { "pk": "USER", "sk": player.id },
         ExpressionAttributeValues: { ":gs": games },
         UpdateExpression: "set games = :gs"
       })));
     } else {
       work.push(ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USER#" + player.id, "sk": "USER" },
+        Key: { "pk": "USER", "sk": player.id },
         ExpressionAttributeValues: { ":gs": games, ":rs": newRatings[ind] },
         UpdateExpression: "set games = :gs, ratings = :rs"
       })));
@@ -2049,8 +2076,8 @@ async function submitComment(userid: string, pars: { id: string; comment: string
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "GAME#" + pars.id,
-          "sk": "COMMENTS"
+          "pk": "GAMECOMMENTS",
+          "sk": pars.id
         },
       }));
   }
@@ -2073,8 +2100,8 @@ async function submitComment(userid: string, pars: { id: string; comment: string
     await ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
-          "pk": "GAME#" + pars.id,
-          "sk": "COMMENTS",
+          "pk": "GAMECOMMENTS",
+          "sk": pars.id,
           "comments": comments
         }
       }));
@@ -2088,8 +2115,8 @@ async function updateMetaGameCounts(userId: string) {
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "USER#" + userId,
-          "sk": "USER"
+          "pk": "USER",
+          "sk": userId
         },
       }));
     if (user.Item === undefined || user.Item.admin !== true) {
@@ -2133,7 +2160,11 @@ async function updateMetaGameCounts(userId: string) {
       })));
 
     const metaGamesData = await metaGamesDataWork;
-    const metaGameCounts = metaGamesData.Item as MetaGameCounts;
+    let metaGameCounts: MetaGameCounts;
+    if (metaGamesData.Item === undefined)
+      metaGameCounts = {};
+    else
+      metaGameCounts = metaGamesData.Item as MetaGameCounts;
   
     const work = await Promise.all([Promise.all(currentgames), Promise.all(completedgames), Promise.all(standingchallenges)]);
     console.log("work", work);
@@ -2143,8 +2174,7 @@ async function updateMetaGameCounts(userId: string) {
         metaGameCounts[game] = { 
           "currentgames": work[0][ind].Items ? work[0][ind].Items!.length : 0, 
           "completedgames": work[1][ind].Items ? work[1][ind].Items!.length : 0, 
-          "standingchallenges": work[2][ind].Items ? work[2][ind].Items!.length : 0,
-          "ratings": new Set<string>()
+          "standingchallenges": work[2][ind].Items ? work[2][ind].Items!.length : 0
         };
       } else {
         metaGameCounts[game].currentgames = work[0][ind].Items ? work[0][ind].Items!.length : 0;
@@ -2177,8 +2207,8 @@ async function updateMetaGameRatings(userId: string) {
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "USER#" + userId,
-          "sk": "USER"
+          "pk": "USER",
+          "sk": userId
         },
       }));
     if (user.Item === undefined || user.Item.admin !== true) {
@@ -2200,8 +2230,8 @@ async function updateMetaGameRatings(userId: string) {
     const data = await ddbDocClient.send(
         new QueryCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
-          KeyConditionExpression: "begins_with(#pk, :pk)",
-          ExpressionAttributeValues: { ":pk": "USER#" },
+          KeyConditionExpression: "#pk = :pk",
+          ExpressionAttributeValues: { ":pk": "USER" },
           ExpressionAttributeNames: { "#pk": "pk" }
         }));
     if (data.Items === undefined) {
@@ -2228,13 +2258,15 @@ async function updateMetaGameRatings(userId: string) {
       if (metaGameCounts[metaGame] === undefined) 
         metaGameCounts[metaGame] = {currentgames: 0, completedgames: 0, standingchallenges: 0, ratings: new Set()};
       ratings[metaGame].forEach(rating => {
+        if (metaGameCounts[metaGame].ratings === undefined)
+          metaGameCounts[metaGame].ratings = new Set();
         metaGameCounts[metaGame].ratings!.add(rating.player);
         work.push(ddbDocClient.send(
           new PutCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
               Item: {
-                "pk": "RATINGS#" + metaGame + "#" + rating.player,
-                "sk": rating.rating.rating,
+                "pk": "RATINGS#" + metaGame,
+                "sk": Math.round(rating.rating.rating).toString().padStart(4,"0") + "#" + rating.player,
                 "id": rating.player,
                 "name": rating.name,
                 "rating": rating.rating
@@ -2268,8 +2300,8 @@ async function onetimeFix(userId: string) {
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "USER#" + userId,
-          "sk": "USER"
+          "pk": "USER",
+          "sk": userId
         },
       }));
     if (user.Item === undefined || user.Item.admin !== true) {
@@ -2304,6 +2336,15 @@ async function onetimeFix(userId: string) {
               }
           })
         ));
+        work.push(ddbDocClient.send(
+          new DeleteCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": item.pk, 
+              "sk": item.sk
+            }
+          })
+        ));
       });
       await Promise.all(work);
       console.log(`Fixed ${data.Items.length} games`);
@@ -2329,6 +2370,15 @@ async function onetimeFix(userId: string) {
                 "comments": comment.comments
               }
             })
+        ));
+        work.push(ddbDocClient.send(
+          new DeleteCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": comment.pk, 
+              "sk": comment.sk
+            }
+          })
         ));
       });
       await Promise.all(work);
@@ -2358,6 +2408,15 @@ async function onetimeFix(userId: string) {
               }
             })
         ));
+        work.push(ddbDocClient.send(
+          new DeleteCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": item.pk, 
+              "sk": item.sk
+            }
+          })
+        ));
       });
       await Promise.all(work);
       console.log(`Fixed ${data.Items.length} users`);
@@ -2386,6 +2445,15 @@ async function onetimeFix(userId: string) {
               }
             })
         ));
+        work.push(ddbDocClient.send(
+          new DeleteCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": item.pk, 
+              "sk": item.sk
+            }
+          })
+        ));
       });
       await Promise.all(work);
       console.log(`Fixed ${data.Items.length} challenges`);
@@ -2403,8 +2471,8 @@ async function testAsync(userId: string, pars: { N: number; }) {
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "USER#" + userId,
-          "sk": "USER"
+          "pk": "USER",
+          "sk": userId
         },
       }));
     if (user.Item === undefined || user.Item.admin !== true) {
