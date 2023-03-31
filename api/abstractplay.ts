@@ -367,7 +367,7 @@ async function metaGamesDetails() {
     // Change every "ratings" to the number of elements in the Set.
     const details2 = Object.keys(details)
       .filter(key => key !== "pk" && key !== "sk")
-      .reduce( (a, k) => ({...a, [k]: { ...details[k], "ratings" : details[k].ratings ? details[k].ratings!.size : 0}}), {})
+      .reduce( (a, k) => ({...a, [k]: { ...details[k], "ratings" : details[k].ratings?.size ?? 0}}), {})
     return {
       statusCode: 200,
       body: JSON.stringify(details2),
@@ -1012,7 +1012,7 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
   const work: Promise<any>[] = [];
   for (const player of players) {
     await changeLanguageForPlayer(player);
-    const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { challengerName, metaGame, "interpolation": {"escapeValue": false} }));
+    const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { "challenger": challengerName, metaGame, "interpolation": {"escapeValue": false} }));
     work.push(sesClient.send(comm));
   }
   return Promise.all(work);
@@ -1669,7 +1669,7 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
     "lastMoveTime": timestamp
   } as Game;
   const list: Promise<any>[] = [];
-  let newRatings: any[] | null = null;
+  let newRatings: {[metaGame: string] : Rating}[] | null = null;
   if ((game.toMove === "" || game.toMove === null)) {
     newRatings = updateRatings(game, players);
     myGame.seen = Date.now();
@@ -1718,11 +1718,11 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
       list.push(ddbDocClient.send(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: { 
-          "pk": "RATINGS#" + game.metaGame + "#" + player.id,
-          "sk": newRatings[ind].rating,
+          "pk": "RATINGS#" + game.metaGame,
+          "sk": player.id,
           "id": player.id,
           "name": player.name,
-          "rating": newRatings[ind]
+          "rating": newRatings[ind][game.metaGame]
         }
       })));
         
@@ -1730,7 +1730,7 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "METAGAMES", "sk": "COUNTS" },
         ExpressionAttributeNames: { "#g": game.metaGame },
-        ExpressionAttributeValues: {":p": player.id},
+        ExpressionAttributeValues: {":p": new Set([player.id])},
         UpdateExpression: "add #g.ratedplayers :p",
       })));
     }
@@ -1986,11 +1986,11 @@ async function timeloss(player: number, gameid: string, timestamp: number) {
       work.push(ddbDocClient.send(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: { 
-          "pk": "RATINGS#" + game.metaGame + "#" + player.id,
-          "sk": newRatings[ind].rating,
+          "pk": "RATINGS#" + game.metaGame,
+          "sk": player.id,
           "id": player.id,
           "name": player.name,
-          "rating": newRatings[ind]
+          "rating": newRatings[ind][game.metaGame]
         }
       })));
 
@@ -1998,7 +1998,7 @@ async function timeloss(player: number, gameid: string, timestamp: number) {
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "METAGAMES", "sk": "COUNTS" },
         ExpressionAttributeNames: { "#g": game.metaGame },
-        ExpressionAttributeValues: {":p": player.id},
+        ExpressionAttributeValues: {":p": new Set([player.id])},
         UpdateExpression: "add #g.ratedplayers :p",
       })));
     }
@@ -2266,7 +2266,7 @@ async function updateMetaGameRatings(userId: string) {
             TableName: process.env.ABSTRACT_PLAY_TABLE,
               Item: {
                 "pk": "RATINGS#" + metaGame,
-                "sk": Math.round(rating.rating.rating).toString().padStart(4,"0") + "#" + rating.player,
+                "sk": rating.player,
                 "id": rating.player,
                 "name": rating.name,
                 "rating": rating.rating
