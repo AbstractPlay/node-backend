@@ -13,8 +13,8 @@
 
 service: abstract-play
 # app and org for use with dashboard.serverless.com
-app: apfront
-org: wamelen
+# app: apfront
+# org: wamelen
 
 # You can pin your service to only deploy with a specific Serverless version
 # Check out our docs for more details
@@ -34,7 +34,6 @@ provider:
   stage: ${opt:stage, 'dev'}
   profile: ${param:profile}
   region: us-east-1
-  lambdaHashingVersion: 20201221
   environment:
     ABSTRACT_PLAY_TABLE: abstract-play-${self:provider.stage}
     userpool: ${param:userpool}
@@ -90,7 +89,7 @@ resources:
          ResponseType: DEFAULT_4XX
          RestApiId:
            Ref: 'ApiGatewayRestApi'
-           
+
 functions:
   authQuery:
     handler: api/abstractplay.authQuery
