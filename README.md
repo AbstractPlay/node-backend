@@ -14,9 +14,9 @@ After the pool is created copy the arn to serverless.yml for the authQuery funct
 
 ## Deployment
 Running
-```npm run full-deploy-dev```
+```npm run full-dev```
 and
-```npm run full-deploy-prod```
+```npm run full-prod```
 for the first time will create the DynamoDB and also the lambdas with the back end functionality (it is completely specified in serverless.yml). On subsequent runs it will just update the lambdas (and the DynamoDB is case you made changes).
 But don't run this before doing ```npm install```. sls needs to deploy the node_modules folder and unless that has the correct packages stuff don't work. If you are using PowerShell as your Terminal in VSCode, you might need to run `Remove-Item alias:sls` before `sls` will work. By default it is an alias for the `Select-String` PowerShell cmdlet. Or just use `serverless` instead of `sls`.
 
