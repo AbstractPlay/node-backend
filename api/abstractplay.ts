@@ -199,6 +199,10 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await submitMove(event.cognitoPoolClaims.sub, pars);
     case "submit_comment":
       return await submitComment(event.cognitoPoolClaims.sub, pars);
+    case "save_exploration":
+      return await saveExploration(event.cognitoPoolClaims.sub, pars);
+    case "get_exploration":
+      return await getExploration(event.cognitoPoolClaims.sub, pars);
     case "get_game":
       return await game(event.cognitoPoolClaims.sub, pars);
     case "update_game_settings":
@@ -2106,6 +2110,58 @@ async function submitComment(userid: string, pars: { id: string; comment: string
         }
       }));
   }
+}
+
+async function saveExploration(userid: string, pars: { game: string; move: number; tree: any; }) {
+  await ddbDocClient.send(new PutCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Item: {
+        "pk": "GAMEEXPLORATION#" + pars.game,
+        "sk": userid + "#" + pars.move,
+        "user": userid,
+        "game": pars.game,
+        "move": pars.move,
+        "tree": pars.tree
+      }
+    }));
+}
+
+async function getExploration(userid: string, pars: { game: string; move: number }) {
+  let work: Promise<any>[] = [];
+  try {
+    work.push(ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "GAMEEXPLORATION#" + pars.game,
+          "sk": userid + "#" + pars.move
+          },
+      })
+    ));
+
+    if (pars.move > 1) {
+      work.push(ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "GAMEEXPLORATION#" + pars.game,
+            "sk": userid + "#" + (pars.move - 2)
+            },
+        })
+      ));
+    }
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get exploration data for game ${pars.game} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+  let data = await Promise.all(work);
+  let trees = data.map((d: any) => d.Item);  
+  return {
+    statusCode: 200,
+    body: JSON.stringify(trees),
+    headers
+  };
 }
 
 async function updateMetaGameCounts(userId: string) {
