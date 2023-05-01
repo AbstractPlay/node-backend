@@ -1,6 +1,6 @@
 {
   "name": "abstractplay-backend",
-  "version": "1.0.0",
+  "version": "1.0.0-beta",
   "description": "node.js lambda with DynamoDB",
   "main": "??",
   "scripts": {
