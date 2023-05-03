@@ -11,7 +11,7 @@
   "ChallengeRejectedBody": "[FR] {{quitter}} has declined the {{metaGame}} challenge. The challenge has been removed.",
   "GameStartedBody": "[FR] The {{metaGame}} challenge was accepted by all players and the game has started.",
   "YourMove": "[FR] It is your turn to move.",
-  "YourMoveBody": "[FR] It is now your move in a game of {{metaGame}}. Please visit https://play.dev.abstractplay.com/ for more details.",
-  "GameOverBody": "[FR] Your {{metaGame}} game has ended. Please visit https://play.dev.abstractplay.com/ for more details.",
+  "YourMoveBody": "[FR] It is now your move in a game of {{metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
+  "GameOverBody": "[FR] Your {{metaGame}} game has ended. Please visit https://play.abstractplay.com/ for more details.",
   "EmailOut": "[FR] The AbstractPlay system."
 }
