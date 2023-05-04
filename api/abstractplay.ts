@@ -1897,7 +1897,7 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: any[], simultan
     for (const player of players) {
       await changeLanguageForPlayer(player);
       const comm = createSendEmailCommand(player.email, player.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBody", { metaGame, "interpolation": {"escapeValue": false} }));
-      work.push(sesClient.send(comm));
+    //   work.push(sesClient.send(comm));
     }
   } else {
     // Game over
