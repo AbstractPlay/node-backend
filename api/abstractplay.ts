@@ -70,7 +70,7 @@ type FullChallenge = {
   rated: boolean;
 }
 
-type User = {
+export type User = {
   id: string;
   name: string;
   time?: number;
@@ -106,7 +106,7 @@ type Rating = {
   draws: number;
 }
 
-type Game = {
+export type Game = {
   id : string;
   metaGame: string;
   players: User[];

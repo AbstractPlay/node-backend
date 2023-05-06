@@ -116,3 +116,11 @@ functions:
           path: query
           method: get
           cors: true
+  yourturn:
+    handler: utils/yourturn.handler
+    events:
+      - eventBridge:
+          name: abstractplay-yourturn
+          description: Send out "your turn" notifications
+          enabled: false
+          schedule: cron(0 12 * * ? *)
