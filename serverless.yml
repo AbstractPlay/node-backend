@@ -20,6 +20,11 @@ service: abstract-play
 # Check out our docs for more details
 frameworkVersion: '3'
 
+custom:
+  scheduleEnabled:
+    prod: true
+    dev: false
+
 params:
   dev:
     profile: AbstractPlayDev
@@ -118,9 +123,10 @@ functions:
           cors: true
   yourturn:
     handler: utils/yourturn.handler
+    description: Sends out "your turn" notifications
     events:
       - eventBridge:
-          name: abstractplay-yourturn
+          name: abstractplay-${self:provider.stage}-yourturn
           description: Send out "your turn" notifications
-          enabled: false
-          schedule: cron(0 12 * * ? *)
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(0 14,22 * * ? *)

@@ -10,7 +10,8 @@
     "deploy-dev": "serverless deploy",
     "deploy-prod": "serverless --stage prod deploy",
     "full-dev": "npm run build && serverless deploy",
-    "full-prod": "npm run build && serverless --stage prod deploy"
+    "full-prod": "npm run build && serverless --stage prod deploy",
+    "extract": "i18next 'api/**/*.ts' 'utils/**/*.ts'"
   },
   "repository": {
     "type": "git",
@@ -40,6 +41,7 @@
     "@typescript-eslint/parser": "^5.59.1",
     "eslint": "^8.39.0",
     "i": "^0.3.7",
+    "i18next-parser": "^7.7.0",
     "npm": "^9.6.6",
     "typescript": "^5.0.4"
   }

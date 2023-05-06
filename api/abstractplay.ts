@@ -7,9 +7,9 @@ import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
-import en from '../locales/en/translation.json';
-import fr from '../locales/fr/translation.json';
-import it from '../locales/it/translation.json';
+import en from '../locales/en/apback.json';
+import fr from '../locales/fr/apback.json';
+import it from '../locales/it/apback.json';
 import { EntropyGame } from '@abstractplay/gameslib/build/src/games';
 
 const REGION = "us-east-1";
@@ -2657,7 +2657,7 @@ function shuffle(array: any[]) {
   }
 }
 
-async function changeLanguageForPlayer(player: { language: string | undefined; }) {
+export async function changeLanguageForPlayer(player: { language: string | undefined; }) {
   let lng = "en";
   if (player.language !== undefined)
     lng = player.language;
@@ -2667,7 +2667,7 @@ async function changeLanguageForPlayer(player: { language: string | undefined; }
   }
 }
 
-function createSendEmailCommand(toAddress: string, player: any, subject: any, body: string) {
+export function createSendEmailCommand(toAddress: string, player: any, subject: any, body: string) {
   console.log("toAddress", toAddress, "player", player, "body", body);
   const fullbody =  i18n.t("DearPlayer", { player }) + '\r\n\r\n' + body + "\r\n\r\n" + i18n.t("EmailOut");
   return new SendEmailCommand({
@@ -2692,7 +2692,7 @@ function createSendEmailCommand(toAddress: string, player: any, subject: any, bo
   });
 }
 
-async function initi18n(language: string) {
+export async function initi18n(language: string) {
   await i18n.init({
     lng: language,
     fallbackLng: 'en',
@@ -2711,7 +2711,7 @@ async function initi18n(language: string) {
   });
 }
 
-function formatReturnError(message: string) {
+export function formatReturnError(message: string) {
   return {
     statusCode: 500,
     body: JSON.stringify({
@@ -2723,7 +2723,7 @@ function formatReturnError(message: string) {
 
 // Handles errors during GetItem execution. Use recommendations in error messages below to
 // add error handling specific to your application use-case.
-function logGetItemError(err: unknown) {
+export function logGetItemError(err: unknown) {
   if (!err) {
     console.error('Encountered error object was empty');
     return;
@@ -2737,7 +2737,7 @@ function logGetItemError(err: unknown) {
   handleCommonErrors(err as { code: any; message: any; });
 }
 
-function handleCommonErrors(err: { code: any; message: any; }) {
+export function handleCommonErrors(err: { code: any; message: any; }) {
   switch (err.code) {
     case 'InternalServerError':
       console.error(`Internal Server Error, generally safe to retry with exponential back-off. Error: ${err.message}`);

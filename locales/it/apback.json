@@ -1,0 +1,21 @@
+{
+    "ChallengeBody": "[IT] {{challenger}} has challenged you to a game of {{metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
+    "ChallengeRejectedBody": "[IT] {{quitter}} has declined the {{metaGame}} challenge. The challenge has been removed.",
+    "ChallengeRejectedSubject": "[IT] AbstractPlay: challenge rejected",
+    "ChallengeRevokedBody": "[IT] {{name}} has revoked his {{metaGame}} challenge.",
+    "ChallengeRevokedSubject": "[IT] AbstractPlay: challenge revoked",
+    "ChallengeSubject": "[IT] AbstractPlay: new challenge",
+    "DearPlayer": "[IT] Dear {{player}}",
+    "EmailOut": "[IT] The AbstractPlay system.",
+    "GameOverBody": "[IT] Your {{metaGame}} game has ended. Please visit https://play.abstractplay.com/ for more details.",
+    "GameOverSubject": "[IT] AbstractPlay: game over",
+    "GameOverWithRatingBody": "[IT] Your {{metaGame}} game has ended. Your new rating is {{rating}}. Please visit https://play.abstractplay.com/ for more details.",
+    "GameStartedBody": "[IT] The {{metaGame}} challenge was accepted by all players and the game has started.",
+    "GameStartedSubject": "[IT] AbstractPlay: game started",
+    "YourMove": "[IT] It is your turn to move.",
+    "YourMoveBatchedBody_one": "",
+    "YourMoveBatchedBody_many": "",
+    "YourMoveBatchedBody_other": "",
+    "YourMoveBody": "[IT] It is now your move in a game of {{metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
+    "YourMoveSubject": "[IT] AbstractPlay: your move"
+}
