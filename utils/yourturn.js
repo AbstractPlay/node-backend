@@ -35,11 +35,7 @@ const unmarshallOptions = {
 };
 const translateConfig = { marshallOptions, unmarshallOptions };
 const ddbDocClient = lib_dynamodb_1.DynamoDBDocumentClient.from(clnt, translateConfig);
-const headers = {
-    'content-type': 'application/json',
-    'Access-Control-Allow-Origin': '*'
-};
-const handler = (event, context) => __awaiter(void 0, void 0, void 0, function* () {
+const handler = ( /*event: EventBridgeEvent<any,any>, context*/) => __awaiter(void 0, void 0, void 0, function* () {
     // Get list of all active games
     try {
         let data = yield ddbDocClient.send(new lib_dynamodb_1.QueryCommand({
