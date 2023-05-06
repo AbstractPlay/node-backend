@@ -1,15 +1,10 @@
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, QueryCommand, QueryCommandOutput, QueryCommandInput, ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { gameinfo, GameFactory, GameBase } from '@abstractplay/gameslib';
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import { DynamoDBDocumentClient, QueryCommand,  } from '@aws-sdk/lib-dynamodb';
+import { SESClient } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
-import { Handler, EventBridgeEvent } from "aws-lambda";
-import en from '../locales/en/apback.json';
-import fr from '../locales/fr/apback.json';
-import it from '../locales/it/apback.json';
-import type { User, Game } from '../api/abstractplay';
+import { Handler } from "aws-lambda";
 import { createSendEmailCommand, logGetItemError, formatReturnError, initi18n } from '../api/abstractplay';
 
 const REGION = "us-east-1";
@@ -29,10 +24,6 @@ const unmarshallOptions = {
 };
 const translateConfig = { marshallOptions, unmarshallOptions };
 const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
-const headers = {
-  'content-type': 'application/json',
-  'Access-Control-Allow-Origin': '*'
-};
 
 type PartialGame = {
     id: string;
@@ -61,7 +52,7 @@ type PartialUser = {
     };
 };
 
-export const handler: Handler = async (event: EventBridgeEvent<any,any>, context) => {
+export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, context*/) => {
     // Get list of all active games
     try {
         let data = await ddbDocClient.send(

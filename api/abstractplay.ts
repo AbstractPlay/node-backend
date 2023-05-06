@@ -1892,13 +1892,13 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: any[], simultan
     else if ((game.toMove as boolean[]).every(b => b === true)) {
       playerIds = game.players.map(p => p.id);
     }
-    const players = players0.filter(p => playerIds.includes(p.id));
-    const metaGame = gameinfo.get(game.metaGame).name;
-    for (const player of players) {
-      await changeLanguageForPlayer(player);
-      const comm = createSendEmailCommand(player.email, player.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBody", { metaGame, "interpolation": {"escapeValue": false} }));
+    // const players = players0.filter(p => playerIds.includes(p.id));
+    // const metaGame = gameinfo.get(game.metaGame).name;
+    // for (const player of players) {
+    //   await changeLanguageForPlayer(player);
+    //   const comm = createSendEmailCommand(player.email, player.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBody", { metaGame, "interpolation": {"escapeValue": false} }));
     //   work.push(sesClient.send(comm));
-    }
+    // }
   } else {
     // Game over
     const playerIds = game.players.map((p: { id: any; }) => p.id);
