@@ -47,6 +47,7 @@ const handler = ( /*event: EventBridgeEvent<any,any>, context*/) => __awaiter(vo
             ReturnConsumedCapacity: "INDEXES",
         }));
         const games = data === null || data === void 0 ? void 0 : data.Items;
+        console.log(JSON.stringify(games, null, 2));
         // Map players whose turn it is to the list of games waiting on them
         if (games !== undefined) {
             const p2g = new Map();
@@ -61,6 +62,7 @@ const handler = ( /*event: EventBridgeEvent<any,any>, context*/) => __awaiter(vo
                     p2g.set(toMove.id, [g]);
                 }
             }
+            console.log(JSON.stringify(p2g, null, 2));
             // Get list of users
             data = yield ddbDocClient.send(new lib_dynamodb_1.QueryCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -71,6 +73,7 @@ const handler = ( /*event: EventBridgeEvent<any,any>, context*/) => __awaiter(vo
                 ReturnConsumedCapacity: "INDEXES",
             }));
             const players = data === null || data === void 0 ? void 0 : data.Items;
+            console.log(JSON.stringify(players, null, 2));
             // Collate user data with players whose turn it is, but only those electing to receive notifications
             if (players !== undefined) {
                 const notifications = [];
@@ -85,6 +88,7 @@ const handler = ( /*event: EventBridgeEvent<any,any>, context*/) => __awaiter(vo
                         }
                     }
                 }
+                console.log(JSON.stringify(notifications, null, 2));
                 // Now send notifications
                 yield (0, abstractplay_1.initi18n)("en");
                 const work = [];

@@ -66,6 +66,7 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
             })
         );
         const games = data?.Items as PartialGame[];
+        console.log(JSON.stringify(games, null, 2));
 
         // Map players whose turn it is to the list of games waiting on them
         if (games !== undefined) {
@@ -80,6 +81,7 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
                     p2g.set(toMove.id, [g]);
                 }
             }
+            console.log(JSON.stringify(p2g, null, 2));
 
             // Get list of users
             data = await ddbDocClient.send(
@@ -93,6 +95,7 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
                 })
             );
             const players = data?.Items as PartialUser[];
+            console.log(JSON.stringify(players, null, 2));
 
             // Collate user data with players whose turn it is, but only those electing to receive notifications
             if (players !== undefined) {
@@ -108,6 +111,7 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
                         }
                     }
                 }
+                console.log(JSON.stringify(notifications, null, 2));
 
                 // Now send notifications
                 await initi18n("en");
