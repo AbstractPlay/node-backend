@@ -5,7 +5,7 @@ import { DynamoDBDocumentClient, QueryCommand,  } from '@aws-sdk/lib-dynamodb';
 import { SESClient } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
 import { Handler } from "aws-lambda";
-import { createSendEmailCommand, logGetItemError, formatReturnError, initi18n } from '../api/abstractplay';
+import { createSendEmailCommand, logGetItemError, formatReturnError, initi18n, UserSettings } from '../api/abstractplay';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -41,15 +41,7 @@ type PartialUser = {
     name: string;
     email: string;
     language: string;
-    settings: {
-        [k: string]: any;
-        _notification?: {
-            gameStarted: boolean;
-            gameEnded: boolean;
-            challenges: boolean;
-            yourturn: boolean;
-        }
-    };
+    settings: UserSettings;
 };
 
 export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, context*/) => {
@@ -97,7 +89,7 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
             const players = data?.Items as PartialUser[];
             console.log(JSON.stringify(players, null, 2));
 
-            // Collate user data with players whose turn it is, but only those electing to receive notifications
+            // Collate user data with players whose turn it is, but only those electing to receive notifications and who have valid email addresses
             if (players !== undefined) {
                 const notifications: [PartialUser, number][] = [];
                 for (const [p, gs] of p2g.entries()) {
@@ -106,8 +98,14 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
                         if (player.language === undefined) {
                             player.language = "en";
                         }
-                        if ( (player.settings._notification === undefined) || (player.settings._notification.yourturn) ) {
-                            notifications.push([player, gs.length]);
+                        if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
+                            if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.yourturn) ) {
+                                notifications.push([player, gs.length]);
+                            } else {
+                                console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+                            }
+                        } else {
+                            console.log(`No verified email address found for ${player.name} (${player.id})`);
                         }
                     }
                 }

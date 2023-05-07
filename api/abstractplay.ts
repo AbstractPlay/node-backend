@@ -70,11 +70,26 @@ type FullChallenge = {
   rated: boolean;
 }
 
+export type UserSettings = {
+    [k: string]: any;
+    all?: {
+        [k: string]: any;
+        color?: string;
+        annotate?: boolean;
+        notifications?: {
+            gameStart: boolean;
+            gameEnd: boolean;
+            challenges: boolean;
+            yourturn: boolean;
+        }
+    }
+};
+
 export type User = {
   id: string;
   name: string;
   time?: number;
-  settings?: any;
+  settings?: UserSettings;
   draw?: string;
 }
 
@@ -93,7 +108,7 @@ type FullUser = {
   }
   admin: boolean | undefined;
   language: string;
-  settings: any;
+  settings: UserSettings;
   ratings?: {
     [metaGame: string]: Rating
   };
@@ -174,21 +189,23 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
   }
 }
 
+type PartialClaims = { sub: string; email: string; email_verified: boolean };
+
 // It looks like there is no way to "run and forget", you need to finish all work before returning a response to the front end. :(
 // Make sure the @typescript-eslint/no-floating-promises linter rule passes, otherwise promise might (at best?) only be fullfilled on the next call to the API...
-module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cognitoPoolClaims: { sub: any; email: any; }; }) => {
+module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cognitoPoolClaims: PartialClaims; }) => {
   console.log("authQuery: ", event.body.query);
   const query = event.body.query;
   const pars = event.body.pars;
   switch (query) {
     case "me":
-      return await me(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email, pars);
+      return await me(event.cognitoPoolClaims, pars);
     case "my_settings":
-      return await mySettings(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email);
+      return await mySettings(event.cognitoPoolClaims);
     case "new_setting":
       return await newSetting(event.cognitoPoolClaims.sub, pars);
     case "new_profile":
-      return await newProfile(event.cognitoPoolClaims.sub, event.cognitoPoolClaims.email, pars);
+      return await newProfile(event.cognitoPoolClaims, pars);
     case "new_challenge":
       return await newChallenge(event.cognitoPoolClaims.sub, pars);
     case "challenge_revoke":
@@ -598,7 +615,9 @@ async function updateUserSettings(userid: string, pars: { settings: any; }) {
   }
 }
 
-async function me(userId: string, email: any, pars: { size: string }) {
+async function me(claim: PartialClaims, pars: { size: string }) {
+  const userId = claim.sub;
+  const email = claim.email;
   const fixGames = false;
   try {
     const userData = await ddbDocClient.send(
@@ -619,7 +638,7 @@ async function me(userId: string, email: any, pars: { size: string }) {
     const user = userData.Item as FullUser;
     const work: Promise<any>[] = [];
     if (user.email !== email)
-      work.push(updateUserEMail(userId, email));
+      work.push(updateUserEMail(claim));
     let games = user.games;
     if (games == undefined)
       games= [];
@@ -733,16 +752,20 @@ async function me(userId: string, email: any, pars: { size: string }) {
   }
 }
 
-async function updateUserEMail(userid: string, newMail: any) {
-  return ddbDocClient.send(new UpdateCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "USER", "sk": userid },
-    ExpressionAttributeValues: { ":e": newMail },
-    UpdateExpression: "set email = :e",
-  }));
+async function updateUserEMail(claim: PartialClaims) {
+    if (claim.email_verified) {
+        return ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USER", "sk": claim.sub },
+            ExpressionAttributeValues: { ":e": claim.email },
+            UpdateExpression: "set email = :e",
+          }));
+    }
 }
 
-async function mySettings(userId: string, email: any) {
+async function mySettings(claim: PartialClaims) {
+  const userId = claim.sub;
+  const email = claim.email;
   try {
     const user = await ddbDocClient.send(
       new GetCommand({
@@ -757,7 +780,7 @@ async function mySettings(userId: string, email: any) {
     if (user.Item === undefined)
       throw new Error("mySettings no user ${userId}");
     if (user.Item.email !== email)
-      await updateUserEMail(userId, email);
+      await updateUserEMail(claim);
 
     console.log("mySettings Item: ", user.Item);
     return {
@@ -906,7 +929,12 @@ async function getChallenges(challengeIds: string[]) {
   return Promise.all(challenges);
 }
 
-async function newProfile(userid: string, email: any, pars: { name: any; consent: any; anonymous: any; country: any; tagline: any; }) {
+async function newProfile(claim: PartialClaims, pars: { name: any; consent: any; anonymous: any; country: any; tagline: any; }) {
+  const userid = claim.sub;
+  let email = "";
+  if (claim.email_verified) {
+    email = claim.email;
+  }
   const data = {
       "pk": "USER",
       "sk": userid,
@@ -1083,9 +1111,17 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
   await initi18n('en');
   const work: Promise<any>[] = [];
   for (const player of players) {
-    await changeLanguageForPlayer(player);
-    const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { "challenger": challengerName, metaGame, "interpolation": {"escapeValue": false} }));
-    work.push(sesClient.send(comm));
+    if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
+        if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
+            await changeLanguageForPlayer(player);
+            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { "challenger": challengerName, metaGame, "interpolation": {"escapeValue": false} }));
+            work.push(sesClient.send(comm));
+        } else {
+            console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+        }
+    } else {
+        console.log(`No verified email address found for ${player.name} (${player.id})`);
+    }
   }
   return Promise.all(work);
 }
@@ -1110,18 +1146,34 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
     if (challenge.challengees) {
       const players: FullUser[] = await getPlayers(challenge.challengees.map((c: { id: any; }) => c.id));
       for (const player of players) {
-        await changeLanguageForPlayer(player);
-        const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
-        work.push(sesClient.send(comm));
+        if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
+            if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
+                await changeLanguageForPlayer(player);
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
+                work.push(sesClient.send(comm));
+            } else {
+                console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+            }
+        } else {
+            console.log(`No verified email address found for ${player.name} (${player.id})`);
+        }
       }
     }
     // Inform players that have already accepted
     if (challenge.players) {
       const players = await getPlayers(challenge.players.map((c: { id: any; }) => c.id).filter((id: any) => id !== challenge!.challenger.id));
       for (const player of players) {
-        await changeLanguageForPlayer(player);
-        const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
-        work.push(sesClient.send(comm));
+        if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
+            if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
+                await changeLanguageForPlayer(player);
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
+                work.push(sesClient.send(comm));
+                    } else {
+                console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+            }
+        } else {
+            console.log(`No verified email address found for ${player.name} (${player.id})`);
+        }
       }
     }
   }
@@ -1166,14 +1218,22 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       await initi18n('en');
       try {
         for (const [ind, player] of email.players.entries()) {
-          await changeLanguageForPlayer(player);
-          console.log(player);
-          let body = i18n.t("GameStartedBody", { metaGame: email.metaGame, "interpolation": {"escapeValue": false} });
-          if (ind === 0 || email.simultaneous) {
-            body += " " + i18n.t("YourMove");
-          }
-          const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), body);
-          work.push(sesClient.send(comm));
+            if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
+                if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameStart) ) {
+                    await changeLanguageForPlayer(player);
+                    console.log(player);
+                    let body = i18n.t("GameStartedBody", { metaGame: email.metaGame, "interpolation": {"escapeValue": false} });
+                    if (ind === 0 || email.simultaneous) {
+                      body += " " + i18n.t("YourMove");
+                    }
+                    const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), body);
+                    work.push(sesClient.send(comm));
+                } else {
+                    console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+                }
+            } else {
+                console.log(`No verified email address found for ${player.name} (${player.id})`);
+            }
         }
       } catch (err) {
         logGetItemError(err);
@@ -1207,9 +1267,17 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       const quitter = challenge.challengees!.find(c => c.id === userid)!.name;
       const metaGame = gameinfo.get(challenge.metaGame).name;
       for (const player of players) {
-        await changeLanguageForPlayer(player);
-        const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame, "interpolation": {"escapeValue": false} }));
-        work.push(sesClient.send(comm));
+        if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
+            if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
+                await changeLanguageForPlayer(player);
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame, "interpolation": {"escapeValue": false} }));
+                work.push(sesClient.send(comm));
+            } else {
+                console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+            }
+        } else {
+            console.log(`No verified email address found for ${player.name} (${player.id})`);
+        }
       }
     }
   }
@@ -1881,7 +1949,7 @@ function getK(N: number) {
   );
 }
 
-async function sendSubmittedMoveEmails(game: FullGame, players0: any[], simultaneous: any, newRatings: any[] | null) {
+async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], simultaneous: any, newRatings: any[] | null) {
   await initi18n('en');
   const work: Promise<any>[] =  [];
   if (game.toMove !== '') {
@@ -1905,14 +1973,22 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: any[], simultan
     const players = players0.filter((p: { id: any; }) => playerIds.includes(p.id));
     const metaGame = gameinfo.get(game.metaGame).name;
     for (const [ind, player] of players.entries()) {
-      await changeLanguageForPlayer(player);
-      let body;
-      if (newRatings != null)
-        body = i18n.t("GameOverWithRatingBody", { metaGame, "rating" : `${Math.round(newRatings[ind][game.metaGame].rating)}`, "interpolation": {"escapeValue": false} });
-      else
-        body = i18n.t("GameOverBody", { metaGame, "interpolation": {"escapeValue": false} });
-      const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), body);
-      work.push(sesClient.send(comm));
+        if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
+            if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameEnd) ) {
+                await changeLanguageForPlayer(player);
+                let body;
+                if (newRatings != null)
+                  body = i18n.t("GameOverWithRatingBody", { metaGame, "rating" : `${Math.round(newRatings[ind][game.metaGame].rating)}`, "interpolation": {"escapeValue": false} });
+                else
+                  body = i18n.t("GameOverBody", { metaGame, "interpolation": {"escapeValue": false} });
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), body);
+                work.push(sesClient.send(comm));
+            } else {
+                console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+            }
+        } else {
+            console.log(`No verified email address found for ${player.name} (${player.id})`);
+        }
     }
   }
   return Promise.all(work);
