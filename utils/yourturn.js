@@ -36,6 +36,7 @@ const unmarshallOptions = {
 const translateConfig = { marshallOptions, unmarshallOptions };
 const ddbDocClient = lib_dynamodb_1.DynamoDBDocumentClient.from(clnt, translateConfig);
 const handler = ( /*event: EventBridgeEvent<any,any>, context*/) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
     // Get list of all active games
     try {
         let data = yield ddbDocClient.send(new lib_dynamodb_1.QueryCommand({
@@ -74,7 +75,7 @@ const handler = ( /*event: EventBridgeEvent<any,any>, context*/) => __awaiter(vo
             }));
             const players = data === null || data === void 0 ? void 0 : data.Items;
             console.log(JSON.stringify(players, null, 2));
-            // Collate user data with players whose turn it is, but only those electing to receive notifications
+            // Collate user data with players whose turn it is, but only those electing to receive notifications and who have valid email addresses
             if (players !== undefined) {
                 const notifications = [];
                 for (const [p, gs] of p2g.entries()) {
@@ -83,8 +84,16 @@ const handler = ( /*event: EventBridgeEvent<any,any>, context*/) => __awaiter(vo
                         if (player.language === undefined) {
                             player.language = "en";
                         }
-                        if ((player.settings._notification === undefined) || (player.settings._notification.yourturn)) {
-                            notifications.push([player, gs.length]);
+                        if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
+                            if ((((_b = (_a = player.settings) === null || _a === void 0 ? void 0 : _a.all) === null || _b === void 0 ? void 0 : _b.notifications) === undefined) || (player.settings.all.notifications.yourturn)) {
+                                notifications.push([player, gs.length]);
+                            }
+                            else {
+                                console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+                            }
+                        }
+                        else {
+                            console.log(`No verified email address found for ${player.name} (${player.id})`);
                         }
                     }
                 }
