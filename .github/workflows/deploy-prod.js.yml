@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy-dev:
+  deploy-prod:
     runs-on: ubuntu-latest
 
     steps:
@@ -58,7 +58,7 @@ jobs:
     - name: Configure AWS credentials
       uses: Fooji/create-aws-profile-action@v1
       with:
-        profile: AbstractPlayDev
+        profile: AbstractPlayProd
         region: us-east-1
         key: ${{ secrets.AWS_KEY}}
         secret: ${{ secrets.AWS_SECRET}}
