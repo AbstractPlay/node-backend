@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
@@ -1759,7 +1760,7 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
     } else if (simultaneous) {
       applySimultaneousMove(userid, pars.move, engine, game);
     } else {
-      applyMove(userid, pars.move, engine, game);
+      applyMove(userid, pars.move, engine, game, flags);
     }
   }
   catch (error) {
@@ -2198,13 +2199,24 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBase, g
   }
 }
 
-function applyMove(userid: string, move: string, engine: GameBase, game: FullGame) {
+function applyMove(userid: string, move: string, engine: GameBase, game: FullGame, flags: string[]) {
   // non simultaneous move game.
   if (game.players[parseInt(game.toMove as string)].id !== userid) {
     throw new Error('It is not your turn!');
   }
   console.log("applyMove", move);
   engine.move(move);
+  let count = 1;
+  if (flags.includes("automove")) {
+    console.log("Automove detected");
+    // @ts-ignore
+    while (engine.moves().length === 1) {
+        console.log("Single move detected");
+        count++;
+        // @ts-ignore
+        engine.move(engine.moves()[0]);
+    }
+  }
   console.log("applied");
   game.state = engine.serialize();
   if (engine.gameover) {
@@ -2213,7 +2225,7 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
     game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   }
   else
-    game.toMove = `${(parseInt(game.toMove as string) + 1) % game.players.length}`;
+    game.toMove = `${(parseInt(game.toMove as string) + count) % game.players.length}`;
   console.log("done");
 }
 
