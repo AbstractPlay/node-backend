@@ -2207,7 +2207,7 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
   console.log("applyMove", move);
   engine.move(move);
   let count = 1;
-  if (flags.includes("automove")) {
+  if (flags !== undefined && flags.includes("automove")) {
     console.log("Automove detected");
     // @ts-ignore
     while (engine.moves().length === 1) {
