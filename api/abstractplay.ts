@@ -1872,7 +1872,7 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
         Key: { "pk": "METAGAMES", "sk": "COUNTS" },
         ExpressionAttributeNames: { "#g": game.metaGame },
         ExpressionAttributeValues: {":p": new Set([player.id])},
-        UpdateExpression: "add #g.ratedplayers :p",
+        UpdateExpression: "add #g.ratings :p",
       })));
     }
   });
@@ -2148,7 +2148,7 @@ async function timeloss(player: number, gameid: string, timestamp: number) {
         Key: { "pk": "METAGAMES", "sk": "COUNTS" },
         ExpressionAttributeNames: { "#g": game.metaGame },
         ExpressionAttributeValues: {":p": new Set([player.id])},
-        UpdateExpression: "add #g.ratedplayers :p",
+        UpdateExpression: "add #g.ratings :p",
       })));
     }
   });
