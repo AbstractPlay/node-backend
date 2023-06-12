@@ -11,7 +11,7 @@ import i18n from 'i18next';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
 import it from '../locales/it/apback.json';
-import { EntropyGame } from '@abstractplay/gameslib/build/src/games';
+import { EntropyGame, StringsGame } from '@abstractplay/gameslib/build/src/games';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -2181,6 +2181,8 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBase, g
     console.log(game.partialMove);
     if (game.metaGame === "entropy") // need to fix this...
       (engine as EntropyGame).move(game.partialMove, true);
+    else if (game.metaGame === "strings")
+      (engine as StringsGame).move(game.partialMove, true);
     else
       engine.move(game.partialMove);
   }
