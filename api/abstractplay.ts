@@ -2279,7 +2279,7 @@ async function saveExploration(userid: string, pars: { game: string; move: numbe
         "user": userid,
         "game": pars.game,
         "move": pars.move,
-        "tree": pars.tree
+        "tree": JSON.stringify(pars.tree)
       }
     }));
 }
