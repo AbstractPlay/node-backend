@@ -33,7 +33,7 @@ type PartialGame = {
         name: string;
         time: number;
     }[];
-    toMove: number;
+    toMove: number|string|boolean[];
 };
 
 type PartialUser = {
@@ -73,15 +73,27 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
         if (games !== undefined) {
             const p2g = new Map<string, PartialGame[]>();
             for (const g of games) {
-                console.log(`Individual game: ${JSON.stringify(g)}`);
-                const toMove = g.players[g.toMove];
-                console.log(`toMoveRec: ${JSON.stringify(toMove)}`);
-                if (p2g.has(toMove.id)) {
-                    const lst = p2g.get(toMove.id)!;
-                    lst.push(g);
-                    p2g.set(toMove.id, [...lst]);
+                const toMove: number[] = [];
+                if (Array.isArray(g.toMove)) {
+                    for (let i = 0; i < g.toMove.length; i++) {
+                        if (g.toMove[i]) {
+                            toMove.push(i);
+                        }
+                    }
                 } else {
-                    p2g.set(toMove.id, [g]);
+                    toMove.push(g.toMove as number);
+                }
+                console.log(`Individual game: ${JSON.stringify(g)}`);
+                for (const num of toMove) {
+                    const toMove = g.players[num];
+                    console.log(`toMoveRec: ${JSON.stringify(toMove)}`);
+                    if (p2g.has(toMove.id)) {
+                        const lst = p2g.get(toMove.id)!;
+                        lst.push(g);
+                        p2g.set(toMove.id, [...lst]);
+                    } else {
+                        p2g.set(toMove.id, [g]);
+                    }
                 }
             }
             console.log(JSON.stringify(p2g, null, 2));
