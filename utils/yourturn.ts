@@ -73,6 +73,7 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
         if (games !== undefined) {
             const p2g = new Map<string, PartialGame[]>();
             for (const g of games) {
+                console.log(`Individual game: ${JSON.stringify(g)}`);
                 const toMove = g.players[g.toMove];
                 console.log(`toMoveRec: ${JSON.stringify(toMove)}`);
                 if (p2g.has(toMove.id)) {
