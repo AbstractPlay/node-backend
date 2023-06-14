@@ -51,13 +51,16 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
             new QueryCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
                 KeyConditionExpression: "#pk = :pk",
-                ExpressionAttributeValues: { ":pk": "CURRENTGAMES" },
+                ExpressionAttributeValues: { ":pk": "GAME" },
                 ExpressionAttributeNames: { "#pk": "pk", "#id": "id"},
                 ProjectionExpression: "#id, metaGame, players, toMove",
                 ReturnConsumedCapacity: "INDEXES",
             })
         );
-        const games = data?.Items as PartialGame[];
+        let games = data?.Items as PartialGame[];
+        if (games !== undefined) {
+            games = games.filter(g => ("toMove" in g) && (g.toMove !== undefined) && (g.toMove !== null));
+        }
         console.log(JSON.stringify(games, null, 2));
 
         // Map players whose turn it is to the list of games waiting on them
