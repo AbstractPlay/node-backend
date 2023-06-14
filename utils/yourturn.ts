@@ -61,6 +61,11 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
         let games = data?.Items as PartialGame[];
         if (games !== undefined) {
             games = games.filter(g => ("toMove" in g) && (g.toMove !== undefined) && (g.toMove !== null) && (g.toMove.toString().length > 0) );
+            games.forEach(g => {
+                if (typeof g.toMove === "string") {
+                    g.toMove = parseInt(g.toMove, 10);
+                }
+            });
         }
         console.log(JSON.stringify(games, null, 2));
 
