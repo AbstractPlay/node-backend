@@ -60,7 +60,7 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
         console.log(`Consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
         let games = data?.Items as PartialGame[];
         if (games !== undefined) {
-            games = games.filter(g => ("toMove" in g) && (g.toMove !== undefined) && (g.toMove !== null) && (g.toMove.toString().length > 0) );
+            games = games.filter(g => ("toMove" in g) && (g.toMove !== undefined) && (g.toMove !== null) && ( (Array.isArray(g.toMove)) || (g.toMove.toString().length > 0) ) );
             games.forEach(g => {
                 if (typeof g.toMove === "string") {
                     g.toMove = parseInt(g.toMove, 10);
