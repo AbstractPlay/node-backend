@@ -57,10 +57,10 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
                 ReturnConsumedCapacity: "INDEXES",
             })
         );
-        console.log(`Consumed capacity: ${data?.ConsumedCapacity}`);
+        console.log(`Consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
         let games = data?.Items as PartialGame[];
         if (games !== undefined) {
-            games = games.filter(g => ("toMove" in g) && (g.toMove !== undefined) && (g.toMove !== null));
+            games = games.filter(g => ("toMove" in g) && (g.toMove !== undefined) && (g.toMove !== null) && (g.toMove.toString().length > 0) );
         }
         console.log(JSON.stringify(games, null, 2));
 
