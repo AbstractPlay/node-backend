@@ -83,10 +83,8 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
                 } else {
                     toMove.push(g.toMove as number);
                 }
-                console.log(`Individual game: ${JSON.stringify(g)}`);
                 for (const num of toMove) {
                     const toMove = g.players[num];
-                    console.log(`toMoveRec: ${JSON.stringify(toMove)}`);
                     if (p2g.has(toMove.id)) {
                         const lst = p2g.get(toMove.id)!;
                         lst.push(g);
