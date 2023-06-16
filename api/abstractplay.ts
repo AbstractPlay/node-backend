@@ -1767,7 +1767,6 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
     logGetItemError(error);
     return formatReturnError(`Unable to apply move ${pars.move}`);
   }
-  console.log("Move applied");
 
   const player = game.players.find(p => p.id === userid);
   if (!player)
@@ -1825,7 +1824,6 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
       Item: game
     }));
   list.push(updateGame);
-  console.log("Games updated");
   // Update players
   players.forEach((player, ind) => {
     const games: Game[] = [];
@@ -1878,7 +1876,6 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
       })));
     }
   });
-  console.log("Players updated");
 
   if (simultaneous)
     game.partialMove = game.players.map((p: User, i: number) => (p.id === userid ? game.partialMove!.split(',')[i] : '')).join(',');
@@ -2159,12 +2156,8 @@ async function timeloss(player: number, gameid: string, timestamp: number) {
 }
 
 function applySimultaneousMove(userid: string, move: string, engine: GameBase, game: FullGame) {
-  console.log("Applying simultaneous move");
-  console.log(`userid: ${userid}, move: ${move}`);
   const partialMove = game.partialMove;
-  console.log(`partialMove: ${partialMove}`);
   const moves = partialMove === undefined ? game.players.map(() => '') : partialMove.split(',');
-  console.log(`moves: ${JSON.stringify(moves)}`);
   let cnt = 0;
   let found = false;
   for (let i = 0; i < game.numPlayers; i++) {
@@ -2173,7 +2166,7 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBase, g
       if (moves[i] !== '' || !game.toMove[i]) {
         throw new Error('You have already submitted your move for this turn!');
       }
-      moves[i] = move.replace(/^,+/, "").replace(/,+$/, "");
+      moves[i] = move;
       (game.toMove as boolean[])[i] = false;
     }
     if (moves[i] !== '')
@@ -2185,18 +2178,15 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBase, g
   if (cnt < game.numPlayers) {
     // not a complete "turn" yet, just validate and save the new partial move
     game.partialMove = moves.join(',');
-    console.log("All moves not yet received");
     console.log(game.partialMove);
     if (game.metaGame === "entropy") // need to fix this...
       (engine as EntropyGame).move(game.partialMove, true);
     else if (game.metaGame === "strings")
       (engine as StringsGame).move(game.partialMove, true);
     else
-      throw new Error("Simultaneous games need to be explicitly cast for now.");
+      engine.move(game.partialMove);
   }
   else {
-    console.log("Full move received");
-    console.log(`Final move: ${moves.join(",")}`)
     // full move.
     engine.move(moves.join(','));
     game.state = engine.serialize();
