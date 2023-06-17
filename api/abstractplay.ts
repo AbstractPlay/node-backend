@@ -1849,7 +1849,7 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
             UpdateExpression: "set games = :gs",
           }))
         );
-        console.log(`Scheduled update to player ${player.id} with games = ${games}`);
+        console.log(`Scheduled update to player ${player.id}, ${player.name}, with games`, games);
       } else {
         list.push(
           ddbDocClient.send(new UpdateCommand({
@@ -1870,7 +1870,7 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
             "rating": newRatings[ind][game.metaGame]
           }
         })));
-        console.log(`Scheduled update to player ${player.id} with games = ${games} and ratings = ${newRatings[ind][game.metaGame]}`);
+        console.log(`Scheduled update to player ${player.id} with games and ratings`, games, newRatings[ind][game.metaGame]);
 
         list.push(ddbDocClient.send(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
