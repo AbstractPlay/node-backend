@@ -1741,152 +1741,165 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
   }
   if (!data.Item)
     throw new Error(`No game ${pars.id} in table ${process.env.ABSTRACT_PLAY_TABLE}`);
-  const game = data.Item as FullGame;
-  console.log("got game in submitMove:");
-  console.log(game);
-  const engine = GameFactory(game.metaGame, game.state);
-  if (!engine)
-    throw new Error(`Unknown metaGame ${game.metaGame}`);
-  const flags = gameinfo.get(game.metaGame).flags;
-  const simultaneous = flags !== undefined && flags.includes('simultaneous');
-  const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
   try {
-    if (pars.move === "resign") {
-      resign(userid, engine, game);
-    } else if (pars.move === "timeout") {
-      timeout(userid, engine, game);
-    } else if (pars.move === "" && pars.draw === "drawaccepted"){
-      drawaccepted(userid, engine, game, simultaneous);
-    } else if (simultaneous) {
-      applySimultaneousMove(userid, pars.move, engine, game);
-    } else {
-      applyMove(userid, pars.move, engine, game, flags);
-    }
-  }
-  catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to apply move ${pars.move}`);
-  }
-
-  const player = game.players.find(p => p.id === userid);
-  if (!player)
-    throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
-  // deal with draw offers
-  if (pars.draw === "drawoffer") {
-    player.draw = "offered";
-  } else {
-    // if a player just moved, other draw offers are declined
-    game.players.forEach(p => delete p.draw);
-  }
-  const timestamp = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
-  const timeUsed = timestamp - lastMoveTime;
-  // console.log("timeUsed", timeUsed);
-  // console.log("player", player);
-  if (player.time! - timeUsed < 0)
-    player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
-  else
-    player.time = player.time! - timeUsed + game.clockInc * 3600000;
-  if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
-  // console.log("players", game.players);
-  const playerIDs = game.players.map((p: { id: any; }) => p.id);
-  // TODO: We are updating players and their games. This should be put in some kind of critical section!
-  const players = await getPlayers(playerIDs);
-
-  // this should be all the info we want to show on the "my games" summary page.
-  const playerGame = {
-    "id": game.id,
-    "metaGame": game.metaGame,
-    "players": game.players,
-    "clockHard": game.clockHard,
-    "toMove": game.toMove,
-    "lastMoveTime": timestamp
-  } as Game;
-  const myGame = {
-    "id": game.id,
-    "metaGame": game.metaGame,
-    "players": game.players,
-    "clockHard": game.clockHard,
-    "toMove": game.toMove,
-    "lastMoveTime": timestamp
-  } as Game;
-  const list: Promise<any>[] = [];
-  let newRatings: {[metaGame: string] : Rating}[] | null = null;
-  if ((game.toMove === "" || game.toMove === null)) {
-    newRatings = updateRatings(game, players);
-    myGame.seen = Date.now();
-    if (game.numMoves && game.numMoves > game.numPlayers)
-      list.push(addToGameLists("COMPLETEDGAMES", playerGame, timestamp));
-    list.push(removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players));
-  }
-  game.lastMoveTime = timestamp;
-  const updateGame = ddbDocClient.send(new PutCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: game
-    }));
-  list.push(updateGame);
-  // Update players
-  players.forEach((player, ind) => {
-    const games: Game[] = [];
-    player.games.forEach(g => {
-      if (g.id === playerGame.id) {
-        if (player.id === userid)
-          games.push(myGame);
-        else
-          games.push(playerGame);
+    const game = data.Item as FullGame;
+    console.log("got game in submitMove:");
+    console.log(game);
+    const engine = GameFactory(game.metaGame, game.state);
+    if (!engine)
+      throw new Error(`Unknown metaGame ${game.metaGame}`);
+    const flags = gameinfo.get(game.metaGame).flags;
+    const simultaneous = flags !== undefined && flags.includes('simultaneous');
+    const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+    try {
+      if (pars.move === "resign") {
+        resign(userid, engine, game);
+      } else if (pars.move === "timeout") {
+        timeout(userid, engine, game);
+      } else if (pars.move === "" && pars.draw === "drawaccepted"){
+        drawaccepted(userid, engine, game, simultaneous);
+      } else if (simultaneous) {
+        applySimultaneousMove(userid, pars.move, engine, game);
+      } else {
+        applyMove(userid, pars.move, engine, game, flags);
       }
-      else
-        games.push(g)
-    });
-    if (newRatings === null) {
-      list.push(
-        ddbDocClient.send(new UpdateCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "USER", "sk": player.id },
-          ExpressionAttributeValues: { ":gs": games },
-          UpdateExpression: "set games = :gs",
-        }))
-      );
-    } else {
-      list.push(
-        ddbDocClient.send(new UpdateCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "USER", "sk": player.id },
-          ExpressionAttributeValues: { ":gs": games, ":rs": newRatings[ind] },
-          UpdateExpression: "set games = :gs, ratings = :rs"
-        }))
-      );
-
-      list.push(ddbDocClient.send(new PutCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: {
-          "pk": "RATINGS#" + game.metaGame,
-          "sk": player.id,
-          "id": player.id,
-          "name": player.name,
-          "rating": newRatings[ind][game.metaGame]
-        }
-      })));
-
-      list.push(ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-        ExpressionAttributeNames: { "#g": game.metaGame },
-        ExpressionAttributeValues: {":p": new Set([player.id])},
-        UpdateExpression: "add #g.ratings :p",
-      })));
     }
-  });
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to apply move ${pars.move}`);
+    }
 
-  if (simultaneous)
-    game.partialMove = game.players.map((p: User, i: number) => (p.id === userid ? game.partialMove!.split(',')[i] : '')).join(',');
+    const player = game.players.find(p => p.id === userid);
+    if (!player)
+      throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
+    // deal with draw offers
+    if (pars.draw === "drawoffer") {
+      player.draw = "offered";
+    } else {
+      // if a player just moved, other draw offers are declined
+      game.players.forEach(p => delete p.draw);
+    }
+    const timestamp = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+    const timeUsed = timestamp - lastMoveTime;
+    // console.log("timeUsed", timeUsed);
+    // console.log("player", player);
+    if (player.time! - timeUsed < 0)
+      player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
+    else
+      player.time = player.time! - timeUsed + game.clockInc * 3600000;
+    if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
+    // console.log("players", game.players);
+    const playerIDs = game.players.map((p: { id: any; }) => p.id);
+    // TODO: We are updating players and their games. This should be put in some kind of critical section!
+    const players = await getPlayers(playerIDs);
 
-  list.push(sendSubmittedMoveEmails(game, players, simultaneous, newRatings));
-  await Promise.all(list);
-  return {
+    // this should be all the info we want to show on the "my games" summary page.
+    const playerGame = {
+      "id": game.id,
+      "metaGame": game.metaGame,
+      "players": game.players,
+      "clockHard": game.clockHard,
+      "toMove": game.toMove,
+      "lastMoveTime": timestamp
+    } as Game;
+    const myGame = {
+      "id": game.id,
+      "metaGame": game.metaGame,
+      "players": game.players,
+      "clockHard": game.clockHard,
+      "toMove": game.toMove,
+      "lastMoveTime": timestamp
+    } as Game;
+    const list: Promise<any>[] = [];
+    let newRatings: {[metaGame: string] : Rating}[] | null = null;
+    if ((game.toMove === "" || game.toMove === null)) {
+      newRatings = updateRatings(game, players);
+      myGame.seen = Date.now();
+      if (game.numMoves && game.numMoves > game.numPlayers)
+        list.push(addToGameLists("COMPLETEDGAMES", playerGame, timestamp));
+      list.push(removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players));
+      console.log("Scheduled updates to game lists")
+    }
+    game.lastMoveTime = timestamp;
+    const updateGame = ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: game
+      }));
+    list.push(updateGame);
+    console.log("Scheduled update to game");
+    // Update players
+    players.forEach((player, ind) => {
+      const games: Game[] = [];
+      player.games.forEach(g => {
+        if (g.id === playerGame.id) {
+          if (player.id === userid)
+            games.push(myGame);
+          else
+            games.push(playerGame);
+        }
+        else
+          games.push(g)
+      });
+      if (newRatings === null) {
+        list.push(
+          ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USER", "sk": player.id },
+            ExpressionAttributeValues: { ":gs": games },
+            UpdateExpression: "set games = :gs",
+          }))
+        );
+        console.log(`Scheduled update to player ${player.id} with games = ${games}`);
+      } else {
+        list.push(
+          ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USER", "sk": player.id },
+            ExpressionAttributeValues: { ":gs": games, ":rs": newRatings[ind] },
+            UpdateExpression: "set games = :gs, ratings = :rs"
+          }))
+        );
+
+        list.push(ddbDocClient.send(new PutCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: {
+            "pk": "RATINGS#" + game.metaGame,
+            "sk": player.id,
+            "id": player.id,
+            "name": player.name,
+            "rating": newRatings[ind][game.metaGame]
+          }
+        })));
+        console.log(`Scheduled update to player ${player.id} with games = ${games} and ratings = ${newRatings[ind][game.metaGame]}`);
+
+        list.push(ddbDocClient.send(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+          ExpressionAttributeNames: { "#g": game.metaGame },
+          ExpressionAttributeValues: {":p": new Set([player.id])},
+          UpdateExpression: "add #g.ratings :p",
+        })));
+        console.log(`Scheduled update to metagame ratings counts with player ${player.id}`);
+      }
+    });
+
+    if (simultaneous)
+      game.partialMove = game.players.map((p: User, i: number) => (p.id === userid ? game.partialMove!.split(',')[i] : '')).join(',');
+
+    list.push(sendSubmittedMoveEmails(game, players, simultaneous, newRatings));
+    console.log("Scheduled emails");
+    await Promise.all(list);
+    console.log("All updates complete");
+    return {
       statusCode: 200,
       body: JSON.stringify(game),
       headers
     };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError('Unable to process submit move');
+  }  
 }
 
 function updateRatings(game: FullGame, players: FullUser[]) {
