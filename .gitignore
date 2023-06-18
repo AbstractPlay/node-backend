@@ -5,3 +5,4 @@ jspm_packages
 # Serverless directories
 .serverless
 /api/abstractplay.js
+/utils/yourturn.js
