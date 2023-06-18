@@ -33,7 +33,7 @@ type PartialGame = {
         name: string;
         time: number;
     }[];
-    toMove: number;
+    toMove: number|string|boolean[];
 };
 
 type PartialUser = {
@@ -51,26 +51,47 @@ export const handler: Handler = async (/*event: EventBridgeEvent<any,any>, conte
             new QueryCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
                 KeyConditionExpression: "#pk = :pk",
-                ExpressionAttributeValues: { ":pk": "CURRENTGAMES" },
+                ExpressionAttributeValues: { ":pk": "GAME" },
                 ExpressionAttributeNames: { "#pk": "pk", "#id": "id"},
                 ProjectionExpression: "#id, metaGame, players, toMove",
                 ReturnConsumedCapacity: "INDEXES",
             })
         );
-        const games = data?.Items as PartialGame[];
+        console.log(`Consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+        let games = data?.Items as PartialGame[];
+        if (games !== undefined) {
+            games = games.filter(g => ("toMove" in g) && (g.toMove !== undefined) && (g.toMove !== null) && (g.toMove.toString().length > 0) );
+            games.forEach(g => {
+                if (typeof g.toMove === "string") {
+                    g.toMove = parseInt(g.toMove, 10);
+                }
+            });
+        }
         console.log(JSON.stringify(games, null, 2));
 
         // Map players whose turn it is to the list of games waiting on them
         if (games !== undefined) {
             const p2g = new Map<string, PartialGame[]>();
             for (const g of games) {
-                const toMove = g.players[g.toMove];
-                if (p2g.has(toMove.id)) {
-                    const lst = p2g.get(toMove.id)!;
-                    lst.push(g);
-                    p2g.set(toMove.id, [...lst]);
+                const toMove: number[] = [];
+                if (Array.isArray(g.toMove)) {
+                    for (let i = 0; i < g.toMove.length; i++) {
+                        if (g.toMove[i]) {
+                            toMove.push(i);
+                        }
+                    }
                 } else {
-                    p2g.set(toMove.id, [g]);
+                    toMove.push(g.toMove as number);
+                }
+                for (const num of toMove) {
+                    const toMove = g.players[num];
+                    if (p2g.has(toMove.id)) {
+                        const lst = p2g.get(toMove.id)!;
+                        lst.push(g);
+                        p2g.set(toMove.id, [...lst]);
+                    } else {
+                        p2g.set(toMove.id, [g]);
+                    }
                 }
             }
             console.log(JSON.stringify(p2g, null, 2));
