@@ -122,7 +122,9 @@ type Rating = {
   draws: number;
 }
 
-export type Game = {
+type Game = {
+  pk?: string,
+  sk?: string,
   id : string;
   metaGame: string;
   players: User[];
@@ -2522,7 +2524,7 @@ async function updateMetaGameRatings(userId: string) {
   }
 }
 
-// Rekey all the games. The sk will now be metaGame#gameId
+// Rekey all the games. The sk will now be metaGame#completedbit#gameId
 async function onetimeFix(userId: string) {
   // Make sure people aren't getting clever
   try {
@@ -2544,7 +2546,7 @@ async function onetimeFix(userId: string) {
 
     // Find all games (easy for now!)
     let last : Record<string, any> | undefined | "first" = "first";
-    const work: Promise<any>[] = [];
+    let newids: { [key: string]: string } = {};
     while (last !== undefined) {
       const query : QueryCommandInput = {
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -2562,6 +2564,12 @@ async function onetimeFix(userId: string) {
         data.Items.forEach(item => {
           const game = item as unknown as FullGame;
           if (!game.sk.includes("#")) {
+            if (game.toMove === "" || game.toMove === null) {
+              newids[game.id] = "1#" + game.id;
+            } else {
+              newids[game.id] = "0#" + game.id;
+            }
+            game.id = newids[game.id];
             game.sk = game.metaGame + "#" + game.id;
             work.push(ddbDocClient.send(
               new PutCommand({
@@ -2582,19 +2590,105 @@ async function onetimeFix(userId: string) {
             */
           }
         });
+        await Promise.all(work);
         last = data.LastEvaluatedKey;
       }
-      await Promise.all(work);
-      console.log(`Fixed ${work.length} games`);
+      console.log(`Fixed ${Object.keys(newids).length} games`);
     }
+    // Update GAMECOMMENTS
+    last = "first";
+    let count = 0;
+    while (last !== undefined) {
+      const query : QueryCommandInput = {
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "GAMECOMMENTS" },
+        ExpressionAttributeNames: { "#pk": "pk" }
+      }
+      if (last !== "first") {
+        query.ExclusiveStartKey = last;
+      }
+      let data = await ddbDocClient.send(
+        new QueryCommand(query));
+      if (data.Items !== undefined) {
+        const work: Promise<any>[] = [];
+        data.Items.forEach(item => {
+          const comment = item as unknown as { pk: string, sk: string, comments: Comment[]};
+          if (!comment.sk.includes("#")) {
+            comment.sk = newids[comment.sk];
+            work.push(ddbDocClient.send(
+              new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Item: comment
+              })
+            ));
+          } else {
+            /* Not yet!
+            work.push(ddbDocClient.send(
+              new DeleteCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                  "pk":"GAMECOMMENTS",
+                  "sk": comment.sk
+                }
+              })
+            ));
+            */
+          }
+          count++;
+        });
+        await Promise.all(work);
+        last = data.LastEvaluatedKey;
+      }
+      console.log(`Fixed ${count} comments`);
+    }
+    // Update COMPLETEDGAMES. 
+    // All
+    last = "first";
+    count = 0;
+    let gamelist = [];
+    while (last !== undefined) {
+      const query : QueryCommandInput = {
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES" },
+        ExpressionAttributeNames: { "#pk": "pk" }
+      }
+      if (last !== "first") {
+        query.ExclusiveStartKey = last;
+      }
+      let data = await ddbDocClient.send(
+        new QueryCommand(query));
+      if (data.Items !== undefined) {
+        const work: Promise<any>[] = [];
+        data.Items.forEach(item => {
+          const cgame = item as unknown as Game;
+          if (!cgame.id.includes("#")) {
+            for (const user of cgame.players) {
+              gamelist.push({id: cgame.id, metaGame: cgame.metaGame, userid: user.id});
+            }
+            cgame.sk = cgame.sk!.replace(cgame.id, newids[cgame.id]);
+            cgame.id = newids[cgame.id];
+            work.push(ddbDocClient.send(
+              new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Item: cgame
+              })
+            ));
+          } 
+          count++;
+        });
+        await Promise.all(work);
+        last = data.LastEvaluatedKey;
+      }
+      console.log(`Fixed ${count} COMPLETEDGAMES (all)`);
+    }
+    // COMPLETEDGAMES by metaGame
+
   } catch (err) {
     logGetItemError(err);
     return formatReturnError('Unable to update games');
   }
-}
-
-function updateGames() {
-
 }
 
 async function testAsync(userId: string, pars: { N: number; }) {
