@@ -319,7 +319,7 @@ async function games(pars: { metaGame: string, type: string; }) {
         }));
       const gamelist = gamesData.Items as FullGame[];
       const returnlist = gamelist.map(g => { 
-        return { "id": g.id, "metaGame": g.metaGame, "players": g.players, "toMove": g.toMove, "lastMoveTime": g.lastMoveTime,
+        return { "id": g.id, "metaGame": g.metaGame, "players": g.players, "toMove": g.toMove, "gameStarted": g.gameStarted,
           "numMoves": JSON.parse(g.state).stack.length - 1 } });
       return {
         statusCode: 200,
@@ -2570,6 +2570,7 @@ async function onetimeFix(userId: string) {
         data.Items.forEach(item => {
           const game = item as unknown as FullGame;
           if (!game.sk.includes("#")) {
+            /*
             if (game.toMove === "" || game.toMove === null) {
               game.sk = game.metaGame + "#1#" + game.id;
             } else {
@@ -2581,7 +2582,7 @@ async function onetimeFix(userId: string) {
                   Item: game
               })
             ));
-            /* Not yet!
+            */
             work.push(ddbDocClient.send(
               new DeleteCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -2591,15 +2592,14 @@ async function onetimeFix(userId: string) {
                 }
               })
             ));
-            */
            count++;
           }
         });
         await Promise.all(work);
         last = data.LastEvaluatedKey;
       }
-      console.log(`Fixed ${count} games`);
     }
+    console.log(`Fixed ${count} games`);
   } catch (err) {
     logGetItemError(err);
     return formatReturnError('Unable to update games');
