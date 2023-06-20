@@ -1692,7 +1692,7 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
   } else {
     let update = "add #g.currentgames :nm";
     if (keepgame)
-      update += ", add #g.completedgames :n";
+      update += ", #g.completedgames :n";
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
