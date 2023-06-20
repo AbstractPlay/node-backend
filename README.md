@@ -91,3 +91,18 @@ All data is in a single table. The primary key (or the first part of the primary
 - **Challenges** Details of a challenge. (This is almost certainly overkill, should probably just have left this in the user records, but maybe I'm forgetting something)
   * pk: CHALLENGE
   * sk: \<challengeid\>
+
+- **Meta games** Stats for all metaGames
+	* pk: METAGAMES
+  * sh: COUNTS
+			
+We are going to change this so that GAME records will have the following keys
+- pk: GAME
+- sk: \<metaGame\>#\<completedbit\>#\<gameid\>
+This way we can find all current <metaGame> games by looking for a sk that starts with \<metaGame\>#0#. 
+Pros:
+1. This allows us to show e.g. current move number on the current games page (in order to do so with the current schema we would need to update CURRENTGAMES on every move). 
+2. We can get rid of all the CURRENTGAME lists. 
+Cons:
+1. This change means that when querying for a game record we must already know (besides the gameid) what metaGame it is for and whether it is a completed game or not. Fortunately we have that information available.
+		
