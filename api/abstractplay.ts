@@ -426,9 +426,9 @@ async function metaGamesDetails() {
   }
 }
 
-async function game(userid: string, pars: { id: string, cbit: number, metaGame: string }) {
+async function game(userid: string, pars: { id: string, cbit: string | number, metaGame: string }) {
   try {
-    if (pars.cbit !== 0 && pars.cbit !== 1) {
+    if (pars.cbit !== 0 && pars.cbit !== 1 && pars.cbit !== "0" && pars.cbit !== "1") {
       return formatReturnError("cbit must be 0 or 1");
     }
     const getGame = ddbDocClient.send(
