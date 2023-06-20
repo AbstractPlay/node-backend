@@ -5,13 +5,12 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, QueryCommandInput, ScanCommand } from '@aws-sdk/lib-dynamodb';
 // import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
-import { gameinfo, GameFactory, GameBase } from '@abstractplay/gameslib';
+import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
 import it from '../locales/it/apback.json';
-import { EntropyGame, StringsGame } from '@abstractplay/gameslib/build/src/games';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -1744,7 +1743,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       } else if (pars.move === "" && pars.draw === "drawaccepted"){
         drawaccepted(userid, engine, game, simultaneous);
       } else if (simultaneous) {
-        applySimultaneousMove(userid, pars.move, engine, game);
+        applySimultaneousMove(userid, pars.move, engine as GameBaseSimultaneous, game);
       } else {
         applyMove(userid, pars.move, engine, game, flags);
       }
@@ -1895,7 +1894,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
   catch (error) {
     logGetItemError(error);
     return formatReturnError('Unable to process submit move');
-  }  
+  }
 }
 
 function updateRatings(game: FullGame, players: FullUser[]) {
@@ -2179,7 +2178,7 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
   return Promise.all(work);
 }
 
-function applySimultaneousMove(userid: string, move: string, engine: GameBase, game: FullGame) {
+function applySimultaneousMove(userid: string, move: string, engine: GameBaseSimultaneous, game: FullGame) {
   const partialMove = game.partialMove;
   const moves = partialMove === undefined ? game.players.map(() => '') : partialMove.split(',');
   let cnt = 0;
@@ -2193,6 +2192,11 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBase, g
       moves[i] = move;
       (game.toMove as boolean[])[i] = false;
     }
+    // check if current player is eliminated and insert a blank move
+    // all simultaneous games should accept the character U+0091 as a blank move for eliminated players
+    if (engine.isEliminated(i + 1)) {
+        moves[i] = '\u0091';
+    }
     if (moves[i] !== '')
       cnt++;
   }
@@ -2203,12 +2207,7 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBase, g
     // not a complete "turn" yet, just validate and save the new partial move
     game.partialMove = moves.join(',');
     console.log(game.partialMove);
-    if (game.metaGame === "entropy") // need to fix this...
-      (engine as EntropyGame).move(game.partialMove, true);
-    else if (game.metaGame === "strings")
-      (engine as StringsGame).move(game.partialMove, true);
-    else
-      engine.move(game.partialMove);
+    engine.move(game.partialMove, true);
   }
   else {
     // full move.
