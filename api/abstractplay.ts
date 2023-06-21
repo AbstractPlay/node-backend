@@ -2572,12 +2572,14 @@ async function onetimeFix(userId: string) {
         last = data.LastEvaluatedKey;
       }
     }
+    /*
     let work: Promise<any>[] = [];
     work.push(deleteCurrentGamesByMetaGameAndUser(list));
     work.push(deleteCurrentGamesByUser(list));
     work.push(deleteCurrentGamesByMetaGame(list));
     await Promise.all(work);
-    // await deleteCurrentGames(list);
+    */
+    await deleteCurrentGames(list);
   } catch (err) {
     logGetItemError(err);
     return formatReturnError('Unable to delete CURRENTGAMES');
