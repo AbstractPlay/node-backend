@@ -2721,6 +2721,9 @@ async function deleteCurrentGames(list: Game[]) {
 }
 
 async function onetimeFix(userId: string) {
+}
+
+async function onetimeFixUpdateCompletedGames(userId: string) {
   // Make sure people aren't getting clever
   try {
     const user = await ddbDocClient.send(
