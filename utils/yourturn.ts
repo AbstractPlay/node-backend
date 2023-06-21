@@ -58,7 +58,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                     TableName: process.env.ABSTRACT_PLAY_TABLE,
                     KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
                     ExpressionAttributeValues: { ":pk": "GAME", ":sk": `${metaGame}#0#` },
-                    ExpressionAttributeNames: { "#pk": "pk", "#id": "id"},
+                    ExpressionAttributeNames: { "#pk": "pk", "#id": "id", "#sk": "sk"},
                     ProjectionExpression: "#id, metaGame, players, toMove",
                     ReturnConsumedCapacity: "INDEXES",
                 })
