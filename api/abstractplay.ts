@@ -2573,8 +2573,9 @@ async function onetimeFix(userId: string) {
       }
     }
     // await deleteCurrentGamesByMetaGameAndUser(list);
-    await deleteCurrentGamesByUser(list);
-    await deleteCurrentGamesByMetaGame(list);
+    // await deleteCurrentGamesByUser(list);
+    // await deleteCurrentGamesByMetaGame(list);
+    await deleteCurrentGames(list);
   } catch (err) {
     logGetItemError(err);
     return formatReturnError('Unable to delete CURRENTGAMES');
@@ -2699,6 +2700,23 @@ async function deleteCurrentGamesByMetaGameHelper(key: string) {
       ));
     });
   }
+  return Promise.all(work);
+}
+
+async function deleteCurrentGames(list: Game[]) {
+  let work: Promise<any>[] = [];
+  list.forEach(game => {      
+    work.push(ddbDocClient.send(
+      new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": game.pk,
+          "sk": game.sk
+        }
+      })
+    ));
+  });
+  console.log(`Delete ${list.length} CURRENTGAMES`)
   return Promise.all(work);
 }
 
