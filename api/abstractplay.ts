@@ -2566,11 +2566,11 @@ async function onetimeFix(userId: string) {
       let data = await ddbDocClient.send(
         new QueryCommand(query));
       if (data.Items !== undefined) {
+        console.log(`Got ${data.Items.length} games`);
         const work: Promise<any>[] = [];
         data.Items.forEach(item => {
           const game = item as unknown as FullGame;
           if (!game.sk.includes("#")) {
-            /*
             if (game.toMove === "" || game.toMove === null) {
               game.sk = game.metaGame + "#1#" + game.id;
             } else {
@@ -2582,7 +2582,6 @@ async function onetimeFix(userId: string) {
                   Item: game
               })
             ));
-            */
             work.push(ddbDocClient.send(
               new DeleteCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
