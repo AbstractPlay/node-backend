@@ -2572,7 +2572,9 @@ async function onetimeFix(userId: string) {
         last = data.LastEvaluatedKey;
       }
     }
-    deleteCurrentGamesByMetaGameAndUser(list);
+    // await deleteCurrentGamesByMetaGameAndUser(list);
+    await deleteCurrentGamesByUser(list);
+    await deleteCurrentGamesByMetaGame(list);
   } catch (err) {
     logGetItemError(err);
     return formatReturnError('Unable to delete CURRENTGAMES');
@@ -2589,7 +2591,7 @@ async function deleteCurrentGamesByMetaGameAndUser(list: Game[]) {
   console.log(`Found ${set.size} current games+player combinations`);
   let work: Promise<any>[] = [];
   set.forEach(key => work.push(deleteCurrentGamesByMetaGameAndUserHelper(key)));
-  await Promise.all(work);
+  return Promise.all(work);
 }
     
 async function deleteCurrentGamesByMetaGameAndUserHelper(key: string) {
@@ -2604,7 +2606,87 @@ async function deleteCurrentGamesByMetaGameAndUserHelper(key: string) {
   if (data.Items === undefined) {
     console.log(`Found no items for ${key}}`);
   } else {
-    console.log(`Found ${data.Items.length} items for ${key}}`);
+    console.log(`Found ${data.Items.length} items for ${key}`);
+    data.Items.forEach(item => {      
+      work.push(ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": item.pk,
+            "sk": item.sk
+          }
+        })
+      ));
+    });
+  }
+  return Promise.all(work);
+}
+
+async function deleteCurrentGamesByUser(list: Game[]) {
+  let set = new Set<string>();
+  list.forEach(game => {
+    game.players.forEach(player => {
+      set.add(player.id);
+    });
+  });
+  console.log(`Found ${set.size} current player combinations`);
+  let work: Promise<any>[] = [];
+  set.forEach(key => work.push(deleteCurrentGamesByUserHelper(key)));
+  return Promise.all(work);
+}
+    
+async function deleteCurrentGamesByUserHelper(key: string) {
+  let work: Promise<any>[] = [];
+  const data = await ddbDocClient.send(
+    new QueryCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      KeyConditionExpression: "#pk = :pk",
+      ExpressionAttributeValues: { ":pk": "CURRENTGAMES#" + key },
+      ExpressionAttributeNames: { "#pk": "pk" }
+    }));
+  if (data.Items === undefined) {
+    console.log(`Found no items for ${key}}`);
+  } else {
+    console.log(`Found ${data.Items.length} items for ${key}`);
+    data.Items.forEach(item => {      
+      work.push(ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": item.pk,
+            "sk": item.sk
+          }
+        })
+      ));
+    });
+  }
+  return Promise.all(work);
+}
+
+async function deleteCurrentGamesByMetaGame(list: Game[]) {
+  let set = new Set<string>();
+  list.forEach(game => {
+    set.add(game.metaGame);
+  });
+  console.log(`Found ${set.size} current metaGames`);
+  let work: Promise<any>[] = [];
+  set.forEach(key => work.push(deleteCurrentGamesByMetaGameHelper(key)));
+  return Promise.all(work);
+}
+    
+async function deleteCurrentGamesByMetaGameHelper(key: string) {
+  let work: Promise<any>[] = [];
+  const data = await ddbDocClient.send(
+    new QueryCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      KeyConditionExpression: "#pk = :pk",
+      ExpressionAttributeValues: { ":pk": "CURRENTGAMES#" + key },
+      ExpressionAttributeNames: { "#pk": "pk" }
+    }));
+  if (data.Items === undefined) {
+    console.log(`Found no items for ${key}}`);
+  } else {
+    console.log(`Found ${data.Items.length} items for ${key}`);
     data.Items.forEach(item => {      
       work.push(ddbDocClient.send(
         new DeleteCommand({
