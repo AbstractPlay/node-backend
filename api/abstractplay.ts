@@ -5,13 +5,12 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, QueryCommandInput, ScanCommand } from '@aws-sdk/lib-dynamodb';
 // import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
-import { gameinfo, GameFactory, GameBase } from '@abstractplay/gameslib';
+import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
 import it from '../locales/it/apback.json';
-import { EntropyGame, StringsGame } from '@abstractplay/gameslib/build/src/games';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -122,7 +121,9 @@ type Rating = {
   draws: number;
 }
 
-export type Game = {
+type Game = {
+  pk?: string,
+  sk?: string,
   id : string;
   metaGame: string;
   players: User[];
@@ -130,6 +131,7 @@ export type Game = {
   clockHard: boolean;
   toMove: string | boolean[];
   seen?: number;
+  numMoves?: number;
 }
 
 type FullGame = {
@@ -307,29 +309,49 @@ async function games(pars: { metaGame: string, type: string; }) {
   console.log(game);
   let type2: string;
   if (pars.type === "current") {
-    type2 = "CURRENTGAMES";
+    try {
+      const gamesData = await ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+          ExpressionAttributeValues: { ":pk": "GAME", ":sk": game + '#0#' },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        }));
+      const gamelist = gamesData.Items as FullGame[];
+      const returnlist = gamelist.map(g => { 
+        return { "id": g.id, "metaGame": g.metaGame, "players": g.players, "toMove": g.toMove, "gameStarted": g.gameStarted,
+          "numMoves": JSON.parse(g.state).stack.length - 1 } });
+      return {
+        statusCode: 200,
+        body: JSON.stringify(returnlist),
+        headers
+      };
+    }
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to get games for ${pars.metaGame}`);
+    }
   } else if (pars.type === "completed") {
-    type2 = "COMPLETEDGAMES";
+    try {
+      const gamesData = await ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "#pk = :pk",
+          ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES#" + game },
+          ExpressionAttributeNames: { "#pk": "pk" }
+        }));
+      return {
+        statusCode: 200,
+        body: JSON.stringify(gamesData.Items),
+        headers
+      };
+    }
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to get games for ${pars.metaGame}`);
+    }
   } else {
     return formatReturnError(`Unknown type ${pars.type}`);
-  }
-  try {
-    const gamesData = await ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": type2 + "#" + game },
-        ExpressionAttributeNames: { "#pk": "pk" }
-      }));
-    return {
-      statusCode: 200,
-      body: JSON.stringify(gamesData.Items),
-      headers
-    };
-  }
-  catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to get games for ${pars.metaGame}`);
   }
 }
 
@@ -404,14 +426,17 @@ async function metaGamesDetails() {
   }
 }
 
-async function game(userid: string, pars: { id: string; }) {
+async function game(userid: string, pars: { id: string, cbit: string | number, metaGame: string }) {
   try {
+    if (pars.cbit !== 0 && pars.cbit !== 1 && pars.cbit !== "0" && pars.cbit !== "1") {
+      return formatReturnError("cbit must be 0 or 1");
+    }
     const getGame = ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
           "pk": "GAME",
-          "sk": pars.id
+          "sk": pars.metaGame + "#" + pars.cbit + '#' + pars.id
         },
       }));
     const getComments = ddbDocClient.send(
@@ -424,11 +449,9 @@ async function game(userid: string, pars: { id: string; }) {
         ReturnConsumedCapacity: "INDEXES"
       }));
     const gameData = await getGame;
-    console.log("Got:");
-    console.log(gameData);
     const game = gameData.Item as FullGame;
     if (game === undefined)
-      throw new Error(`Game ${pars.id} not found`);
+      throw new Error(`Game ${pars.id}, metaGame ${pars.metaGame}, completed bit ${pars.cbit} not found`);
     // If the game is over update user to indicate they have seen the game end.
     let work;
     if ((game.toMove === "" || game.toMove === null) && userid !== "") {
@@ -456,7 +479,7 @@ async function game(userid: string, pars: { id: string; }) {
   }
 }
 
-async function injectState(userid: string, pars: { id: string; newState: string; }) {
+async function injectState(userid: string, pars: { id: string; newState: string; metaGame: string;}) {
   // Make sure people aren't getting clever
   try {
     const user = await ddbDocClient.send(
@@ -479,57 +502,59 @@ async function injectState(userid: string, pars: { id: string; newState: string;
     return formatReturnError(`Unable to inject state ${userid}`);
   }
 
-
-    // get the game
-    let game: FullGame;
-    try {
-        const getGame = ddbDocClient.send(
-          new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": "GAME",
-              "sk": pars.id
-            },
-          }));
-        const gameData = await getGame;
-        console.log("Got:");
-        console.log(gameData);
-        game = gameData.Item as FullGame;
-        if (game === undefined) {
-            throw new Error(`Game ${pars.id} not found`);
-        }
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  // get the game. For now we will assume this isn't a finished game.
+  let game: FullGame;
+  try {
+    const getGame = ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "GAME",
+          "sk": pars.metaGame + "#0#" + pars.id
+        },
+      }));
+    const gameData = await getGame;
+    console.log("Got:");
+    console.log(gameData);
+    game = gameData.Item as FullGame;
+    if (game === undefined) {
+        throw new Error(`Game ${pars.id} not found`);
     }
-    // update the state
-    game.state = pars.newState;
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+  // update the state
+  game.state = pars.newState;
 
-    // store the updated game
-    try {
-        await ddbDocClient.send(new PutCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Item: game
-          }));
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to update game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(game),
-      headers
-    };
+  // store the updated game
+  try {
+    await ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: game
+      }));
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to update game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+  return {
+    statusCode: 200,
+    body: JSON.stringify(game),
+    headers
+  };
 }
 
-async function updateGameSettings(userid: string, pars: { game: string; settings: any; }) {
+async function updateGameSettings(userid: string, pars: { game: string, settings: any, metaGame: string, cbit: number }) {
+  if (pars.cbit !== 0 && pars.cbit !== 1) {
+    return formatReturnError("cbit must be 0 or 1");
+  }
   try {
     const data = await ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
           "pk": "GAME",
-          "sk": pars.game
+          "sk": pars.metaGame + "#" + pars.cbit + '#' + pars.game
         },
       }));
     console.log("Got:");
@@ -663,14 +688,14 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           if (minIndex !== -1) {
             game.toMove = '';
             game.lastMoveTime = game.lastMoveTime + game.players[minIndex].time!;
-            work.push(timeloss(minIndex, game.id, game.lastMoveTime));
+            work.push(timeloss(minIndex, game.id, game.metaGame, game.lastMoveTime));
           }
         } else {
           const toMove = parseInt(game.toMove);
           if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
             game.lastMoveTime = game.lastMoveTime + game.players[toMove].time!;
             game.toMove = '';
-            work.push(timeloss(toMove, game.id, game.lastMoveTime));
+            work.push(timeloss(toMove, game.id, game.metaGame, game.lastMoveTime));
           }
         }
       }
@@ -1476,7 +1501,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
           "pk": "GAME",
-          "sk": gameId,
+          "sk": challenge.metaGame + "#0#" + gameId,
           "id": gameId,
           "metaGame": challenge.metaGame,
           "numPlayers": challenge.numPlayers,
@@ -1502,7 +1527,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       "lastMoveTime": now,
     } as Game;
     const list: Promise<any>[] = [];
-    list.push(addToGameLists("CURRENTGAMES", game, now));
+    list.push(addToGameLists("CURRENTGAMES", game, now, false));
 
     // Now remove the challenge and add the game to all players
     list.push(addGame);
@@ -1621,40 +1646,42 @@ async function getPlayers(playerIDs: string[]) {
   return players.map(player => player.Item as FullUser);
 }
 
-function addToGameLists(type: string, game: Game, now: number) {
+function addToGameLists(type: string, game: Game, now: number, keepgame: boolean) {
   const work: Promise<any>[] = [];
   const sk = now + "#" + game.id;
-  work.push(ddbDocClient.send(new PutCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: {
-        "pk": type,
-        "sk": sk,
-        ...game}
-    })));
-  work.push(ddbDocClient.send(new PutCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: {
-        "pk": type + "#" + game.metaGame,
-        "sk": sk,
-        ...game}
-    })));
-  game.players.forEach((player: { id: string; }) => {
+  if (type === "COMPLETEDGAMES" && keepgame) {
     work.push(ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
-          "pk": type + "#" + player.id,
+          "pk": type,
           "sk": sk,
           ...game}
       })));
     work.push(ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
-          "pk": type + "#" + game.metaGame + "#" + player.id,
+          "pk": type + "#" + game.metaGame,
           "sk": sk,
           ...game}
       })));
-  });
-  if (type === "CURRENTGAMES")
+    game.players.forEach((player: { id: string; }) => {
+      work.push(ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: {
+            "pk": type + "#" + player.id,
+            "sk": sk,
+            ...game}
+        })));
+      work.push(ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: {
+            "pk": type + "#" + game.metaGame + "#" + player.id,
+            "sk": sk,
+            ...game}
+        })));
+    });
+  }
+  if (type === "CURRENTGAMES") {
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
@@ -1662,68 +1689,25 @@ function addToGameLists(type: string, game: Game, now: number) {
       ExpressionAttributeValues: {":n": 1},
       UpdateExpression: "add #g.currentgames :n"
     })));
-  else
+  } else {
+    let update = "add #g.currentgames :nm";
+    if (keepgame)
+      update += ", #g.completedgames :n";
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": game.metaGame },
-      ExpressionAttributeValues: {":n": 1},
-      UpdateExpression: "add #g.completedgames :n"
+      ExpressionAttributeValues: {":n": 1, ":nm": -1},
+      UpdateExpression: update
     })));
+  }
   return Promise.all(work);
 }
 
-function removeFromGameLists(type: string, metaGame: string, gameStarted: number, id: string, players: any[]) {
-  const work: Promise<any>[] = [];
-  const sk = gameStarted + "#" + id;
-  console.log("sk", sk);
-  work.push(ddbDocClient.send(new DeleteCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: {
-      "pk": type, "sk": sk
-    }
-  })));
-  work.push(ddbDocClient.send(new DeleteCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: {
-      "pk": type + "#" + metaGame, "sk": sk
-    }
-  })));
-  players.forEach((player: { id: string; }) => {
-    work.push(ddbDocClient.send(new DeleteCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: {
-        "pk": type + "#" + player.id, "sk": sk
-      }
-    })));
-    work.push(ddbDocClient.send(new DeleteCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: {
-          "pk": type + "#" + metaGame + "#" + player.id, "sk": sk
-      }
-    })));
-  });
-  if (type === "CURRENTGAMES")
-    work.push(ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-      ExpressionAttributeNames: { "#g": metaGame },
-      ExpressionAttributeValues: {":n": -1},
-      UpdateExpression: "add #g.currentgames :n"
-    })));
-  else
-    work.push(ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-      ExpressionAttributeNames: { "#g": metaGame },
-      ExpressionAttributeValues: {":n": -1},
-      UpdateExpression: "add #g.completedgames :n"
-    })));
-
-  return Promise.all(work);
-}
-
-async function submitMove(userid: string, pars: { id: string; move: string; draw: string; }) {
+async function submitMove(userid: string, pars: { id: string, move: string, draw: string, metaGame: string, cbit: number}) {
+  if (pars.cbit !== 0) {
+    return formatReturnError("cbit must be 0");
+  }
   let data: any;
   try {
     data = await ddbDocClient.send(
@@ -1731,7 +1715,7 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
           "pk": "GAME",
-          "sk": pars.id
+          "sk": pars.metaGame + "#0#" + pars.id
         },
       }));
   }
@@ -1741,152 +1725,176 @@ async function submitMove(userid: string, pars: { id: string; move: string; draw
   }
   if (!data.Item)
     throw new Error(`No game ${pars.id} in table ${process.env.ABSTRACT_PLAY_TABLE}`);
-  const game = data.Item as FullGame;
-  console.log("got game in submitMove:");
-  console.log(game);
-  const engine = GameFactory(game.metaGame, game.state);
-  if (!engine)
-    throw new Error(`Unknown metaGame ${game.metaGame}`);
-  const flags = gameinfo.get(game.metaGame).flags;
-  const simultaneous = flags !== undefined && flags.includes('simultaneous');
-  const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
   try {
-    if (pars.move === "resign") {
-      resign(userid, engine, game);
-    } else if (pars.move === "timeout") {
-      timeout(userid, engine, game);
-    } else if (pars.move === "" && pars.draw === "drawaccepted"){
-      drawaccepted(userid, engine, game, simultaneous);
-    } else if (simultaneous) {
-      applySimultaneousMove(userid, pars.move, engine, game);
-    } else {
-      applyMove(userid, pars.move, engine, game, flags);
-    }
-  }
-  catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to apply move ${pars.move}`);
-  }
-
-  const player = game.players.find(p => p.id === userid);
-  if (!player)
-    throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
-  // deal with draw offers
-  if (pars.draw === "drawoffer") {
-    player.draw = "offered";
-  } else {
-    // if a player just moved, other draw offers are declined
-    game.players.forEach(p => delete p.draw);
-  }
-  const timestamp = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
-  const timeUsed = timestamp - lastMoveTime;
-  // console.log("timeUsed", timeUsed);
-  // console.log("player", player);
-  if (player.time! - timeUsed < 0)
-    player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
-  else
-    player.time = player.time! - timeUsed + game.clockInc * 3600000;
-  if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
-  // console.log("players", game.players);
-  const playerIDs = game.players.map((p: { id: any; }) => p.id);
-  // TODO: We are updating players and their games. This should be put in some kind of critical section!
-  const players = await getPlayers(playerIDs);
-
-  // this should be all the info we want to show on the "my games" summary page.
-  const playerGame = {
-    "id": game.id,
-    "metaGame": game.metaGame,
-    "players": game.players,
-    "clockHard": game.clockHard,
-    "toMove": game.toMove,
-    "lastMoveTime": timestamp
-  } as Game;
-  const myGame = {
-    "id": game.id,
-    "metaGame": game.metaGame,
-    "players": game.players,
-    "clockHard": game.clockHard,
-    "toMove": game.toMove,
-    "lastMoveTime": timestamp
-  } as Game;
-  const list: Promise<any>[] = [];
-  let newRatings: {[metaGame: string] : Rating}[] | null = null;
-  if ((game.toMove === "" || game.toMove === null)) {
-    newRatings = updateRatings(game, players);
-    myGame.seen = Date.now();
-    if (game.numMoves && game.numMoves > game.numPlayers)
-      list.push(addToGameLists("COMPLETEDGAMES", playerGame, timestamp));
-    list.push(removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players));
-  }
-  game.lastMoveTime = timestamp;
-  const updateGame = ddbDocClient.send(new PutCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: game
-    }));
-  list.push(updateGame);
-  // Update players
-  players.forEach((player, ind) => {
-    const games: Game[] = [];
-    player.games.forEach(g => {
-      if (g.id === playerGame.id) {
-        if (player.id === userid)
-          games.push(myGame);
-        else
-          games.push(playerGame);
+    const game = data.Item as FullGame;
+    console.log("got game in submitMove:");
+    console.log(game);
+    const engine = GameFactory(game.metaGame, game.state);
+    if (!engine)
+      throw new Error(`Unknown metaGame ${game.metaGame}`);
+    const flags = gameinfo.get(game.metaGame).flags;
+    const simultaneous = flags !== undefined && flags.includes('simultaneous');
+    const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+    try {
+      if (pars.move === "resign") {
+        resign(userid, engine, game);
+      } else if (pars.move === "timeout") {
+        timeout(userid, engine, game);
+      } else if (pars.move === "" && pars.draw === "drawaccepted"){
+        drawaccepted(userid, engine, game, simultaneous);
+      } else if (simultaneous) {
+        applySimultaneousMove(userid, pars.move, engine as GameBaseSimultaneous, game);
+      } else {
+        applyMove(userid, pars.move, engine, game, flags);
       }
-      else
-        games.push(g)
-    });
-    if (newRatings === null) {
-      list.push(
-        ddbDocClient.send(new UpdateCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "USER", "sk": player.id },
-          ExpressionAttributeValues: { ":gs": games },
-          UpdateExpression: "set games = :gs",
-        }))
-      );
-    } else {
-      list.push(
-        ddbDocClient.send(new UpdateCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "USER", "sk": player.id },
-          ExpressionAttributeValues: { ":gs": games, ":rs": newRatings[ind] },
-          UpdateExpression: "set games = :gs, ratings = :rs"
-        }))
-      );
-
-      list.push(ddbDocClient.send(new PutCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: {
-          "pk": "RATINGS#" + game.metaGame,
-          "sk": player.id,
-          "id": player.id,
-          "name": player.name,
-          "rating": newRatings[ind][game.metaGame]
-        }
-      })));
-
-      list.push(ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-        ExpressionAttributeNames: { "#g": game.metaGame },
-        ExpressionAttributeValues: {":p": new Set([player.id])},
-        UpdateExpression: "add #g.ratings :p",
-      })));
     }
-  });
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to apply move ${pars.move}`);
+    }
 
-  if (simultaneous)
-    game.partialMove = game.players.map((p: User, i: number) => (p.id === userid ? game.partialMove!.split(',')[i] : '')).join(',');
+    const player = game.players.find(p => p.id === userid);
+    if (!player)
+      throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
+    // deal with draw offers
+    if (pars.draw === "drawoffer") {
+      player.draw = "offered";
+    } else {
+      // if a player just moved, other draw offers are declined
+      game.players.forEach(p => delete p.draw);
+    }
+    const timestamp = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+    const timeUsed = timestamp - lastMoveTime;
+    // console.log("timeUsed", timeUsed);
+    // console.log("player", player);
+    if (player.time! - timeUsed < 0)
+      player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
+    else
+      player.time = player.time! - timeUsed + game.clockInc * 3600000;
+    if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
+    // console.log("players", game.players);
+    const playerIDs = game.players.map((p: { id: any; }) => p.id);
+    // TODO: We are updating players and their games. This should be put in some kind of critical section!
+    const players = await getPlayers(playerIDs);
 
-  list.push(sendSubmittedMoveEmails(game, players, simultaneous, newRatings));
-  await Promise.all(list);
-  return {
+    // this should be all the info we want to show on the "my games" summary page.
+    const playerGame = {
+      "id": game.id,
+      "metaGame": game.metaGame,
+      "players": game.players,
+      "clockHard": game.clockHard,
+      "toMove": game.toMove,
+      "lastMoveTime": timestamp
+    } as Game;
+    const myGame = {
+      "id": game.id,
+      "metaGame": game.metaGame,
+      "players": game.players,
+      "clockHard": game.clockHard,
+      "toMove": game.toMove,
+      "lastMoveTime": timestamp
+    } as Game;
+    const list: Promise<any>[] = [];
+    let newRatings: {[metaGame: string] : Rating}[] | null = null;
+    if ((game.toMove === "" || game.toMove === null)) {
+      newRatings = updateRatings(game, players);
+      myGame.seen = Date.now();
+      if (game.numMoves && game.numMoves > game.numPlayers)
+        playerGame.numMoves = game.numMoves;
+      list.push(addToGameLists("COMPLETEDGAMES", playerGame, timestamp, game.numMoves !== undefined && game.numMoves > game.numPlayers));
+      // delete at old sk
+      list.push(ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk":"GAME",
+            "sk": game.sk
+          }
+        })
+      ));
+      console.log("Scheduled delete and updates to game lists");
+      game.sk = game.metaGame + "#1#" + game.id;
+    }
+    game.lastMoveTime = timestamp;
+    const updateGame = ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: game
+      }));
+    list.push(updateGame);
+    console.log("Scheduled update to game");
+    // Update players
+    players.forEach((player, ind) => {
+      const games: Game[] = [];
+      player.games.forEach(g => {
+        if (g.id === playerGame.id) {
+          if (player.id === userid)
+            games.push(myGame);
+          else
+            games.push(playerGame);
+        }
+        else
+          games.push(g)
+      });
+      if (newRatings === null) {
+        list.push(
+          ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USER", "sk": player.id },
+            ExpressionAttributeValues: { ":gs": games },
+            UpdateExpression: "set games = :gs",
+          }))
+        );
+        console.log(`Scheduled update to player ${player.id}, ${player.name}, with games`, games);
+      } else {
+        list.push(
+          ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USER", "sk": player.id },
+            ExpressionAttributeValues: { ":gs": games, ":rs": newRatings[ind] },
+            UpdateExpression: "set games = :gs, ratings = :rs"
+          }))
+        );
+
+        list.push(ddbDocClient.send(new PutCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: {
+            "pk": "RATINGS#" + game.metaGame,
+            "sk": player.id,
+            "id": player.id,
+            "name": player.name,
+            "rating": newRatings[ind][game.metaGame]
+          }
+        })));
+        console.log(`Scheduled update to player ${player.id} with games and ratings`, games, newRatings[ind][game.metaGame]);
+
+        list.push(ddbDocClient.send(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+          ExpressionAttributeNames: { "#g": game.metaGame },
+          ExpressionAttributeValues: {":p": new Set([player.id])},
+          UpdateExpression: "add #g.ratings :p",
+        })));
+        console.log(`Scheduled update to metagame ratings counts with player ${player.id}`);
+      }
+    });
+
+    if (simultaneous)
+      game.partialMove = game.players.map((p: User, i: number) => (p.id === userid ? game.partialMove!.split(',')[i] : '')).join(',');
+
+    list.push(sendSubmittedMoveEmails(game, players, simultaneous, newRatings));
+    console.log("Scheduled emails");
+    await Promise.all(list);
+    console.log("All updates complete");
+    return {
       statusCode: 200,
       body: JSON.stringify(game),
       headers
     };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError('Unable to process submit move');
+  }
 }
 
 function updateRatings(game: FullGame, players: FullUser[]) {
@@ -2056,7 +2064,7 @@ function drawaccepted(userid: string, engine: GameBase, game: FullGame, simultan
   }
 }
 
-async function timeloss(player: number, gameid: string, timestamp: number) {
+async function timeloss(player: number, gameid: string, metaGame: string, timestamp: number) {
   let data: any;
   try {
     data = await ddbDocClient.send(
@@ -2064,7 +2072,7 @@ async function timeloss(player: number, gameid: string, timestamp: number) {
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
           "pk": "GAME",
-          "sk": gameid
+          "sk": metaGame + "#0#" + gameid
         },
       }));
   }
@@ -2099,13 +2107,28 @@ async function timeloss(player: number, gameid: string, timestamp: number) {
     "lastMoveTime": game.lastMoveTime
   } as Game;
   const work: Promise<any>[] = [];
+  if (game.numMoves && game.numMoves > game.numPlayers)
+    playerGame.numMoves = game.numMoves;
+  work.push(addToGameLists("COMPLETEDGAMES", playerGame, game.lastMoveTime, game.numMoves !== undefined && game.numMoves > game.numPlayers));
+
+  // delete at old sk
+  work.push(ddbDocClient.send(
+    new DeleteCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        "pk":"GAME",
+        "sk": game.sk
+      }
+    })
+  ));
+  console.log("Scheduled delete and updates to game lists");
+  game.sk = game.metaGame + "#1#" + game.id;
+
   work.push(ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: game
     })));
-  if (game.numMoves && game.numMoves > game.numPlayers)
-    work.push(addToGameLists("COMPLETEDGAMES", playerGame, game.lastMoveTime));
-  work.push(removeFromGameLists("CURRENTGAMES", game.metaGame, game.gameStarted, game.id, game.players));
+
   const newRatings = updateRatings(game, players);
 
   // Update players
@@ -2155,7 +2178,7 @@ async function timeloss(player: number, gameid: string, timestamp: number) {
   return Promise.all(work);
 }
 
-function applySimultaneousMove(userid: string, move: string, engine: GameBase, game: FullGame) {
+function applySimultaneousMove(userid: string, move: string, engine: GameBaseSimultaneous, game: FullGame) {
   const partialMove = game.partialMove;
   const moves = partialMove === undefined ? game.players.map(() => '') : partialMove.split(',');
   let cnt = 0;
@@ -2169,6 +2192,11 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBase, g
       moves[i] = move;
       (game.toMove as boolean[])[i] = false;
     }
+    // check if current player is eliminated and insert a blank move
+    // all simultaneous games should accept the character U+0091 as a blank move for eliminated players
+    if (engine.isEliminated(i + 1)) {
+        moves[i] = '\u0091';
+    }
     if (moves[i] !== '')
       cnt++;
   }
@@ -2179,12 +2207,7 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBase, g
     // not a complete "turn" yet, just validate and save the new partial move
     game.partialMove = moves.join(',');
     console.log(game.partialMove);
-    if (game.metaGame === "entropy") // need to fix this...
-      (engine as EntropyGame).move(game.partialMove, true);
-    else if (game.metaGame === "strings")
-      (engine as StringsGame).move(game.partialMove, true);
-    else
-      engine.move(game.partialMove);
+    engine.move(game.partialMove, true);
   }
   else {
     // full move.
@@ -2507,6 +2530,7 @@ async function updateMetaGameRatings(userId: string) {
   }
 }
 
+// Rekey all the games. The sk will now be metaGame#completedbit#gameId
 async function onetimeFix(userId: string) {
   // Make sure people aren't getting clever
   try {
@@ -2526,155 +2550,58 @@ async function onetimeFix(userId: string) {
       };
     }
 
-    // Fix GAME
-    let input: QueryCommandInput = {
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      FilterExpression: "begins_with(#pk, :g) and #sk = :s",
-      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-      ExpressionAttributeValues: { ":g": "GAME#", ":s": "GAME" }
-    }
-    let data = await ddbDocClient.send(new ScanCommand(input));
-    console.log(`Found ${data.Items?.length} games`);
-    if (data.Items !== undefined) {
-      const work: Promise<any>[] = [];
-      data.Items.forEach(item => {
-        const game = item as unknown as FullGame;
-        const {pk, sk, ...game2} = game;
-        work.push(ddbDocClient.send(
-          new PutCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Item: {
-                "pk": "GAME",
-                "sk": game.id,
-                ...game2
-              }
-          })
-        ));
-        work.push(ddbDocClient.send(
-          new DeleteCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": item.pk,
-              "sk": item.sk
+    // Find all games (easy for now!)
+    let last : Record<string, any> | undefined | "first" = "first";
+    let count = 0;
+    while (last !== undefined) {
+      const query : QueryCommandInput = {
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "GAME" },
+        ExpressionAttributeNames: { "#pk": "pk" }
+      }
+      if (last !== "first") {
+        query.ExclusiveStartKey = last;
+      }
+      let data = await ddbDocClient.send(
+        new QueryCommand(query));
+      if (data.Items !== undefined) {
+        console.log(`Got ${data.Items.length} games`);
+        const work: Promise<any>[] = [];
+        data.Items.forEach(item => {
+          const game = item as unknown as FullGame;
+          if (!game.sk.includes("#")) {
+            if (game.toMove === "" || game.toMove === null) {
+              game.sk = game.metaGame + "#1#" + game.id;
+            } else {
+              game.sk = game.metaGame + "#0#" + game.id;
             }
-          })
-        ));
-      });
-      await Promise.all(work);
-      console.log(`Fixed ${data.Items.length} games`);
+            work.push(ddbDocClient.send(
+              new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Item: game
+              })
+            ));
+            work.push(ddbDocClient.send(
+              new DeleteCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                  "pk":"GAME",
+                  "sk": game.id
+                }
+              })
+            ));
+           count++;
+          }
+        });
+        await Promise.all(work);
+        last = data.LastEvaluatedKey;
+      }
     }
-
-    // Fix GAME COMMENTS
-    input = {
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      FilterExpression: "begins_with(#pk, :g) and #sk = :s",
-      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-      ExpressionAttributeValues: { ":g": "GAME#", ":s": "COMMENTS" }
-    }
-    data = await ddbDocClient.send(new ScanCommand(input));
-    if (data.Items !== undefined) {
-      const work: Promise<any>[] = [];
-      data.Items.forEach(comment => {
-        work.push(ddbDocClient.send(
-          new PutCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Item: {
-                "pk": "GAMECOMMENTS",
-                "sk": (comment.pk as unknown as string).substring(5),
-                "comments": comment.comments
-              }
-            })
-        ));
-        work.push(ddbDocClient.send(
-          new DeleteCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": comment.pk,
-              "sk": comment.sk
-            }
-          })
-        ));
-      });
-      await Promise.all(work);
-      console.log(`Fixed ${data.Items.length} game comments`);
-    }
-
-    // Fix USER
-    input = {
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      FilterExpression: "begins_with(#pk, :g) and #sk = :s",
-      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-      ExpressionAttributeValues: { ":g": "USER#", ":s": "USER" }
-    }
-    data = await ddbDocClient.send(new ScanCommand(input));
-    if (data.Items !== undefined) {
-      const work: Promise<any>[] = [];
-      data.Items.forEach(item => {
-        const user = item as unknown as FullUser;
-        const {pk, sk, ...user2} = user;
-        work.push(ddbDocClient.send(
-          new PutCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Item: {
-                "pk": "USER",
-                "sk": user.id,
-                ...user2
-              }
-            })
-        ));
-        work.push(ddbDocClient.send(
-          new DeleteCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": item.pk,
-              "sk": item.sk
-            }
-          })
-        ));
-      });
-      await Promise.all(work);
-      console.log(`Fixed ${data.Items.length} users`);
-    }
-
-    // Fix CHALLENGE
-    input = {
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      FilterExpression: "begins_with(#pk, :c) and #sk = :s",
-      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-      ExpressionAttributeValues: { ":c": "CHALLENGE#", ":s": "CHALLENGE" }
-    }
-    data = await ddbDocClient.send(new ScanCommand(input));
-    if (data.Items !== undefined) {
-      const work: Promise<any>[] = [];
-      data.Items.forEach(item => {
-        const challenge = item as unknown as FullChallenge;
-        const {pk, sk, ...challenge2} = challenge;
-        work.push(ddbDocClient.send(
-          new PutCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Item: {
-                "pk": "CHALLENGE",
-                "sk": challenge.pk?.substring(10),
-                ...challenge2
-              }
-            })
-        ));
-        work.push(ddbDocClient.send(
-          new DeleteCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": item.pk,
-              "sk": item.sk
-            }
-          })
-        ));
-      });
-      await Promise.all(work);
-      console.log(`Fixed ${data.Items.length} challenges`);
-    }
+    console.log(`Fixed ${count} games`);
   } catch (err) {
     logGetItemError(err);
-    return formatReturnError(`Unable to update meta game counts ${userId}`);
+    return formatReturnError('Unable to update games');
   }
 }
 

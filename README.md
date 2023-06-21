@@ -29,4 +29,80 @@ will trigger a "compile" and show you syntax errors without having to deploy and
 After deployment  
 ```curl -H "Content-Type: application/json" -X GET [my lambda location]/dev/query?query=list_games```  
 will return the list of current games if you want a quick sanity check that the deployment succeeded and the DB is reachable.
-  
+
+## DB Schema
+All data is in a single table. The primary key (or the first part of the primary key) is like a SQL table.
+- **Games** Data for a game
+  * pk: GAME
+  * sk: \<gameid\> (a GUID as a string)
+		
+- **Game Comments** Comments for a game	
+  * pk: GAMECOMMENTS
+  * sk: \<gameid\>
+		
+- **Users** User information, including name, id, email, settings, ratings. Also enough info to show Dashboard (so all current games and challenges)
+  * pk: USER
+  * sk: \<userid\>
+		
+- **User list** List of users (for use when challenging someone). Just name, and userid
+  * pk: USERS
+  * sk: \<userid\>	
+- Game Lists
+  - **List of completed games** ALL completed games. Not currently used, but might be nice for a "Recently completed games" page that could give people an idea of what games are currently popular. sk is such that we can sort by date (in case you just want to see the top n)
+  	- pk: COMPLETEDGAMES
+  	- sk: \<timestamp\>#\<gameid\>
+
+  - **List of completed games by metaGame and player** Not used yet. sk is such that we can sort by date (in case you just want to see the top n)
+    - pk: COMPLETEDGAMES#\<metaGame\>#\<userid\>
+    - sk: \<timestamp\>#\<gameid\>
+
+  - **List of completed games by metaGame** Just enough data to show on the completed games page. Full game gets fetched when clicking on a game.
+    - pk: COMPLETEDGAMES#\<metaGame\>
+    - sk: \<timestamp\>#\<gameid\>
+
+  - **List of completed games by player** Note that for a game with n players, there will be n items.
+    - pk: COMPLETEDGAMES#\<userid\>
+    - sk: \<timestamp\>#\<gameid\>
+	
+  - **List of current games by metaGame and player** Not used. sk is such that we can sort by date (in case you just want to see the top n)
+    - pk: CURRENTGAMES#\<metaGame\>#\<userid\>
+    - sk: \<timestamp\>#\<gameid\>
+
+  - **List of current games by metaGame** Just enough data to show on the current games page. Full game gets fetched when clicking on a game.
+    - pk: CURRENTGAMES#\<metaGame\>#\<userid\>
+    - sk: \<timestamp\>#\<gameid\>
+
+  - **List of current games by player** Not used. Completely redundant. This info is in the player record (although not queryable by metaGame). sk is such that we can sort by date (in case you just want to see the top n)
+    - pk: COMPLETEDGAMES#\<metaGame\>
+    - sk: \<timestamp\>#\<gameid\>
+
+- **Exploration** Game tree for a particular game at a particular move entered by a specific user.
+  * pk: GAMEEXPLORATION#\<gameid\>
+  * sk: \<userid\>#\<movenumber\>
+	
+- **Ratings** Ratings by metaGame. For use by the Ratings page.
+  * pk: RATINGS#\<metaGame\>
+  * sk: \<userid\>
+	
+- **Standing challenges** Standing challenges by metaGame	
+  * pk: STANDINGCHALLENGE#\<metaGame\>
+  * sk: \<challengeid\>
+		
+- **Challenges** Details of a challenge. (This is almost certainly overkill, should probably just have left this in the user records, but maybe I'm forgetting something)
+  * pk: CHALLENGE
+  * sk: \<challengeid\>
+
+- **Meta games** Stats for all metaGames
+	* pk: METAGAMES
+  * sh: COUNTS
+			
+We are going to change this so that GAME records will have the following keys
+- pk: GAME
+- sk: \<metaGame\>#\<completedbit\>#\<gameid\>
+This way we can find all current <metaGame> games by looking for a sk that starts with \<metaGame\>#0#. 
+Pros:
+1. This allows us to show e.g. current move number on the current games page (in order to do so with the current schema we would need to update CURRENTGAMES on every move). 
+2. We can get rid of all the CURRENTGAME lists. 
+Cons:
+1. This change means that when querying for a game record we must already know (besides the gameid) what metaGame it is for and whether it is a completed game or not. Fortunately we have that information available.
+		
