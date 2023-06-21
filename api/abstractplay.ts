@@ -318,7 +318,7 @@ async function games(pars: { metaGame: string, type: string; }) {
           ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
         }));
       const gamelist = gamesData.Items as FullGame[];
-      const returnlist = gamelist.map(g => { 
+      const returnlist = gamelist.map(g => {
         return { "id": g.id, "metaGame": g.metaGame, "players": g.players, "toMove": g.toMove, "gameStarted": g.gameStarted,
           "numMoves": JSON.parse(g.state).stack.length - 1 } });
       return {
@@ -2530,8 +2530,79 @@ async function updateMetaGameRatings(userId: string) {
   }
 }
 
-// Rekey all the games. The sk will now be metaGame#completedbit#gameId
 async function onetimeFix(userId: string) {
+  // Make sure people aren't getting clever
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+
+    let last : Record<string, any> | undefined | "first" = "first";
+    let list : Game[] = [];
+    while (last !== undefined) {
+      const query : QueryCommandInput = {
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "CURRENTGAMES" },
+        ExpressionAttributeNames: { "#pk": "pk" }
+      }
+      if (last !== "first") {
+        query.ExclusiveStartKey = last;
+      }
+      let data = await ddbDocClient.send(
+        new QueryCommand(query));
+      if (data.Items !== undefined) {
+        console.log(`Got ${data.Items.length} games`);
+        data.Items.forEach(item => {
+          const game = item as unknown as Game;
+          list.push(game);
+        });
+        last = data.LastEvaluatedKey;
+      }
+    }
+    deleteCurrentGamesByMetaGameAndUser(list);
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError('Unable to delete CURRENTGAMES');
+  }
+}
+
+async function deleteCurrentGamesByMetaGameAndUser(list: Game[]) {
+  let set = new Set<string>();
+  list.forEach(game => {
+    game.players.forEach(player => {
+      set.add(game.metaGame + "#" + player.id);
+    });
+  });
+  console.log(`Found ${set.size} current games+player combinations`);
+  let work: Promise<any>[] = [];
+  set.forEach(key => {
+    work.push(ddbDocClient.send(
+      new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk":"CURRENTGAMES#" + key
+        }
+      })
+    ));
+  });
+  await Promise.all(work);
+}
+
+// Rekey all the games. The sk will now be metaGame#completedbit#gameId
+async function onetimeFixDeleteMe(userId: string) {
   // Make sure people aren't getting clever
   try {
     const user = await ddbDocClient.send(
