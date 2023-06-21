@@ -2588,17 +2588,36 @@ async function deleteCurrentGamesByMetaGameAndUser(list: Game[]) {
   });
   console.log(`Found ${set.size} current games+player combinations`);
   let work: Promise<any>[] = [];
-  set.forEach(key => {
-    work.push(ddbDocClient.send(
-      new DeleteCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk":"CURRENTGAMES#" + key
-        }
-      })
-    ));
-  });
+  set.forEach(key => work.push(deleteCurrentGamesByMetaGameAndUserHelper(key)));
   await Promise.all(work);
+}
+    
+async function deleteCurrentGamesByMetaGameAndUserHelper(key: string) {
+  let work: Promise<any>[] = [];
+  const data = await ddbDocClient.send(
+    new QueryCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      KeyConditionExpression: "#pk = :pk",
+      ExpressionAttributeValues: { ":pk": "CURRENTGAMES#" + key },
+      ExpressionAttributeNames: { "#pk": "pk" }
+      }));
+  if (data.Items === undefined) {
+    console.log(`Found no items for ${key}}`);
+  } else {
+    console.log(`Found ${data.Items.length} items for ${key}}`);
+    data.Items.forEach(item => {      
+      work.push(ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": item.pk,
+            "sk": item.sk
+          }
+        })
+      ));
+    });
+  }
+  return Promise.all(work);
 }
 
 // Rekey all the games. The sk will now be metaGame#completedbit#gameId
