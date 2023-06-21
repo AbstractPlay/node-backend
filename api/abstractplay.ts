@@ -2530,7 +2530,7 @@ async function updateMetaGameRatings(userId: string) {
   }
 }
 
-async function onetimeFixForCURRENTGAMES(userId: string) {
+async function onetimeFix(userId: string) {
   // Make sure people aren't getting clever
   try {
     const user = await ddbDocClient.send(
@@ -2572,10 +2572,12 @@ async function onetimeFixForCURRENTGAMES(userId: string) {
         last = data.LastEvaluatedKey;
       }
     }
-    // await deleteCurrentGamesByMetaGameAndUser(list);
-    // await deleteCurrentGamesByUser(list);
-    // await deleteCurrentGamesByMetaGame(list);
-    await deleteCurrentGames(list);
+    let work: Promise<any>[] = [];
+    work.push(deleteCurrentGamesByMetaGameAndUser(list));
+    work.push(deleteCurrentGamesByUser(list));
+    work.push(deleteCurrentGamesByMetaGame(list));
+    await Promise.all(work);
+    // await deleteCurrentGames(list);
   } catch (err) {
     logGetItemError(err);
     return formatReturnError('Unable to delete CURRENTGAMES');
@@ -2720,9 +2722,6 @@ async function deleteCurrentGames(list: Game[]) {
   return Promise.all(work);
 }
 
-async function onetimeFix(userId: string) {
-}
-
 async function onetimeFixUpdateCompletedGames(userId: string) {
   // Make sure people aren't getting clever
   try {
@@ -2819,81 +2818,6 @@ async function updateCompletedGame(game0: Game) {
   });
 
   return Promise.all(work);
-}
-
-// Rekey all the games. The sk will now be metaGame#completedbit#gameId
-async function onetimeFixDeleteMe(userId: string) {
-  // Make sure people aren't getting clever
-  try {
-    const user = await ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "USER",
-          "sk": userId
-        },
-      }));
-    if (user.Item === undefined || user.Item.admin !== true) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify({}),
-        headers
-      };
-    }
-
-    // Find all games (easy for now!)
-    let last : Record<string, any> | undefined | "first" = "first";
-    let count = 0;
-    while (last !== undefined) {
-      const query : QueryCommandInput = {
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "GAME" },
-        ExpressionAttributeNames: { "#pk": "pk" }
-      }
-      if (last !== "first") {
-        query.ExclusiveStartKey = last;
-      }
-      let data = await ddbDocClient.send(
-        new QueryCommand(query));
-      if (data.Items !== undefined) {
-        console.log(`Got ${data.Items.length} games`);
-        const work: Promise<any>[] = [];
-        data.Items.forEach(item => {
-          const game = item as unknown as FullGame;
-          if (!game.sk.includes("#")) {
-            if (game.toMove === "" || game.toMove === null) {
-              game.sk = game.metaGame + "#1#" + game.id;
-            } else {
-              game.sk = game.metaGame + "#0#" + game.id;
-            }
-            work.push(ddbDocClient.send(
-              new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Item: game
-              })
-            ));
-            work.push(ddbDocClient.send(
-              new DeleteCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                  "pk":"GAME",
-                  "sk": game.id
-                }
-              })
-            ));
-           count++;
-          }
-        });
-        await Promise.all(work);
-        last = data.LastEvaluatedKey;
-      }
-    }
-    console.log(`Fixed ${count} games`);
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError('Unable to update games');
-  }
 }
 
 async function testAsync(userId: string, pars: { N: number; }) {
