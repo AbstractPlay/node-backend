@@ -160,7 +160,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     console.log(`TOTAL UNITS CONSUMED: ${totalUnits}`);
 
     // If not in test mode, send notifications
-    if ( (notifications.length > 0) && (context === undefined) ) {
+    if ( (notifications.length > 0) && ( (context === undefined) || ( !("key1" in context)) ) ) {
         await initi18n("en");
         const work: Promise<any>[] =  [];
 
