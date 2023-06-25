@@ -153,6 +153,7 @@ type FullGame = {
   winner?: number[];
   numMoves?: number;
   rated?: boolean;
+  pieInvoked?: boolean;
 }
 
 type Comment = {
@@ -2587,6 +2588,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
       const reversed = [...game.players].reverse();
       console.log(`Reversed: ${JSON.stringify(reversed)}`);
       game.players = [...reversed];
+      game.pieInvoked = true;
 
       // this should be all the info we want to show on the "my games" summary page.
       const playerGame = {
