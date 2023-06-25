@@ -153,6 +153,7 @@ type FullGame = {
   winner?: number[];
   numMoves?: number;
   rated?: boolean;
+  pieInvoked?: boolean;
 }
 
 type Comment = {
@@ -217,6 +218,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await respondedChallenge(event.cognitoPoolClaims.sub, pars);
     case "submit_move":
       return await submitMove(event.cognitoPoolClaims.sub, pars);
+    case "invoke_pie":
+      return await invokePie(event.cognitoPoolClaims.sub, pars);
     case "submit_comment":
       return await submitComment(event.cognitoPoolClaims.sub, pars);
     case "save_exploration":
@@ -2528,6 +2531,133 @@ async function updateMetaGameRatings(userId: string) {
     logGetItemError(err);
     return formatReturnError(`Unable to update meta game counts ${userId}`);
   }
+}
+
+async function invokePie(userid: string, pars: {id: string, metaGame: string, cbit: number}) {
+    if (pars.cbit !== 0) {
+      return formatReturnError("cbit must be 0");
+    }
+    let data: any;
+    try {
+      data = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "GAME",
+            "sk": pars.metaGame + "#0#" + pars.id
+          },
+        }));
+    }
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    }
+    if (!data.Item)
+      throw new Error(`No game ${pars.id} in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    try {
+      const game = data.Item as FullGame;
+      console.log("got game in invokePie:");
+      console.log(game);
+      const engine = GameFactory(game.metaGame, game.state);
+      if (!engine)
+        throw new Error(`Unknown metaGame ${game.metaGame}`);
+      const flags = gameinfo.get(game.metaGame).flags;
+      if ( (flags === undefined) || (! flags.includes("pie"))) {
+        throw new Error(`Metagame ${pars.metaGame} does not have the "pie" flag. Aborting.`);
+      }
+      const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+
+      const player = game.players.find(p => p.id === userid);
+      if (!player)
+        throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
+
+      const timestamp = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+      const timeUsed = timestamp - lastMoveTime;
+      // console.log("timeUsed", timeUsed);
+      // console.log("player", player);
+      if (player.time! - timeUsed < 0)
+        player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
+      else
+        player.time = player.time! - timeUsed + game.clockInc * 3600000;
+      if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
+      // console.log("players", game.players);
+      const playerIDs = game.players.map((p: { id: any; }) => p.id);
+      // TODO: We are updating players and their games. This should be put in some kind of critical section!
+      const players = await getPlayers(playerIDs);
+      console.log(`Current player list: ${JSON.stringify(game.players)}`);
+      const reversed = [...game.players].reverse();
+      console.log(`Reversed: ${JSON.stringify(reversed)}`);
+      game.players = [...reversed];
+      game.pieInvoked = true;
+
+      // this should be all the info we want to show on the "my games" summary page.
+      const playerGame = {
+        "id": game.id,
+        "metaGame": game.metaGame,
+        // reverse the list of players
+        "players": [...reversed],
+        "clockHard": game.clockHard,
+        "toMove": game.toMove,
+        "lastMoveTime": timestamp
+      } as Game;
+      const myGame = {
+        "id": game.id,
+        "metaGame": game.metaGame,
+        // reverse the list of players
+        "players": [...reversed],
+        "clockHard": game.clockHard,
+        "toMove": game.toMove,
+        "lastMoveTime": timestamp
+      } as Game;
+      const list: Promise<any>[] = [];
+      game.lastMoveTime = timestamp;
+      const updateGame = ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: game
+        }));
+      list.push(updateGame);
+      console.log("Scheduled update to game");
+      // Update players
+      players.forEach((player) => {
+        const games: Game[] = [];
+        player.games.forEach(g => {
+          if (g.id === playerGame.id) {
+            if (player.id === userid)
+              games.push(myGame);
+            else
+              games.push(playerGame);
+          }
+          else
+            games.push(g)
+        });
+        list.push(
+        ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USER", "sk": player.id },
+            ExpressionAttributeValues: { ":gs": games },
+            UpdateExpression: "set games = :gs",
+        }))
+        );
+        console.log(`Scheduled update to player ${player.id}, ${player.name}, with games`, games);
+      });
+
+      // insert a comment into the game log
+      list.push(submitComment("", {id: game.id, comment: "Pie invoked.", moveNumber: 2}));
+
+      list.push(sendSubmittedMoveEmails(game, players, false, []));
+      console.log("Scheduled emails");
+      await Promise.all(list);
+      console.log("All updates complete");
+      return {
+        statusCode: 200,
+        body: JSON.stringify(game),
+        headers
+      };
+    }
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError('Unable to process invoke pie');
+    }
 }
 
 async function onetimeFix(userId: string) {
