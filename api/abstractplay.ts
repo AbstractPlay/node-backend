@@ -2589,7 +2589,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
         "id": game.id,
         "metaGame": game.metaGame,
         // reverse the list of players
-        "players": game.players.reverse(),
+        "players": [...game.players].reverse(),
         "clockHard": game.clockHard,
         "toMove": game.toMove,
         "lastMoveTime": timestamp
@@ -2598,7 +2598,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
         "id": game.id,
         "metaGame": game.metaGame,
         // reverse the list of players
-        "players": game.players.reverse(),
+        "players": [...game.players].reverse(),
         "clockHard": game.clockHard,
         "toMove": game.toMove,
         "lastMoveTime": timestamp
@@ -2652,7 +2652,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
       logGetItemError(error);
       return formatReturnError('Unable to process submit move');
     }
-  }
+}
 
 async function onetimeFix(userId: string) {
 }
