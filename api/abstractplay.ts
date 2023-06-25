@@ -2586,6 +2586,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
       console.log(`Current player list: ${JSON.stringify(game.players)}`);
       const reversed = [...game.players].reverse();
       console.log(`Reversed: ${JSON.stringify(reversed)}`);
+      game.players = [...reversed];
 
       // this should be all the info we want to show on the "my games" summary page.
       const playerGame = {
