@@ -2654,7 +2654,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
     }
     catch (error) {
       logGetItemError(error);
-      return formatReturnError('Unable to process submit move');
+      return formatReturnError('Unable to process invoke pie');
     }
 }
 
