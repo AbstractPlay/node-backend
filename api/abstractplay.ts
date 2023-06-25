@@ -2583,13 +2583,16 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
       const playerIDs = game.players.map((p: { id: any; }) => p.id);
       // TODO: We are updating players and their games. This should be put in some kind of critical section!
       const players = await getPlayers(playerIDs);
+      console.log(`Current player list: ${JSON.stringify(game.players)}`);
+      const reversed = [...game.players].reverse();
+      console.log(`Reversed: ${JSON.stringify(reversed)}`);
 
       // this should be all the info we want to show on the "my games" summary page.
       const playerGame = {
         "id": game.id,
         "metaGame": game.metaGame,
         // reverse the list of players
-        "players": [...game.players].reverse(),
+        "players": [...reversed],
         "clockHard": game.clockHard,
         "toMove": game.toMove,
         "lastMoveTime": timestamp
@@ -2598,7 +2601,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
         "id": game.id,
         "metaGame": game.metaGame,
         // reverse the list of players
-        "players": [...game.players].reverse(),
+        "players": [...reversed],
         "clockHard": game.clockHard,
         "toMove": game.toMove,
         "lastMoveTime": timestamp
