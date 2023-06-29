@@ -2378,25 +2378,28 @@ async function updateMetaGameCounts(userId: string) {
     const games: string[] = [];
     gameinfo.forEach((game) => games.push(game.uid));
     const currentgames = games.map(game => ddbDocClient.send(
-        new QueryCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          KeyConditionExpression: "#pk = :pk",
-          ExpressionAttributeValues: { ":pk": "CURRENTGAMES#" + game },
-          ExpressionAttributeNames: { "#pk": "pk" }
-        })));
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        ExpressionAttributeValues: { ":pk": "GAME", ":sk": game + '#0#' },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        ProjectionExpression: "#pk, #sk"
+      })));
     const completedgames = games.map(game => ddbDocClient.send(
       new QueryCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         KeyConditionExpression: "#pk = :pk",
         ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES#" + game },
-        ExpressionAttributeNames: { "#pk": "pk" }
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        ProjectionExpression: "#pk, #sk"
       })));
     const standingchallenges = games.map(game => ddbDocClient.send(
       new QueryCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         KeyConditionExpression: "#pk = :pk",
         ExpressionAttributeValues: { ":pk": "STANDINGCHALLENGE#" + game },
-        ExpressionAttributeNames: { "#pk": "pk" }
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        ProjectionExpression: "#pk, #sk"
       })));
 
     const metaGamesData = await metaGamesDataWork;
