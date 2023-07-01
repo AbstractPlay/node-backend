@@ -548,6 +548,11 @@ async function toggleStar(userid: string, pars: {metaGame: string}) {
         console.log("Running queued updates");
         await Promise.all(list);
         console.log("Done");
+        return {
+            statusCode: 200,
+            body: JSON.stringify(player.stars),
+            headers
+        };
     } catch (error) {
         logGetItemError(error);
         return formatReturnError(`Unable to toggle star for ${userid}, ${pars.metaGame} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
