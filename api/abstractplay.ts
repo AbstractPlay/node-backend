@@ -826,6 +826,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "language": user.language,
           "games": games,
           "settings": user.settings,
+          "stars": user.stars,
           "challengesIssued": data[0].map(d => d.Item),
           "challengesReceived": data[1].map(d => d.Item),
           "challengesAccepted": data[2].map(d => d.Item),
@@ -842,7 +843,8 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "admin": (user.admin === true),
           "language": user.language,
           "games": games,
-          "settings": user.settings
+          "settings": user.settings,
+          "stars": user.stars,
         }, Set_toJSON),
         headers
       }
