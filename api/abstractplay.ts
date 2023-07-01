@@ -2490,6 +2490,7 @@ async function updateMetaGameCounts(userId: string) {
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             KeyConditionExpression: "#pk = :pk",
             ExpressionAttributeValues: { ":pk": "USER" },
+            ExpressionAttributeNames: { "#pk": "pk" },
             ReturnConsumedCapacity: "INDEXES",
         })
     );
