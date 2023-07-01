@@ -41,6 +41,7 @@ type MetaGameCounts = {
     completedgames: number;
     standingchallenges: number;
     ratings?: Set<string>;
+    stars?: number;
   }
 }
 
@@ -112,6 +113,7 @@ type FullUser = {
   ratings?: {
     [metaGame: string]: Rating
   };
+  stars?: string[];
 }
 
 type Rating = {
@@ -228,6 +230,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await getExploration(event.cognitoPoolClaims.sub, pars);
     case "get_game":
       return await game(event.cognitoPoolClaims.sub, pars);
+    case "toggle_star":
+      return await toggleStar(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
       return await injectState(event.cognitoPoolClaims.sub, pars);
     case "update_game_settings":
@@ -480,6 +484,79 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
     logGetItemError(error);
     return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
+}
+
+async function toggleStar(userid: string, pars: {metaGame: string}) {
+    try {
+        // get player
+        const player = (await getPlayers([userid]))[0];
+        // add or remove metaGame
+        let delta = 0;
+        if (player.stars === undefined) {
+            player.stars = [];
+        }
+        if (! player.stars.includes(pars.metaGame)) {
+            delta = 1;
+            player.stars.push(pars.metaGame);
+        } else {
+            delta = -1;
+            const idx = player.stars.findIndex(m => m === pars.metaGame);
+            player.stars.splice(idx, 1);
+        }
+        // queue player update
+        const list: Promise<any>[] = [];
+        list.push(
+            ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USER", "sk": player.id },
+            ExpressionAttributeValues: { ":ss": player.stars },
+            UpdateExpression: "set stars = :ss",
+            }))
+        );
+        console.log(`Queued update to player ${player.id}, ${player.name}, toggling star for ${pars.metaGame}: ${delta}`);
+
+        /* Don't need to do this. Can just add directly. Assumes the metaCount has been updated before adding a new game, otherwise will throw an error. */
+        // get metagame counts
+        // const data = await ddbDocClient.send(
+        //     new GetCommand({
+        //       TableName: process.env.ABSTRACT_PLAY_TABLE,
+        //       Key: {
+        //         "pk": "METAGAMES", "sk": "COUNTS"
+        //     },
+        // }));
+        // const details = data.Item as MetaGameCounts;
+        // if (! (pars.metaGame in details)) {
+        //     throw new Error(`Could not find a metagame record for '${pars.metaGame}'`);
+        // }
+        // // update count
+        // if (details[pars.metaGame].stars === undefined) {
+        //     details[pars.metaGame].stars = 0;
+        // }
+        // details[pars.metaGame].stars! += delta;
+
+        // queue game update
+        list.push(
+            ddbDocClient.send(new UpdateCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+                ExpressionAttributeNames: { "#g": pars.metaGame },            ExpressionAttributeValues: {":n": delta},
+                UpdateExpression: "add #g.stars :n",
+            }))
+        );
+
+        // run all updates
+        console.log("Running queued updates");
+        await Promise.all(list);
+        console.log("Done");
+        return {
+            statusCode: 200,
+            body: JSON.stringify(player.stars),
+            headers
+        };
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to toggle star for ${userid}, ${pars.metaGame} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    }
 }
 
 async function injectState(userid: string, pars: { id: string; newState: string; metaGame: string;}) {
@@ -754,6 +831,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "language": user.language,
           "games": games,
           "settings": user.settings,
+          "stars": user.stars,
           "challengesIssued": data[0].map(d => d.Item),
           "challengesReceived": data[1].map(d => d.Item),
           "challengesAccepted": data[2].map(d => d.Item),
@@ -770,7 +848,8 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "admin": (user.admin === true),
           "language": user.language,
           "games": games,
-          "settings": user.settings
+          "settings": user.settings,
+          "stars": user.stars,
         }, Set_toJSON),
         headers
       }
@@ -2412,17 +2491,47 @@ async function updateMetaGameCounts(userId: string) {
     const work = await Promise.all([Promise.all(currentgames), Promise.all(completedgames), Promise.all(standingchallenges)]);
     console.log("work", work);
 
+    // process stars
+    const data = await ddbDocClient.send(
+        new QueryCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            KeyConditionExpression: "#pk = :pk",
+            ExpressionAttributeValues: { ":pk": "USER" },
+            ExpressionAttributeNames: { "#pk": "pk" },
+            ReturnConsumedCapacity: "INDEXES",
+        })
+    );
+    if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
+        console.log(`Units consumed by player read: ${data.ConsumedCapacity.CapacityUnits}`);
+    }
+    const players = data?.Items as FullUser[];
+    const starCounts = new Map<string, number>();
+    for (const p of players) {
+        if (p.stars !== undefined) {
+            for (const star of p.stars) {
+                if (starCounts.has(star)) {
+                    const val = starCounts.get(star)!;
+                    starCounts.set(star, val + 1);
+                } else {
+                    starCounts.set(star, 1);
+                }
+            }
+        }
+    }
+
     games.forEach((game, ind) => {
       if (metaGameCounts[game] === undefined) {
         metaGameCounts[game] = {
           "currentgames": work[0][ind].Items ? work[0][ind].Items!.length : 0,
           "completedgames": work[1][ind].Items ? work[1][ind].Items!.length : 0,
-          "standingchallenges": work[2][ind].Items ? work[2][ind].Items!.length : 0
+          "standingchallenges": work[2][ind].Items ? work[2][ind].Items!.length : 0,
+          "stars": starCounts.has(game) ? starCounts.get(game)! : 0,
         };
       } else {
         metaGameCounts[game].currentgames = work[0][ind].Items ? work[0][ind].Items!.length : 0;
         metaGameCounts[game].completedgames = work[1][ind].Items ? work[1][ind].Items!.length : 0;
         metaGameCounts[game].standingchallenges = work[2][ind].Items ? work[2][ind].Items!.length : 0;
+        metaGameCounts[game].stars = starCounts.has(game) ? starCounts.get(game)! : 0;
       }
     });
 
