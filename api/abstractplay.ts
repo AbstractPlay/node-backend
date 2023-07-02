@@ -1773,13 +1773,16 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
     })));
   } else {
     let update = "add #g.currentgames :nm";
-    if (keepgame)
-      update += ", #g.completedgames :n";
+    const eavObj: {[k: string]: number} = {":nm": -1};
+    if (keepgame) {
+        update += ", #g.completedgames :n";
+        eavObj[":n"] = 1
+    }
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": game.metaGame },
-      ExpressionAttributeValues: {":n": 1, ":nm": -1},
+      ExpressionAttributeValues: eavObj,
       UpdateExpression: update
     })));
   }
