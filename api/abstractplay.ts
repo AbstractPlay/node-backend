@@ -1873,10 +1873,10 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "clockHard": game.clockHard,
       "toMove": game.toMove,
       "lastMoveTime": timestamp,
-      "gameStarted": engine.stack[0]._timestamp.getTime(),
+      "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
     } as Game;
     if (engine.gameover) {
-        playerGame.gameEnded = engine.stack[engine.stack.length - 1]._timestamp.getTime();
+        playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
     }
     const myGame = {
       "id": game.id,
@@ -2228,10 +2228,10 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
     "clockHard": game.clockHard,
     "toMove": game.toMove,
     "lastMoveTime": game.lastMoveTime,
-    "gameStarted": engine.stack[0]._timestamp.getTime(),
+    "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
   } as Game;
   if (engine.gameover) {
-      playerGame.gameEnded = engine.stack[engine.stack.length - 1]._timestamp.getTime();
+      playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
   }
   const work: Promise<any>[] = [];
   if (game.numMoves && game.numMoves > game.numPlayers)
