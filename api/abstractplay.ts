@@ -134,6 +134,8 @@ type Game = {
   toMove: string | boolean[];
   seen?: number;
   numMoves?: number;
+  gameStarted?: number;
+  gameEnded?: number;
 }
 
 type FullGame = {
@@ -145,6 +147,7 @@ type FullGame = {
   clockMax: number;
   clockStart: number;
   gameStarted: number;
+  gameEnded?: number;
   lastMoveTime: number;
   metaGame: string;
   numPlayers: number;
@@ -1869,15 +1872,19 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "players": game.players,
       "clockHard": game.clockHard,
       "toMove": game.toMove,
-      "lastMoveTime": timestamp
+      "lastMoveTime": timestamp,
+      "gameStarted": engine.stack[0]._timestamp.getTime(),
     } as Game;
+    if (engine.gameover) {
+        playerGame.gameEnded = engine.stack[engine.stack.length - 1]._timestamp.getTime();
+    }
     const myGame = {
       "id": game.id,
       "metaGame": game.metaGame,
       "players": game.players,
       "clockHard": game.clockHard,
       "toMove": game.toMove,
-      "lastMoveTime": timestamp
+      "lastMoveTime": timestamp,
     } as Game;
     const list: Promise<any>[] = [];
     let newRatings: {[metaGame: string] : Rating}[] | null = null;
@@ -2220,8 +2227,12 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
     "players": game.players,
     "clockHard": game.clockHard,
     "toMove": game.toMove,
-    "lastMoveTime": game.lastMoveTime
+    "lastMoveTime": game.lastMoveTime,
+    "gameStarted": engine.stack[0]._timestamp.getTime(),
   } as Game;
+  if (engine.gameover) {
+      playerGame.gameEnded = engine.stack[engine.stack.length - 1]._timestamp.getTime();
+  }
   const work: Promise<any>[] = [];
   if (game.numMoves && game.numMoves > game.numPlayers)
     playerGame.numMoves = game.numMoves;
