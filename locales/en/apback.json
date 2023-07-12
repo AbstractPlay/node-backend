@@ -8,7 +8,7 @@
     "DearPlayer": "Dear {{player}}",
     "EmailOut": "The AbstractPlay system.",
     "GameOverBody": "Your {{metaGame}} game has ended.",
-    "GameOverLink": "Please visit https://play.abstractplay.com/{{metaGame}}/1/{{gameID}} for more details.",
+    "GameOverLink": "For more details, including a game record you can archive, please visit https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}.",
     "GameOverRating": "Your new rating is {{rating}}.",
     "GameOverResult_win": "You won!",
     "GameOverResult_lose": "You lost.",
