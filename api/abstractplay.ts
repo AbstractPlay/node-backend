@@ -2066,19 +2066,50 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
     const playerIds = game.players.map((p: { id: any; }) => p.id);
     const players = players0.filter((p: { id: any; }) => playerIds.includes(p.id));
     const metaGame = gameinfo.get(game.metaGame).name;
+    const engine = GameFactory(game.metaGame, game.state);
+    if (!engine)
+      throw new Error(`Unknown metaGame ${game.metaGame}`);
+    const scores = [];
+    if (gameinfo.get(game.metaGame).flags.includes("scores")) {
+        for (let p = 1; p <= engine.numplayers; p++) {
+            scores.push(engine.getPlayerScore(p));
+        }
+    }
+
     for (const [ind, player] of players.entries()) {
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameEnd) ) {
                 await changeLanguageForPlayer(player);
-                let body;
-                if (newRatings != null)
-                  body = i18n.t("GameOverWithRatingBody", { metaGame, "rating" : `${Math.round(newRatings[ind][game.metaGame].rating)}`, "interpolation": {"escapeValue": false} });
-                else
-                  body = i18n.t("GameOverBody", { metaGame, "interpolation": {"escapeValue": false} });
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), body);
+                // The Game Over email has a few components:
+                const body = [];
+                //   - Initial line
+                body.push(i18n.t("GameOverBody", {metaGame}));
+                //   - Winner statement
+                let result = "lose";
+                if (engine.winner.length > 1) {
+                    result = "draw";
+                } else if (engine.winner.length === 1) {
+                    const winner = playerIds[engine.winner[0] - 1];
+                    if (winner === player.id) {
+                        result = "win";
+                    }
+                }
+                body.push(i18n.t("GameOverResult", {context: result}));
+                //   - Rating, if applicable
+                if (newRatings != null) {
+                    body.push(i18n.t("GameOverRating", {"rating" : `${Math.round(newRatings[ind][game.metaGame].rating)}`, "interpolation": {"escapeValue": false} }));
+                }
+                //   - Final scores, if applicable
+                if (scores.length > 0) {
+                    body.push(i18n.t("GameOverScores", {scores: scores.join(", ")}))
+                }
+                //   - Direct link to game
+                body.push(i18n.t("GameOverLink", {metaGame: game.metaGame, gameID: game.id}));
+
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), body.join(" "));
                 work.push(sesClient.send(comm));
             } else {
-                console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+                console.log(`Player ${player.name} (${player.id}) has elected to not receive game end notifications.`);
             }
         } else {
             console.log(`No verified email address found for ${player.name} (${player.id})`);

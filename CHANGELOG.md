@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 * "Your Turn" emails are now batched twice a day.
+* "Game End" emails have been expanded with additional information.
 
 ## [1.0.0-beta] - 2023-04-30
 
