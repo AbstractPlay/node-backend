@@ -2444,11 +2444,17 @@ async function submitComment(userid: string, pars: { id: string; metaGame?: stri
     const game = games.find(g => g.id === pars.id);
     if (game !== undefined) {
         game.lastChat = Date.now();
-        await ddbDocClient.send(new PutCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Item: game
-            })
-        );
+        try {
+            console.log(`About to save updated game record: ${JSON.stringify(game)}`);
+            await ddbDocClient.send(new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Item: game
+                })
+            );
+        } catch (err) {
+            logGetItemError(err);
+            return formatReturnError(`Unable to save lastchat for game ${pars.metaGame}#${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+        }
     }
   }
 }
