@@ -2928,13 +2928,17 @@ async function onetimeFix(userId: string) {
         if (! memoGame.has(game.id)) {
             // load and memoize
             let data: any;
+            let cbit = "0";
+            if ( (game.toMove === "") || (game.toMove === undefined) || ( (Array.isArray(game.toMove)) && (game.toMove.length === 0) ) ) {
+                cbit = "1";
+            }
             try {
               data = await ddbDocClient.send(
                 new GetCommand({
                   TableName: process.env.ABSTRACT_PLAY_TABLE,
                   Key: {
                     "pk": "GAME",
-                    "sk": game.id
+                    "sk": `${game.metaGame}#${cbit}#${game.id}`
                   },
                   ReturnConsumedCapacity: "INDEXES",
                 }));
