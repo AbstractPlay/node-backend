@@ -2905,6 +2905,7 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
             const then = new Date();
             then.setDate(now.getDate() + interval);
             game.seen = then.getTime();
+            console.log(`Setting lastSeen for ${game.id} to ${then.getTime()} (${then.toUTCString()}). It is currently ${new Date().toUTCString()}`);
             // save USER rec
             await ddbDocClient.send(new PutCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
