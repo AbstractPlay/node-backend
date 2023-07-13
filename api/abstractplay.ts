@@ -2232,10 +2232,8 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
     "toMove": game.toMove,
     "lastMoveTime": game.lastMoveTime,
     "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
+    "gameEnded": new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime(),
   } as Game;
-  if (engine.gameover) {
-      playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
-  }
   const work: Promise<any>[] = [];
   if (game.numMoves && game.numMoves > game.numPlayers)
     playerGame.numMoves = game.numMoves;
