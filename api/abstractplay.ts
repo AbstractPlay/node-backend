@@ -2423,6 +2423,7 @@ async function submitComment(userid: string, pars: { id: string; metaGame?: stri
   // if game is completed, `metaGame` will be passed
   // find the record for this particular game and update `lastChat`
   if ( ("metaGame" in pars) && (pars.metaGame !== undefined) ) {
+    console.log("This game is closed, so finding all COMPLETEDGAMES records");
     let games: Game[] = [];
     try {
         const data = await ddbDocClient.send(
@@ -2441,6 +2442,8 @@ async function submitComment(userid: string, pars: { id: string; metaGame?: stri
         logGetItemError(err);
         return formatReturnError(`Unable to get game data for game ${pars.metaGame} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
     }
+    console.log(`Found the following games:`);
+    console.log(JSON.stringify(games));
     const game = games.find(g => g.id === pars.id);
     if (game !== undefined) {
         game.lastChat = Date.now();
