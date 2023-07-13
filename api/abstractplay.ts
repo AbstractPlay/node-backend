@@ -2910,8 +2910,18 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
                 Item: user
             }));
+            return {
+                statusCode: 200,
+                body: "",
+                headers
+            };
         }
     }
+    return {
+        statusCode: 406,
+        body: "",
+        headers
+    };
 }
 
 async function onetimeFix(userId: string) {
