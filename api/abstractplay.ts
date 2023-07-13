@@ -134,6 +134,9 @@ type Game = {
   toMove: string | boolean[];
   seen?: number;
   numMoves?: number;
+  gameStarted?: number;
+  gameEnded?: number;
+  lastChat?: number;
 }
 
 type FullGame = {
@@ -145,6 +148,7 @@ type FullGame = {
   clockMax: number;
   clockStart: number;
   gameStarted: number;
+  gameEnded?: number;
   lastMoveTime: number;
   metaGame: string;
   numPlayers: number;
@@ -783,10 +787,10 @@ async function me(claim: PartialClaims, pars: { size: string }) {
     // Check for "recently completed games"
     // As soon as a game is over move it to archive status (game.type = 0).
     // Remove the game from user's games list 48 hours after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
-    // TODO: Put it back in their list if anyone comments.
     for (let i = games.length - 1; i >= 0; i-- ) {
-      if (games[i].toMove === "" || games[i].toMove === null ) {
-        if (games[i].seen !== undefined && Date.now() - (games[i].seen || 0) > 48 * 3600000) {
+      const game = games[i];
+      if (game.toMove === "" || game.toMove === null ) {
+        if ( (game.seen !== undefined) && (Date.now() - (game.seen || 0) > 48 * 3600000) && ((game.lastChat || 0) <= (game.seen || 0)) ) {
           games.splice(i, 1);
         }
       }
@@ -1869,7 +1873,8 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "players": game.players,
       "clockHard": game.clockHard,
       "toMove": game.toMove,
-      "lastMoveTime": timestamp
+      "lastMoveTime": timestamp,
+      "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
     } as Game;
     const myGame = {
       "id": game.id,
@@ -1877,8 +1882,13 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "players": game.players,
       "clockHard": game.clockHard,
       "toMove": game.toMove,
-      "lastMoveTime": timestamp
+      "lastMoveTime": timestamp,
+      "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
     } as Game;
+    if (engine.gameover) {
+        playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
+        myGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
+    }
     const list: Promise<any>[] = [];
     let newRatings: {[metaGame: string] : Rating}[] | null = null;
     if ((game.toMove === "" || game.toMove === null)) {
@@ -2220,7 +2230,9 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
     "players": game.players,
     "clockHard": game.clockHard,
     "toMove": game.toMove,
-    "lastMoveTime": game.lastMoveTime
+    "lastMoveTime": game.lastMoveTime,
+    "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
+    "gameEnded": new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime(),
   } as Game;
   const work: Promise<any>[] = [];
   if (game.numMoves && game.numMoves > game.numPlayers)
@@ -2370,7 +2382,7 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
   console.log("done");
 }
 
-async function submitComment(userid: string, pars: { id: string; comment: string; moveNumber: number; }) {
+async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; comment: string; moveNumber: number; }) {
   let data: any;
   try {
     data = await ddbDocClient.send(
@@ -2406,6 +2418,58 @@ async function submitComment(userid: string, pars: { id: string; comment: string
           "comments": comments
         }
       }));
+  }
+
+  // if game is completed, `players` will be passed
+  // pull each user's record and update `lastChat`
+  if ( ("players" in pars) && (pars.players !== undefined) && (Array.isArray(pars.players)) ) {
+    console.log("This game is closed, so finding all user records");
+    for (const pid of pars.players.map(p => p.id)) {
+        let data: any;
+        let user: FullUser|undefined;
+        try {
+            data = await ddbDocClient.send(
+                new GetCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "USER",
+                    "sk": pid
+                    },
+                })
+            )
+            if (data.Item !== undefined) {
+                user = data.Item as FullUser;
+            }
+        } catch (err) {
+            logGetItemError(err);
+            return formatReturnError(`Unable to get user data for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+        }
+        if (user === undefined) {
+            return formatReturnError(`Unable to get user data for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+        }
+        console.log(`Found the following user data:`);
+        console.log(JSON.stringify(user));
+        const game = user.games.find(g => g.id === pars.id);
+        if (game !== undefined) {
+            game.lastChat = Date.now();
+            // if this is the player who submitted the comment, also update their `lastSeen`
+            // so the chat doesn't get flagged as new
+            if (pid === userid) {
+                game.seen = game.lastChat + 10;
+            }
+            try {
+                console.log(`About to save updated user record: ${JSON.stringify(user)}`);
+                await ddbDocClient.send(new PutCommand({
+                    TableName: process.env.ABSTRACT_PLAY_TABLE,
+                      Item: user
+                    })
+                );
+            } catch (err) {
+                logGetItemError(err);
+                return formatReturnError(`Unable to save lastchat for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+            }
+        }
+    }
   }
 }
 
@@ -2807,6 +2871,161 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
 }
 
 async function onetimeFix(userId: string) {
+  // Make sure people aren't getting clever
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      })
+    );
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+  } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to onetimeFix ${userId}`);
+  }
+  let totalUnits = 0;
+  // get all USER records
+  let data: any;
+  let users: FullUser[] = [];
+  try {
+    data = await ddbDocClient.send(
+        new QueryCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            KeyConditionExpression: "#pk = :pk",
+            ExpressionAttributeValues: { ":pk": "USER" },
+            ExpressionAttributeNames: { "#pk": "pk" },
+            ReturnConsumedCapacity: "INDEXES",
+        })
+      )
+      if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
+        totalUnits += data.ConsumedCapacity.CapacityUnits;
+      } else {
+        console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+      }
+      users = data?.Items as FullUser[];
+      console.log(JSON.stringify(users, null, 2));
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to onetimeFix get all users`);
+  }
+  const memoGame = new Map<string, FullGame>();
+  const memoComments = new Map<string, Comment[]>();
+  // foreach USER
+  for (const user of users) {
+    // foreach game in USER.games
+    for (const game of user.games) {
+        // check if game is already loaded
+        if (! memoGame.has(game.id)) {
+            // load and memoize
+            let data: any;
+            let cbit = "0";
+            if ( (game.toMove === "") || (game.toMove === undefined) || ( (Array.isArray(game.toMove)) && (game.toMove.length === 0) ) ) {
+                cbit = "1";
+            }
+            try {
+              data = await ddbDocClient.send(
+                new GetCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "GAME",
+                    "sk": `${game.metaGame}#${cbit}#${game.id}`
+                  },
+                  ReturnConsumedCapacity: "INDEXES",
+                }));
+            } catch (error) {
+              logGetItemError(error);
+              return formatReturnError(`Unable to get comments for game ${game.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+            }
+            if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
+                totalUnits += data.ConsumedCapacity.CapacityUnits;
+            } else {
+              console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+            }
+            const gameData = data.Item as FullGame;
+            console.log("got game in onetimeFix:");
+            console.log(gameData);
+            memoGame.set(game.id, gameData);
+        }
+        const gameObj = memoGame.get(game.id);
+        // check if comments already loaded
+        if (! memoComments.has(game.id)) {
+            // load and memoize
+            let data: any;
+            try {
+              data = await ddbDocClient.send(
+                new GetCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "GAMECOMMENTS",
+                    "sk": game.id
+                  },
+                  ReturnConsumedCapacity: "INDEXES",
+                }));
+            } catch (error) {
+              logGetItemError(error);
+              return formatReturnError(`Unable to get comments for game ${game.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+            }
+            if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
+                totalUnits += data.ConsumedCapacity.CapacityUnits;
+            } else {
+              console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+            }
+            const commentsData = data.Item;
+            console.log("got comments in onetimeFix:");
+            console.log(commentsData);
+            let comments: Comment[];
+            if (commentsData === undefined)
+              comments= []
+            else
+              comments = commentsData.comments;
+            memoComments.set(game.id, comments);
+        }
+        const comments = memoComments.get(game.id)!;
+        // if for some reason the game ID doesn't match a record, skip entirely
+        if (gameObj === undefined) {
+            console.log(`Could not find a full game record for the following: ${JSON.stringify(game)}`);
+            continue;
+        }
+        let engine: GameBase|GameBaseSimultaneous|undefined;
+        try {
+            engine = GameFactory(gameObj.metaGame, gameObj.state);
+        } catch (err) {
+            console.log(`An error occured when trying to hydrate the following game: ${JSON.stringify(game)}`);
+            console.log(err);
+            continue;
+        }
+        if (engine === undefined) {
+            return formatReturnError(`Unable to get engine for ${gameObj.metaGame} with state ${gameObj.state}`);
+        }
+        // add gameStarted
+        game.gameStarted = new Date(engine.stack[0]._timestamp).getTime();
+        // add gameEnded, if applicable
+        if (engine.gameover) {
+            game.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
+        }
+        // add lastChat, if applicable
+        if (comments.length > 0) {
+            game.lastChat = Math.max(...comments.map(c => c.timeStamp));
+        }
+    }
+    console.log(`About to save updated USER record: ${JSON.stringify(user)}`);
+    // save updated USER record
+    await ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: user
+    }));
+  }
+  console.log(`All done! Total units used: ${totalUnits}`);
 }
 
 async function testAsync(userId: string, pars: { N: number; }) {
