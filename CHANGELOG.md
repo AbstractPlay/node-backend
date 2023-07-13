@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * When submitting a move for games with the flag `automove`, the backend will now check how many moves the next player has available. As long as there is only one choice, the backend will automatically make that move.
 * Added generalized Pie rule function. When invoked, the list of players in the GAME record and each USER record gets reversed.
 * (experimental) Added star functionality, including in updateMetaGameCounts.
-* Adding `gameStarted` and `gameEnded` timestamps to `Game` interface.
+* Adding `gameStarted`, `gameEnded`, and `lastChat` timestamps to `Game` interface.
 
 ### Changed
 
