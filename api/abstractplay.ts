@@ -1876,9 +1876,6 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "lastMoveTime": timestamp,
       "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
     } as Game;
-    if (engine.gameover) {
-        playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
-    }
     const myGame = {
       "id": game.id,
       "metaGame": game.metaGame,
@@ -1886,7 +1883,12 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "clockHard": game.clockHard,
       "toMove": game.toMove,
       "lastMoveTime": timestamp,
+      "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
     } as Game;
+    if (engine.gameover) {
+        playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
+        myGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
+    }
     const list: Promise<any>[] = [];
     let newRatings: {[metaGame: string] : Rating}[] | null = null;
     if ((game.toMove === "" || game.toMove === null)) {
