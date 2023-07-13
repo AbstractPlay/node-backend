@@ -226,6 +226,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await submitMove(event.cognitoPoolClaims.sub, pars);
     case "invoke_pie":
       return await invokePie(event.cognitoPoolClaims.sub, pars);
+    case "set_lastSeen":
+      return await setLastSeen(event.cognitoPoolClaims.sub, pars);
     case "submit_comment":
       return await submitComment(event.cognitoPoolClaims.sub, pars);
     case "save_exploration":
@@ -2867,6 +2869,48 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
     catch (error) {
       logGetItemError(error);
       return formatReturnError('Unable to process invoke pie');
+    }
+}
+
+async function setLastSeen(userId: string, pars: {gameId: string; interval?: number;}) {
+    // get USER rec
+    let user: FullUser|undefined;
+    try {
+        const data = await ddbDocClient.send(
+          new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "USER",
+              "sk": userId
+            },
+          })
+        );
+        if (data.Item !== undefined) {
+            user = data.Item as FullUser;
+        }
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to onetimeFix ${userId}`);
+    }
+    if (user !== undefined) {
+        // find matching game
+        const game = user.games.find(g => g.id === pars.gameId);
+        if (game !== undefined) {
+            // set lastSeen to "now" + interval
+            let interval = 50;
+            if (pars.interval !== undefined) {
+                interval = pars.interval;
+            }
+            const now = new Date();
+            const then = new Date();
+            then.setDate(now.getDate() + interval);
+            game.seen = then.getTime();
+            // save USER rec
+            await ddbDocClient.send(new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Item: user
+            }));
+        }
     }
 }
 
