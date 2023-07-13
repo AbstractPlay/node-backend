@@ -2924,6 +2924,11 @@ async function onetimeFix(userId: string) {
   for (const user of users) {
     // foreach game in USER.games
     for (const game of user.games) {
+        // if this user's first game already has `gameStarted`, then assume it's already done and move on
+        // this is because it times out in production
+        if ("gameStarted" in game) {
+            break;
+        }
         // check if game is already loaded
         if (! memoGame.has(game.id)) {
             // load and memoize
