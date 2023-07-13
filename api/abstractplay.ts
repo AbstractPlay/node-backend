@@ -2893,7 +2893,123 @@ async function onetimeFix(userId: string) {
         logGetItemError(err);
         return formatReturnError(`Unable to onetimeFix ${userId}`);
   }
-  // load all completed games
+  let totalUnits = 0;
+  // get all USER records
+  let data: any;
+  let users: FullUser[] = [];
+  try {
+    data = await ddbDocClient.send(
+        new QueryCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            KeyConditionExpression: "#pk = :pk",
+            ExpressionAttributeValues: { ":pk": "USER" },
+            ExpressionAttributeNames: { "#pk": "pk" },
+            ReturnConsumedCapacity: "INDEXES",
+        })
+      )
+      if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
+        totalUnits += data.ConsumedCapacity.CapacityUnits;
+      } else {
+        console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+      }
+      users = data?.Items as FullUser[];
+      console.log(JSON.stringify(users, null, 2));
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to onetimeFix get all users`);
+  }
+  const memoGame = new Map<string, FullGame>();
+  const memoComments = new Map<string, Comment[]>();
+  // foreach USER
+  for (const user of users) {
+    // foreach game in USER.games
+    for (const game of user.games) {
+        // check if game is already loaded
+        if (! memoGame.has(game.id)) {
+            // load and memoize
+            let data: any;
+            try {
+              data = await ddbDocClient.send(
+                new GetCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "GAME",
+                    "sk": game.id
+                  },
+                  ReturnConsumedCapacity: "INDEXES",
+                }));
+            } catch (error) {
+              logGetItemError(error);
+              return formatReturnError(`Unable to get comments for game ${game.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+            }
+            if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
+                totalUnits += data.ConsumedCapacity.CapacityUnits;
+            } else {
+              console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+            }
+            const gameData = data.Item as FullGame;
+            console.log("got game in onetimeFix:");
+            console.log(gameData);
+            memoGame.set(game.id, gameData);
+        }
+        const gameObj = memoGame.get(game.id)!;
+        // check if comments already loaded
+        if (! memoComments.has(game.id)) {
+            // load and memoize
+            let data: any;
+            try {
+              data = await ddbDocClient.send(
+                new GetCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "GAMECOMMENTS",
+                    "sk": game.id
+                  },
+                  ReturnConsumedCapacity: "INDEXES",
+                }));
+            } catch (error) {
+              logGetItemError(error);
+              return formatReturnError(`Unable to get comments for game ${game.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+            }
+            if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
+                totalUnits += data.ConsumedCapacity.CapacityUnits;
+            } else {
+              console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+            }
+            const commentsData = data.Item;
+            console.log("got comments in onetimeFix:");
+            console.log(commentsData);
+            let comments: Comment[];
+            if (commentsData === undefined)
+              comments= []
+            else
+              comments = commentsData.comments;
+            memoComments.set(game.id, comments);
+        }
+        const comments = memoComments.get(game.id)!;
+        const engine = GameFactory(gameObj.metaGame, gameObj.state);
+        if (engine === undefined) {
+            return formatReturnError(`Unable to get engine for ${gameObj.metaGame} with state ${gameObj.state}`);
+        }
+        // add gameStarted
+        game.gameStarted = new Date(engine.stack[0]._timestamp).getTime();
+        // add gameEnded, if applicable
+        if (engine.gameover) {
+            game.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
+        }
+        // add lastChat, if applicable
+        if (comments.length > 0) {
+            game.lastChat = Math.max(...comments.map(c => c.timeStamp));
+        }
+    }
+    console.log(`About to save updated USER record: ${JSON.stringify(user)}`);
+    // save updated USER record
+    await ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: user
+    }));
+  }
+  console.log(`All done! Total units used: ${totalUnits}`);
 }
 
 async function testAsync(userId: string, pars: { N: number; }) {
