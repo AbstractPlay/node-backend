@@ -2382,7 +2382,7 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
   console.log("done");
 }
 
-async function submitComment(userid: string, pars: { id: string; metaGame: string; comment: string; moveNumber: number; }) {
+async function submitComment(userid: string, pars: { id: string; metaGame?: string; comment: string; moveNumber: number; }) {
   let data: any;
   try {
     data = await ddbDocClient.send(
