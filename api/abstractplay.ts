@@ -2384,7 +2384,7 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
   console.log("done");
 }
 
-async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; comment: string; moveNumber: number; }) {
+async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; metaGame?: string, comment: string; moveNumber: number; }) {
   let data: any;
   try {
     data = await ddbDocClient.send(
@@ -2424,7 +2424,7 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
 
   // if game is completed, `players` will be passed
   // pull each user's record and update `lastChat`
-  if ( ("players" in pars) && (pars.players !== undefined) && (Array.isArray(pars.players)) ) {
+  if ( ("players" in pars) && (pars.players !== undefined) && (Array.isArray(pars.players)) && ("metaGame" in pars) && (pars.metaGame !== undefined) ) {
     console.log("This game is closed, so finding all user records");
     for (const pid of pars.players.map(p => p.id)) {
         let data: any;
@@ -2459,17 +2459,55 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
             if (pid === userid) {
                 game.seen = game.lastChat + 10;
             }
+        } else {
+            console.log(`User ${user.name} does not have a game entry for ${pars.id}`);
+            // pull the corresponding full game record
+            let data: any;
+            let fullGame: FullGame|undefined;
             try {
-                console.log(`About to save updated user record: ${JSON.stringify(user)}`);
-                await ddbDocClient.send(new PutCommand({
-                    TableName: process.env.ABSTRACT_PLAY_TABLE,
-                      Item: user
+                data = await ddbDocClient.send(
+                    new GetCommand({
+                      TableName: process.env.ABSTRACT_PLAY_TABLE,
+                      Key: {
+                        "pk": "GAME",
+                        "sk": `${pars.metaGame}#1#${pars.id}`
+                        },
                     })
-                );
+                )
+                if (data.Item !== undefined) {
+                    fullGame = data.Item as FullGame;
+                }
             } catch (err) {
                 logGetItemError(err);
-                return formatReturnError(`Unable to save lastchat for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+                return formatReturnError(`Unable to get full game record for ${pars.metaGame}, id ${pars.id}, from table ${process.env.ABSTRACT_PLAY_TABLE}`);
             }
+            if (fullGame === undefined) {
+                return formatReturnError(`Unable to get full game record for ${pars.metaGame}, id ${pars.id}, from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+            }
+            // push a new `Game` object
+            user.games.push({
+                id: pars.id,
+                metaGame: pars.metaGame,
+                players: [...fullGame.players],
+                lastMoveTime: fullGame.lastMoveTime,
+                clockHard: fullGame.clockHard,
+                toMove: fullGame.toMove,
+                numMoves: fullGame.numMoves,
+                gameStarted: fullGame.gameStarted,
+                gameEnded: fullGame.gameEnded,
+                lastChat: new Date().getTime(),
+            });
+        }
+        try {
+            console.log(`About to save updated user record: ${JSON.stringify(user)}`);
+            await ddbDocClient.send(new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Item: user
+                })
+            );
+        } catch (err) {
+            logGetItemError(err);
+            return formatReturnError(`Unable to save lastchat for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
         }
     }
   }
