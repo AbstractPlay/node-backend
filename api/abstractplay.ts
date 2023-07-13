@@ -2452,6 +2452,11 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
         const game = user.games.find(g => g.id === pars.id);
         if (game !== undefined) {
             game.lastChat = Date.now();
+            // if this is the player who submitted the comment, also update their `lastSeen`
+            // so the chat doesn't get flagged as new
+            if (pid === userid) {
+                game.seen = game.lastChat - 10;
+            }
             try {
                 console.log(`About to save updated user record: ${JSON.stringify(user)}`);
                 await ddbDocClient.send(new PutCommand({
