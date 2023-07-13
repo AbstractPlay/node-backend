@@ -2897,7 +2897,7 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
         const game = user.games.find(g => g.id === pars.gameId);
         if (game !== undefined) {
             // set lastSeen to "now" + interval
-            let interval = 2.25;
+            let interval = 3;
             if (pars.interval !== undefined) {
                 interval = pars.interval;
             }
@@ -2906,6 +2906,8 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
             then.setDate(now.getDate() - interval);
             game.seen = then.getTime();
             console.log(`Setting lastSeen for ${game.id} to ${then.getTime()} (${then.toUTCString()}). It is currently ${new Date().toUTCString()}`);
+            // you need to set `lastChat` as well or chats near the end of the game will be flagged
+            game.lastChat = then.getTime();
             // save USER rec
             await ddbDocClient.send(new PutCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
