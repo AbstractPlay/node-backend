@@ -2485,6 +2485,10 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
                 return formatReturnError(`Unable to get full game record for ${pars.metaGame}, id ${pars.id}, from table ${process.env.ABSTRACT_PLAY_TABLE}`);
             }
             // push a new `Game` object
+            const engine = GameFactory(pars.metaGame, fullGame.state);
+            if (engine === undefined) {
+                return formatReturnError(`Unable to hydrate state for ${pars.metaGame}: ${fullGame.state}`);
+            }
             user.games.push({
                 id: pars.id,
                 metaGame: pars.metaGame,
@@ -2492,9 +2496,9 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
                 lastMoveTime: fullGame.lastMoveTime,
                 clockHard: fullGame.clockHard,
                 toMove: fullGame.toMove,
-                numMoves: fullGame.numMoves,
-                gameStarted: fullGame.gameStarted,
-                gameEnded: fullGame.gameEnded,
+                numMoves: engine.stack.length - 1,
+                gameStarted: new Date(engine.stack[0]._timestamp).getTime(),
+                gameEnded: new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime(),
                 lastChat: new Date().getTime(),
             });
         }
