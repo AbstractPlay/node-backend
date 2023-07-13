@@ -226,6 +226,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await submitMove(event.cognitoPoolClaims.sub, pars);
     case "invoke_pie":
       return await invokePie(event.cognitoPoolClaims.sub, pars);
+    case "set_lastSeen":
+      return await setLastSeen(event.cognitoPoolClaims.sub, pars);
     case "submit_comment":
       return await submitComment(event.cognitoPoolClaims.sub, pars);
     case "save_exploration":
@@ -2382,7 +2384,7 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
   console.log("done");
 }
 
-async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; comment: string; moveNumber: number; }) {
+async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; metaGame?: string, comment: string; moveNumber: number; }) {
   let data: any;
   try {
     data = await ddbDocClient.send(
@@ -2422,7 +2424,7 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
 
   // if game is completed, `players` will be passed
   // pull each user's record and update `lastChat`
-  if ( ("players" in pars) && (pars.players !== undefined) && (Array.isArray(pars.players)) ) {
+  if ( ("players" in pars) && (pars.players !== undefined) && (Array.isArray(pars.players)) && ("metaGame" in pars) && (pars.metaGame !== undefined) ) {
     console.log("This game is closed, so finding all user records");
     for (const pid of pars.players.map(p => p.id)) {
         let data: any;
@@ -2457,17 +2459,59 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
             if (pid === userid) {
                 game.seen = game.lastChat + 10;
             }
+        } else {
+            console.log(`User ${user.name} does not have a game entry for ${pars.id}`);
+            // pull the corresponding full game record
+            let data: any;
+            let fullGame: FullGame|undefined;
             try {
-                console.log(`About to save updated user record: ${JSON.stringify(user)}`);
-                await ddbDocClient.send(new PutCommand({
-                    TableName: process.env.ABSTRACT_PLAY_TABLE,
-                      Item: user
+                data = await ddbDocClient.send(
+                    new GetCommand({
+                      TableName: process.env.ABSTRACT_PLAY_TABLE,
+                      Key: {
+                        "pk": "GAME",
+                        "sk": `${pars.metaGame}#1#${pars.id}`
+                        },
                     })
-                );
+                )
+                if (data.Item !== undefined) {
+                    fullGame = data.Item as FullGame;
+                }
             } catch (err) {
                 logGetItemError(err);
-                return formatReturnError(`Unable to save lastchat for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+                return formatReturnError(`Unable to get full game record for ${pars.metaGame}, id ${pars.id}, from table ${process.env.ABSTRACT_PLAY_TABLE}`);
             }
+            if (fullGame === undefined) {
+                return formatReturnError(`Unable to get full game record for ${pars.metaGame}, id ${pars.id}, from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+            }
+            // push a new `Game` object
+            const engine = GameFactory(pars.metaGame, fullGame.state);
+            if (engine === undefined) {
+                return formatReturnError(`Unable to hydrate state for ${pars.metaGame}: ${fullGame.state}`);
+            }
+            user.games.push({
+                id: pars.id,
+                metaGame: pars.metaGame,
+                players: [...fullGame.players],
+                lastMoveTime: fullGame.lastMoveTime,
+                clockHard: fullGame.clockHard,
+                toMove: fullGame.toMove,
+                numMoves: engine.stack.length - 1,
+                gameStarted: new Date(engine.stack[0]._timestamp).getTime(),
+                gameEnded: new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime(),
+                lastChat: new Date().getTime(),
+            });
+        }
+        try {
+            console.log(`About to save updated user record: ${JSON.stringify(user)}`);
+            await ddbDocClient.send(new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Item: user
+                })
+            );
+        } catch (err) {
+            logGetItemError(err);
+            return formatReturnError(`Unable to save lastchat for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
         }
     }
   }
@@ -2870,6 +2914,61 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
     }
 }
 
+async function setLastSeen(userId: string, pars: {gameId: string; interval?: number;}) {
+    // get USER rec
+    let user: FullUser|undefined;
+    try {
+        const data = await ddbDocClient.send(
+          new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "USER",
+              "sk": userId
+            },
+          })
+        );
+        if (data.Item !== undefined) {
+            user = data.Item as FullUser;
+        }
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to onetimeFix ${userId}`);
+    }
+    if (user !== undefined) {
+        // find matching game
+        const game = user.games.find(g => g.id === pars.gameId);
+        if (game !== undefined) {
+            // set lastSeen to "now" + interval
+            let interval = 3;
+            if (pars.interval !== undefined) {
+                interval = pars.interval;
+            }
+            const now = new Date();
+            const then = new Date();
+            then.setDate(now.getDate() - interval);
+            game.seen = then.getTime();
+            console.log(`Setting lastSeen for ${game.id} to ${then.getTime()} (${then.toUTCString()}). It is currently ${new Date().toUTCString()}`);
+            // you need to set `lastChat` as well or chats near the end of the game will be flagged
+            game.lastChat = then.getTime();
+            // save USER rec
+            await ddbDocClient.send(new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Item: user
+            }));
+            return {
+                statusCode: 200,
+                body: "",
+                headers
+            };
+        }
+    }
+    return {
+        statusCode: 406,
+        body: "",
+        headers
+    };
+}
+
 async function onetimeFix(userId: string) {
   // Make sure people aren't getting clever
   try {
@@ -2924,11 +3023,6 @@ async function onetimeFix(userId: string) {
 //   for (const user of users) {
 //     // foreach game in USER.games
 //     for (const game of user.games) {
-//         // if this user's first game already has `gameStarted`, then assume it's already done and move on
-//         // this is because it times out in production
-//         if ("gameStarted" in game) {
-//             break;
-//         }
 //         // check if game is already loaded
 //         if (! memoGame.has(game.id)) {
 //             // load and memoize
