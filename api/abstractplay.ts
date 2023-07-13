@@ -2431,8 +2431,6 @@ async function submitComment(userid: string, pars: { id: string; metaGame?: stri
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               KeyConditionExpression: "#pk = :pk",
               ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES#" + pars.metaGame },
-              ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-              ProjectionExpression: "#pk, #sk"
             })
         );
         if (data.Items !== undefined) {
