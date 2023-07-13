@@ -2903,7 +2903,7 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
             }
             const now = new Date();
             const then = new Date();
-            then.setDate(now.getDate() + interval);
+            then.setDate(now.getDate() - interval);
             game.seen = then.getTime();
             console.log(`Setting lastSeen for ${game.id} to ${then.getTime()} (${then.toUTCString()}). It is currently ${new Date().toUTCString()}`);
             // save USER rec
