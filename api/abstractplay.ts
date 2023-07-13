@@ -2455,7 +2455,7 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
             // if this is the player who submitted the comment, also update their `lastSeen`
             // so the chat doesn't get flagged as new
             if (pid === userid) {
-                game.seen = game.lastChat - 10;
+                game.seen = game.lastChat + 10;
             }
             try {
                 console.log(`About to save updated user record: ${JSON.stringify(user)}`);
