@@ -2996,7 +2996,14 @@ async function onetimeFix(userId: string) {
             console.log(`Could not find a full game record for the following: ${JSON.stringify(game)}`);
             continue;
         }
-        const engine = GameFactory(gameObj.metaGame, gameObj.state);
+        let engine: GameBase|GameBaseSimultaneous|undefined;
+        try {
+            engine = GameFactory(gameObj.metaGame, gameObj.state);
+        } catch (err) {
+            console.log(`An error occured when trying to hydrate the following game: ${JSON.stringify(game)}`);
+            console.log(err);
+            continue;
+        }
         if (engine === undefined) {
             return formatReturnError(`Unable to get engine for ${gameObj.metaGame} with state ${gameObj.state}`);
         }
