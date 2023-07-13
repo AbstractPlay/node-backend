@@ -2382,7 +2382,7 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
   console.log("done");
 }
 
-async function submitComment(userid: string, pars: { id: string; metaGame?: string; comment: string; moveNumber: number; }) {
+async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; comment: string; moveNumber: number; }) {
   let data: any;
   try {
     data = await ddbDocClient.send(
@@ -2420,42 +2420,49 @@ async function submitComment(userid: string, pars: { id: string; metaGame?: stri
       }));
   }
 
-  // if game is completed, `metaGame` will be passed
-  // find the record for this particular game and update `lastChat`
-  if ( ("metaGame" in pars) && (pars.metaGame !== undefined) ) {
-    console.log("This game is closed, so finding all COMPLETEDGAMES records");
-    let games: Game[] = [];
-    try {
-        const data = await ddbDocClient.send(
-            new QueryCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-              KeyConditionExpression: "#pk = :pk",
-              ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES#" + pars.metaGame },
-              ExpressionAttributeNames: { "#pk": "pk" },
-            })
-        );
-        if (data.Items !== undefined) {
-            games = data.Items as Game[];
-        }
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`Unable to get game data for game ${pars.metaGame} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-    }
-    console.log(`Found the following games:`);
-    console.log(JSON.stringify(games));
-    const game = games.find(g => g.id === pars.id);
-    if (game !== undefined) {
-        game.lastChat = Date.now();
+  // if game is completed, `players` will be passed
+  // pull each user's record and update `lastChat`
+  if ( ("players" in pars) && (pars.players !== undefined) && (Array.isArray(pars.players)) ) {
+    console.log("This game is closed, so finding all user records");
+    for (const pid of pars.players.map(p => p.id)) {
+        let data: any;
+        let user: FullUser|undefined;
         try {
-            console.log(`About to save updated game record: ${JSON.stringify(game)}`);
-            await ddbDocClient.send(new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Item: game
+            data = await ddbDocClient.send(
+                new GetCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "USER",
+                    "sk": pid
+                    },
                 })
-            );
+            )
+            if (data.Item !== undefined) {
+                user = data.Item as FullUser;
+            }
         } catch (err) {
             logGetItemError(err);
-            return formatReturnError(`Unable to save lastchat for game ${pars.metaGame}#${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+            return formatReturnError(`Unable to get user data for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+        }
+        if (user === undefined) {
+            return formatReturnError(`Unable to get user data for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+        }
+        console.log(`Found the following user data:`);
+        console.log(JSON.stringify(user));
+        const game = user.games.find(g => g.id === pars.id);
+        if (game !== undefined) {
+            game.lastChat = Date.now();
+            try {
+                console.log(`About to save updated user record: ${JSON.stringify(user)}`);
+                await ddbDocClient.send(new PutCommand({
+                    TableName: process.env.ABSTRACT_PLAY_TABLE,
+                      Item: user
+                    })
+                );
+            } catch (err) {
+                logGetItemError(err);
+                return formatReturnError(`Unable to save lastchat for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+            }
         }
     }
   }
@@ -2859,6 +2866,29 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
 }
 
 async function onetimeFix(userId: string) {
+  // Make sure people aren't getting clever
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      })
+    );
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+  } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to onetimeFix ${userId}`);
+  }
+  // load all completed games
 }
 
 async function testAsync(userId: string, pars: { N: number; }) {
