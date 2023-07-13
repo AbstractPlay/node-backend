@@ -2952,7 +2952,7 @@ async function onetimeFix(userId: string) {
             console.log(gameData);
             memoGame.set(game.id, gameData);
         }
-        const gameObj = memoGame.get(game.id)!;
+        const gameObj = memoGame.get(game.id);
         // check if comments already loaded
         if (! memoComments.has(game.id)) {
             // load and memoize
@@ -2987,6 +2987,11 @@ async function onetimeFix(userId: string) {
             memoComments.set(game.id, comments);
         }
         const comments = memoComments.get(game.id)!;
+        // if for some reason the game ID doesn't match a record, skip entirely
+        if (gameObj === undefined) {
+            console.log(`Could not find a full game record for the following: ${JSON.stringify(game)}`);
+            continue;
+        }
         const engine = GameFactory(gameObj.metaGame, gameObj.state);
         if (engine === undefined) {
             return formatReturnError(`Unable to get engine for ${gameObj.metaGame} with state ${gameObj.state}`);
