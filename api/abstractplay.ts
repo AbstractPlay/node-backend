@@ -136,6 +136,7 @@ type Game = {
   numMoves?: number;
   gameStarted?: number;
   gameEnded?: number;
+  lastChat?: number;
 }
 
 type FullGame = {
@@ -786,10 +787,10 @@ async function me(claim: PartialClaims, pars: { size: string }) {
     // Check for "recently completed games"
     // As soon as a game is over move it to archive status (game.type = 0).
     // Remove the game from user's games list 48 hours after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
-    // TODO: Put it back in their list if anyone comments.
     for (let i = games.length - 1; i >= 0; i-- ) {
-      if (games[i].toMove === "" || games[i].toMove === null ) {
-        if (games[i].seen !== undefined && Date.now() - (games[i].seen || 0) > 48 * 3600000) {
+      const game = games[i];
+      if (game.toMove === "" || game.toMove === null ) {
+        if ( (game.seen !== undefined) && (Date.now() - (game.seen || 0) > 48 * 3600000) && ((game.lastChat || 0) <= (game.seen || 0)) ) {
           games.splice(i, 1);
         }
       }
@@ -2381,7 +2382,7 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
   console.log("done");
 }
 
-async function submitComment(userid: string, pars: { id: string; comment: string; moveNumber: number; }) {
+async function submitComment(userid: string, pars: { id: string; metaGame: string; comment: string; moveNumber: number; }) {
   let data: any;
   try {
     data = await ddbDocClient.send(
@@ -2417,6 +2418,38 @@ async function submitComment(userid: string, pars: { id: string; comment: string
           "comments": comments
         }
       }));
+  }
+
+  // if game is completed, `metaGame` will be passed
+  // find the record for this particular game and update `lastChat`
+  if ( ("metaGame" in pars) && (pars.metaGame !== undefined) ) {
+    let games: Game[] = [];
+    try {
+        const data = await ddbDocClient.send(
+            new QueryCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              KeyConditionExpression: "#pk = :pk",
+              ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES#" + pars.metaGame },
+              ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+              ProjectionExpression: "#pk, #sk"
+            })
+        );
+        if (data.Items !== undefined) {
+            games = data.Items as Game[];
+        }
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to get game data for game ${pars.metaGame} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    }
+    const game = games.find(g => g.id === pars.id);
+    if (game !== undefined) {
+        game.lastChat = Date.now();
+        await ddbDocClient.send(new PutCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Item: game
+            })
+        );
+    }
   }
 }
 
