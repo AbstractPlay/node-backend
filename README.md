@@ -34,8 +34,8 @@ will return the list of current games if you want a quick sanity check that the 
 All data is in a single table. The primary key (or the first part of the primary key) is like a SQL table.
 - **Games** Data for a game
   * pk: GAME
-  * sk: \<gameid\> (a GUID as a string)
-		
+  * sk: \<metaGame\>#\<completedbit\>#\<gameid\>
+	
 - **Game Comments** Comments for a game	
   * pk: GAMECOMMENTS
   * sk: \<gameid\>
@@ -47,6 +47,7 @@ All data is in a single table. The primary key (or the first part of the primary
 - **User list** List of users (for use when challenging someone). Just name, and userid
   * pk: USERS
   * sk: \<userid\>	
+
 - Game Lists
   - **List of completed games** ALL completed games. Not currently used, but might be nice for a "Recently completed games" page that could give people an idea of what games are currently popular. sk is such that we can sort by date (in case you just want to see the top n)
   	- pk: COMPLETEDGAMES
@@ -64,18 +65,6 @@ All data is in a single table. The primary key (or the first part of the primary
     - pk: COMPLETEDGAMES#\<userid\>
     - sk: \<timestamp\>#\<gameid\>
 	
-  - **List of current games by metaGame and player** Not used. sk is such that we can sort by date (in case you just want to see the top n)
-    - pk: CURRENTGAMES#\<metaGame\>#\<userid\>
-    - sk: \<timestamp\>#\<gameid\>
-
-  - **List of current games by metaGame** Just enough data to show on the current games page. Full game gets fetched when clicking on a game.
-    - pk: CURRENTGAMES#\<metaGame\>#\<userid\>
-    - sk: \<timestamp\>#\<gameid\>
-
-  - **List of current games by player** Not used. Completely redundant. This info is in the player record (although not queryable by metaGame). sk is such that we can sort by date (in case you just want to see the top n)
-    - pk: COMPLETEDGAMES#\<metaGame\>
-    - sk: \<timestamp\>#\<gameid\>
-
 - **Exploration** Game tree for a particular game at a particular move entered by a specific user.
   * pk: GAMEEXPLORATION#\<gameid\>
   * sk: \<userid\>#\<movenumber\>
@@ -96,13 +85,3 @@ All data is in a single table. The primary key (or the first part of the primary
 	* pk: METAGAMES
   * sh: COUNTS
 			
-We are going to change this so that GAME records will have the following keys
-- pk: GAME
-- sk: \<metaGame\>#\<completedbit\>#\<gameid\>
-This way we can find all current <metaGame> games by looking for a sk that starts with \<metaGame\>#0#. 
-Pros:
-1. This allows us to show e.g. current move number on the current games page (in order to do so with the current schema we would need to update CURRENTGAMES on every move). 
-2. We can get rid of all the CURRENTGAME lists. 
-Cons:
-1. This change means that when querying for a game record we must already know (besides the gameid) what metaGame it is for and whether it is a completed game or not. Fortunately we have that information available.
-		

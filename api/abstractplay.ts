@@ -828,6 +828,8 @@ async function me(claim: PartialClaims, pars: { size: string }) {
     })));
     await Promise.all(work);
     if (data) {
+      // Still trying to get to the bottom of games shown as "to move" when already moved.
+      console.log(`me returning for ${user.name}, id ${user.id} with games`, games);
       return {
         statusCode: 200,
         body: JSON.stringify({
