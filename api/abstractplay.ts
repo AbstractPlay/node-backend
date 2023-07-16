@@ -869,13 +869,15 @@ async function me(claim: PartialClaims, pars: { size: string }) {
 }
 
 async function updateUserEMail(claim: PartialClaims) {
-    if (claim.email_verified) {
+    if (claim.email_verified && claim.email && claim.email.trim().length > 0) {
         return ddbDocClient.send(new UpdateCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: { "pk": "USER", "sk": claim.sub },
             ExpressionAttributeValues: { ":e": claim.email },
             UpdateExpression: "set email = :e",
           }));
+    } else {
+      console.log(`updateUserEMail: claim.email_verified is ${claim.email_verified} and claim.email is ${claim.email}`);
     }
 }
 
@@ -1050,6 +1052,10 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
   let email = "";
   if (claim.email_verified) {
     email = claim.email;
+  }
+  if (!email || email.trim() === "") {
+    logGetItemError(`No email for user ${pars.name}, id ${userid} in newProfile`);
+    return formatReturnError(`No email for user ${pars.name}, id ${userid} in newProfile`);
   }
   const data = {
       "pk": "USER",
