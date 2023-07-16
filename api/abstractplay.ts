@@ -1054,9 +1054,9 @@ async function getChallenges(challengeIds: string[]) {
 
 async function newProfile(claim: PartialClaims, pars: { name: any; consent: any; anonymous: any; country: any; tagline: any; }) {
   const userid = claim.sub;
-  let email = "";
-  if (claim.email_verified) {
-    email = claim.email;
+  const email = claim.email;
+  if (! claim.email_verified) {
+    console.log("How?! email_verified is FALSE");
   }
   if (!email || email.trim() === "") {
     logGetItemError(`No email for user ${pars.name}, id ${userid} in newProfile`);
