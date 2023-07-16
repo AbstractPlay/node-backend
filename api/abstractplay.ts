@@ -730,6 +730,10 @@ async function updateUserSettings(userid: string, pars: { settings: any; }) {
 async function me(claim: PartialClaims, pars: { size: string }) {
   const userId = claim.sub;
   const email = claim.email;
+  if (!claim.email_verified || !claim.email || claim.email.trim().length === 0) {
+    console.log(`How!?: claim.email_verified is ${claim.email_verified} and claim.email is ${claim.email}`);
+  }
+
   const fixGames = false;
   try {
     const userData = await ddbDocClient.send(
@@ -870,12 +874,13 @@ async function me(claim: PartialClaims, pars: { size: string }) {
 
 async function updateUserEMail(claim: PartialClaims) {
     if (claim.email_verified && claim.email && claim.email.trim().length > 0) {
-        return ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USER", "sk": claim.sub },
-            ExpressionAttributeValues: { ":e": claim.email },
-            UpdateExpression: "set email = :e",
-          }));
+      console.log(`updateUserEMail: updating email to ${claim.email}`);
+      return ddbDocClient.send(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { "pk": "USER", "sk": claim.sub },
+          ExpressionAttributeValues: { ":e": claim.email },
+          UpdateExpression: "set email = :e",
+        }));
     } else {
       console.log(`updateUserEMail: claim.email_verified is ${claim.email_verified} and claim.email is ${claim.email}`);
     }
