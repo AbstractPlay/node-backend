@@ -730,8 +730,8 @@ async function updateUserSettings(userid: string, pars: { settings: any; }) {
 async function me(claim: PartialClaims, pars: { size: string }) {
   const userId = claim.sub;
   const email = claim.email;
-  if (!claim.email_verified || !claim.email || claim.email.trim().length === 0) {
-    console.log(`How!?: claim.email_verified is ${claim.email_verified} and claim.email is ${claim.email}`);
+  if (!claim.email || claim.email.trim().length === 0) {
+    console.log(`How!?: claim.email is ${claim.email}`);
   }
 
   const fixGames = false;
@@ -873,7 +873,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
 }
 
 async function updateUserEMail(claim: PartialClaims) {
-    if (claim.email_verified && claim.email && claim.email.trim().length > 0) {
+    if (claim.email && claim.email.trim().length > 0) {
       console.log(`updateUserEMail: updating email to ${claim.email}`);
       return ddbDocClient.send(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -882,7 +882,7 @@ async function updateUserEMail(claim: PartialClaims) {
           UpdateExpression: "set email = :e",
         }));
     } else {
-      console.log(`updateUserEMail: claim.email_verified is ${claim.email_verified} and claim.email is ${claim.email}`);
+      console.log(`updateUserEMail: claim.email is ${claim.email}`);
     }
 }
 
@@ -1054,10 +1054,7 @@ async function getChallenges(challengeIds: string[]) {
 
 async function newProfile(claim: PartialClaims, pars: { name: any; consent: any; anonymous: any; country: any; tagline: any; }) {
   const userid = claim.sub;
-  let email = "";
-  if (claim.email_verified) {
-    email = claim.email;
-  }
+  const email = claim.email;
   if (!email || email.trim() === "") {
     logGetItemError(`No email for user ${pars.name}, id ${userid} in newProfile`);
     return formatReturnError(`No email for user ${pars.name}, id ${userid} in newProfile`);
