@@ -2398,6 +2398,10 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
 }
 
 async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; metaGame?: string, comment: string; moveNumber: number; }) {
+  // reject empty comments
+  if ( (pars.comment.length === 0) || (/^\s*$/.test(pars.comment) ) ) {
+    return formatReturnError(`Refusing to accept blank comment.`);
+  }
   let data: any;
   try {
     data = await ddbDocClient.send(
