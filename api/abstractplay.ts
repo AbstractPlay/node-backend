@@ -752,9 +752,9 @@ async function me(claim: PartialClaims, pars: { size: string }) {
       };
     }
     const user = userData.Item as FullUser;
-    const work: Promise<any>[] = [];
+    
     if (user.email !== email)
-      work.push(updateUserEMail(claim));
+      await updateUserEMail(claim);
     let games = user.games;
     if (games == undefined)
       games= [];
@@ -764,7 +764,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
       console.log("games after", games);
     }
     // Check for out-of-time games
-    games.forEach((game: Game) => {
+    games.forEach(async (game: Game) => {
       if (game.clockHard && game.toMove !== '') {
         if (Array.isArray(game.toMove)) {
           let minTime = 0;
@@ -778,14 +778,15 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           if (minIndex !== -1) {
             game.toMove = '';
             game.lastMoveTime = game.lastMoveTime + game.players[minIndex].time!;
-            work.push(timeloss(minIndex, game.id, game.metaGame, game.lastMoveTime));
+            await timeloss(minIndex, game.id, game.metaGame, game.lastMoveTime);
           }
         } else {
           const toMove = parseInt(game.toMove);
           if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
             game.lastMoveTime = game.lastMoveTime + game.players[toMove].time!;
             game.toMove = '';
-            work.push(timeloss(toMove, game.id, game.metaGame, game.lastMoveTime));
+            // DON'T parallelize this!
+            await timeloss(toMove, game.id, game.metaGame, game.lastMoveTime);
           }
         }
       }
@@ -824,13 +825,12 @@ async function me(claim: PartialClaims, pars: { size: string }) {
       data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges]);
     }
     // Update last seen date for user
-    work.push(ddbDocClient.send(new UpdateCommand({
+    await ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userId },
       ExpressionAttributeValues: { ":dt": Date.now(), ":gs": games },
       UpdateExpression: "set lastSeen = :dt, games = :gs"
-    })));
-    await Promise.all(work);
+    }));
     if (data) {
       // Still trying to get to the bottom of games shown as "to move" when already moved.
       console.log(`me returning for ${user.name}, id ${user.id} with games`, games);
@@ -2216,10 +2216,10 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
   }
   catch (error) {
     logGetItemError(error);
-    throw new Error(`Unable to get game ${gameid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    throw new Error(`Unable to get game ${metaGame}, ${gameid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
   if (!data.Item)
-    throw new Error(`No game ${gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    throw new Error(`No game ${metaGame}, ${gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
 
   const game = data.Item as FullGame;
   const engine = GameFactory(game.metaGame, game.state);
@@ -2395,6 +2395,10 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
 }
 
 async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; metaGame?: string, comment: string; moveNumber: number; }) {
+  // reject empty comments
+  if ( (pars.comment.length === 0) || (/^\s*$/.test(pars.comment) ) ) {
+    return formatReturnError(`Refusing to accept blank comment.`);
+  }
   let data: any;
   try {
     data = await ddbDocClient.send(
