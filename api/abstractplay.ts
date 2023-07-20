@@ -903,8 +903,8 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
     return ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userId },
-      ExpressionAttributeValues: { ":gs": games },
-      UpdateExpression: "set gamesUpdate = 1, games = :gs"
+      ExpressionAttributeValues: { ":val": 1, ":gs": games },
+      UpdateExpression: "set gamesUpdate = :val, games = :gs"
     }));
   } else {
     console.log(`updateUserGames: optimistically updating games for ${userId}`);
