@@ -753,7 +753,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
       };
     }
     const user = userData.Item as FullUser;
-    
+
     if (user.email !== email)
       await updateUserEMail(claim);
     let games = user.games;
@@ -1657,13 +1657,15 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       whoseTurn = playerIDs.map(() => true);
     }
     const variants = challenge.variants;
+    console.log(`Variants in the challenge object: ${JSON.stringify(variants)}`);
     let engine;
     if (info.playercounts.length > 1)
-      engine = GameFactory(challenge.metaGame, challenge.numPlayers, undefined, variants);
+      engine = GameFactory(challenge.metaGame, challenge.numPlayers, variants);
     else
       engine = GameFactory(challenge.metaGame, undefined, variants);
     if (!engine)
       throw new Error(`Unknown metaGame ${challenge.metaGame}`);
+    console.log(`Variants in the game engine: ${JSON.stringify(engine.variants)}`);
     const state = engine.serialize();
     const now = Date.now();
     const gamePlayers = playersFull.map(p => { return {"id": p.id, "name": p.name, "time": challenge.clockStart * 3600000 }}) as User[];
@@ -2460,6 +2462,10 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
 }
 
 async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; metaGame?: string, comment: string; moveNumber: number; }) {
+  // reject empty comments
+  if ( (pars.comment.length === 0) || (/^\s*$/.test(pars.comment) ) ) {
+    return formatReturnError(`Refusing to accept blank comment.`);
+  }
   let data: any;
   try {
     data = await ddbDocClient.send(
