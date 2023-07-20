@@ -2029,7 +2029,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: { "pk": "USER", "sk": player.id },
             ExpressionAttributeValues: { ":rs": newRatings[ind] },
-            UpdateExpression: "ratings = :rs"
+            UpdateExpression: "set ratings = :rs"
           }))
         );
 
@@ -2359,7 +2359,7 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "USER", "sk": player.id },
         ExpressionAttributeValues: { ":rs": newRatings[ind] },
-        UpdateExpression: "ratings = :rs"
+        UpdateExpression: "set ratings = :rs"
       })));
 
       work.push(ddbDocClient.send(new PutCommand({
