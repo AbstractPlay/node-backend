@@ -2,7 +2,7 @@
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, QueryCommandInput, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
 // import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
@@ -59,6 +59,7 @@ type FullChallenge = {
   metaGame: string;
   numPlayers: number;
   standing?: boolean;
+  duration?: number;
   seating: string;
   variants: string;
   challenger: User;
@@ -320,7 +321,6 @@ async function challengeDetails(pars: { id: string; }) {
 async function games(pars: { metaGame: string, type: string; }) {
   const game = pars.metaGame;
   console.log(game);
-  let type2: string;
   if (pars.type === "current") {
     try {
       const gamesData = await ddbDocClient.send(
@@ -1122,6 +1122,7 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
         "metaGame": challenge.metaGame,
         "numPlayers": challenge.numPlayers,
         "standing": challenge.standing,
+        "duration": challenge.duration,
         "seating": challenge.seating,
         "variants": challenge.variants,
         "challenger": challenge.challenger,
@@ -1190,6 +1191,7 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
         "metaGame": challenge.metaGame,
         "numPlayers": challenge.numPlayers,
         "standing": challenge.standing,
+        "duration": challenge.duration,
         "seating": challenge.seating,
         "variants": challenge.variants,
         "challenger": challenge.challenger,
@@ -1241,7 +1243,7 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
             const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { "challenger": challengerName, metaGame, "interpolation": {"escapeValue": false} }));
             work.push(sesClient.send(comm));
         } else {
-            console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+            console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
         }
     } else {
         console.log(`No verified email address found for ${player.name} (${player.id})`);
@@ -1434,6 +1436,29 @@ async function removeChallenge(challengeId: string, metaGame: string, standing: 
 // Remove the challenge either because the game has started, or someone withrew: either challenger revoked the challenge or someone withdrew an acceptance, or didn't accept the challenge.
 async function removeAChallenge(challenge: { [x: string]: any; challenger?: any; id?: any; challengees?: any; numPlayers?: any; metaGame?: any; players?: any; }, standing: any, revoked: boolean, started: boolean, quitter: string) {
   const list: Promise<any>[] = [];
+
+  // determine if a standing challenge has expired
+  let expired = false;
+  if (standing) {
+    if ( ("duration" in challenge) && (typeof challenge.duration === "number") && (challenge.duration > 0) ) {
+        if (challenge.duration === 1) {
+            expired = true;
+        } else {
+            list.push(
+                ddbDocClient.send(
+                    new UpdateCommand({
+                        TableName: process.env.ABSTRACT_PLAY_TABLE,
+                        Key: {"pk": "STANDINGCHALLENGE#" + challenge.metaGame, "sk": challenge.id},
+                        ExpressionAttributeValues: {":d": challenge.duration - 1},
+                        ExpressionAttributeNames: {"#d": "duration"},
+                        UpdateExpression: "set #d = :d"
+                    })
+                )
+            );
+        }
+    }
+  }
+
   if (!standing) {
     // Remove from challenger
     const updateChallenger = ddbDocClient.send(new UpdateCommand({
@@ -1459,6 +1484,7 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
   } else if (
       revoked
       || challenge.numPlayers > 2 // Had to duplicate the standing challenge when someone accepted but there were still spots left. Remove the duplicated standing challenge
+      || expired
       ) {
     // Remove from challenger
     console.log(`removing duplicated challenge ${standing ? challenge.metaGame + '#' + challenge.id : challenge.id} from challenger ${challenge.challenger.id}`);
@@ -1506,6 +1532,7 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
   } else if (
     revoked
     || challenge.numPlayers > 2 // Had to duplicate the standing challenge when someone accepted but there were still spots left. Remove the duplicated standing challenge
+    || expired
   ) {
     list.push(
       ddbDocClient.send(
