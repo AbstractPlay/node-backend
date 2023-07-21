@@ -218,6 +218,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await newSetting(event.cognitoPoolClaims.sub, pars);
     case "new_profile":
       return await newProfile(event.cognitoPoolClaims, pars);
+    case "save_push":
+      return await savePush(event.cognitoPoolClaims.sub, pars);
     case "new_challenge":
       return await newChallenge(event.cognitoPoolClaims.sub, pars);
     case "challenge_revoke":
@@ -893,7 +895,7 @@ async function updateUserEMail(claim: PartialClaims) {
 
 // Make sure we "lock" games while updating. We are often updating multiple games at once.
 async function updateUserGames(userId: string, gamesUpdate: undefined | number, gameIDsChanged: string[], games: Game[]) {
-  if (gameIDsChanged.length === 0) { 
+  if (gameIDsChanged.length === 0) {
     return;
   }
   const gameIDsCloned = gameIDsChanged.slice();
@@ -1186,6 +1188,29 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
     logGetItemError(err);
     return formatReturnError(`Unable to store user profile for user ${pars.name}`);
   }
+}
+
+async function savePush(userid: string, payload: any) {
+    try {
+        await ddbDocClient.send(new PutCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Item: {
+                "pk": "PUSH",
+                "sk": userid,
+                "payload": payload,
+              }
+        }));
+    } catch (error) {
+        logGetItemError(error);
+        throw new Error("savePush: Failed to save push notification credentials");
+    }
+    return {
+        statusCode: 200,
+        body: JSON.stringify({
+          message: `Successfully saved push notifications credentials for ${userid}`,
+        }),
+        headers
+    };
 }
 
 async function newChallenge(userid: string, challenge: FullChallenge) {
