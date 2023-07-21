@@ -769,7 +769,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
     // Check for "recently completed games"
     // As soon as a game is over move it to archive status (game.type = 0).
     // Remove the game from user's games list 48 hours after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
-    let removedGameIDs: string[] = [];
+    const removedGameIDs: string[] = [];
     for (let i = games.length - 1; i >= 0; i-- ) {
       const game = games[i];
       if (game.toMove === "" || game.toMove === null ) {
@@ -935,8 +935,8 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
             }));
           const user = userData.Item as FullUser;
           const dbGames = user.games;
-          let gamesUpdate = user.gamesUpdate;
-          let newgames: Game[] = [];
+          const gamesUpdate = user.gamesUpdate;
+          const newgames: Game[] = [];
           for (const game of dbGames) {
             if (gameIDsCloned.includes(game.id)) {
               const newgame = games.find(g => g.id === game.id);
@@ -1190,14 +1190,15 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
   }
 }
 
-async function savePush(userid: string, payload: any) {
+async function savePush(userid: string, pars: { payload: any }) {
     try {
+        console.log(`Attempting to save push notification credentials for user ${userid}:\n${JSON.stringify(pars.payload)}`);
         await ddbDocClient.send(new PutCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
               Item: {
                 "pk": "PUSH",
                 "sk": userid,
-                "payload": payload,
+                "payload": pars.payload,
               }
         }));
     } catch (error) {
