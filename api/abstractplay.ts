@@ -172,6 +172,12 @@ type Comment = {
   timeStamp: number;
 }
 
+type PushCredentials = {
+    pk: string;
+    sk: string;
+    payload: any;
+}
+
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
   const pars = event.queryStringParameters;
@@ -3287,7 +3293,7 @@ async function testPush(userId: string) {
         return formatReturnError(`Unable to testPush ${userId}`);
   }
 
-  let subscription: any|undefined;
+  let subscription: PushCredentials|undefined;
   try {
     const push = await ddbDocClient.send(
         new GetCommand({
@@ -3296,15 +3302,16 @@ async function testPush(userId: string) {
             "pk": "PUSH",
             "sk": userId
           },
-        }));
-      if (push.Item === undefined) {
-        subscription = push.Item;
-      }
+        })
+    );
+    if (push.Item !== undefined) {
+        subscription = push.Item as PushCredentials;
+    }
   } catch (err) {
     logGetItemError(err);
     return formatReturnError(`Unable to fetch push credentials for ${userId}`);
   }
-  console.log(`Subscription: ${JSON.stringify(subscription)}`);
+  console.log(`Subscription: ${JSON.stringify(subscription?.payload)}`);
 
   if(subscription !== undefined) {
     try {
@@ -3313,7 +3320,7 @@ async function testPush(userId: string) {
             process.env.VAPID_PUBLIC_KEY as string,
             process.env.VAPID_PRIVATE_KEY as string,
         );
-        const result = await webpush.sendNotification(subscription, JSON.stringify({title: "Testing, 1...2...3...", body: "This is a test of the push notification system."}));
+        const result = await webpush.sendNotification(subscription.payload, JSON.stringify({title: "Testing, 1...2...3...", body: "This is a test of the push notification system."}));
         console.log(`Result of webpush:`);
         console.log(result);
     } catch (err) {
