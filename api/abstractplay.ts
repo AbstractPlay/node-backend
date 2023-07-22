@@ -2270,7 +2270,7 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
           topic: "yourturn",
           title: i18n.t("PUSH.titles.yourturn"),
           body: i18n.t("YourMoveBody", { metaGame, "interpolation": {"escapeValue": false} }),
-          url: `/move/${game.metaGame}/1/${game.id}`,
+          url: `/move/${game.metaGame}/0/${game.id}`,
       }));
     }
   } else {
