@@ -755,7 +755,6 @@ async function me(claim: PartialClaims, pars: { size: string }) {
       };
     }
     const user = userData.Item as FullUser;
-
     if (user.email !== email)
       await updateUserEMail(claim);
     let games = user.games;
@@ -769,7 +768,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
     // Check for "recently completed games"
     // As soon as a game is over move it to archive status (game.type = 0).
     // Remove the game from user's games list 48 hours after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
-    const removedGameIDs: string[] = [];
+    let removedGameIDs: string[] = [];
     for (let i = games.length - 1; i >= 0; i-- ) {
       const game = games[i];
       if (game.toMove === "" || game.toMove === null ) {
@@ -935,8 +934,8 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
             }));
           const user = userData.Item as FullUser;
           const dbGames = user.games;
-          const gamesUpdate = user.gamesUpdate;
-          const newgames: Game[] = [];
+          let gamesUpdate = user.gamesUpdate;
+          let newgames: Game[] = [];
           for (const game of dbGames) {
             if (gameIDsCloned.includes(game.id)) {
               const newgame = games.find(g => g.id === game.id);
