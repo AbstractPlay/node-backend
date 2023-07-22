@@ -7,7 +7,7 @@ import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCo
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import webpush from "web-push";
+import webpush, { RequestOptions } from "web-push";
 import i18n from 'i18next';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
@@ -176,6 +176,14 @@ type PushCredentials = {
     pk: string;
     sk: string;
     payload: any;
+}
+
+type PushOptions = {
+    userId: string;
+    title: string;
+    body: string;
+    topic: "yourturn"|"ended"|"started"|"challenges"|"test";
+    url?: string; //relative url of target page, if appropriate
 }
 
 module.exports.query = async (event: { queryStringParameters: any; }) => {
@@ -2711,6 +2719,50 @@ async function getExploration(userid: string, pars: { game: string; move: number
   };
 }
 
+async function sendPush(opts: PushOptions) {
+    console.log(`Sending push: ${JSON.stringify(opts)}`);
+    const {userId, body, title, topic, url} = opts;
+    let subscription: PushCredentials|undefined;
+    try {
+      const push = await ddbDocClient.send(
+          new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "PUSH",
+              "sk": userId
+            },
+          })
+      );
+      if (push.Item !== undefined) {
+          subscription = push.Item as PushCredentials;
+      }
+    } catch (err) {
+      logGetItemError(err);
+      return formatReturnError(`Unable to fetch push credentials for ${userId}`);
+    }
+
+    if(subscription !== undefined) {
+      try {
+          const options: RequestOptions = {
+            vapidDetails: {
+              subject: 'https://play.abstractplay.com',
+              publicKey: process.env.VAPID_PUBLIC_KEY as string,
+              privateKey: process.env.VAPID_PRIVATE_KEY as string,
+            },
+            // @ts-ignore
+            topic,
+          };
+          const payload = {title, body, url, topic};
+          const result = await webpush.sendNotification(subscription.payload, JSON.stringify(payload), options);
+          console.log(`Result of webpush:`);
+          console.log(result);
+      } catch (err) {
+          logGetItemError(err);
+          return formatReturnError(`Unable to send push notification: ${err}`);
+      }
+    }
+}
+
 async function updateMetaGameCounts(userId: string) {
   // Make sure people aren't getting clever
   try {
@@ -3293,42 +3345,13 @@ async function testPush(userId: string) {
         return formatReturnError(`Unable to testPush ${userId}`);
   }
 
-  let subscription: PushCredentials|undefined;
-  try {
-    const push = await ddbDocClient.send(
-        new GetCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "PUSH",
-            "sk": userId
-          },
-        })
-    );
-    if (push.Item !== undefined) {
-        subscription = push.Item as PushCredentials;
-    }
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to fetch push credentials for ${userId}`);
-  }
-  console.log(`Subscription: ${JSON.stringify(subscription?.payload)}`);
-
-  if(subscription !== undefined) {
-    try {
-        webpush.setVapidDetails(
-            'mailto:support@abstractplay.com',
-            process.env.VAPID_PUBLIC_KEY as string,
-            process.env.VAPID_PRIVATE_KEY as string,
-        );
-        const result = await webpush.sendNotification(subscription.payload, JSON.stringify({title: "Testing, 1...2...3...", body: "This is a test of the push notification system."}));
-        console.log(`Result of webpush:`);
-        console.log(result);
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`Unable to send push notification: ${err}`);
-    }
-  }
-  console.log("testPush complete");
+  await sendPush({
+    userId,
+    title: "Test",
+    body: "Testing 1...2...3...",
+    topic: "test",
+    url: "/about",
+  });
 }
 
 async function testAsync(userId: string, pars: { N: number; }) {
