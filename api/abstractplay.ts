@@ -1361,13 +1361,21 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
   const work: Promise<any>[] = [];
   for (const player of players) {
     if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
+        await changeLanguageForPlayer(player);
         if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-            await changeLanguageForPlayer(player);
             const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { "challenger": challengerName, metaGame, "interpolation": {"escapeValue": false} }));
             work.push(sesClient.send(comm));
         } else {
             console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
         }
+        // push notifications are sent no matter what
+        work.push(sendPush({
+            userId: player.id,
+            topic: "challenges",
+            title: i18n.t("PUSH.titles.challenged"),
+            body: i18n.t("ChallengeBody", { "challenger": challengerName, metaGame, "interpolation": {"escapeValue": false} }),
+            url: "/",
+        }));
     } else {
         console.log(`No verified email address found for ${player.name} (${player.id})`);
     }
@@ -1395,34 +1403,50 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
     if (challenge.challengees) {
       const players: FullUser[] = await getPlayers(challenge.challengees.map((c: { id: any; }) => c.id));
       for (const player of players) {
+        await changeLanguageForPlayer(player);
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                await changeLanguageForPlayer(player);
                 const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
                 work.push(sesClient.send(comm));
             } else {
-                console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+                console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
             }
         } else {
             console.log(`No verified email address found for ${player.name} (${player.id})`);
         }
+        // push notifications are sent no matter what
+        work.push(sendPush({
+            userId: player.id,
+            topic: "challenges",
+            title: i18n.t("PUSH.titles.revoked"),
+            body: i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}),
+            url: "/",
+        }));
       }
     }
     // Inform players that have already accepted
     if (challenge.players) {
       const players = await getPlayers(challenge.players.map((c: { id: any; }) => c.id).filter((id: any) => id !== challenge!.challenger.id));
       for (const player of players) {
+        await changeLanguageForPlayer(player);
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                await changeLanguageForPlayer(player);
                 const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
                 work.push(sesClient.send(comm));
                     } else {
-                console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+                console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
             }
         } else {
             console.log(`No verified email address found for ${player.name} (${player.id})`);
         }
+        // push notifications are sent no matter what
+        work.push(sendPush({
+            userId: player.id,
+            topic: "challenges",
+            title: i18n.t("PUSH.titles.revoked"),
+            body: i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}),
+            url: "/",
+        }));
       }
     }
   }
@@ -1467,9 +1491,9 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       await initi18n('en');
       try {
         for (const [ind, player] of email.players.entries()) {
+            await changeLanguageForPlayer(player);
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
                 if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameStart) ) {
-                    await changeLanguageForPlayer(player);
                     console.log(player);
                     let body = i18n.t("GameStartedBody", { metaGame: email.metaGame, "interpolation": {"escapeValue": false} });
                     if (ind === 0 || email.simultaneous) {
@@ -1478,11 +1502,23 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
                     const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), body);
                     work.push(sesClient.send(comm));
                 } else {
-                    console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+                    console.log(`Player ${player.name} (${player.id}) has elected to not receive game start notifications.`);
                 }
             } else {
                 console.log(`No verified email address found for ${player.name} (${player.id})`);
             }
+            // push notifications are sent no matter what
+            let body = i18n.t("GameStartedBody", { metaGame: email.metaGame, "interpolation": {"escapeValue": false} });
+            if (ind === 0 || email.simultaneous) {
+                body += " " + i18n.t("YourMove");
+              }
+            work.push(sendPush({
+                userId: player.id,
+                topic: "started",
+                title: i18n.t("PUSH.titles.started"),
+                body,
+                url: "/",
+            }));
         }
       } catch (err) {
         logGetItemError(err);
@@ -1516,17 +1552,25 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       const quitter = challenge.challengees!.find(c => c.id === userid)!.name;
       const metaGame = gameinfo.get(challenge.metaGame).name;
       for (const player of players) {
+        await changeLanguageForPlayer(player);
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                await changeLanguageForPlayer(player);
                 const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame, "interpolation": {"escapeValue": false} }));
                 work.push(sesClient.send(comm));
             } else {
-                console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
+                console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
             }
         } else {
             console.log(`No verified email address found for ${player.name} (${player.id})`);
         }
+        // push notifications are sent no matter what
+        work.push(sendPush({
+            userId: player.id,
+            topic: "challenges",
+            title: i18n.t("PUSH.titles.declined"),
+            body: i18n.t("ChallengeRejectedBody", { quitter, metaGame, "interpolation": {"escapeValue": false} }),
+            url: "/",
+        }));
       }
     }
   }
@@ -2216,13 +2260,19 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
     else if ((game.toMove as boolean[]).every(b => b === true)) {
       playerIds = game.players.map(p => p.id);
     }
-    // const players = players0.filter(p => playerIds.includes(p.id));
-    // const metaGame = gameinfo.get(game.metaGame).name;
-    // for (const player of players) {
-    //   await changeLanguageForPlayer(player);
-    //   const comm = createSendEmailCommand(player.email, player.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBody", { metaGame, "interpolation": {"escapeValue": false} }));
-    //   work.push(sesClient.send(comm));
-    // }
+    const players = players0.filter(p => playerIds.includes(p.id));
+    const metaGame = gameinfo.get(game.metaGame).name;
+    // Realtime YourTurn notifications are only sent by push
+    for (const player of players) {
+      await changeLanguageForPlayer(player);
+      work.push(sendPush({
+          userId: player.id,
+          topic: "yourturn",
+          title: i18n.t("PUSH.titles.yourturn"),
+          body: i18n.t("YourMoveBody", { metaGame, "interpolation": {"escapeValue": false} }),
+          url: `/move/${game.metaGame}/1/${game.id}`,
+      }));
+    }
   } else {
     // Game over
     const playerIds = game.players.map((p: { id: any; }) => p.id);
@@ -2239,35 +2289,35 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
     }
 
     for (const [ind, player] of players.entries()) {
+        await changeLanguageForPlayer(player);
+        // The Game Over email has a few components:
+        const body = [];
+        //   - Initial line
+        body.push(i18n.t("GameOverBody", {metaGame}));
+        //   - Winner statement
+        let result = "lose";
+        if (engine.winner.length > 1) {
+            result = "draw";
+        } else if (engine.winner.length === 1) {
+            const winner = playerIds[engine.winner[0] - 1];
+            if (winner === player.id) {
+                result = "win";
+            }
+        }
+        body.push(i18n.t("GameOverResult", {context: result}));
+        //   - Rating, if applicable
+        if (newRatings != null) {
+            body.push(i18n.t("GameOverRating", {"rating" : `${Math.round(newRatings[ind][game.metaGame].rating)}`, "interpolation": {"escapeValue": false} }));
+        }
+        //   - Final scores, if applicable
+        if (scores.length > 0) {
+            body.push(i18n.t("GameOverScores", {scores: scores.join(", ")}))
+        }
+        //   - Direct link to game
+        body.push(i18n.t("GameOverLink", {metaGame: game.metaGame, gameID: game.id}));
+
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameEnd) ) {
-                await changeLanguageForPlayer(player);
-                // The Game Over email has a few components:
-                const body = [];
-                //   - Initial line
-                body.push(i18n.t("GameOverBody", {metaGame}));
-                //   - Winner statement
-                let result = "lose";
-                if (engine.winner.length > 1) {
-                    result = "draw";
-                } else if (engine.winner.length === 1) {
-                    const winner = playerIds[engine.winner[0] - 1];
-                    if (winner === player.id) {
-                        result = "win";
-                    }
-                }
-                body.push(i18n.t("GameOverResult", {context: result}));
-                //   - Rating, if applicable
-                if (newRatings != null) {
-                    body.push(i18n.t("GameOverRating", {"rating" : `${Math.round(newRatings[ind][game.metaGame].rating)}`, "interpolation": {"escapeValue": false} }));
-                }
-                //   - Final scores, if applicable
-                if (scores.length > 0) {
-                    body.push(i18n.t("GameOverScores", {scores: scores.join(", ")}))
-                }
-                //   - Direct link to game
-                body.push(i18n.t("GameOverLink", {metaGame: game.metaGame, gameID: game.id}));
-
                 const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), body.join(" "));
                 work.push(sesClient.send(comm));
             } else {
@@ -2276,6 +2326,14 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
         } else {
             console.log(`No verified email address found for ${player.name} (${player.id})`);
         }
+        // push notifications are sent no matter what
+        work.push(sendPush({
+            userId: player.id,
+            topic: "ended",
+            title: i18n.t("PUSH.titles.ended"),
+            body: body.join(" "),
+            url: `/move/${game.metaGame}/1/${game.id}`,
+        }));
     }
   }
   return Promise.all(work);
