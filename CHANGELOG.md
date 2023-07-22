@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * (experimental) Added star functionality, including in updateMetaGameCounts.
 * Adding `gameStarted`, `gameEnded`, and `lastChat` timestamps to `Game` interface.
 * Adding `duration` property to standing challenges. 0 means indefinite, >0 means the challenge will expire after being accepted that many times. Only applies to 2-player games.
+* Push notifications!
 
 ### Changed
 

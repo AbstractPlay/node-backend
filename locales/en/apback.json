@@ -17,6 +17,16 @@
     "GameOverSubject": "AbstractPlay: game over",
     "GameStartedBody": "The {{metaGame}} challenge was accepted by all players and the game has started.",
     "GameStartedSubject": "AbstractPlay: game started",
+    "PUSH": {
+        "titles": {
+            "challenged": "Challenged",
+            "declined": "Challenge declined",
+            "ended": "Game over",
+            "revoked": "Challenge revoked",
+            "started": "Game started",
+            "yourturn": "Your turn"
+        }
+    },
     "YourMove": "It is your turn to move.",
     "YourMoveBatchedBody_one": "It's your turn in {{ count }} game. Visit https://play.abstractplay.com to take your turns.",
     "YourMoveBatchedBody_other": "It's your turn in {{ count }} games. Visit https://play.abstractplay.com to take your turns.",
