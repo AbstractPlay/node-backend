@@ -7,6 +7,7 @@ import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCo
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import webpush from "web-push";
 import i18n from 'i18next';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
@@ -254,6 +255,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await updateMetaGameRatings(event.cognitoPoolClaims.sub);
     case "onetime_fix":
       return await onetimeFix(event.cognitoPoolClaims.sub);
+    case "test_push":
+      return await testPush(event.cognitoPoolClaims.sub);
     case "test_async":
       return await testAsync(event.cognitoPoolClaims.sub, pars);
     default:
@@ -768,7 +771,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
     // Check for "recently completed games"
     // As soon as a game is over move it to archive status (game.type = 0).
     // Remove the game from user's games list 48 hours after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
-    let removedGameIDs: string[] = [];
+    const removedGameIDs: string[] = [];
     for (let i = games.length - 1; i >= 0; i-- ) {
       const game = games[i];
       if (game.toMove === "" || game.toMove === null ) {
@@ -934,8 +937,8 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
             }));
           const user = userData.Item as FullUser;
           const dbGames = user.games;
-          let gamesUpdate = user.gamesUpdate;
-          let newgames: Game[] = [];
+          const gamesUpdate = user.gamesUpdate;
+          const newgames: Game[] = [];
           for (const game of dbGames) {
             if (gameIDsCloned.includes(game.id)) {
               const newgame = games.find(g => g.id === game.id);
@@ -3258,6 +3261,64 @@ async function onetimeFix(userId: string) {
 //     }));
 //   }
 //   console.log(`All done! Total units used: ${totalUnits}`);
+}
+
+async function testPush(userId: string) {
+  // Make sure people aren't getting clever
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      })
+    );
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+  } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to testPush ${userId}`);
+  }
+
+  let subscription: any|undefined;
+  try {
+    const push = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "PUSH",
+            "sk": userId
+          },
+        }));
+      if (push.Item === undefined) {
+        subscription = push.Item;
+      }
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to fetch push credentials for ${userId}`);
+  }
+
+  if(subscription !== undefined) {
+    try {
+        webpush.setVapidDetails(
+            'mailto:support@abstractplay.com',
+            process.env.VAPID_PUBLIC_KEY as string,
+            process.env.VAPID_PRIVATE_KEY as string,
+        );
+        await webpush.sendNotification(subscription, JSON.stringify({title: "Testing, 1...2...3...", body: "This is a test of the push notification system."}))
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to send push notification: ${err}`);
+    }
+  }
+  console.log("testPush complete");
 }
 
 async function testAsync(userId: string, pars: { N: number; }) {
