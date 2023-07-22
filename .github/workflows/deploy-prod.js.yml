@@ -18,6 +18,10 @@ on:
     types: [dep_update_prod]
   workflow_dispatch:
 
+env:
+    VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+    VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+
 jobs:
   deploy-prod:
     runs-on: ubuntu-latest
