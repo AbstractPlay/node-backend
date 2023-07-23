@@ -2096,8 +2096,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     if ((game.toMove === "" || game.toMove === null)) {
       newRatings = updateRatings(game, players);
       myGame.seen = Date.now();
-      if (game.numMoves && game.numMoves > game.numPlayers)
-        playerGame.numMoves = game.numMoves;
+      playerGame.numMoves = engine.stack.length - 1;
       list.push(addToGameLists("COMPLETEDGAMES", playerGame, timestamp, game.numMoves !== undefined && game.numMoves > game.numPlayers));
       // delete at old sk
       list.push(ddbDocClient.send(
@@ -2445,8 +2444,7 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
     "gameEnded": new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime(),
   } as Game;
   const work: Promise<any>[] = [];
-  if (game.numMoves && game.numMoves > game.numPlayers)
-    playerGame.numMoves = game.numMoves;
+  playerGame.numMoves = engine.stack.length - 1;
   work.push(addToGameLists("COMPLETEDGAMES", playerGame, game.lastMoveTime, game.numMoves !== undefined && game.numMoves > game.numPlayers));
 
   // delete at old sk
