@@ -2076,6 +2076,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "clockHard": game.clockHard,
       "toMove": game.toMove,
       "lastMoveTime": timestamp,
+      "numMoves": engine.stack.length - 1,
       "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
     } as Game;
     const myGame = {
@@ -2085,6 +2086,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "clockHard": game.clockHard,
       "toMove": game.toMove,
       "lastMoveTime": timestamp,
+      "numMoves": engine.stack.length - 1,
       "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
     } as Game;
     if (engine.gameover) {
@@ -2096,8 +2098,6 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     if ((game.toMove === "" || game.toMove === null)) {
       newRatings = updateRatings(game, players);
       myGame.seen = Date.now();
-      if (game.numMoves && game.numMoves > game.numPlayers)
-        playerGame.numMoves = game.numMoves;
       list.push(addToGameLists("COMPLETEDGAMES", playerGame, timestamp, game.numMoves !== undefined && game.numMoves > game.numPlayers));
       // delete at old sk
       list.push(ddbDocClient.send(
@@ -2443,10 +2443,9 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
     "lastMoveTime": game.lastMoveTime,
     "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
     "gameEnded": new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime(),
+    "numMoves": engine.stack.length - 1,
   } as Game;
   const work: Promise<any>[] = [];
-  if (game.numMoves && game.numMoves > game.numPlayers)
-    playerGame.numMoves = game.numMoves;
   work.push(addToGameLists("COMPLETEDGAMES", playerGame, game.lastMoveTime, game.numMoves !== undefined && game.numMoves > game.numPlayers));
 
   // delete at old sk
