@@ -136,6 +136,7 @@ type Game = {
   clockHard: boolean;
   toMove: string | boolean[];
   seen?: number;
+  winner?: number[];
   numMoves?: number;
   gameStarted?: number;
   gameEnded?: number;
@@ -2091,7 +2092,9 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     } as Game;
     if (engine.gameover) {
         playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
+        playerGame.winner = engine.winner;
         myGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
+        myGame.winner = engine.winner;
     }
     const list: Promise<any>[] = [];
     let newRatings: {[metaGame: string] : Rating}[] | null = null;
@@ -2439,6 +2442,7 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
     "metaGame": game.metaGame,
     "players": game.players,
     "clockHard": game.clockHard,
+    "winner": game.winner,
     "toMove": game.toMove,
     "lastMoveTime": game.lastMoveTime,
     "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
