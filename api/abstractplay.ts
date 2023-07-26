@@ -1786,7 +1786,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     if (info.flags !== undefined && info.flags.includes('perspective')) {
       let rot = 180;
       if (playerIDs.length > 2 && info.flags !== undefined && info.flags.includes('rotate90')) {
-        rot = 90;
+        rot = -90;
       }
       for (let i = 1; i < playerIDs.length; i++) {
         gamePlayers[i].settings = {"rotate": i * rot};
