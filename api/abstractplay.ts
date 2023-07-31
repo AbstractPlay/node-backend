@@ -117,6 +117,7 @@ type FullUser = {
     [metaGame: string]: Rating
   };
   stars?: string[];
+  mayPush?: boolean;
 }
 
 type Rating = {
@@ -234,6 +235,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await newSetting(event.cognitoPoolClaims.sub, pars);
     case "new_profile":
       return await newProfile(event.cognitoPoolClaims, pars);
+    case "set_push":
+      return await setPush(event.cognitoPoolClaims.sub, pars);
     case "save_push":
       return await savePush(event.cognitoPoolClaims.sub, pars);
     case "new_challenge":
@@ -868,6 +871,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "games": games,
           "settings": user.settings,
           "stars": user.stars,
+          "mayPush": user.mayPush,
           "challengesIssued": data[0].map(d => d.Item),
           "challengesReceived": data[1].map(d => d.Item),
           "challengesAccepted": data[2].map(d => d.Item),
@@ -1206,6 +1210,43 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
     return formatReturnError(`Unable to store user profile for user ${pars.name}`);
   }
 }
+
+async function setPush(userid: string, pars: { state: boolean }) {
+    try {
+        console.log(`Setting 'mayPush' to ${pars.state} for user ${userid}`);
+        await ddbDocClient.send(
+            new UpdateCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {"pk": "USER", "sk": userid},
+                ExpressionAttributeNames: {"#mp": "mayPush"},
+                ExpressionAttributeValues: {":mp": pars.state},
+                UpdateExpression: "set #mp = :mp"
+            })
+        );
+        if (pars.state === false) {
+            // purge any existing push data for this user
+            await ddbDocClient.send(
+                new DeleteCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "PUSH", "sk": userid
+                  },
+                })
+            )
+        }
+    } catch (error) {
+        logGetItemError(error);
+        throw new Error("setPush: Failed to save push preference");
+    }
+    return {
+        statusCode: 200,
+        body: JSON.stringify({
+          message: `Successfully saved push preference for ${userid}`,
+        }),
+        headers
+    };
+}
+
 
 async function savePush(userid: string, pars: { payload: any }) {
     try {
