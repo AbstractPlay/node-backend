@@ -142,6 +142,7 @@ type Game = {
   gameStarted?: number;
   gameEnded?: number;
   lastChat?: number;
+  variants?: string[];
 }
 
 type FullGame = {
@@ -165,6 +166,7 @@ type FullGame = {
   numMoves?: number;
   rated?: boolean;
   pieInvoked?: boolean;
+  variants?: string[];
 }
 
 type Comment = {
@@ -356,8 +358,9 @@ async function games(pars: { metaGame: string, type: string; }) {
         }));
       const gamelist = gamesData.Items as FullGame[];
       const returnlist = gamelist.map(g => {
+        const state = JSON.parse(g.state);
         return { "id": g.id, "metaGame": g.metaGame, "players": g.players, "toMove": g.toMove, "gameStarted": g.gameStarted,
-          "numMoves": JSON.parse(g.state).stack.length - 1 } });
+          "numMoves": state.stack.length - 1, "variants": state.variants } });
       return {
         statusCode: 200,
         body: JSON.stringify(returnlist),
@@ -1850,7 +1853,8 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
           "state": state,
           "toMove": whoseTurn,
           "lastMoveTime": now,
-          "gameStarted": now
+          "gameStarted": now,
+          "variants": engine.variants,
         }
       }));
     // this should be all the info we want to show on the "my games" summary page.
@@ -1861,6 +1865,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       "clockHard": challenge.clockHard,
       "toMove": whoseTurn,
       "lastMoveTime": now,
+      "variants": engine.variants,
     } as Game;
     const list: Promise<any>[] = [];
     list.push(addToGameLists("CURRENTGAMES", game, now, false));
@@ -2120,6 +2125,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "lastMoveTime": timestamp,
       "numMoves": engine.stack.length - 1,
       "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
+      "variants": engine.variants,
     } as Game;
     const myGame = {
       "id": game.id,
@@ -2130,6 +2136,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "lastMoveTime": timestamp,
       "numMoves": engine.stack.length - 1,
       "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
+      "variants": engine.variants,
     } as Game;
     if (engine.gameover) {
         playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
@@ -2489,7 +2496,8 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
     "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
     "gameEnded": new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime(),
     "numMoves": engine.stack.length - 1,
-  } as Game;
+    "variants": engine.variants,
+} as Game;
   const work: Promise<any>[] = [];
   work.push(addToGameLists("COMPLETEDGAMES", playerGame, game.lastMoveTime, game.numMoves !== undefined && game.numMoves > game.numPlayers));
 
