@@ -1945,6 +1945,7 @@ async function duplicateStandingChallenge(challenge: { [x: string]: any; metaGam
         "variants": challenge.variants,
         "challenger": challenge.challenger,
         "players": [challenge.challenger, newplayer], // users that have accepted
+        "challengees": [challenge.challenger, newplayer], // users that have accepted
         "clockStart": challenge.clockStart,
         "clockInc": challenge.clockInc,
         "clockMax": challenge.clockMax,
