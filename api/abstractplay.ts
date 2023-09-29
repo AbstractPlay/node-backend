@@ -760,9 +760,11 @@ async function me(claim: PartialClaims, pars: { size: string }) {
   if (!claim.email || claim.email.trim().length === 0) {
     console.log(`How!?: claim.email is ${claim.email}`);
   }
+  console.log(`ME: Attempting to find data for user id ${userId}`);
 
   const fixGames = false;
   try {
+    console.log(`Getting USER record`);
     const userData = await ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -790,6 +792,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
       console.log("games after", games);
     }
     // Check for "recently completed games"
+    console.log(`Checking for recently completed games`);
     // As soon as a game is over move it to archive status (game.type = 0).
     // Remove the game from user's games list 48 hours after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
     const removedGameIDs: string[] = [];
@@ -803,6 +806,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
       }
     }
     // Check for out-of-time games
+    console.log(`Checking for out-of-time games`);
     for(const game of games) {
       if (game.clockHard && game.toMove !== '') {
         if (Array.isArray(game.toMove)) {
@@ -847,6 +851,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
         standingChallengeIDs = user.challenges.standing;
     }
     let data = null;
+    console.log(`Fetching challenges`);
     if (!pars || !pars.size || pars.size !== "small") {
       const challengesIssued = getChallenges(challengesIssuedIDs);
       const challengesReceived = getChallenges(challengesReceivedIDs);
@@ -855,6 +860,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
       data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges, updateUserGames(userId, user.gamesUpdate, removedGameIDs, games)]);
     }
     // Update last seen date for user
+    console.log(`Updating last seen date`);
     await ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userId },
