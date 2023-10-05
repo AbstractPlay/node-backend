@@ -2523,7 +2523,6 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
   const newRatings = updateRatings(game, players);
 
   // Update players
-  const updatedGameIds = [playerGame.id];
   players.forEach((player, ind) => {
     const games: Game[] = [];
     player.games.forEach(g => {
@@ -2532,7 +2531,7 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
       else
         games.push(g)
     });
-
+    const updatedGameIds = [playerGame.id];
     work.push(updateUserGames(player.id, player.gamesUpdate, updatedGameIds, games));
     if (newRatings !== null) {
       work.push(ddbDocClient.send(new UpdateCommand({
