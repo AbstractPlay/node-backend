@@ -2523,7 +2523,6 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
   const newRatings = updateRatings(game, players);
 
   // Update players
-  const updatedGameIds = [playerGame.id];
   players.forEach((player, ind) => {
     const games: Game[] = [];
     player.games.forEach(g => {
@@ -2532,7 +2531,7 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
       else
         games.push(g)
     });
-
+    const updatedGameIds = [playerGame.id];
     work.push(updateUserGames(player.id, player.gamesUpdate, updatedGameIds, games));
     if (newRatings !== null) {
       work.push(ddbDocClient.send(new UpdateCommand({
@@ -2618,13 +2617,11 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
   }
   console.log("applyMove", move);
   engine.move(move);
-  let count = 1;
   if (flags !== undefined && flags.includes("automove")) {
     console.log("Automove detected");
     // @ts-ignore
     while (engine.moves().length === 1) {
         console.log("Single move detected");
-        count++;
         // @ts-ignore
         engine.move(engine.moves()[0]);
     }
@@ -2635,9 +2632,12 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
     game.toMove = "";
     game.winner = engine.winner;
     game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+  } else {
+    if ( (! ("currplayer" in engine)) || (engine.currplayer === undefined) || (engine.currplayer === null) || (typeof engine.currplayer !== "number") ) {
+        throw new Error("The engine must provide a current player for `applyMove()` to be able to function.");
+    }
+    game.toMove = `${engine.currplayer - 1}`;
   }
-  else
-    game.toMove = `${(parseInt(game.toMove as string) + count) % game.players.length}`;
   console.log("done");
 }
 
