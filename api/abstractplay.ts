@@ -3247,7 +3247,7 @@ async function updateNote(userId: string, pars: {gameId: string; note?: string;}
         const game = user.games.find(g => g.id === pars.gameId);
         if (game !== undefined) {
             // set note
-            if ( (pars.note === undefined) || (pars.note === null) ) {
+            if ( (pars.note === undefined) || (pars.note === null) || (pars.note.length === 0) ) {
                 delete game.note;
             } else {
                 game.note = pars.note.substring(0, 250);
