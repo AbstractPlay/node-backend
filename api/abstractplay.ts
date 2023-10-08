@@ -2818,6 +2818,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
     } catch (err: any) {
       if (err.name === 'ConditionalCheckFailedException') {
         // Either nothing here yet, or somebody else has updated the tree. Send back to the front end to merge and try to save again.
+        console.log("Failed to update public exploration, trying to get it.")
         const explorationData = await ddbDocClient.send(
           new GetCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -2826,8 +2827,9 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
               "sk": pars.move
             },
           }));
-        let exploration: Exploration;
+        let exploration: Exploration | undefined = undefined;
         if (explorationData.Item === undefined) {
+          console.log("Nothing here yet, try inserting.");
           // try to insert
           try {
             await ddbDocClient.send(new PutCommand({
@@ -2844,6 +2846,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
           }
           catch (error: any) {
             if (err.name === 'ConditionalCheckFailedException') {
+              console.log("Wow, that was unlikely. Failed to insert public exploration, trying to get it.")
               // Somebody else has updated the tree. Send back to the front end to merge and try to save again.
               const explorationData = await ddbDocClient.send(
                 new GetCommand({
@@ -2854,13 +2857,15 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
                   },
                 }));
               exploration = explorationData.Item as Exploration;
-            }
-            else {
+            } else {
               logGetItemError(err);
               return formatReturnError(`Unable to save exploration data for game ${pars.game} move ${pars.move}`);
             }      
           }
-          return;
+          if (exploration === undefined) {
+            console.log("Successfully inserted public exploration, returning to client.");
+            return;
+          }
         } else {
           exploration = explorationData.Item as Exploration;
         }
