@@ -2918,23 +2918,24 @@ async function getExploration(userid: string, pars: { game: string; move: number
 }
 
 async function getPublicExploration(pars: { game: string; move: number }) {
-  const work: Promise<any>[] = [];
+  let data;
   try {
-    work.push(ddbDocClient.send(
-      new GetCommand({
+    data = await ddbDocClient.send(
+      new QueryCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "PUBLICEXPLORATION#" + pars.game
-          },
-      })
-    ));
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "PUBLICEXPLORATION#" + pars.game },
+        ExpressionAttributeNames: { "#pk": "pk"}
+      }));
   }
   catch (error) {
     logGetItemError(error);
     return formatReturnError(`Unable to get public exploration data for game ${pars.game}`);
   }
-  const data = await Promise.all(work);
-  const trees = data.map((d: any) => {return {move: d.Item.sk, version: d.Item.version, tree: d.Item.tree}});
+  if (data.Items === undefined) {
+    return;
+  }
+  const trees = data.Items.map((d: any) => {return {move: d.Item.sk, version: d.Item.version, tree: d.Item.tree}});
   return {
     statusCode: 200,
     body: JSON.stringify(trees),
