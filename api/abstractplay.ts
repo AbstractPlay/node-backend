@@ -191,6 +191,15 @@ type PushOptions = {
     url?: string; //relative url of target page, if appropriate
 }
 
+type Exploration = {
+  version?: number;
+  id: string;
+  move: number;
+  comment: string;
+  children: Exploration[];
+  outcome?: number; // Optional. 0 for player1 win, 1 for player2 win, -1 for undecided.
+};
+
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
   const pars = event.queryStringParameters;
@@ -210,6 +219,8 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return await metaGamesDetails();
     case "get_game":
       return await game("", pars);
+    case "get_public_exploration":
+      return await getPublicExploration(pars);
     default:
       return {
         statusCode: 500,
@@ -2781,7 +2792,8 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
   }
 }
 
-async function saveExploration(userid: string, pars: { game: string; move: number; tree: any; }) {
+async function saveExploration(userid: string, pars: { public: boolean, game: string; move: number; tree: Exploration; }) {
+  if (!pars.public) {
   await ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: {
@@ -2793,6 +2805,78 @@ async function saveExploration(userid: string, pars: { game: string; move: numbe
         "tree": JSON.stringify(pars.tree)
       }
     }));
+  } else {
+    const version = pars.tree.version!;
+    try {
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "PUBLICEXPLORATION#" + pars.game, "sk": pars.move },
+        ExpressionAttributeValues: { ":v": version, ":inc": 1, ":t": JSON.stringify(pars.tree) },
+        ExpressionAttributeNames: { "#v": "version", "#t": "tree" },
+        ConditionExpression: "#v = :v",
+        UpdateExpression: "set #v = :v + :inc, #t = :t"
+      }));
+    } catch (err: any) {
+      if (err.name === 'ConditionalCheckFailedException') {
+        // Either nothing here yet, or somebody else has updated the tree. Send back to the front end to merge and try to save again.
+        const explorationData = await ddbDocClient.send(
+          new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "PUBLICEXPLORATION#" + pars.game,
+              "sk": pars.move
+            },
+          }));
+        let exploration: Exploration;
+        if (explorationData.Item === undefined) {
+          // try to insert
+          try {
+            await ddbDocClient.send(new PutCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Item: {
+                "pk": "PUBLICEXPLORATION#" + pars.game,
+                "sk": pars.move,
+                "version": version + 1,
+                "game": pars.game,
+                "tree": JSON.stringify(pars.tree)
+              },
+              ConditionExpression: "attribute_not_exists(sk)"
+            }));
+          }
+          catch (error: any) {
+            if (err.name === 'ConditionalCheckFailedException') {
+              // Somebody else has updated the tree. Send back to the front end to merge and try to save again.
+              const explorationData = await ddbDocClient.send(
+                new GetCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "PUBLICEXPLORATION#" + pars.game,
+                    "sk": pars.move
+                  },
+                }));
+              exploration = explorationData.Item as Exploration;
+            }
+            else {
+              logGetItemError(err);
+              return formatReturnError(`Unable to save exploration data for game ${pars.game} move ${pars.move}`);
+            }      
+          }
+          return;
+        } else {
+          exploration = explorationData.Item as Exploration;
+        }
+        return {
+          statusCode: 200,
+          body: JSON.stringify(exploration),
+          headers
+        };
+      }
+      else {
+        logGetItemError(err);
+        return formatReturnError(`Unable to save exploration data for game ${pars.game} move ${pars.move}`);
+      }
+    }
+  }
 }
 
 async function getExploration(userid: string, pars: { game: string; move: number }) {
@@ -2826,6 +2910,31 @@ async function getExploration(userid: string, pars: { game: string; move: number
   }
   const data = await Promise.all(work);
   const trees = data.map((d: any) => d.Item);
+  return {
+    statusCode: 200,
+    body: JSON.stringify(trees),
+    headers
+  };
+}
+
+async function getPublicExploration(pars: { game: string; move: number }) {
+  const work: Promise<any>[] = [];
+  try {
+    work.push(ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "PUBLICEXPLORATION#" + pars.game
+          },
+      })
+    ));
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get public exploration data for game ${pars.game}`);
+  }
+  const data = await Promise.all(work);
+  const trees = data.map((d: any) => {return {move: d.Item.sk, version: d.Item.version, tree: d.Item.tree}});
   return {
     statusCode: 200,
     body: JSON.stringify(trees),
