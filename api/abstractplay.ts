@@ -2835,7 +2835,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
               Item: {
                 "pk": "PUBLICEXPLORATION#" + pars.game,
                 "sk": pars.move,
-                "version": version + 1,
+                "version": pars.version + 1,
                 "game": pars.game,
                 "tree": JSON.stringify(pars.tree)
               },
