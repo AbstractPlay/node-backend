@@ -136,6 +136,7 @@ type Game = {
   lastMoveTime: number;
   clockHard: boolean;
   toMove: string | boolean[];
+  note?: string;
   seen?: number;
   winner?: number[];
   numMoves?: number;
@@ -251,6 +252,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await submitMove(event.cognitoPoolClaims.sub, pars);
     case "invoke_pie":
       return await invokePie(event.cognitoPoolClaims.sub, pars);
+    case "update_note":
+      return await updateNote(event.cognitoPoolClaims.sub, pars);
     case "set_lastSeen":
       return await setLastSeen(event.cognitoPoolClaims.sub, pars);
     case "submit_comment":
@@ -3217,6 +3220,56 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
       logGetItemError(error);
       return formatReturnError('Unable to process invoke pie');
     }
+}
+
+async function updateNote(userId: string, pars: {gameId: string; note?: string;}) {
+    // get USER rec
+    let user: FullUser|undefined;
+    try {
+        const data = await ddbDocClient.send(
+          new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "USER",
+              "sk": userId
+            },
+          })
+        );
+        if (data.Item !== undefined) {
+            user = data.Item as FullUser;
+        }
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to updateNote ${userId}`);
+    }
+    if (user !== undefined) {
+        // find matching game
+        const game = user.games.find(g => g.id === pars.gameId);
+        if (game !== undefined) {
+            // set note
+            if ( (pars.note === undefined) || (pars.note === null) || (pars.note.length === 0) ) {
+                delete game.note;
+            } else {
+                game.note = pars.note.substring(0, 250);
+            }
+            console.log(`Setting note for user ${userId}, game ${game.id}.`);
+            // save USER rec
+            await ddbDocClient.send(new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Item: user
+            }));
+            return {
+                statusCode: 200,
+                body: "",
+                headers
+            };
+        }
+    }
+    return {
+        statusCode: 406,
+        body: "",
+        headers
+    };
 }
 
 async function setLastSeen(userId: string, pars: {gameId: string; interval?: number;}) {
