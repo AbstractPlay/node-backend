@@ -2825,7 +2825,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: {
               "pk": "PUBLICEXPLORATION#" + pars.game,
-              "sk": pars.move
+              "sk": `${pars.move}`
             },
           }));
         let exploration: Exploration | undefined = undefined;
@@ -2837,7 +2837,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               Item: {
                 "pk": "PUBLICEXPLORATION#" + pars.game,
-                "sk": pars.move,
+                "sk": `${pars.move}`,
                 "version": pars.version + 1,
                 "game": pars.game,
                 "tree": JSON.stringify(pars.tree)
@@ -2854,7 +2854,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
                   TableName: process.env.ABSTRACT_PLAY_TABLE,
                   Key: {
                     "pk": "PUBLICEXPLORATION#" + pars.game,
-                    "sk": pars.move
+                    "sk": `${pars.move}`
                   },
                 }));
               exploration = explorationData.Item as Exploration;
