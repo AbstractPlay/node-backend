@@ -2807,10 +2807,10 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
       }));
   } else {
     try {
-      console.log("Trying to update public exploration at key " + JSON.stringify({ "pk": "PUBLICEXPLORATION#" + pars.game, "sk": pars.move }));
+      console.log("Trying to update public exploration at key " + JSON.stringify({ "pk": "PUBLICEXPLORATION#" + pars.game, "sk": `${pars.move}` }));
       await ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "PUBLICEXPLORATION#" + pars.game, "sk": pars.move },
+        Key: { "pk": "PUBLICEXPLORATION#" + pars.game, "sk": `${pars.move}` },
         ExpressionAttributeValues: { ":v": pars.version, ":inc": 1, ":t": JSON.stringify(pars.tree) },
         ExpressionAttributeNames: { "#v": "version", "#t": "tree" },
         ConditionExpression: "#v = :v",
