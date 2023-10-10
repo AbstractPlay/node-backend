@@ -2940,7 +2940,8 @@ async function getPublicExploration(pars: { game: string; move: number }) {
   if (data.Items === undefined) {
     return;
   }
-  const trees = data.Items.map((d: any) => {return {move: d.Item.sk, version: d.Item.version, tree: d.Item.tree}});
+  console.log("Got public exploration data", data.Items);
+  const trees = data.Items.map((d: any) => {return {move: d.sk, version: d.version, tree: d.tree}});
   return {
     statusCode: 200,
     body: JSON.stringify(trees),
