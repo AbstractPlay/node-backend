@@ -3023,7 +3023,7 @@ async function markAsPublished(userid: string, pars: { id: string; metagame: str
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
           "pk": "GAME",
-          "sk": pars.id + "#1#" + pars.metagame
+          "sk": pars.metagame + "#1#" + pars.id
         },
       }));
     if (!data.Item)
