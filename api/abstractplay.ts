@@ -168,6 +168,7 @@ type FullGame = {
   rated?: boolean;
   pieInvoked?: boolean;
   variants?: string[];
+  published?: string[];
 }
 
 type Comment = {
@@ -273,6 +274,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await saveExploration(event.cognitoPoolClaims.sub, pars);
     case "get_exploration":
       return await getExploration(event.cognitoPoolClaims.sub, pars);
+    case "get_private_exploration":
+      return await getPrivateExploration(event.cognitoPoolClaims.sub, pars);
     case "get_game":
       return await game(event.cognitoPoolClaims.sub, pars);
     case "toggle_star":
@@ -285,6 +288,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await updateUserSettings(event.cognitoPoolClaims.sub, pars);
     case "update_meta_game_counts":
       return await updateMetaGameCounts(event.cognitoPoolClaims.sub);
+    case "mark_published":
+      return await markAsPublished(event.cognitoPoolClaims.sub, pars);
     case "update_meta_game_ratings":
       return await updateMetaGameRatings(event.cognitoPoolClaims.sub);
     case "onetime_fix":
@@ -2922,7 +2927,66 @@ async function getExploration(userid: string, pars: { game: string; move: number
   };
 }
 
-async function getPublicExploration(pars: { game: string; move: number }) {
+// This is for publishing your "during game" exploration for all to see after the game ends.
+async function getPrivateExploration(userid: string, pars: { id: string }) {
+  let data;
+  try {
+    data = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + pars.id, ":sk": userid + "#" },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" }
+      }));
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get exploration data for game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+  const trees = data.Items;
+  return {
+    statusCode: 200,
+    body: JSON.stringify(trees),
+    headers
+  };
+}
+
+// Mark a game as having had its exploration (for one of the players) published.
+async function markAsPublished(userid: string, pars: { id: string; metagame: string }) {
+  try {
+    const data = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "GAME",
+          "sk": pars.id + "#1#" + pars.metagame
+        },
+      }));
+    if (!data.Item)
+      throw new Error(`No game ${pars.id} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    const game = data.Item as FullGame;
+    if (!game.players.find((p: { id: any; }) => p.id === userid))
+      throw new Error(`Only players can publish exploration!`);
+    let published: string[] = [];
+    if (game.published)
+      published = game.published;
+    if (published.includes(userid))
+      throw new Error(`${userid} has already published for game ${pars.id}`);
+    published.push(userid);
+    await ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "GAME", "sk": pars.id + "#1#" + pars.metagame },
+      ExpressionAttributeValues: { ":p": published },
+      UpdateExpression: "set published = :p"
+    }));
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to mark game ${pars.id} as published`);
+  }
+}
+
+async function getPublicExploration(pars: { game: string }) {
   let data;
   try {
     data = await ddbDocClient.send(
