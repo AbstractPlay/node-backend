@@ -3027,7 +3027,7 @@ async function markAsPublished(userid: string, pars: { id: string; metagame: str
         },
       }));
     if (!data.Item)
-      throw new Error(`No game ${pars.id} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+      throw new Error(`No game ${pars.metagame + "#1#" + pars.id} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
     const game = data.Item as FullGame;
     if (!game.players.find((p: { id: any; }) => p.id === userid))
       throw new Error(`Only players can publish exploration!`);
