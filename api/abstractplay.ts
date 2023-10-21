@@ -525,9 +525,24 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
       }));
 
     const gameData = await getGame;
-    const game = gameData.Item as FullGame;
-    if (game === undefined)
-      throw new Error(`Game ${pars.id}, metaGame ${pars.metaGame}, completed bit ${pars.cbit} not found`);
+    let game = gameData.Item as FullGame;
+    if (game === undefined) {
+      // Maybe the game has ended and we need to look for the completed game.
+      if (pars.cbit === 0) {
+        const completedGameData = await ddbDocClient.send(
+          new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "GAME",
+              "sk": pars.metaGame + "#1#" + pars.id
+            },
+          }));
+        game = completedGameData.Item as FullGame;
+      }
+      if (game === undefined) {
+        throw new Error(`Game ${pars.id}, metaGame ${pars.metaGame}, completed bit ${pars.cbit} not found`);
+      }
+    }
     // If the game is over update user to indicate they have seen the game end.
     let work;
     if ((game.toMove === "" || game.toMove === null) && userid !== "") {
