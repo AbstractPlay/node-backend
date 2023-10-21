@@ -127,6 +127,12 @@ type Rating = {
   draws: number;
 }
 
+type Note = {
+    pk: string;
+    sk: string;
+    note: string;
+}
+
 type Game = {
   pk?: string,
   sk?: string,
@@ -161,6 +167,7 @@ type FullGame = {
   numPlayers: number;
   players: User[];
   state: string;
+  note?: string;
   toMove: string | boolean[];
   partialMove?: string;
   winner?: number[];
@@ -507,6 +514,16 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
         },
         ReturnConsumedCapacity: "INDEXES"
       }));
+    const getNote = ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "NOTE",
+          "sk": `${pars.id}#${userid}`,
+        },
+        ReturnConsumedCapacity: "INDEXES"
+      }));
+
     const gameData = await getGame;
     const game = gameData.Item as FullGame;
     if (game === undefined)
@@ -520,6 +537,10 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
     const flags = gameinfo.get(game.metaGame).flags;
     if (flags !== undefined && flags.includes('simultaneous') && game.partialMove !== undefined) {
       game.partialMove = game.partialMove.split(',').map((m: string, i: number) => (game.players[i].id === userid ? m : '')).join(',');
+    }
+    const noteData = await getNote;
+    if (noteData.Item !== undefined && noteData.Item.note) {
+        game.note = noteData.Item.note;
     }
     let comments = [];
     const commentData = await getComments;
@@ -2182,6 +2203,34 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       ));
       console.log("Scheduled delete and updates to game lists");
       game.sk = game.metaGame + "#1#" + game.id;
+      // delete associated notes
+      try {
+        const notesData = await ddbDocClient.send(
+            new QueryCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+              ExpressionAttributeValues: { ":pk": "NOTE", ":sk": game.id },
+              ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+              ProjectionExpression: "#pk, #sk"
+        }));
+        if ( (notesData.Items) && (notesData.Items.length > 0) ) {
+            const notesList = notesData.Items as Note[];
+            for (const note of notesList) {
+                list.push(ddbDocClient.send(
+                    new DeleteCommand({
+                      TableName: process.env.ABSTRACT_PLAY_TABLE,
+                      Key: {
+                        "pk": note.pk,
+                        "sk": note.sk
+                      }
+                    })
+                ));
+            }
+        }
+      } catch (err) {
+        logGetItemError(err);
+        return formatReturnError('Unable to process submit move');
+      }
     }
     game.lastMoveTime = timestamp;
     const updateGame = ddbDocClient.send(new PutCommand({
@@ -2866,7 +2915,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
             } else {
               logGetItemError(err);
               return formatReturnError(`Unable to save exploration data for game ${pars.game} move ${pars.move}`);
-            }      
+            }
           }
           if (exploration === undefined) {
             console.log("Successfully inserted public exploration, returning to client.");
@@ -3403,53 +3452,44 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
 }
 
 async function updateNote(userId: string, pars: {gameId: string; note?: string;}) {
-    // get USER rec
-    let user: FullUser|undefined;
-    try {
-        const data = await ddbDocClient.send(
-          new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": "USER",
-              "sk": userId
-            },
-          })
-        );
-        if (data.Item !== undefined) {
-            user = data.Item as FullUser;
+    // if note is empty, delete the record
+    if ( (pars.note === undefined) || (pars.note === null) || (pars.note.length === 0) ) {
+        try {
+            await ddbDocClient.send(
+                new DeleteCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "NOTE", "sk": `${pars.gameId}#${userId}`,
+                  },
+                })
+            )
+        } catch (err) {
+            logGetItemError(err);
+            return formatReturnError(`Unable to updateNote (delete, actually) ${userId}`);
         }
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`Unable to updateNote ${userId}`);
-    }
-    if (user !== undefined) {
-        // find matching game
-        const game = user.games.find(g => g.id === pars.gameId);
-        if (game !== undefined) {
-            // set note
-            if ( (pars.note === undefined) || (pars.note === null) || (pars.note.length === 0) ) {
-                delete game.note;
-            } else {
-                game.note = pars.note.substring(0, 250);
-            }
-            console.log(`Setting note for user ${userId}, game ${game.id}.`);
-            // save USER rec
+    // otherwise, just PUT it!
+    } else {
+        const note: Note = {
+            pk: "NOTE",
+            sk: `${pars.gameId}#${userId}`,
+            note: pars.note,
+        }
+        console.log(`Setting note for user ${userId}, game ${pars.gameId}.`);
+        try {
             await ddbDocClient.send(new PutCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item: user
+                Item: note
             }));
-            return {
-                statusCode: 200,
-                body: "",
-                headers
-            };
+        } catch (err) {
+            logGetItemError(err);
+            return formatReturnError(`Unable to updateNote ${userId}`);
         }
-    }
-    return {
-        statusCode: 406,
-        body: "",
-        headers
-    };
+   }
+   return {
+     statusCode: 200,
+     body: "",
+     headers
+   };
 }
 
 async function setLastSeen(userId: string, pars: {gameId: string; interval?: number;}) {
