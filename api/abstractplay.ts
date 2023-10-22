@@ -3039,7 +3039,7 @@ async function markAsPublished(userid: string, pars: { id: string; metagame: str
     published.push(userid);
     await ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "GAME", "sk": pars.id + "#1#" + pars.metagame },
+      Key: { "pk": "GAME", "sk": pars.metagame + "#1#" + pars.id },
       ExpressionAttributeValues: { ":p": published },
       UpdateExpression: "set published = :p"
     }));
