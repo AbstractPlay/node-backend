@@ -33,6 +33,7 @@
     "@aws-sdk/lib-dynamodb": "^3.321.1",
     "aws-lambda": "^1.0.7",
     "i18next": "^22.4.15",
+    "ion-js": "^5.2.0",
     "lodash": "^4.17.21",
     "web-push": "^3.6.3"
   },

@@ -26,7 +26,8 @@ custom:
     dev: false
   recbucket:
     prod: "records.abstractplay.com"
-    dev: "records.dev.abstractplay.com"
+    dev: "records.abstractplay.com"
+  dumpbucket: "abstractplay-db-dump"
 
 params:
   dev:
@@ -70,6 +71,10 @@ provider:
             - ses:SendEmail
             - ses:SendRawEmail
           Resource: "*"
+        - Effect: 'Allow'
+          Action:
+            - 's3:ListBucket'
+          Resource: 'arn:aws:s3:::abstractplay-db-dump'
         - Effect: 'Allow'
           Action:
             - 's3:ListBucket'
@@ -185,4 +190,4 @@ functions:
           name: abstractplay-${self:provider.stage}-records
           description: Generates static lists of game records
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          schedule: cron(0 12 * * ? *)
+          schedule: cron(0 0 ? * 1 *)
