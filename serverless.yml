@@ -24,6 +24,10 @@ custom:
   scheduleEnabled:
     prod: true
     dev: false
+  recbucket:
+    prod: "records.abstractplay.com"
+    dev: "records.abstractplay.com"
+  dumpbucket: "abstractplay-db-dump"
 
 params:
   dev:
@@ -32,6 +36,13 @@ params:
   prod:
     profile: AbstractPlayProd
     userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_YCjgSZHJm
+
+package:
+  excludeDevDependencies: false
+
+plugins:
+  - serverless-plugin-common-excludes
+  - serverless-plugin-include-dependencies
 
 provider:
   name: aws
@@ -43,10 +54,10 @@ provider:
   environment:
     ABSTRACT_PLAY_TABLE: abstract-play-${self:provider.stage}
     userpool: ${param:userpool}
-    VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
-    VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
-    # VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
-    # VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
+    # VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
+    # VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
+    VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
+    VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
   iam:
     role:
       statements:
@@ -61,6 +72,22 @@ provider:
             - ses:SendEmail
             - ses:SendRawEmail
           Resource: "*"
+        - Effect: 'Allow'
+          Action:
+            - 's3:ListBucket'
+          Resource: 'arn:aws:s3:::abstractplay-db-dump'
+        - Effect: 'Allow'
+          Action:
+            - 's3:GetObject'
+          Resource: 'arn:aws:s3:::abstractplay-db-dump/*'
+        - Effect: 'Allow'
+          Action:
+            - 's3:ListBucket'
+          Resource: !GetAtt [RecordsS3Bucket, Arn]
+        - Effect: 'Allow'
+          Action:
+            - 's3:PutObject'
+          Resource: !Join ['/', [!GetAtt [RecordsS3Bucket, Arn], '*']]
 
 resources:
   Resources:
@@ -100,6 +127,30 @@ resources:
          RestApiId:
            Ref: 'ApiGatewayRestApi'
 
+    RecordsS3Bucket:
+      Type: "AWS::S3::Bucket"
+      Properties:
+        BucketName: ${self:custom.recbucket.${self:provider.stage}}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
+
+    PublicBucketPolicy:
+      Type: "AWS::S3::BucketPolicy"
+      Properties:
+        Bucket: !Ref RecordsS3Bucket
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 's3:GetObject'
+              Resource:
+                - !Join ['/', [!GetAtt [RecordsS3Bucket, Arn], '*']]
+              Principal: '*'
+
 functions:
   authQuery:
     handler: api/abstractplay.authQuery
@@ -135,3 +186,14 @@ functions:
           description: Send out "your turn" notifications
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           schedule: cron(0 14,22 * * ? *)
+  records:
+    handler: utils/records.handler
+    description: Generates static lists of game records
+    timeout: 60
+    memorySize: 2048
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-records
+          description: Generates static lists of game records
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(0 0 ? * 1 *)

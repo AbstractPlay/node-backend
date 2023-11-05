@@ -180,4 +180,5 @@ export const handler: Handler = async (event: any, context?: any) => {
     } else {
         console.log(`Not sending any notifications.`);
     }
+    return;
 };
