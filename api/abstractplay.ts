@@ -233,7 +233,7 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return {
         statusCode: 500,
         body: JSON.stringify({
-          message: `Unable to execute unknown query '${pars.query}'`
+          message: `Unable to execute unknown open query '${pars.query}'`
         }),
         headers
       };
