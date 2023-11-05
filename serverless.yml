@@ -69,6 +69,7 @@ provider:
             - dynamodb:PutItem
             - dynamodb:UpdateItem
             - dynamodb:DeleteItem
+            - dynamodb:ExportTableToPointInTime
             - ses:SendEmail
             - ses:SendRawEmail
           Resource: "*"
@@ -79,6 +80,7 @@ provider:
         - Effect: 'Allow'
           Action:
             - 's3:GetObject'
+            - 's3:PutObject'
           Resource: 'arn:aws:s3:::abstractplay-db-dump/*'
         - Effect: 'Allow'
           Action:
@@ -173,3 +175,12 @@ functions:
           description: Generates static lists of game records
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           schedule: cron(0 3 ? * 1 *)
+  dumpdb:
+    handler: utils/dumpdb.handler
+    description: Triggers a full export of production DB to S3
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-dumpdb
+          description: Triggers a full export of production DB to S3
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(0 0 ? * 1 *)
