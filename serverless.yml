@@ -94,30 +94,30 @@ provider:
 resources:
   Resources:
     # One table design
-    # AbstractGamesDynamoDbTable:
-    #   Type: 'AWS::DynamoDB::Table'
-    #   DeletionPolicy: Delete
-    #   Properties:
-    #     AttributeDefinitions:
-    #       -
-    #         AttributeName: "pk"
-    #         AttributeType: "S"
-    #       -
-    #         AttributeName: "sk"
-    #         AttributeType: "S"
-    #     KeySchema:
-    #       -
-    #         AttributeName: "pk"
-    #         KeyType: "HASH"
-    #       -
-    #         AttributeName: "sk"
-    #         KeyType: "RANGE"
-    #     ProvisionedThroughput:
-    #       ReadCapacityUnits: 1
-    #       WriteCapacityUnits: 1
-    #     StreamSpecification:
-    #       StreamViewType: "NEW_AND_OLD_IMAGES"
-    #     TableName: ${self:provider.environment.ABSTRACT_PLAY_TABLE}
+    AbstractGamesDynamoDbTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: "pk"
+            AttributeType: "S"
+          -
+            AttributeName: "sk"
+            AttributeType: "S"
+        KeySchema:
+          -
+            AttributeName: "pk"
+            KeyType: "HASH"
+          -
+            AttributeName: "sk"
+            KeyType: "RANGE"
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        StreamSpecification:
+          StreamViewType: "NEW_AND_OLD_IMAGES"
+        TableName: ${self:provider.environment.ABSTRACT_PLAY_TABLE}
 
     GatewayResponseDefault4XX:
        Type: 'AWS::ApiGateway::GatewayResponse'
