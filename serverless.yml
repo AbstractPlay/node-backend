@@ -172,4 +172,4 @@ functions:
           name: abstractplay-${self:provider.stage}-records
           description: Generates static lists of game records
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          schedule: cron(0 0 ? * 1 *)
+          schedule: cron(0 3 ? * 1 *)
