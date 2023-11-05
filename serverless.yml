@@ -83,11 +83,11 @@ provider:
         - Effect: 'Allow'
           Action:
             - 's3:ListBucket'
-          Resource: !GetAtt [RecordsS3Bucket, Arn]
+          Resource: 'arn:aws:s3:::records.abstractplay.com'
         - Effect: 'Allow'
           Action:
             - 's3:PutObject'
-          Resource: !Join ['/', [!GetAtt [RecordsS3Bucket, Arn], '*']]
+          Resource: 'arn:aws:s3:::records.abstractplay.com/*'
 
 resources:
   Resources:
@@ -126,30 +126,6 @@ resources:
          ResponseType: DEFAULT_4XX
          RestApiId:
            Ref: 'ApiGatewayRestApi'
-
-    RecordsS3Bucket:
-      Type: "AWS::S3::Bucket"
-      Properties:
-        BucketName: ${self:custom.recbucket.${self:provider.stage}}
-        PublicAccessBlockConfiguration:
-          BlockPublicAcls: false
-          BlockPublicPolicy: false
-          IgnorePublicAcls: false
-          RestrictPublicBuckets: false
-
-    PublicBucketPolicy:
-      Type: "AWS::S3::BucketPolicy"
-      Properties:
-        Bucket: !Ref RecordsS3Bucket
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                - 's3:GetObject'
-              Resource:
-                - !Join ['/', [!GetAtt [RecordsS3Bucket, Arn], '*']]
-              Principal: '*'
 
 functions:
   authQuery:
