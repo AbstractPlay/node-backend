@@ -47,6 +47,7 @@ plugins:
 provider:
   name: aws
   runtime: nodejs14.x
+  versionFunctions: false
   stage: ${opt:stage, 'dev'}
   profile: ${param:profile}
   region: us-east-1
@@ -75,6 +76,10 @@ provider:
           Action:
             - 's3:ListBucket'
           Resource: 'arn:aws:s3:::abstractplay-db-dump'
+        - Effect: 'Allow'
+          Action:
+            - 's3:GetObject'
+          Resource: 'arn:aws:s3:::abstractplay-db-dump/*'
         - Effect: 'Allow'
           Action:
             - 's3:ListBucket'
@@ -185,6 +190,7 @@ functions:
     handler: utils/records.handler
     description: Generates static lists of game records
     timeout: 60
+    memorySize: 2048
     events:
       - eventBridge:
           name: abstractplay-${self:provider.stage}-records

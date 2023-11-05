@@ -1,61 +1,75 @@
 'use strict';
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handler = void 0;
-const client_dynamodb_1 = require("@aws-sdk/client-dynamodb");
-const lib_dynamodb_1 = require("@aws-sdk/lib-dynamodb");
 const client_s3_1 = require("@aws-sdk/client-s3");
-const abstractplay_1 = require("../api/abstractplay");
 const gameslib_1 = require("@abstractplay/gameslib");
+const fflate_1 = require("fflate");
+const ion_js_1 = require("ion-js");
 const REGION = "us-east-1";
 const s3 = new client_s3_1.S3Client({ region: REGION });
-const clnt = new client_dynamodb_1.DynamoDBClient({ region: REGION });
-const marshallOptions = {
-    // Whether to automatically convert empty strings, blobs, and sets to `null`.
-    convertEmptyValues: false,
-    // Whether to remove undefined values while marshalling.
-    removeUndefinedValues: true,
-    // Whether to convert typeof object to map attribute.
-    convertClassInstanceToMap: false, // false, by default.
-};
-const unmarshallOptions = {
-    // Whether to return numbers as a string instead of converting them to native JavaScript numbers.
-    wrapNumbers: false, // false, by default.
-};
-const translateConfig = { marshallOptions, unmarshallOptions };
-const ddbDocClient = lib_dynamodb_1.DynamoDBDocumentClient.from(clnt, translateConfig);
+const DUMP_BUCKET = "abstractplay-db-dump";
+const REC_BUCKET = "records.abstractplay.com";
 const handler = async (event, context) => {
-    // Have to fetch data by metagame
-    let totalUnits = 0;
-    const gamesCollated = [];
-    for (const metaGame of gameslib_1.gameinfo.keys()) {
-        try {
-            const data = await ddbDocClient.send(new lib_dynamodb_1.QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-                ExpressionAttributeValues: { ":pk": "GAME", ":sk": `${metaGame}#1#` },
-                ExpressionAttributeNames: { "#pk": "pk", "#id": "id", "#sk": "sk", "#state": "state" },
-                ProjectionExpression: "#id, metaGame, players, #state",
-                ReturnConsumedCapacity: "INDEXES",
-            }));
-            if ((data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined)) {
-                totalUnits += data.ConsumedCapacity.CapacityUnits;
+    // scan bucket for data folder
+    const command = new client_s3_1.ListObjectsV2Command({
+        Bucket: DUMP_BUCKET,
+    });
+    const allContents = [];
+    try {
+        let isTruncatedOuter = true;
+        while (isTruncatedOuter) {
+            const { Contents, IsTruncated: IsTruncatedInner, NextContinuationToken } = await s3.send(command);
+            if (Contents === undefined) {
+                throw new Error(`Could not list the bucket contents`);
             }
-            else {
-                console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
-            }
-            const games = data?.Items;
-            if (games === undefined) {
-                throw new Error(`Could not get valid completed game data for ${metaGame}`);
-            }
-            gamesCollated.push(...games);
-            console.log(JSON.stringify(games, null, 2));
-        }
-        catch (e) {
-            (0, abstractplay_1.logGetItemError)(e);
-            return (0, abstractplay_1.formatReturnError)(`Unable to get completed games from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+            allContents.push(...Contents);
+            isTruncatedOuter = IsTruncatedInner || false;
+            command.input.ContinuationToken = NextContinuationToken;
         }
     }
-    console.log(`TOTAL UNITS CONSUMED: ${totalUnits}`);
+    catch (err) {
+        console.error(err);
+    }
+    // find the latest `manifest-summary.json` file
+    const manifests = allContents.filter(c => c.Key?.includes("manifest-summary.json"));
+    manifests.sort((a, b) => b.LastModified.toISOString().localeCompare(a.LastModified.toISOString()));
+    const latest = manifests[0];
+    const match = latest.Key.match(/^AWSDynamoDB\/(\S+)\/manifest-summary.json$/);
+    if (match === null) {
+        throw new Error(`Could not extract uid from "${latest.Key}"`);
+    }
+    // from there, extract the UID and list of associated data files
+    const uid = match[1];
+    const dataFiles = allContents.filter(c => c.Key?.includes(`${uid}/data/`) && c.Key?.endsWith(".ion.gz"));
+    console.log(`Found the following matching data files:\n${JSON.stringify(dataFiles, null, 2)}`);
+    // load the data from each data file, but only keep the GAME records
+    const justGames = [];
+    for (const file of dataFiles) {
+        const command = new client_s3_1.GetObjectCommand({
+            Bucket: DUMP_BUCKET,
+            Key: file.Key,
+        });
+        try {
+            const response = await s3.send(command);
+            // The Body object also has 'transformToByteArray' and 'transformToWebStream' methods.
+            const bytes = await response.Body?.transformToByteArray();
+            if (bytes !== undefined) {
+                const ion = (0, fflate_1.strFromU8)((0, fflate_1.gunzipSync)(bytes));
+                const parsed = (0, ion_js_1.loadAll)(ion);
+                for (const outerRec of parsed) {
+                    const json = JSON.parse(JSON.stringify(outerRec));
+                    const rec = json.Item;
+                    if ((rec.pk === "GAME") && (rec.sk.includes("#1#"))) {
+                        justGames.push(rec);
+                    }
+                }
+            }
+        }
+        catch (err) {
+            console.error(err);
+        }
+    }
+    console.log(`Found ${justGames.length} completed GAME records`);
     // for each game, generate a game record and categorize it
     const pushToMap = (m, key, value) => {
         if (m.has(key)) {
@@ -69,7 +83,7 @@ const handler = async (event, context) => {
     const allRecs = [];
     const metaRecs = new Map();
     const userRecs = new Map();
-    for (const gdata of gamesCollated) {
+    for (const gdata of justGames) {
         const g = (0, gameslib_1.GameFactory)(gdata.metaGame, gdata.state);
         if (g === undefined) {
             throw new Error(`Unable to instantiate ${gdata.metaGame} game ${gdata.id}:\n${JSON.stringify(gdata.state)}`);
@@ -87,13 +101,12 @@ const handler = async (event, context) => {
             pushToMap(userRecs, p.id, rec);
         }
     }
+    console.log(`allRecs: ${allRecs.length}, metaRecs: ${[...metaRecs.keys()].length}, userRecs: ${[...userRecs.keys()].length}`);
     // write files to S3
-    const s3arn = "records.abstractplay.com";
-    const fnAll = "_ALL.json";
     const bodyAll = JSON.stringify(allRecs);
     let cmd = new client_s3_1.PutObjectCommand({
-        Bucket: s3arn,
-        Key: fnAll,
+        Bucket: REC_BUCKET,
+        Key: "ALL.json",
         Body: bodyAll,
     });
     let response = await s3.send(cmd);
@@ -104,8 +117,8 @@ const handler = async (event, context) => {
     // meta games
     for (const [meta, recs] of metaRecs.entries()) {
         cmd = new client_s3_1.PutObjectCommand({
-            Bucket: s3arn,
-            Key: `_meta_${meta}.json`,
+            Bucket: REC_BUCKET,
+            Key: `meta/${meta}.json`,
             Body: JSON.stringify(recs),
         });
         response = await s3.send(cmd);
@@ -117,8 +130,8 @@ const handler = async (event, context) => {
     // players
     for (const [player, recs] of userRecs.entries()) {
         cmd = new client_s3_1.PutObjectCommand({
-            Bucket: s3arn,
-            Key: `_meta_${player}.json`,
+            Bucket: REC_BUCKET,
+            Key: `/player/${player}.json`,
             Body: JSON.stringify(recs),
         });
         response = await s3.send(cmd);
@@ -127,6 +140,5 @@ const handler = async (event, context) => {
         }
     }
     console.log("Player recs done");
-    return;
 };
 exports.handler = handler;
