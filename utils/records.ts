@@ -3,7 +3,7 @@
 import { S3Client, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, type _Object } from "@aws-sdk/client-s3";
 import { Handler } from "aws-lambda";
 import { GameFactory } from '@abstractplay/gameslib';
-import { APGameRecord } from '@abstractplay/recranks';
+import { type APGameRecord } from '@abstractplay/recranks';
 import { gunzipSync, strFromU8 } from "fflate";
 import { loadAll } from "ion-js";
 
