@@ -2962,6 +2962,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
 async function getExploration(userid: string, pars: { game: string; move: number }) {
   const work: Promise<any>[] = [];
   try {
+    // get exploration you did while looking at this position in a previous visit to the game
     work.push(ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -2971,7 +2972,20 @@ async function getExploration(userid: string, pars: { game: string; move: number
           },
       })
     ));
-
+    // also get exploration you did while you opponent was on move, or if it is his move, the exploration you did for your last move.
+    if (pars.move > 0) {
+      work.push(ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "GAMEEXPLORATION#" + pars.game,
+            "sk": userid + "#" + (pars.move - 1)
+            },
+        })
+      ));
+    }
+    // and exploration you did when it was last your move. No need to further back because that exploration would have been merged when it was
+    // last your move (unless you turned off exploration for that move, but...)
     if (pars.move > 1) {
       work.push(ddbDocClient.send(
         new GetCommand({
