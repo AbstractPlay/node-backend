@@ -1,7 +1,7 @@
 // tslint:disable: no-console
-import { S3Client, GetObjectCommand, PutObjectCommand, type _Object } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { Handler } from "aws-lambda";
-import { IRating, APGameRecord, ELOBasic } from "@abstractplay/recranks";
+import { type IRating, type APGameRecord, ELOBasic } from "@abstractplay/recranks";
 // import { nanoid } from "nanoid";
 
 const REGION = "us-east-1";
@@ -9,10 +9,10 @@ const s3 = new S3Client({region: REGION});
 const REC_BUCKET = "records.abstractplay.com";
 
 type RatingList = {
-    [k: string]: {
-        [k: string]: IRating;
-    }
-};
+    user: string;
+    game: string;
+    rating: IRating;
+}[];
 
 interface UserRating {
     user: string;
@@ -100,8 +100,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         const playerIDs = new Set<string>();
         const meta2recs = new Map<string, APGameRecord[]>();
         const player2recs = new Map<string, APGameRecord[]>();
-        const g2p2r: RatingList = {};
-        const p2g2r: RatingList = {};
+        const ratingList: RatingList = [];
         let oldest: string|undefined;
         let newest: string|undefined;
 
@@ -180,36 +179,30 @@ export const handler: Handler = async (event: any, context?: any) => {
                 rating.gamename = meta;
                 const [,userid] = rating.userid.split("|");
                 rating.userid = userid;
-                if (meta in g2p2r) {
-                    g2p2r[meta][userid] = rating;
-                } else {
-                    g2p2r[meta] = {[userid]: rating}
-                }
-                if (meta in p2g2r) {
-                    p2g2r[userid][meta] = rating;
-                } else {
-                    p2g2r[userid] = {[meta]: rating}
-                }
+                ratingList.push({user: userid, game: meta, rating});
                 rawList.push({user: userid, game: meta, rating: Math.round(rating.rating)});
             }
         }
+
+        const ratedGames = new Set<string>(ratingList.map(r => r.game));
+        const ratedPlayers = new Set<string>(ratingList.map(r => r.user));
 
         // LISTS OF RATINGS
         // raw [see `rawList` above]
         // average rating
         const avgRatings: UserRating[] = [];
-        for (const p of Object.keys(p2g2r)) {
-            const ratings = [...Object.values(p2g2r[p])].map(r => r.rating);
+        for (const p of ratedPlayers) {
+            const ratings = ratingList.filter(r => r.user === p).map(r => r.rating.rating);
             const sum = ratings.reduce((prev, curr) => prev + curr, 0);
             const avg = Math.round(sum / ratings.length);
             avgRatings.push({user: p, rating: avg});
         }
         // average rating, weighted by number of plays
         const weightedRatings: UserRating[] = [];
-        for (const p of Object.keys(p2g2r)) {
-            const counts = [...Object.values(p2g2r[p])].map(r => r.recCount);
+        for (const p of ratedPlayers) {
+            const counts = ratingList.filter(r => r.user === p).map(r => r.rating.recCount);
             const totalRecs = counts.reduce((prev, curr) => prev + curr, 0);
-            const ratings = [...Object.values(p2g2r[p])].map(r => r.rating * (r.recCount / totalRecs));
+            const ratings = ratingList.filter(r => r.user === p).map(r => r.rating.rating * (r.rating.recCount / totalRecs));
             const sum = ratings.reduce((prev, curr) => prev + curr, 0);
             const avg = Math.round(sum);
             weightedRatings.push({user: p, rating: avg});
@@ -217,11 +210,11 @@ export const handler: Handler = async (event: any, context?: any) => {
 
         // TOP PLAYERS
         const topPlayers: UserGameRating[] = [];
-        for (const g of Object.keys(g2p2r)) {
-            const ratings = [...Object.values(g2p2r[g])];
-            ratings.sort((a, b) => b.rating - a.rating);
+        for (const g of ratedGames) {
+            const ratings = ratingList.filter(r => r.game === g);
+            ratings.sort((a, b) => b.rating.rating - a.rating.rating);
             const top = ratings[0];
-            topPlayers.push({user: top.userid, game: g, rating: Math.round(top.rating)});
+            topPlayers.push({user: top.user, game: g, rating: Math.round(top.rating.rating)});
         }
 
         // POPULAR GAMES
