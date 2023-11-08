@@ -166,11 +166,13 @@ export const handler: Handler = async (event: any, context?: any) => {
                 };
             }
         }
-        const sortVariants = (rec: APGameRecord): string|undefined => {
+        const sortVariants = (rec: APGameRecord): string => {
             if ( (rec.header.game.variants !== undefined) && (rec.header.game.variants.length > 0) ) {
                 const lst = [...rec.header.game.variants];
                 lst.sort();
                 return lst.join("|");
+            } else {
+                return "";
             }
         }
         const metaStats: {[k: string]: TwoPlayerStats} = {};
@@ -184,18 +186,23 @@ export const handler: Handler = async (event: any, context?: any) => {
                     winsFirst: combined.winsFirst,
                 };
             }
-            const allVariants = new Set<string|undefined>(recs.map(r => sortVariants(r)));
-            for (const combo of allVariants) {
-                if (combo === undefined) { continue; }
-                const subset = recs.filter(r => sortVariants(r) === combo);
-                const substats = calcStats(subset);
-                if (substats !== undefined) {
-                    metaStats[`${game} (${combo})`] = {
-                        n: substats.n,
-                        lenAvg: substats.lenAvg,
-                        lenMedian: substats.lenMedian,
-                        winsFirst: substats.winsFirst,
-                    };
+            const allVariants = new Set<string>(recs.map(r => sortVariants(r)));
+            if (allVariants.size > 1) {
+                for (const combo of allVariants) {
+                    const subset = recs.filter(r => sortVariants(r) === combo);
+                    const substats = calcStats(subset);
+                    let metaName = `${game} (${combo})`;
+                    if (combo === "") {
+                        metaName = `${game} (no variants)`;
+                    }
+                    if (substats !== undefined) {
+                        metaStats[metaName] = {
+                            n: substats.n,
+                            lenAvg: substats.lenAvg,
+                            lenMedian: substats.lenMedian,
+                            winsFirst: substats.winsFirst,
+                        };
+                    }
                 }
             }
         }
