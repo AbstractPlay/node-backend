@@ -25,6 +25,7 @@ type GameRec = {
     sk: string;
     metaGame: string;
     state: string;
+    pieInvoked?: boolean;
     players: {
         name: string;
         id: string;
@@ -122,6 +123,10 @@ export const handler: Handler = async (event: any, context?: any) => {
         });
         if (rec === undefined) {
             throw new Error(`Unable to create a game report for ${gdata.metaGame} game ${gdata.id}:\n${JSON.stringify(gdata.state)}`);
+        }
+        // check for pie
+        if ( (gdata.pieInvoked !== undefined) && (gdata.pieInvoked) ) {
+            rec.header.pied = true;
         }
         allRecs.push(rec);
         pushToMap(metaRecs, gdata.metaGame, rec);

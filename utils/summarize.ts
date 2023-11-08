@@ -132,15 +132,14 @@ export const handler: Handler = async (event: any, context?: any) => {
         const numPlayers = playerIDs.size;
 
         // META STATS
-        const metaStats: {[k: string]: TwoPlayerStats} = {};
-        for (const [game, recs] of meta2recs.entries()) {
+        const calcStats = (recs: APGameRecord[]): TwoPlayerStats|undefined => {
             let n = 0;
             let fpWins = 0;
-            const length: number[] = [];
+            const lengths: number[] = [];
             for (const rec of recs) {
                 if ( (rec.header.players.length === 2) && (rec.moves.length > 2) ) {
                     n++;
-                    length.push(rec.moves.length);
+                    lengths.push(rec.moves.length);
                     if (rec.header.players[0].result > rec.header.players[1].result) {
                         fpWins++;
                     }
@@ -148,23 +147,56 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
             if (n > 0) {
                 const wins = fpWins / n;
-                const sum = length.reduce((prev, curr) => prev + curr, 0);
-                const avg = sum / length.length;
-                length.sort();
+                const sum = lengths.reduce((prev, curr) => prev + curr, 0);
+                const avg = sum / lengths.length;
+                lengths.sort();
                 let median: number;
-                if (length.length % 2 === 0) {
-                    const rightIdx = length.length / 2;
+                if (lengths.length % 2 === 0) {
+                    const rightIdx = lengths.length / 2;
                     const leftIdx = rightIdx - 1;
-                    median = (length[leftIdx] + length[rightIdx]) / 2;
+                    median = (lengths[leftIdx] + lengths[rightIdx]) / 2;
                 } else {
-                    median = length[Math.floor(length.length / 2)];
+                    median = lengths[Math.floor(lengths.length / 2)];
                 }
-                metaStats[game] = {
+                return {
                     n,
                     lenAvg: avg,
                     lenMedian: median,
                     winsFirst: wins,
                 };
+            }
+        }
+        const sortVariants = (rec: APGameRecord): string|undefined => {
+            if ( (rec.header.game.variants !== undefined) && (rec.header.game.variants.length > 0) ) {
+                const lst = [...rec.header.game.variants];
+                lst.sort();
+                return lst.join("|");
+            }
+        }
+        const metaStats: {[k: string]: TwoPlayerStats} = {};
+        for (const [game, recs] of meta2recs.entries()) {
+            const combined = calcStats(recs);
+            if (combined !== undefined) {
+                metaStats[game] = {
+                    n: combined.n,
+                    lenAvg: combined.lenAvg,
+                    lenMedian: combined.lenMedian,
+                    winsFirst: combined.winsFirst,
+                };
+            }
+            const allVariants = new Set<string|undefined>(recs.map(r => sortVariants(r)));
+            for (const combo of allVariants) {
+                if (combo === undefined) { continue; }
+                const subset = recs.filter(r => sortVariants(r) === combo);
+                const substats = calcStats(subset);
+                if (substats !== undefined) {
+                    metaStats[`${game} (${combo})`] = {
+                        n: substats.n,
+                        lenAvg: substats.lenAvg,
+                        lenMedian: substats.lenMedian,
+                        winsFirst: substats.winsFirst,
+                    };
+                }
             }
         }
 
