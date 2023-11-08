@@ -1,11 +1,13 @@
 // tslint:disable: no-console
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { CloudFrontClient, CreateInvalidationCommand, type CreateInvalidationCommandInput } from "@aws-sdk/client-cloudfront";
 import { Handler } from "aws-lambda";
 import { type IRating, type APGameRecord, ELOBasic } from "@abstractplay/recranks";
 // import { nanoid } from "nanoid";
 
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
+const cloudfront = new CloudFrontClient({region: REGION});
 const REC_BUCKET = "records.abstractplay.com";
 
 type RatingList = {
@@ -342,5 +344,23 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
 
         console.log("Analysis complete");
+
+        // invalidate CloudFront distribution
+        const cfParams: CreateInvalidationCommandInput = {
+            DistributionId: "EM4FVU08T5188",
+            InvalidationBatch: {
+                CallerReference: Date.now().toString(),
+                Paths: {
+                    Quantity: 1,
+                    Items: ["/*"],
+                },
+            },
+        };
+        const cfCmd = new CreateInvalidationCommand(cfParams);
+        const cfResponse = await cloudfront.send(cfCmd);
+        if (cfResponse["$metadata"].httpStatusCode !== 200) {
+            console.log(cfResponse);
+        }
+        console.log("Invalidation sent");
     }
 }
