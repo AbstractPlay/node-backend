@@ -42,6 +42,11 @@ interface TwoPlayerStats {
     winsFirst: number;
 }
 
+interface GameNumList {
+    game: string;
+    value: number[];
+}
+
 type GameSummary = {
     numGames: number;
     numPlayers: number;
@@ -56,12 +61,18 @@ type GameSummary = {
     plays: {
         total: GameNumber[];
         width: GameNumber[];
-    },
+    };
     players: {
         social: UserNumber[];
         eclectic: UserNumber[];
         allPlays: UserNumber[];
-    },
+    };
+    histograms: {
+        all: number[];
+        meta: GameNumList[];
+    };
+    recent: GameNumber[];
+    hoursPer: number[];
     metaStats: {
         [k: string]: TwoPlayerStats;
     }
@@ -311,6 +322,48 @@ export const handler: Handler = async (event: any, context?: any) => {
             social.push({user, value: opps.size});
         }
 
+        // HISTOGRAMS
+        const histList: {game: string; bucket: number}[] = [];
+        const baseline = Date.now();
+        // all first
+        for (const rec of recs) {
+            const completed = (new Date(rec.header["date-end"])).getTime();
+            const daysAgo = (baseline - completed) / (24 * 60 * 60 * 1000);
+            const bucket = Math.floor(daysAgo / 7);
+            histList.push({game: rec.header.game.name, bucket});
+        }
+        const histAll: number[] = [];
+        const maxBucket = Math.max(...histList.map(x => x.bucket));
+        for (let i = 0; i <= maxBucket; i++) {
+            histAll.push(histList.filter(x => x.bucket === i).length);
+        }
+        const histMeta: GameNumList[] = [];
+        const recent: GameNumber[] = [];
+        for (const meta of meta2recs.keys()) {
+            const subset = histList.filter(x => x.game === meta);
+            const maxBucket = Math.max(...subset.map(x => x.bucket));
+            const lst: number[] = [];
+            for (let i = 0; i <= maxBucket; i++) {
+                lst.push(subset.filter(x => x.bucket === i).length);
+            }
+            histMeta.push({game: meta, value: [...lst]});
+            const slice = lst.slice(-4);
+            recent.push({game: meta, value: slice.reduce((prev, curr) => prev + curr, 0)});
+        }
+
+        // DAYS PER MOVE
+        const hoursPer: number[] = [];
+        for (const rec of recs) {
+            if (rec.header["date-start"] !== undefined) {
+                const started = (new Date(rec.header["date-start"])).getTime();
+                const completed = (new Date(rec.header["date-end"])).getTime();
+                const duration = completed - started;
+                const numMoves = (rec.moves as any[]).map(m => m.length).reduce((prev, curr) => prev + curr, 0);
+                const secsPer = duration / numMoves;
+                hoursPer.push(secsPer / (60 * 60 * 1000));
+            }
+        }
+
         const summary: GameSummary = {
             numGames,
             numPlayers,
@@ -331,6 +384,12 @@ export const handler: Handler = async (event: any, context?: any) => {
                 eclectic,
                 social
             },
+            histograms: {
+                all: histAll,
+                meta: histMeta,
+            },
+            hoursPer,
+            recent,
             metaStats,
         }
         const cmd = new PutObjectCommand({
