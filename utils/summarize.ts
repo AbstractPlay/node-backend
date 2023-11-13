@@ -354,6 +354,11 @@ export const handler: Handler = async (event: any, context?: any) => {
         // DAYS PER MOVE
         const hoursPer: number[] = [];
         for (const rec of recs) {
+            // omit "timeout" records
+            const last = (rec.moves as any[]).slice(-1);
+            if (last.includes("timeout")) {
+                continue;
+            }
             if (rec.header["date-start"] !== undefined) {
                 const started = (new Date(rec.header["date-start"])).getTime();
                 const completed = (new Date(rec.header["date-end"])).getTime();
