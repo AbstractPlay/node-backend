@@ -366,7 +366,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             // omit "timeout" records
             const last = (rec.moves as string[][])[rec.moves.length - 1];
             if (last.includes("timeout")) {
-                console.log(`Skipping record ${rec.header.site.gameid} because it contains a timeout move`)
+                // console.log(`Skipping record ${rec.header.site.gameid} because it contains a timeout move`)
                 continue;
             }
             if (rec.header["date-start"] !== undefined) {
