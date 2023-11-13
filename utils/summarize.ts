@@ -42,6 +42,11 @@ interface TwoPlayerStats {
     winsFirst: number;
 }
 
+interface GameNumList {
+    game: string;
+    value: number[];
+}
+
 type GameSummary = {
     numGames: number;
     numPlayers: number;
@@ -56,12 +61,18 @@ type GameSummary = {
     plays: {
         total: GameNumber[];
         width: GameNumber[];
-    },
+    };
     players: {
         social: UserNumber[];
         eclectic: UserNumber[];
         allPlays: UserNumber[];
-    },
+    };
+    histograms: {
+        all: number[];
+        meta: GameNumList[];
+    };
+    recent: GameNumber[];
+    hoursPer: number[];
     metaStats: {
         [k: string]: TwoPlayerStats;
     }
@@ -85,6 +96,7 @@ export const handler: Handler = async (event: any, context?: any) => {
 
     let recs: APGameRecord[]|undefined;
     try {
+        console.log("Loading all game records");
         const response = await s3.send(command);
         // The Body object also has 'transformToByteArray' and 'transformToWebStream' methods.
         const str = await response.Body?.transformToString();
@@ -106,6 +118,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         let oldest: string|undefined;
         let newest: string|undefined;
 
+        console.log("Segmenting records by meta and player");
         for (const rec of recs) {
             // get list of unique player IDs for numPlayers
             // separate records by player
@@ -134,6 +147,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         const numPlayers = playerIDs.size;
 
         // META STATS
+        console.log("Calculating meta stats");
         const calcStats = (recs: APGameRecord[]): TwoPlayerStats|undefined => {
             let n = 0;
             let fpWins = 0;
@@ -210,6 +224,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
 
         // rate the records for each game
+        console.log("Rating records");
         const rater = new ELOBasic();
         // collate list of raw ratings right here and now
         const rawList: UserGameRating[] = [];
@@ -229,6 +244,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         const ratedPlayers = new Set<string>(ratingList.map(r => r.user));
 
         // LISTS OF RATINGS
+        console.log("Summarizing ratings");
         // raw [see `rawList` above]
         // average rating
         const avgRatings: UserRating[] = [];
@@ -259,6 +275,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
 
         // POPULAR GAMES
+        console.log("Calculating play stats");
         // total plays
         const numPlays: GameNumber[] = [];
         for (const [game, recs] of meta2recs.entries()) {
@@ -279,6 +296,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
 
         // PLAYER STATISTICS
+        console.log("Calculating player statistics");
         // all plays
         const allPlays: UserNumber[] = [];
         for (const [user, recs] of player2recs.entries()) {
@@ -311,6 +329,56 @@ export const handler: Handler = async (event: any, context?: any) => {
             social.push({user, value: opps.size});
         }
 
+        // HISTOGRAMS
+        console.log("Calculating histograms");
+        const histList: {game: string; bucket: number}[] = [];
+        const baseline = Date.now();
+        // all first
+        for (const rec of recs) {
+            const completed = (new Date(rec.header["date-end"])).getTime();
+            const daysAgo = (baseline - completed) / (24 * 60 * 60 * 1000);
+            const bucket = Math.floor(daysAgo / 7);
+            histList.push({game: rec.header.game.name, bucket});
+        }
+        const histAll: number[] = [];
+        const maxBucket = Math.max(...histList.map(x => x.bucket));
+        for (let i = 0; i <= maxBucket; i++) {
+            histAll.push(histList.filter(x => x.bucket === i).length);
+        }
+        const histMeta: GameNumList[] = [];
+        const recent: GameNumber[] = [];
+        for (const meta of meta2recs.keys()) {
+            const subset = histList.filter(x => x.game === meta);
+            const maxBucket = Math.max(...subset.map(x => x.bucket));
+            const lst: number[] = [];
+            for (let i = 0; i <= maxBucket; i++) {
+                lst.push(subset.filter(x => x.bucket === i).length);
+            }
+            histMeta.push({game: meta, value: [...lst]});
+            const slice = lst.slice(-4);
+            recent.push({game: meta, value: slice.reduce((prev, curr) => prev + curr, 0)});
+        }
+
+        // HOURS PER MOVE
+        console.log("Calculating hours per move");
+        const hoursPer: number[] = [];
+        for (const rec of recs) {
+            // omit "timeout" records
+            const last = (rec.moves as string[][])[rec.moves.length - 1];
+            if (last.includes("timeout")) {
+                // console.log(`Skipping record ${rec.header.site.gameid} because it contains a timeout move`)
+                continue;
+            }
+            if (rec.header["date-start"] !== undefined) {
+                const started = (new Date(rec.header["date-start"])).getTime();
+                const completed = (new Date(rec.header["date-end"])).getTime();
+                const duration = completed - started;
+                const numMoves = (rec.moves as any[]).map(m => m.length).reduce((prev, curr) => prev + curr, 0);
+                const secsPer = duration / numMoves;
+                hoursPer.push(secsPer / (60 * 60 * 1000));
+            }
+        }
+
         const summary: GameSummary = {
             numGames,
             numPlayers,
@@ -331,6 +399,12 @@ export const handler: Handler = async (event: any, context?: any) => {
                 eclectic,
                 social
             },
+            histograms: {
+                all: histAll,
+                meta: histMeta,
+            },
+            hoursPer,
+            recent,
             metaStats,
         }
         const cmd = new PutObjectCommand({
