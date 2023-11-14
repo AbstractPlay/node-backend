@@ -364,8 +364,8 @@ export const handler: Handler = async (event: any, context?: any) => {
         const hoursPer: number[] = [];
         for (const rec of recs) {
             // omit "timeout" records
-            const last = (rec.moves as string[][])[rec.moves.length - 1];
-            if (last.includes("timeout")) {
+            const moveStr = JSON.stringify(rec.moves);
+            if ( (moveStr.includes("timeout")) || (rec.moves.length < 2) ) {
                 // console.log(`Skipping record ${rec.header.site.gameid} because it contains a timeout move`)
                 continue;
             }
@@ -375,7 +375,11 @@ export const handler: Handler = async (event: any, context?: any) => {
                 const duration = completed - started;
                 const numMoves = (rec.moves as any[]).map(m => m.length).reduce((prev, curr) => prev + curr, 0);
                 const secsPer = duration / numMoves;
-                hoursPer.push(secsPer / (60 * 60 * 1000));
+                const hours = secsPer / (60 * 60 * 1000);
+                if (hours > 200) {
+                    console.log(`Excessive hoursPer found at record ${rec.header.site.gameid}`);
+                }
+                hoursPer.push(hours);
             }
         }
 
