@@ -30,9 +30,19 @@ interface GameNumber {
     value: number;
 }
 
+interface GameNumList {
+    game: string;
+    value: number[];
+}
+
 interface UserNumber {
     user: string;
     value: number;
+}
+
+interface UserNumList {
+    user: string;
+    value: number[];
 }
 
 interface TwoPlayerStats {
@@ -40,11 +50,6 @@ interface TwoPlayerStats {
     lenAvg: number;
     lenMedian: number;
     winsFirst: number;
-}
-
-interface GameNumList {
-    game: string;
-    value: number[];
 }
 
 type GameSummary = {
@@ -70,6 +75,8 @@ type GameSummary = {
     histograms: {
         all: number[];
         meta: GameNumList[];
+        players: UserNumList[];
+        firstTimers: number[];
     };
     recent: GameNumber[];
     hoursPer: number[];
@@ -332,6 +339,8 @@ export const handler: Handler = async (event: any, context?: any) => {
         // HISTOGRAMS
         console.log("Calculating histograms");
         const histList: {game: string; bucket: number}[] = [];
+        const histListPlayers: {user: string; bucket: number}[] = [];
+        const completedList: {user: string; time: number}[] = [];
         const baseline = Date.now();
         // all first
         for (const rec of recs) {
@@ -339,9 +348,15 @@ export const handler: Handler = async (event: any, context?: any) => {
             const daysAgo = (baseline - completed) / (24 * 60 * 60 * 1000);
             const bucket = Math.floor(daysAgo / 7);
             histList.push({game: rec.header.game.name, bucket});
+            for (const player of rec.header.players) {
+                histListPlayers.push({user: player.userid, bucket});
+                completedList.push({user: player.userid, time: completed})
+            }
         }
+
+        // all games
         const histAll: number[] = [];
-        const maxBucket = Math.max(...histList.map(x => x.bucket));
+        let maxBucket = Math.max(...histList.map(x => x.bucket));
         for (let i = 0; i <= maxBucket; i++) {
             histAll.push(histList.filter(x => x.bucket === i).length);
         }
@@ -357,6 +372,33 @@ export const handler: Handler = async (event: any, context?: any) => {
             histMeta.push({game: meta, value: [...lst]});
             const slice = lst.slice(-4);
             recent.push({game: meta, value: slice.reduce((prev, curr) => prev + curr, 0)});
+        }
+
+        // individual players
+        const histPlayers: UserNumList[] = [];
+        for (const userid of (new Set<string>(histListPlayers.map(x => x.user)))) {
+            const subset = histListPlayers.filter(x => x.user === userid);
+            const maxBucket = Math.max(...subset.map(x => x.bucket));
+            const lst: number[] = [];
+            for (let i = 0; i <= maxBucket; i++) {
+                lst.push(subset.filter(x => x.bucket === i).length);
+            }
+            histPlayers.push({user: userid, value: [...lst]});
+        }
+
+        // first timers
+        const buckets: number[] = [];
+        for (const userid of (new Set<string>(completedList.map(x => x.user)))) {
+            const times = completedList.filter(x => x.user === userid).map(x => x.time);
+            const earliest = Math.min(...times);
+            const daysAgo = (baseline - earliest) / (24 * 60 * 60 * 1000);
+            const bucket = Math.floor(daysAgo / 7);
+            buckets.push(bucket);
+        }
+        const firstTimers: number[] = [];
+        maxBucket = Math.max(...buckets);
+        for (let i = 0; i <= maxBucket; i++) {
+            firstTimers.push(buckets.filter(x => x === i).length);
         }
 
         // HOURS PER MOVE
@@ -406,6 +448,8 @@ export const handler: Handler = async (event: any, context?: any) => {
             histograms: {
                 all: histAll,
                 meta: histMeta,
+                players: histPlayers,
+                firstTimers,
             },
             hoursPer,
             recent,
