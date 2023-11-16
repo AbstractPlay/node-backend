@@ -1,18 +1,20 @@
 // tslint:disable: no-console
-import { S3Client, GetObjectCommand, PutObjectCommand, type _Object } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { CloudFrontClient, CreateInvalidationCommand, type CreateInvalidationCommandInput } from "@aws-sdk/client-cloudfront";
 import { Handler } from "aws-lambda";
-import { IRating, APGameRecord, ELOBasic } from "@abstractplay/recranks";
+import { type IRating, type APGameRecord, ELOBasic } from "@abstractplay/recranks";
 // import { nanoid } from "nanoid";
 
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
+const cloudfront = new CloudFrontClient({region: REGION});
 const REC_BUCKET = "records.abstractplay.com";
 
 type RatingList = {
-    [k: string]: {
-        [k: string]: IRating;
-    }
-};
+    user: string;
+    game: string;
+    rating: IRating;
+}[];
 
 interface UserRating {
     user: string;
@@ -28,9 +30,19 @@ interface GameNumber {
     value: number;
 }
 
+interface GameNumList {
+    game: string;
+    value: number[];
+}
+
 interface UserNumber {
     user: string;
     value: number;
+}
+
+interface UserNumList {
+    user: string;
+    value: number[];
 }
 
 interface TwoPlayerStats {
@@ -54,12 +66,20 @@ type GameSummary = {
     plays: {
         total: GameNumber[];
         width: GameNumber[];
-    },
+    };
     players: {
         social: UserNumber[];
         eclectic: UserNumber[];
         allPlays: UserNumber[];
-    },
+    };
+    histograms: {
+        all: number[];
+        meta: GameNumList[];
+        players: UserNumList[];
+        firstTimers: number[];
+    };
+    recent: GameNumber[];
+    hoursPer: number[];
     metaStats: {
         [k: string]: TwoPlayerStats;
     }
@@ -83,6 +103,7 @@ export const handler: Handler = async (event: any, context?: any) => {
 
     let recs: APGameRecord[]|undefined;
     try {
+        console.log("Loading all game records");
         const response = await s3.send(command);
         // The Body object also has 'transformToByteArray' and 'transformToWebStream' methods.
         const str = await response.Body?.transformToString();
@@ -100,11 +121,11 @@ export const handler: Handler = async (event: any, context?: any) => {
         const playerIDs = new Set<string>();
         const meta2recs = new Map<string, APGameRecord[]>();
         const player2recs = new Map<string, APGameRecord[]>();
-        const g2p2r: RatingList = {};
-        const p2g2r: RatingList = {};
+        const ratingList: RatingList = [];
         let oldest: string|undefined;
         let newest: string|undefined;
 
+        console.log("Segmenting records by meta and player");
         for (const rec of recs) {
             // get list of unique player IDs for numPlayers
             // separate records by player
@@ -133,15 +154,15 @@ export const handler: Handler = async (event: any, context?: any) => {
         const numPlayers = playerIDs.size;
 
         // META STATS
-        const metaStats: {[k: string]: TwoPlayerStats} = {};
-        for (const [game, recs] of meta2recs.entries()) {
+        console.log("Calculating meta stats");
+        const calcStats = (recs: APGameRecord[]): TwoPlayerStats|undefined => {
             let n = 0;
             let fpWins = 0;
-            const length: number[] = [];
+            const lengths: number[] = [];
             for (const rec of recs) {
                 if ( (rec.header.players.length === 2) && (rec.moves.length > 2) ) {
                     n++;
-                    length.push(rec.moves.length);
+                    lengths.push(rec.moves.length);
                     if (rec.header.players[0].result > rec.header.players[1].result) {
                         fpWins++;
                     }
@@ -149,18 +170,18 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
             if (n > 0) {
                 const wins = fpWins / n;
-                const sum = length.reduce((prev, curr) => prev + curr, 0);
-                const avg = sum / length.length;
-                length.sort();
+                const sum = lengths.reduce((prev, curr) => prev + curr, 0);
+                const avg = sum / lengths.length;
+                lengths.sort();
                 let median: number;
-                if (length.length % 2 === 0) {
-                    const rightIdx = length.length / 2;
+                if (lengths.length % 2 === 0) {
+                    const rightIdx = lengths.length / 2;
                     const leftIdx = rightIdx - 1;
-                    median = (length[leftIdx] + length[rightIdx]) / 2;
+                    median = (lengths[leftIdx] + lengths[rightIdx]) / 2;
                 } else {
-                    median = length[Math.floor(length.length / 2)];
+                    median = lengths[Math.floor(lengths.length / 2)];
                 }
-                metaStats[game] = {
+                return {
                     n,
                     lenAvg: avg,
                     lenMedian: median,
@@ -168,8 +189,49 @@ export const handler: Handler = async (event: any, context?: any) => {
                 };
             }
         }
+        const sortVariants = (rec: APGameRecord): string => {
+            if ( (rec.header.game.variants !== undefined) && (rec.header.game.variants.length > 0) ) {
+                const lst = [...rec.header.game.variants];
+                lst.sort();
+                return lst.join("|");
+            } else {
+                return "";
+            }
+        }
+        const metaStats: {[k: string]: TwoPlayerStats} = {};
+        for (const [game, recs] of meta2recs.entries()) {
+            const combined = calcStats(recs);
+            if (combined !== undefined) {
+                metaStats[game] = {
+                    n: combined.n,
+                    lenAvg: combined.lenAvg,
+                    lenMedian: combined.lenMedian,
+                    winsFirst: combined.winsFirst,
+                };
+            }
+            const allVariants = new Set<string>(recs.map(r => sortVariants(r)));
+            if (allVariants.size > 1) {
+                for (const combo of allVariants) {
+                    const subset = recs.filter(r => sortVariants(r) === combo);
+                    const substats = calcStats(subset);
+                    let metaName = `${game} (${combo})`;
+                    if (combo === "") {
+                        metaName = `${game} (no variants)`;
+                    }
+                    if (substats !== undefined) {
+                        metaStats[metaName] = {
+                            n: substats.n,
+                            lenAvg: substats.lenAvg,
+                            lenMedian: substats.lenMedian,
+                            winsFirst: substats.winsFirst,
+                        };
+                    }
+                }
+            }
+        }
 
         // rate the records for each game
+        console.log("Rating records");
         const rater = new ELOBasic();
         // collate list of raw ratings right here and now
         const rawList: UserGameRating[] = [];
@@ -180,36 +242,31 @@ export const handler: Handler = async (event: any, context?: any) => {
                 rating.gamename = meta;
                 const [,userid] = rating.userid.split("|");
                 rating.userid = userid;
-                if (meta in g2p2r) {
-                    g2p2r[meta][userid] = rating;
-                } else {
-                    g2p2r[meta] = {[userid]: rating}
-                }
-                if (meta in p2g2r) {
-                    p2g2r[userid][meta] = rating;
-                } else {
-                    p2g2r[userid] = {[meta]: rating}
-                }
+                ratingList.push({user: userid, game: meta, rating});
                 rawList.push({user: userid, game: meta, rating: Math.round(rating.rating)});
             }
         }
 
+        const ratedGames = new Set<string>(ratingList.map(r => r.game));
+        const ratedPlayers = new Set<string>(ratingList.map(r => r.user));
+
         // LISTS OF RATINGS
+        console.log("Summarizing ratings");
         // raw [see `rawList` above]
         // average rating
         const avgRatings: UserRating[] = [];
-        for (const p of Object.keys(p2g2r)) {
-            const ratings = [...Object.values(p2g2r[p])].map(r => r.rating);
+        for (const p of ratedPlayers) {
+            const ratings = ratingList.filter(r => r.user === p).map(r => r.rating.rating);
             const sum = ratings.reduce((prev, curr) => prev + curr, 0);
             const avg = Math.round(sum / ratings.length);
             avgRatings.push({user: p, rating: avg});
         }
         // average rating, weighted by number of plays
         const weightedRatings: UserRating[] = [];
-        for (const p of Object.keys(p2g2r)) {
-            const counts = [...Object.values(p2g2r[p])].map(r => r.recCount);
+        for (const p of ratedPlayers) {
+            const counts = ratingList.filter(r => r.user === p).map(r => r.rating.recCount);
             const totalRecs = counts.reduce((prev, curr) => prev + curr, 0);
-            const ratings = [...Object.values(p2g2r[p])].map(r => r.rating * (r.recCount / totalRecs));
+            const ratings = ratingList.filter(r => r.user === p).map(r => r.rating.rating * (r.rating.recCount / totalRecs));
             const sum = ratings.reduce((prev, curr) => prev + curr, 0);
             const avg = Math.round(sum);
             weightedRatings.push({user: p, rating: avg});
@@ -217,14 +274,15 @@ export const handler: Handler = async (event: any, context?: any) => {
 
         // TOP PLAYERS
         const topPlayers: UserGameRating[] = [];
-        for (const g of Object.keys(g2p2r)) {
-            const ratings = [...Object.values(g2p2r[g])];
-            ratings.sort((a, b) => b.rating - a.rating);
+        for (const g of ratedGames) {
+            const ratings = ratingList.filter(r => r.game === g);
+            ratings.sort((a, b) => b.rating.rating - a.rating.rating);
             const top = ratings[0];
-            topPlayers.push({user: top.userid, game: g, rating: Math.round(top.rating)});
+            topPlayers.push({user: top.user, game: g, rating: Math.round(top.rating.rating)});
         }
 
         // POPULAR GAMES
+        console.log("Calculating play stats");
         // total plays
         const numPlays: GameNumber[] = [];
         for (const [game, recs] of meta2recs.entries()) {
@@ -245,6 +303,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
 
         // PLAYER STATISTICS
+        console.log("Calculating player statistics");
         // all plays
         const allPlays: UserNumber[] = [];
         for (const [user, recs] of player2recs.entries()) {
@@ -277,6 +336,95 @@ export const handler: Handler = async (event: any, context?: any) => {
             social.push({user, value: opps.size});
         }
 
+        // HISTOGRAMS
+        console.log("Calculating histograms");
+        const histList: {game: string; bucket: number}[] = [];
+        const histListPlayers: {user: string; bucket: number}[] = [];
+        const completedList: {user: string; time: number}[] = [];
+        const baseline = Date.now();
+        // all first
+        for (const rec of recs) {
+            const completed = (new Date(rec.header["date-end"])).getTime();
+            const daysAgo = (baseline - completed) / (24 * 60 * 60 * 1000);
+            const bucket = Math.floor(daysAgo / 7);
+            histList.push({game: rec.header.game.name, bucket});
+            for (const player of rec.header.players) {
+                histListPlayers.push({user: player.userid, bucket});
+                completedList.push({user: player.userid, time: completed})
+            }
+        }
+
+        // all games
+        const histAll: number[] = [];
+        let maxBucket = Math.max(...histList.map(x => x.bucket));
+        for (let i = 0; i <= maxBucket; i++) {
+            histAll.push(histList.filter(x => x.bucket === i).length);
+        }
+        const histMeta: GameNumList[] = [];
+        const recent: GameNumber[] = [];
+        for (const meta of meta2recs.keys()) {
+            const subset = histList.filter(x => x.game === meta);
+            const maxBucket = Math.max(...subset.map(x => x.bucket));
+            const lst: number[] = [];
+            for (let i = 0; i <= maxBucket; i++) {
+                lst.push(subset.filter(x => x.bucket === i).length);
+            }
+            histMeta.push({game: meta, value: [...lst]});
+            const slice = lst.slice(-4);
+            recent.push({game: meta, value: slice.reduce((prev, curr) => prev + curr, 0)});
+        }
+
+        // individual players
+        const histPlayers: UserNumList[] = [];
+        for (const userid of (new Set<string>(histListPlayers.map(x => x.user)))) {
+            const subset = histListPlayers.filter(x => x.user === userid);
+            const maxBucket = Math.max(...subset.map(x => x.bucket));
+            const lst: number[] = [];
+            for (let i = 0; i <= maxBucket; i++) {
+                lst.push(subset.filter(x => x.bucket === i).length);
+            }
+            histPlayers.push({user: userid, value: [...lst]});
+        }
+
+        // first timers
+        const buckets: number[] = [];
+        for (const userid of (new Set<string>(completedList.map(x => x.user)))) {
+            const times = completedList.filter(x => x.user === userid).map(x => x.time);
+            const earliest = Math.min(...times);
+            const daysAgo = (baseline - earliest) / (24 * 60 * 60 * 1000);
+            const bucket = Math.floor(daysAgo / 7);
+            buckets.push(bucket);
+        }
+        const firstTimers: number[] = [];
+        maxBucket = Math.max(...buckets);
+        for (let i = 0; i <= maxBucket; i++) {
+            firstTimers.push(buckets.filter(x => x === i).length);
+        }
+
+        // HOURS PER MOVE
+        console.log("Calculating hours per move");
+        const hoursPer: number[] = [];
+        for (const rec of recs) {
+            // omit "timeout" records
+            const moveStr = JSON.stringify(rec.moves);
+            if ( (moveStr.includes("timeout")) || (rec.moves.length < 2) ) {
+                // console.log(`Skipping record ${rec.header.site.gameid} because it contains a timeout move`)
+                continue;
+            }
+            if (rec.header["date-start"] !== undefined) {
+                const started = (new Date(rec.header["date-start"])).getTime();
+                const completed = (new Date(rec.header["date-end"])).getTime();
+                const duration = completed - started;
+                const numMoves = (rec.moves as any[]).map(m => m.length).reduce((prev, curr) => prev + curr, 0);
+                const secsPer = duration / numMoves;
+                const hours = secsPer / (60 * 60 * 1000);
+                if (hours > 200) {
+                    console.log(`Excessive hoursPer found at record ${rec.header.site.gameid}`);
+                }
+                hoursPer.push(hours);
+            }
+        }
+
         const summary: GameSummary = {
             numGames,
             numPlayers,
@@ -297,6 +445,14 @@ export const handler: Handler = async (event: any, context?: any) => {
                 eclectic,
                 social
             },
+            histograms: {
+                all: histAll,
+                meta: histMeta,
+                players: histPlayers,
+                firstTimers,
+            },
+            hoursPer,
+            recent,
             metaStats,
         }
         const cmd = new PutObjectCommand({
@@ -310,5 +466,23 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
 
         console.log("Analysis complete");
+
+        // invalidate CloudFront distribution
+        const cfParams: CreateInvalidationCommandInput = {
+            DistributionId: "EM4FVU08T5188",
+            InvalidationBatch: {
+                CallerReference: Date.now().toString(),
+                Paths: {
+                    Quantity: 1,
+                    Items: ["/*"],
+                },
+            },
+        };
+        const cfCmd = new CreateInvalidationCommand(cfParams);
+        const cfResponse = await cloudfront.send(cfCmd);
+        if (cfResponse["$metadata"].httpStatusCode !== 200) {
+            console.log(cfResponse);
+        }
+        console.log("Invalidation sent");
     }
 }
