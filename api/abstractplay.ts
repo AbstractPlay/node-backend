@@ -2682,7 +2682,7 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBaseSim
     // not a complete "turn" yet, just validate and save the new partial move
     game.partialMove = moves.join(',');
     console.log(game.partialMove);
-    engine.move(game.partialMove, true);
+    engine.move(game.partialMove, {partial: true});
   }
   else {
     // full move.
