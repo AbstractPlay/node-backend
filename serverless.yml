@@ -70,6 +70,7 @@ provider:
             - dynamodb:UpdateItem
             - dynamodb:DeleteItem
             - dynamodb:ExportTableToPointInTime
+            - dynamodb:BatchWriteItem
             - ses:SendEmail
             - ses:SendRawEmail
             - cloudfront:CreateInvalidation
