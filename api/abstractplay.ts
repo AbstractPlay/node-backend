@@ -2,10 +2,10 @@
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
 // import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
-import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
+import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush, { RequestOptions } from "web-push";
 import i18n from 'i18next';
@@ -178,6 +178,13 @@ type FullGame = {
   published?: string[];
 }
 
+type Playground = {
+    pk: "PLAYGROUND";
+    sk: string;
+    metaGame: string;
+    state: string;
+}
+
 type Comment = {
   comment: string;
   userId: string;
@@ -285,6 +292,12 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await getPrivateExploration(event.cognitoPoolClaims.sub, pars);
     case "get_game":
       return await game(event.cognitoPoolClaims.sub, pars);
+    case "get_playground":
+      return await getPlayground(event.cognitoPoolClaims.sub, pars);
+    case "new_playground":
+      return await newPlayground(event.cognitoPoolClaims.sub, pars);
+    case "reset_playground":
+      return await resetPlayground(event.cognitoPoolClaims.sub);
     case "toggle_star":
       return await toggleStar(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
@@ -573,6 +586,177 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
     return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
 }
+
+async function newPlayground(userid: string, pars: { metaGame: string; state: string; }) {
+    console.log(`New playground request received:\nGame: ${pars.metaGame}\nState: ${pars.state}`);
+    // first make sure it's a 2-player non-simultaneous game
+    const info: APGamesInformation|undefined = gameinfo.get(pars.metaGame);
+    let valid = true;
+    if (info !== undefined) {
+        if ( (! info.playercounts.includes(2)) || (info.flags.includes("simultaneous")) ) {
+            valid = false;
+        }
+    } else {
+        valid = false;
+    }
+
+    if (! valid) {
+        console.log(`Invalid game (400)`);
+        return {
+            statusCode: 400,
+            headers
+        };
+    }
+
+    // initialize the playground
+    try {
+        // delete existing exploration
+        console.log(`Deleting existing exploration`);
+        const explorationQuery = ddbDocClient.send(
+            new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk",
+                ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + userid },
+                ExpressionAttributeNames: { "#pk": "pk" },
+        }));
+        const explorationData = await explorationQuery;
+        const explorationRecs = explorationData.Items;
+        if (explorationRecs !== undefined) {
+            const batches = Math.ceil(explorationRecs.length / 10);
+            for (let batch = 0; batch < batches; batch++) {
+                const subset = explorationRecs.slice(batch * 10, 10);
+                await ddbDocClient.send(
+                    new BatchWriteCommand({
+                        "RequestItems": {
+                            [process.env.ABSTRACT_PLAY_TABLE!]: subset.map(item => ({
+                                DeleteRequest: {
+                                    Key: {
+                                        pk: item.pk,
+                                        sk: item.sk,
+                                    }
+                                }
+                            }))
+                        }
+                    })
+                );
+            }
+        }
+
+        // create new playground record
+        console.log(`Creating playground record`);
+        const Item: Playground = {
+            pk: "PLAYGROUND",
+            sk: userid,
+            metaGame: pars.metaGame,
+            state: pars.state,
+        };
+        await ddbDocClient.send(
+            new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Item,
+            })
+        );
+        console.log(`Returning ${JSON.stringify(Item)}`);
+        return {
+            statusCode: 200,
+            body: JSON.stringify(Item),
+            headers
+        };
+    }
+    catch (error) {
+        handleCommonErrors(error as {code: any; message: any});
+        return formatReturnError(`Unable to create playground for ${userid}: ${error}`);
+    }
+}
+
+async function resetPlayground(userid: string) {
+    console.log(`Playground reset requested`);
+    try {
+        // delete existing exploration
+        console.log(`Deleting existing exploration`);
+        const explorationQuery = ddbDocClient.send(
+            new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk",
+                ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + userid },
+                ExpressionAttributeNames: { "#pk": "pk" },
+        }));
+        const explorationData = await explorationQuery;
+        const explorationRecs = explorationData.Items;
+        if (explorationRecs !== undefined) {
+            const batches = Math.ceil(explorationRecs.length / 10);
+            for (let batch = 0; batch < batches; batch++) {
+                const subset = explorationRecs.slice(batch * 10, 10);
+                await ddbDocClient.send(
+                    new BatchWriteCommand({
+                        "RequestItems": {
+                            [process.env.ABSTRACT_PLAY_TABLE!]: subset.map(item => ({
+                                DeleteRequest: {
+                                    Key: {
+                                        pk: item.pk,
+                                        sk: item.sk,
+                                    }
+                                }
+                            }))
+                        }
+                    })
+                );
+            }
+        }
+
+        // delete existing playground record
+        await ddbDocClient.send(
+            new DeleteCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Key: {
+                "pk": "PLAYGROUND", "sk": userid
+              },
+            })
+        )
+        console.log(`Playground reset`);
+        return {
+            statusCode: 200,
+            headers
+        };
+    }
+    catch (error) {
+        handleCommonErrors(error as {code: any; message: any});
+        return formatReturnError(`Unable to reset playground for ${userid}: ${error}`);
+    }
+}
+
+async function getPlayground(userid: string, pars: any) {
+    try {
+      const getGame = ddbDocClient.send(
+         new GetCommand({
+           TableName: process.env.ABSTRACT_PLAY_TABLE,
+           Key: {
+             "pk": "PLAYGROUND",
+             "sk": userid
+           },
+         }));
+
+      const gameData = await getGame;
+      const game = gameData.Item as Playground;
+      if (game === undefined) {
+        return {
+             statusCode: 200,
+             body: JSON.stringify(null),
+             headers
+           };
+      }  else {
+         return {
+            headers,
+            statusCode: 200,
+            body: JSON.stringify(game),
+          };
+      }
+    }
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to get playground for user ${userid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    }
+  }
 
 async function toggleStar(userid: string, pars: {metaGame: string}) {
     try {
