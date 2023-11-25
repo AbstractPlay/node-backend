@@ -71,6 +71,7 @@ type GameSummary = {
         social: UserNumber[];
         eclectic: UserNumber[];
         allPlays: UserNumber[];
+        h: UserNumber[];
     };
     histograms: {
         all: number[];
@@ -335,6 +336,28 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
             social.push({user, value: opps.size});
         }
+        // h-index
+        const h: UserNumber[] = [];
+        for (const [user, recs] of player2recs.entries()) {
+            console.log(`Calculating h-index for user ${user}`);
+            const gameNames = new Set<string>(recs.map(r => r.header.game.name));
+            console.log(JSON.stringify([...gameNames.values()]));
+            const counts = new Map<string, number>();
+            for (const name of gameNames) {
+                counts.set(name, recs.filter(r => r.header.game.name === name).length);
+            }
+            console.log(JSON.stringify([...counts.entries()]));
+            const sorted = [...counts.values()].sort((a, b) => b - a);
+            let index = sorted.length;
+            for (let i = 0; i < sorted.length; i++) {
+                if (sorted[i] < i + 1) {
+                    index = i;
+                    break;
+                }
+            }
+            console.log(`h-index is ${index}`);
+            h.push({user, value: index});
+        }
 
         // HISTOGRAMS
         console.log("Calculating histograms");
@@ -443,7 +466,8 @@ export const handler: Handler = async (event: any, context?: any) => {
             players: {
                 allPlays,
                 eclectic,
-                social
+                social,
+                h,
             },
             histograms: {
                 all: histAll,
