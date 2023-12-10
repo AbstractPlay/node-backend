@@ -86,5 +86,25 @@ All data is in a single table. The primary key (or the first part of the primary
 
 - **Meta games** Stats for all metaGames
 	* pk: METAGAMES
-  * sh: COUNTS
+  * sk: COUNTS
 
+- **Tournaments** List of tournaments that are not completed yet. Either waiting for players to sign up, or ongoing.
+  * pk: TOURNAMENT
+  * sk: \<tournamentid\>
+
+- **Tournament Player**
+  * pk: TOURNAMENTPLAYER
+  * sk: \<tournamentid\>#\<division\>#\<playerid\>
+
+- **Tournament Game**
+  * pk: TOURNAMENTGAME
+  * sk: \<tournamentid\>#\<division\>#\<gameid\>
+
+- **Completed Tournaments** List of tournaments that are not completed yet. Either waiting for players to sign up, or ongoing.
+  * pk: COMPLETEDTOURNAMENT
+  * sk: \<tournamentid\>
+
+- **Tournament count** Counter for tournaments. Each metaGame + variants combination gets a count. Variants is a pipe delimited concatenation of (sorted) variations.
+  * pk: TOURNAMENTSCOUNTER
+  * sk: \<metaGame\>#<\variants\>
+{ counter, over }
