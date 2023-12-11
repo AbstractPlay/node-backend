@@ -179,7 +179,7 @@ functions:
   records:
     handler: utils/records.handler
     description: Generates static lists of game records
-    timeout: 120
+    timeout: 240
     memorySize: 2048
     events:
       - eventBridge:
