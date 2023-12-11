@@ -180,7 +180,7 @@ functions:
     handler: utils/records.handler
     description: Generates static lists of game records
     timeout: 480
-    memorySize: 2048
+    memorySize: 4096
     events:
       - eventBridge:
           name: abstractplay-${self:provider.stage}-records
