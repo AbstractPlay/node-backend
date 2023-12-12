@@ -23,6 +23,7 @@ interface UserRating {
 
 interface UserGameRating extends UserRating {
     game: string;
+    wld: [number,number,number];
 }
 
 interface GameNumber {
@@ -231,20 +232,30 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
         }
 
-        // rate the records for each game
+        // rate the records for each game (now subdivided by variants)
         console.log("Rating records");
         const rater = new ELOBasic();
         // collate list of raw ratings right here and now
         const rawList: UserGameRating[] = [];
         for (const [meta, recs] of meta2recs.entries()) {
-            const results = rater.runProcessed(recs);
-            console.log(`Rating records for "${meta}":\nTotal records: ${results.recsReceived}, Num rated: ${results.recsRated}\n${results.warnings !== undefined ? results.warnings.join("\n") + "\n" : ""}${results.errors !== undefined ? results.errors.join("\n") + "\n" : ""}`);
-            for (const rating of results.ratings.values()) {
-                rating.gamename = meta;
-                const [,userid] = rating.userid.split("|");
-                rating.userid = userid;
-                ratingList.push({user: userid, game: meta, rating});
-                rawList.push({user: userid, game: meta, rating: Math.round(rating.rating)});
+            const allVariants = new Set<string>(recs.map(r => sortVariants(r)));
+            if (allVariants.size > 1) {
+                for (const combo of allVariants) {
+                    const subset = recs.filter(r => sortVariants(r) === combo);
+                    let metaName = `${meta} (${combo})`;
+                    if (combo === "") {
+                        metaName = `${meta} (no variants)`;
+                    }
+                    const results = rater.runProcessed(subset);
+                    console.log(`Rating records for "${metaName}":\nTotal records: ${results.recsReceived}, Num rated: ${results.recsRated}\n${results.warnings !== undefined ? results.warnings.join("\n") + "\n" : ""}${results.errors !== undefined ? results.errors.join("\n") + "\n" : ""}`);
+                    for (const rating of results.ratings.values()) {
+                        rating.gamename = meta;
+                        const [,userid] = rating.userid.split("|");
+                        rating.userid = userid;
+                        ratingList.push({user: userid, game: metaName, rating});
+                        rawList.push({user: userid, game: metaName, rating: Math.round(rating.rating), wld: [rating.wins, rating.losses, rating.draws]});
+                    }
+                }
             }
         }
 
@@ -279,7 +290,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             const ratings = ratingList.filter(r => r.game === g);
             ratings.sort((a, b) => b.rating.rating - a.rating.rating);
             const top = ratings[0];
-            topPlayers.push({user: top.user, game: g, rating: Math.round(top.rating.rating)});
+            topPlayers.push({user: top.user, game: g, rating: Math.round(top.rating.rating), wld: [top.rating.wins, top.rating.losses, top.rating.draws]});
         }
 
         // POPULAR GAMES
