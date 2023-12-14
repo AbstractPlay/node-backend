@@ -2,7 +2,8 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { CloudFrontClient, CreateInvalidationCommand, type CreateInvalidationCommandInput } from "@aws-sdk/client-cloudfront";
 import { Handler } from "aws-lambda";
-import { type IRating, type APGameRecord, ELOBasic } from "@abstractplay/recranks";
+import { type IRating, type IGlickoRating, type APGameRecord, ELOBasic, Glicko2, type ITrueskillRating, Trueskill } from "@abstractplay/recranks";
+import { replacer } from "@abstractplay/gameslib/build/src/common";
 // import { nanoid } from "nanoid";
 
 const REGION = "us-east-1";
@@ -24,6 +25,8 @@ interface UserRating {
 interface UserGameRating extends UserRating {
     game: string;
     wld: [number,number,number];
+    glicko?: {rating: number; rd: number};
+    trueskill?: {mu: number; sigma: number};
 }
 
 interface GameNumber {
@@ -241,19 +244,97 @@ export const handler: Handler = async (event: any, context?: any) => {
             const allVariants = new Set<string>(recs.map(r => sortVariants(r)));
             if (allVariants.size > 1) {
                 for (const combo of allVariants) {
+                    console.log(`Rating game ${meta}, variant grouping ${combo}`);
                     const subset = recs.filter(r => sortVariants(r) === combo);
                     let metaName = `${meta} (${combo})`;
                     if (combo === "") {
                         metaName = `${meta} (no variants)`;
                     }
+                    // Elo ratings first
                     const results = rater.runProcessed(subset);
-                    console.log(`Rating records for "${metaName}":\nTotal records: ${results.recsReceived}, Num rated: ${results.recsRated}\n${results.warnings !== undefined ? results.warnings.join("\n") + "\n" : ""}${results.errors !== undefined ? results.errors.join("\n") + "\n" : ""}`);
+                    console.log(`Elo rater:\nTotal records: ${results.recsReceived}, Num rated: ${results.recsRated}\n${results.warnings !== undefined ? results.warnings.join("\n") + "\n" : ""}${results.errors !== undefined ? results.errors.join("\n") + "\n" : ""}`);
                     for (const rating of results.ratings.values()) {
                         rating.gamename = meta;
                         const [,userid] = rating.userid.split("|");
                         rating.userid = userid;
                         ratingList.push({user: userid, game: metaName, rating});
-                        rawList.push({user: userid, game: metaName, rating: Math.round(rating.rating), wld: [rating.wins, rating.losses, rating.draws]});
+                    }
+
+                    // now Trueskill
+                    console.log(`Running Trueskill ratings`);
+                    const ts = new Trueskill({betaStart: 25/9});
+                    const tsResults = ts.runProcessed(subset);
+                    const tsRatings = new Map(tsResults.ratings) as Map<string, ITrueskillRating>;
+                    if (ratingList.filter(r => r.game === metaName).length !== tsRatings.size) {
+                        const elo = new Set<string>(ratingList.map(r => r.user));
+                        const tsVals = new Set<string>([...tsRatings.values()].map(r => {const [,u] = r.userid.split("|"); return u;}))
+                        const inElo = [...elo.values()].filter(u => ! tsVals.has(u));
+                        const inTS = [...tsVals.values()].filter(u => ! elo.has(u));
+                        throw new Error(`The list of Elo ratings is not the same length as the list of Trueskill ratings.\nList of Elo ratings not in Trueskill: ${JSON.stringify(inElo, null, 2)}\nList of Trueskill ratings not in Elo: ${JSON.stringify(inTS, null, 2)}\nTrueskill ratings: ${JSON.stringify(tsRatings, replacer, 2)}`);
+                    }
+                    console.log(`Final Trueskill ratings:\n${JSON.stringify([...tsRatings.values()])}`)
+
+                    // now Glicko
+                    console.log(`Running Glicko2 ratings`);
+                    const glicko = new Glicko2();
+                    // get earliest and latest dates for subset
+                    const oldest = new Date(subset.map(r => r.header["date-end"]).sort((a, b) => a.localeCompare(b))[0]);
+                    const newest = new Date(subset.map(r => r.header["date-end"]).sort((a, b) => b.localeCompare(a))[0]);
+                    console.log(`Oldest: ${oldest}, Newest: ${newest}`);
+                    const delta = newest.getTime() - oldest.getTime();
+                    const period = 60 * 24 * 60 * 60 * 1000;
+                    let numPeriods = Math.ceil(delta / period);
+                    if (numPeriods === 0) { numPeriods++; }
+                    console.log(`Number of periods: ${numPeriods}`);
+                    let toDate = new Map<string, IGlickoRating>();
+                    let ratedRecs = 0;
+                    for (let p = 0; p < numPeriods; p++) {
+                        glicko.knownRatings = new Map(toDate);
+                        const pMin = oldest.getTime() + (p * period);
+                        const pMax = oldest.getTime() + ((p + 1) * period)
+                        const recs: APGameRecord[] = [];
+                        for (const rec of subset) {
+                            const secs = new Date(rec.header["date-end"]).getTime();
+                            if ( (secs >= pMin) && (secs < pMax) ) {
+                                recs.push(rec);
+                            }
+                        }
+                        ratedRecs += recs.length;
+                        const results = glicko.runProcessed(recs);
+                        toDate = new Map(results.ratings as Map<string, IGlickoRating>);
+                    }
+                    if (ratedRecs !== subset.length) {
+                        throw new Error(`The record subset had ${subset.length} records, but only ${ratedRecs} were handed to the rater.`);
+                    }
+                    // toDate now has the final rating results
+                    if (ratingList.filter(r => r.game === metaName).length !== toDate.size) {
+                        const elo = new Set<string>(ratingList.map(r => r.user));
+                        const glicko = new Set<string>([...toDate.values()].map(r => {const [,u] = r.userid.split("|"); return u;}))
+                        const inElo = [...elo.values()].filter(u => ! glicko.has(u));
+                        const inGlicko = [...glicko.values()].filter(u => ! elo.has(u));
+                        throw new Error(`The list of Elo ratings is not the same length as the list of Glicko ratings.\nList of Elo ratings not in Glicko: ${JSON.stringify(inElo, null, 2)}\nList of Glicko ratings not in Elo: ${JSON.stringify(inGlicko, null, 2)}\nGlicko ratings: ${JSON.stringify(toDate, replacer, 2)}`);
+                    }
+                    console.log(`Final glicko rating results: ${JSON.stringify(toDate, replacer)}`)
+
+                    // Save Elo, Glicko2, and Trueskill ratings into rawList
+                    for (const userStr of toDate.keys()) {
+                        const [,user] = userStr.split("|");
+                        const elo = ratingList.find(r => r.user === user && r.game === metaName)?.rating;
+                        if (elo === undefined) {
+                            throw new Error(`Could not find a matching Elo rating for ${user}.`);
+                        }
+                        const ts = tsRatings.get(userStr);
+                        if (ts === undefined) {
+                            throw new Error(`Could not find a matching Trueskill rating for ${user}.`);
+                        }
+                        const glicko = toDate.get(userStr)!;
+                        if (elo.recCount !== glicko.recCount) {
+                            throw new Error(`Rated recCounts do not match.`);
+                        }
+                        if (elo.recCount !== ts.recCount) {
+                            throw new Error(`Rated recCounts do not match for user ${user}:\nElo: ${elo.recCount}\Trueskill: ${glicko.recCount}`);
+                        }
+                        rawList.push({user, game: metaName, rating: Math.round(elo.rating), wld: [elo.wins, elo.losses, elo.draws], glicko: {rating: glicko.rating, rd: glicko.rd}, trueskill: {mu: ts.rating, sigma: ts.sigma}});
                     }
                 }
             }
