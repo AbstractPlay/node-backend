@@ -54,10 +54,10 @@ provider:
   environment:
     ABSTRACT_PLAY_TABLE: abstract-play-${self:provider.stage}
     userpool: ${param:userpool}
-    VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
-    VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
-    # VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
-    # VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
+    # VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
+    # VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
+    VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
+    VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
   iam:
     role:
       statements:
