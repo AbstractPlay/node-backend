@@ -339,7 +339,7 @@ async function userNames() {
         KeyConditionExpression: "#pk = :pk",
         ExpressionAttributeValues: { ":pk": "USERS" },
         ExpressionAttributeNames: { "#pk": "pk", "#name": "name"},
-        ProjectionExpression: "sk, #name, lastseen, country, stars",
+        ProjectionExpression: "sk, #name, lastSeen, country, stars",
         ReturnConsumedCapacity: "INDEXES"
       }));
 
@@ -351,7 +351,7 @@ async function userNames() {
     }
     return {
       statusCode: 200,
-      body: JSON.stringify(users.map(u => ({"id": u.sk, "name": u.name, "country": u.country, "stars": u.stars, "lastseen": u.lastseen}))),
+      body: JSON.stringify(users.map(u => ({"id": u.sk, "name": u.name, "country": u.country, "stars": u.stars, "lastSeen": u.lastSeen}))),
       headers
     };
   }
