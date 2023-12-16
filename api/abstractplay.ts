@@ -112,6 +112,8 @@ type FullUser = {
   }
   admin: boolean | undefined;
   language: string;
+  country: string;
+  lastSeen?: number;
   settings: UserSettings;
   ratings?: {
     [metaGame: string]: Rating
@@ -338,7 +340,7 @@ async function userNames() {
         KeyConditionExpression: "#pk = :pk",
         ExpressionAttributeValues: { ":pk": "USERS" },
         ExpressionAttributeNames: { "#pk": "pk", "#name": "name"},
-        ProjectionExpression: "sk, #name",
+        ProjectionExpression: "sk, #name, lastSeen, country, stars",
         ReturnConsumedCapacity: "INDEXES"
       }));
 
@@ -350,7 +352,7 @@ async function userNames() {
     }
     return {
       statusCode: 200,
-      body: JSON.stringify(users.map(u => ({"id": u.sk, "name": u.name}))),
+      body: JSON.stringify(users.map(u => ({"id": u.sk, "name": u.name, "country": u.country, "stars": u.stars, "lastSeen": u.lastSeen}))),
       headers
     };
   }
@@ -785,6 +787,14 @@ async function toggleStar(userid: string, pars: {metaGame: string}) {
             UpdateExpression: "set stars = :ss",
             }))
         );
+        list.push(
+            ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USERS", "sk": player.id },
+            ExpressionAttributeValues: { ":ss": player.stars },
+            UpdateExpression: "set stars = :ss",
+            }))
+        );
         console.log(`Queued update to player ${player.id}, ${player.name}, toggling star for ${pars.metaGame}: ${delta}`);
 
         /* Don't need to do this. Can just add directly. Assumes the metaCount has been updated before adding a new game, otherwise will throw an error. */
@@ -1106,6 +1116,12 @@ async function me(claim: PartialClaims, pars: { size: string }) {
       ExpressionAttributeValues: { ":dt": Date.now(), ":gs": games },
       UpdateExpression: "set lastSeen = :dt, games = :gs"
     }));
+    await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USERS", "sk": userId },
+        ExpressionAttributeValues: { ":dt": Date.now() },
+        UpdateExpression: "set lastSeen = :dt"
+    }));
     if (data) {
       // Still trying to get to the bottom of games shown as "to move" when already moved.
       console.log(`me returning for ${user.name}, id ${user.id} with games`, games);
@@ -1116,6 +1132,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "name": user.name,
           "admin": (user.admin === true),
           "language": user.language,
+          "country": user.country,
           "games": games,
           "settings": user.settings,
           "stars": user.stars,
@@ -1135,6 +1152,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "name": user.name,
           "admin": (user.admin === true),
           "language": user.language,
+          "country": user.country,
           "games": games,
           "settings": user.settings,
           "stars": user.stars,
@@ -1286,6 +1304,10 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
       attr = "language";
       val = pars.value;
       break;
+    case "country":
+      attr = "country";
+      val = pars.value;
+      break;
     default:
       return;
   }
@@ -1305,6 +1327,15 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
       ExpressionAttributeValues: { ":newname": val },
       ExpressionAttributeNames: { "#name": "name" },
       UpdateExpression: "set #name = :newname"
+    })));
+  }
+  if (pars.attribute === "country") {
+    work.push(ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USERS", "sk": userId },
+        ExpressionAttributeValues: { ":newcountry": val },
+        ExpressionAttributeNames: { "#country": "country" },
+        UpdateExpression: "set #country = :newcountry"
     })));
   }
   try {
@@ -3729,7 +3760,7 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
         }
     } catch (err) {
         logGetItemError(err);
-        return formatReturnError(`Unable to onetimeFix ${userId}`);
+        return formatReturnError(`Unable to setLastSeen ${userId}`);
     }
     if (user !== undefined) {
         // find matching game
@@ -3789,31 +3820,46 @@ async function onetimeFix(userId: string) {
         logGetItemError(err);
         return formatReturnError(`Unable to onetimeFix ${userId}`);
   }
-//   let totalUnits = 0;
-//   // get all USER records
-//   let data: any;
-//   let users: FullUser[] = [];
-//   try {
-//     data = await ddbDocClient.send(
-//         new QueryCommand({
-//             TableName: process.env.ABSTRACT_PLAY_TABLE,
-//             KeyConditionExpression: "#pk = :pk",
-//             ExpressionAttributeValues: { ":pk": "USER" },
-//             ExpressionAttributeNames: { "#pk": "pk" },
-//             ReturnConsumedCapacity: "INDEXES",
-//         })
-//       )
-//       if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
-//         totalUnits += data.ConsumedCapacity.CapacityUnits;
-//       } else {
-//         console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
-//       }
-//       users = data?.Items as FullUser[];
-//       console.log(JSON.stringify(users, null, 2));
-//   } catch (err) {
-//     logGetItemError(err);
-//     return formatReturnError(`Unable to onetimeFix get all users`);
-//   }
+
+  let totalUnits = 0;
+  // get all USER records
+  let data: any;
+  let users: FullUser[] = [];
+  try {
+    data = await ddbDocClient.send(
+        new QueryCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            KeyConditionExpression: "#pk = :pk",
+            ExpressionAttributeValues: { ":pk": "USER" },
+            ExpressionAttributeNames: { "#pk": "pk" },
+            ReturnConsumedCapacity: "INDEXES",
+        })
+      )
+      if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
+        totalUnits += data.ConsumedCapacity.CapacityUnits;
+      } else {
+        console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+      }
+      users = data?.Items as FullUser[];
+      console.log(JSON.stringify(users, null, 2));
+      console.log(`Total units used: ${totalUnits}`);
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to onetimeFix get all users`);
+  }
+
+  const work: Promise<any>[] = [];
+  for (const user of users) {
+    work.push(
+        ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USERS", "sk": user.id },
+            ExpressionAttributeValues: { ":ss": user.stars || [], ":ls": user.lastSeen || 0, ":country": user.country },
+            UpdateExpression: "set stars = :ss, lastSeen = :ls, country = :country",
+        }))
+    );
+  }
+  return Promise.all(work);
 //   const memoGame = new Map<string, FullGame>();
 //   const memoComments = new Map<string, Comment[]>();
 //   // foreach USER
