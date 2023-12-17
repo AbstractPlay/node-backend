@@ -242,7 +242,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         const rawList: UserGameRating[] = [];
         for (const [meta, recs] of meta2recs.entries()) {
             const allVariants = new Set<string>(recs.map(r => sortVariants(r)));
-            if (allVariants.size > 1) {
+            if (allVariants.size > 0) {
                 for (const combo of allVariants) {
                     console.log(`Rating game ${meta}, variant grouping ${combo}`);
                     const subset = recs.filter(r => sortVariants(r) === combo);
