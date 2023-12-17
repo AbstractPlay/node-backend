@@ -1,6 +1,9 @@
 // tslint:disable: no-console
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { CloudFrontClient, CreateInvalidationCommand, type CreateInvalidationCommandInput } from "@aws-sdk/client-cloudfront";
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { isoToCountryCode } from "../lib/isoToCountryCode";
 import { Handler } from "aws-lambda";
 import { type IRating, type IGlickoRating, type APGameRecord, ELOBasic, Glicko2, type ITrueskillRating, Trueskill } from "@abstractplay/recranks";
 import { replacer } from "@abstractplay/gameslib/build/src/common";
@@ -10,6 +13,21 @@ const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
 const cloudfront = new CloudFrontClient({region: REGION});
 const REC_BUCKET = "records.abstractplay.com";
+const clnt = new DynamoDBClient({ region: REGION });
+const marshallOptions = {
+  // Whether to automatically convert empty strings, blobs, and sets to `null`.
+  convertEmptyValues: false, // false, by default.
+  // Whether to remove undefined values while marshalling.
+  removeUndefinedValues: true, // false, by default.
+  // Whether to convert typeof object to map attribute.
+  convertClassInstanceToMap: false, // false, by default.
+};
+const unmarshallOptions = {
+  // Whether to return numbers as a string instead of converting them to native JavaScript numbers.
+  wrapNumbers: false, // false, by default.
+};
+const translateConfig = { marshallOptions, unmarshallOptions };
+const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
 
 type RatingList = {
     user: string;
@@ -56,6 +74,12 @@ interface TwoPlayerStats {
     winsFirst: number;
 }
 
+interface GeoStats {
+    code: string;
+    name: string;
+    n: number;
+}
+
 type GameSummary = {
     numGames: number;
     numPlayers: number;
@@ -88,6 +112,7 @@ type GameSummary = {
     metaStats: {
         [k: string]: TwoPlayerStats;
     }
+    geoStats: GeoStats[];
 };
 
 const pushToMap = (map: Map<string, any[]>, key: string, value: any) => {
@@ -332,7 +357,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                             throw new Error(`Rated recCounts do not match.`);
                         }
                         if (elo.recCount !== ts.recCount) {
-                            throw new Error(`Rated recCounts do not match for user ${user}:\nElo: ${elo.recCount}\Trueskill: ${glicko.recCount}`);
+                            throw new Error(`Rated recCounts do not match for user ${user}:\nElo: ${elo.recCount}\nTrueskill: ${glicko.recCount}`);
                         }
                         rawList.push({user, game: metaName, rating: Math.round(elo.rating), wld: [elo.wins, elo.losses, elo.draws], glicko: {rating: glicko.rating, rd: glicko.rd}, trueskill: {mu: ts.rating, sigma: ts.sigma}});
                     }
@@ -540,6 +565,46 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
         }
 
+        // gathering geographical statistics
+        let users: Record<string, any>[]|undefined;
+        try {
+            const data = await ddbDocClient.send(
+              new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk",
+                ExpressionAttributeValues: { ":pk": "USERS" },
+                ExpressionAttributeNames: { "#pk": "pk"},
+                ProjectionExpression: "sk, country",
+                ReturnConsumedCapacity: "INDEXES"
+              }));
+
+            users = data.Items;
+            if (users === undefined) {
+              throw new Error("Found no users?");
+            }
+        } catch (err) {
+            console.log(`An error occurred fetching USERS data: ${err}`);
+            throw err;
+        }
+        const countryCounts = new Map<string, number>();
+        for (const user of users) {
+            const alpha2 = isoToCountryCode(user.country, "alpha2");
+            if (alpha2 !== undefined) {
+                if (countryCounts.has(alpha2)) {
+                    const num = countryCounts.get(alpha2)!;
+                    countryCounts.set(alpha2, num + 1);
+                } else {
+                    countryCounts.set(alpha2, 1);
+                }
+            }
+        }
+        const geoStats: GeoStats[] = [];
+        for (const [alpha2, count] of countryCounts.entries()) {
+            const name = isoToCountryCode(alpha2, "countryName");
+            geoStats.push({code: alpha2, n: count, name: name || alpha2});
+        }
+
+
         const summary: GameSummary = {
             numGames,
             numPlayers,
@@ -570,6 +635,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             hoursPer,
             recent,
             metaStats,
+            geoStats,
         }
         const cmd = new PutObjectCommand({
             Bucket: REC_BUCKET,
