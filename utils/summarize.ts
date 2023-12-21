@@ -195,6 +195,8 @@ export const handler: Handler = async (event: any, context?: any) => {
                     lengths.push(rec.moves.length);
                     if (rec.header.players[0].result > rec.header.players[1].result) {
                         fpWins++;
+                    } else if (rec.header.players[0].result === rec.header.players[1].result) {
+                        fpWins += 0.5;
                     }
                 }
             }
