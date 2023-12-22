@@ -43,6 +43,7 @@ type MetaGameCounts = {
     standingchallenges: number;
     ratings?: Set<string>;
     stars?: number;
+    tags?: string[];
   }
 }
 
@@ -119,6 +120,7 @@ type FullUser = {
     [metaGame: string]: Rating
   };
   stars?: string[];
+  tags?: TagList[];
   mayPush?: boolean;
 }
 
@@ -217,6 +219,17 @@ type Exploration = {
   outcome?: number; // Optional. 0 for player1 win, 1 for player2 win, -1 for undecided.
 };
 
+type TagList = {
+    meta: string;
+    tags: string[];
+}
+
+type TagRec = {
+    pk: "TAG";
+    sk: string;
+    tags: TagList[];
+}
+
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
   const pars = event.queryStringParameters;
@@ -270,6 +283,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await setPush(event.cognitoPoolClaims.sub, pars);
     case "save_push":
       return await savePush(event.cognitoPoolClaims.sub, pars);
+    case "save_tags":
+      return await saveTags(event.cognitoPoolClaims.sub, pars);
     case "new_challenge":
       return await newChallenge(event.cognitoPoolClaims.sub, pars);
     case "challenge_revoke":
@@ -481,6 +496,36 @@ async function standingChallenges(pars: { metaGame: string; }) {
   }
 }
 
+async function assembleTags(): Promise<TagList[]|undefined> {
+    try {
+        const data = await ddbDocClient.send(
+            new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk",
+                ExpressionAttributeValues: { ":pk": "TAG" },
+                ExpressionAttributeNames: { "#pk": "pk" },
+        }));
+        const allTags = data.Items as TagRec[];
+        const collated = new Map<string, string[]>();
+        if (allTags !== undefined) {
+            for (const rec of allTags) {
+                for (const {meta, tags} of rec.tags) {
+                    const uniques = new Set<string>(tags);
+                    if (collated.has(meta)) {
+                        for (const tag of collated.get(meta)!) {
+                            uniques.add(tag);
+                        }
+                    }
+                    collated.set(meta, [...tags.values()].sort((a,b) => a.localeCompare(b)));
+                }
+            }
+        }
+        return [...collated.entries()].map(([meta, tags]) => {return {meta, tags}});
+    } catch (error) {
+        return undefined;
+    }
+}
+
 async function metaGamesDetails() {
   try {
     const data = await ddbDocClient.send(
@@ -491,6 +536,22 @@ async function metaGamesDetails() {
         },
       }));
     const details = data.Item as MetaGameCounts;
+    // get list of tags
+    const taglist = await assembleTags();
+    if (taglist === undefined) {
+        throw new Error("An error occured while fetching game tags");
+    }
+    for (const key of Object.keys(details)) {
+        if ( (key === "pk") || (key === "sk") ) {
+            continue;
+        }
+        const tags = taglist.find(l => l.meta === key);
+        if (tags !== undefined) {
+            details[key].tags = [...tags.tags]
+        } else {
+            details[key].tags = [];
+        }
+    }
     // Change every "ratings" to the number of elements in the Set.
     const details2 = Object.keys(details)
       .filter(key => key !== "pk" && key !== "sk")
@@ -1040,6 +1101,23 @@ async function me(claim: PartialClaims, pars: { size: string }) {
       games = await getGamesForUser(userId);
       console.log("games after", games);
     }
+
+    // fetch tags
+    const tagData = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "TAG",
+            "sk": userId
+            },
+        })
+    );
+    let tags: TagList[] = [];
+    if (tagData.Item !== undefined) {
+        const tagRec = tagData.Item as TagRec;
+        tags = tagRec.tags;
+    }
+
     // Check for "recently completed games"
     console.log(`Checking for recently completed games`);
     // As soon as a game is over move it to archive status (game.type = 0).
@@ -1136,6 +1214,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "games": games,
           "settings": user.settings,
           "stars": user.stars,
+          tags,
           "mayPush": user.mayPush,
           "challengesIssued": data[0].map(d => d.Item),
           "challengesReceived": data[1].map(d => d.Item),
@@ -1156,6 +1235,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "games": games,
           "settings": user.settings,
           "stars": user.stars,
+          tags,
         }, Set_toJSON),
         headers
       }
@@ -1526,7 +1606,6 @@ async function setPush(userid: string, pars: { state: boolean }) {
     };
 }
 
-
 async function savePush(userid: string, pars: { payload: any }) {
     try {
         console.log(`Attempting to save push notification credentials for user ${userid}:\n${JSON.stringify(pars.payload)}`);
@@ -1546,6 +1625,41 @@ async function savePush(userid: string, pars: { payload: any }) {
         statusCode: 200,
         body: JSON.stringify({
           message: `Successfully saved push notifications credentials for ${userid}`,
+        }),
+        headers
+    };
+}
+
+async function saveTags(userid: string, pars: { payload: TagList[] }) {
+    try {
+        console.log(`Attempting to save tags for user ${userid}:\n${JSON.stringify(pars.payload)}`);
+        if (pars.payload.length === 0) {
+            await ddbDocClient.send(
+                new DeleteCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "TAG", "sk": userid
+                  },
+                })
+            )
+        } else {
+            await ddbDocClient.send(new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Item: {
+                    "pk": "TAG",
+                    "sk": userid,
+                    "tags": pars.payload,
+                  }
+            }));
+        }
+    } catch (error) {
+        logGetItemError(error);
+        throw new Error("saveTags: Failed to save tags");
+    }
+    return {
+        statusCode: 200,
+        body: JSON.stringify({
+          message: `Successfully saved tags for ${userid}`,
         }),
         headers
     };
