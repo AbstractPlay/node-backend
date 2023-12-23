@@ -506,7 +506,6 @@ async function assembleTags(): Promise<TagList[]|undefined> {
                 ExpressionAttributeNames: { "#pk": "pk" },
         }));
         const allTags = data.Items as TagRec[];
-        console.log(JSON.stringify(allTags, undefined, 2));
         const collated = new Map<string, string[]>();
         if (allTags !== undefined) {
             for (const rec of allTags) {
@@ -539,7 +538,6 @@ async function metaGamesDetails() {
     const details = data.Item as MetaGameCounts;
     // get list of tags
     const taglist = await assembleTags();
-    console.log(JSON.stringify(taglist, undefined, 2));
     if (taglist === undefined) {
         throw new Error("An error occured while fetching game tags");
     }
