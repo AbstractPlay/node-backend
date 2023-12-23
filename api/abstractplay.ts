@@ -517,7 +517,7 @@ async function assembleTags(): Promise<TagList[]|undefined> {
                             uniques.add(tag);
                         }
                     }
-                    collated.set(meta, [...tags.values()].sort((a,b) => a.localeCompare(b)));
+                    collated.set(meta, [...uniques.values()].sort((a,b) => a.localeCompare(b)));
                 }
             }
         }
