@@ -536,6 +536,7 @@ async function metaGamesDetails() {
         },
       }));
     const details = data.Item as MetaGameCounts;
+    console.log(`Got the following metagame counts:\n${JSON.stringify(details, undefined, 2)}`);
     // get list of tags
     const taglist = await assembleTags();
     if (taglist === undefined) {
