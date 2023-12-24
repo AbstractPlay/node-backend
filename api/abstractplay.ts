@@ -536,7 +536,7 @@ async function metaGamesDetails() {
         },
       }));
     const details = data.Item as MetaGameCounts;
-    console.log(`Got the following metagame counts:\n${JSON.stringify(details, undefined, 2)}`);
+    // console.log(`Got the following metagame counts:\n${JSON.stringify(details, undefined, 2)}`);
     // get list of tags
     const taglist = await assembleTags();
     if (taglist === undefined) {
@@ -553,12 +553,12 @@ async function metaGamesDetails() {
             details[key].tags = [];
         }
     }
-    console.log(`Details:\n${JSON.stringify(details, undefined, 2)}`);
+    // console.log(`Details:\n${JSON.stringify(details, undefined, 2)}`);
     // Change every "ratings" to the number of elements in the Set.
     const details2 = Object.keys(details)
       .filter(key => key !== "pk" && key !== "sk")
       .reduce( (a, k) => ({...a, [k]: { ...details[k], "ratings" : details[k].ratings?.size ?? 0}}), {})
-    console.log(`Details2:\n${JSON.stringify(details2, undefined, 2)}`);
+    // console.log(`Details2:\n${JSON.stringify(details2, undefined, 2)}`);
     return {
       statusCode: 200,
       body: JSON.stringify(details2),
