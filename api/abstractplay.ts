@@ -121,6 +121,7 @@ type FullUser = {
   };
   stars?: string[];
   tags?: TagList[];
+  palettes?: Palette[];
   mayPush?: boolean;
 }
 
@@ -230,6 +231,17 @@ type TagRec = {
     tags: TagList[];
 }
 
+type Palette = {
+    name: string;
+    colours: string[];
+}
+
+type PaletteRec = {
+    pk: "PALETTES";
+    sk: string;
+    palettes: Palette[];
+}
+
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
   const pars = event.queryStringParameters;
@@ -285,6 +297,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await savePush(event.cognitoPoolClaims.sub, pars);
     case "save_tags":
       return await saveTags(event.cognitoPoolClaims.sub, pars);
+    case "save_palettes":
+      return await savePalettes(event.cognitoPoolClaims.sub, pars);
     case "new_challenge":
       return await newChallenge(event.cognitoPoolClaims.sub, pars);
     case "challenge_revoke":
@@ -536,6 +550,7 @@ async function metaGamesDetails() {
         },
       }));
     const details = data.Item as MetaGameCounts;
+    // console.log(`Got the following metagame counts:\n${JSON.stringify(details, undefined, 2)}`);
     // get list of tags
     const taglist = await assembleTags();
     if (taglist === undefined) {
@@ -552,10 +567,12 @@ async function metaGamesDetails() {
             details[key].tags = [];
         }
     }
+    // console.log(`Details:\n${JSON.stringify(details, undefined, 2)}`);
     // Change every "ratings" to the number of elements in the Set.
     const details2 = Object.keys(details)
       .filter(key => key !== "pk" && key !== "sk")
       .reduce( (a, k) => ({...a, [k]: { ...details[k], "ratings" : details[k].ratings?.size ?? 0}}), {})
+    // console.log(`Details2:\n${JSON.stringify(details2, undefined, 2)}`);
     return {
       statusCode: 200,
       body: JSON.stringify(details2),
@@ -1118,6 +1135,22 @@ async function me(claim: PartialClaims, pars: { size: string }) {
         tags = tagRec.tags;
     }
 
+    // fetch palettes
+    const paletteData = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "PALETTES",
+            "sk": userId
+            },
+        })
+    );
+    let palettes: Palette[] = [];
+    if (paletteData.Item !== undefined) {
+        const paletteRec = paletteData.Item as PaletteRec;
+        palettes = paletteRec.palettes;
+    }
+
     // Check for "recently completed games"
     console.log(`Checking for recently completed games`);
     // As soon as a game is over move it to archive status (game.type = 0).
@@ -1215,6 +1248,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "settings": user.settings,
           "stars": user.stars,
           tags,
+          palettes,
           "mayPush": user.mayPush,
           "challengesIssued": data[0].map(d => d.Item),
           "challengesReceived": data[1].map(d => d.Item),
@@ -1236,6 +1270,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "settings": user.settings,
           "stars": user.stars,
           tags,
+          palettes,
         }, Set_toJSON),
         headers
       }
@@ -1660,6 +1695,41 @@ async function saveTags(userid: string, pars: { payload: TagList[] }) {
         statusCode: 200,
         body: JSON.stringify({
           message: `Successfully saved tags for ${userid}`,
+        }),
+        headers
+    };
+}
+
+async function savePalettes(userid: string, pars: { palettes: Palette[] }) {
+    try {
+        console.log(`Attempting to save palettes for user ${userid}:\n${JSON.stringify(pars.palettes)}`);
+        if (pars.palettes.length === 0) {
+            await ddbDocClient.send(
+                new DeleteCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "PALETTES", "sk": userid
+                  },
+                })
+            )
+        } else {
+            await ddbDocClient.send(new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Item: {
+                    "pk": "PALETTES",
+                    "sk": userid,
+                    "palettes": pars.palettes,
+                  } as PaletteRec
+            }));
+        }
+    } catch (error) {
+        logGetItemError(error);
+        throw new Error("saveTags: Failed to save palettes");
+    }
+    return {
+        statusCode: 200,
+        body: JSON.stringify({
+          message: `Successfully saved palettes for ${userid}`,
         }),
         headers
     };
