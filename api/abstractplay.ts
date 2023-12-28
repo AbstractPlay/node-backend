@@ -237,7 +237,7 @@ type Palette = {
 }
 
 type PaletteRec = {
-    pk: "PALETTE";
+    pk: "PALETTES";
     sk: string;
     palettes: Palette[];
 }
@@ -1140,7 +1140,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
         new GetCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: {
-            "pk": "PALETTE",
+            "pk": "PALETTES",
             "sk": userId
             },
         })
