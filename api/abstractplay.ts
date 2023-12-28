@@ -1718,7 +1718,7 @@ async function savePalettes(userid: string, pars: { palettes: Palette[] }) {
                   Item: {
                     "pk": "PALETTES",
                     "sk": userid,
-                    "tags": pars.palettes,
+                    "palettes": pars.palettes,
                   }
             }));
         }
