@@ -1719,7 +1719,7 @@ async function savePalettes(userid: string, pars: { palettes: Palette[] }) {
                     "pk": "PALETTES",
                     "sk": userid,
                     "palettes": pars.palettes,
-                  }
+                  } as PaletteRec
             }));
         }
     } catch (error) {
