@@ -3093,8 +3093,9 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBaseSim
       game.winner = engine.winner;
       game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
     }
-    else
-      game.toMove = game.players.map(() => true);
+    else {
+        game.toMove = game.players.map((p, i) => ! engine.isEliminated(i + 1));
+    }
   }
 }
 
