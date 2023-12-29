@@ -1,14 +1,33 @@
 // tslint:disable: no-console
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { CloudFrontClient, CreateInvalidationCommand, type CreateInvalidationCommandInput } from "@aws-sdk/client-cloudfront";
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { isoToCountryCode } from "../lib/isoToCountryCode";
 import { Handler } from "aws-lambda";
-import { type IRating, type APGameRecord, ELOBasic } from "@abstractplay/recranks";
+import { type IRating, type IGlickoRating, type APGameRecord, ELOBasic, Glicko2, type ITrueskillRating, Trueskill } from "@abstractplay/recranks";
+import { replacer } from "@abstractplay/gameslib/build/src/common";
 // import { nanoid } from "nanoid";
 
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
 const cloudfront = new CloudFrontClient({region: REGION});
 const REC_BUCKET = "records.abstractplay.com";
+const clnt = new DynamoDBClient({ region: REGION });
+const marshallOptions = {
+  // Whether to automatically convert empty strings, blobs, and sets to `null`.
+  convertEmptyValues: false, // false, by default.
+  // Whether to remove undefined values while marshalling.
+  removeUndefinedValues: true, // false, by default.
+  // Whether to convert typeof object to map attribute.
+  convertClassInstanceToMap: false, // false, by default.
+};
+const unmarshallOptions = {
+  // Whether to return numbers as a string instead of converting them to native JavaScript numbers.
+  wrapNumbers: false, // false, by default.
+};
+const translateConfig = { marshallOptions, unmarshallOptions };
+const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
 
 type RatingList = {
     user: string;
@@ -23,6 +42,9 @@ interface UserRating {
 
 interface UserGameRating extends UserRating {
     game: string;
+    wld: [number,number,number];
+    glicko?: {rating: number; rd: number};
+    trueskill?: {mu: number; sigma: number};
 }
 
 interface GameNumber {
@@ -52,6 +74,12 @@ interface TwoPlayerStats {
     winsFirst: number;
 }
 
+interface GeoStats {
+    code: string;
+    name: string;
+    n: number;
+}
+
 type GameSummary = {
     numGames: number;
     numPlayers: number;
@@ -71,6 +99,7 @@ type GameSummary = {
         social: UserNumber[];
         eclectic: UserNumber[];
         allPlays: UserNumber[];
+        h: UserNumber[];
     };
     histograms: {
         all: number[];
@@ -83,6 +112,7 @@ type GameSummary = {
     metaStats: {
         [k: string]: TwoPlayerStats;
     }
+    geoStats: GeoStats[];
 };
 
 const pushToMap = (map: Map<string, any[]>, key: string, value: any) => {
@@ -165,6 +195,8 @@ export const handler: Handler = async (event: any, context?: any) => {
                     lengths.push(rec.moves.length);
                     if (rec.header.players[0].result > rec.header.players[1].result) {
                         fpWins++;
+                    } else if (rec.header.players[0].result === rec.header.players[1].result) {
+                        fpWins += 0.5;
                     }
                 }
             }
@@ -230,20 +262,108 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
         }
 
-        // rate the records for each game
+        // rate the records for each game (now subdivided by variants)
         console.log("Rating records");
         const rater = new ELOBasic();
         // collate list of raw ratings right here and now
         const rawList: UserGameRating[] = [];
         for (const [meta, recs] of meta2recs.entries()) {
-            const results = rater.runProcessed(recs);
-            console.log(`Rating records for "${meta}":\nTotal records: ${results.recsReceived}, Num rated: ${results.recsRated}\n${results.warnings !== undefined ? results.warnings.join("\n") + "\n" : ""}${results.errors !== undefined ? results.errors.join("\n") + "\n" : ""}`);
-            for (const rating of results.ratings.values()) {
-                rating.gamename = meta;
-                const [,userid] = rating.userid.split("|");
-                rating.userid = userid;
-                ratingList.push({user: userid, game: meta, rating});
-                rawList.push({user: userid, game: meta, rating: Math.round(rating.rating)});
+            const allVariants = new Set<string>(recs.map(r => sortVariants(r)));
+            if (allVariants.size > 0) {
+                for (const combo of allVariants) {
+                    console.log(`Rating game ${meta}, variant grouping ${combo}`);
+                    const subset = recs.filter(r => sortVariants(r) === combo);
+                    let metaName = `${meta} (${combo})`;
+                    if (combo === "") {
+                        metaName = `${meta} (no variants)`;
+                    }
+                    // Elo ratings first
+                    const results = rater.runProcessed(subset);
+                    console.log(`Elo rater:\nTotal records: ${results.recsReceived}, Num rated: ${results.recsRated}\n${results.warnings !== undefined ? results.warnings.join("\n") + "\n" : ""}${results.errors !== undefined ? results.errors.join("\n") + "\n" : ""}`);
+                    for (const rating of results.ratings.values()) {
+                        rating.gamename = meta;
+                        const [,userid] = rating.userid.split("|");
+                        rating.userid = userid;
+                        ratingList.push({user: userid, game: metaName, rating});
+                    }
+
+                    // now Trueskill
+                    console.log(`Running Trueskill ratings`);
+                    const ts = new Trueskill({betaStart: 25/9});
+                    const tsResults = ts.runProcessed(subset);
+                    const tsRatings = new Map(tsResults.ratings) as Map<string, ITrueskillRating>;
+                    if (ratingList.filter(r => r.game === metaName).length !== tsRatings.size) {
+                        const elo = new Set<string>(ratingList.map(r => r.user));
+                        const tsVals = new Set<string>([...tsRatings.values()].map(r => {const [,u] = r.userid.split("|"); return u;}))
+                        const inElo = [...elo.values()].filter(u => ! tsVals.has(u));
+                        const inTS = [...tsVals.values()].filter(u => ! elo.has(u));
+                        throw new Error(`The list of Elo ratings is not the same length as the list of Trueskill ratings.\nList of Elo ratings not in Trueskill: ${JSON.stringify(inElo, null, 2)}\nList of Trueskill ratings not in Elo: ${JSON.stringify(inTS, null, 2)}\nTrueskill ratings: ${JSON.stringify(tsRatings, replacer, 2)}`);
+                    }
+                    console.log(`Final Trueskill ratings:\n${JSON.stringify([...tsRatings.values()])}`)
+
+                    // now Glicko
+                    console.log(`Running Glicko2 ratings`);
+                    const glicko = new Glicko2();
+                    // get earliest and latest dates for subset
+                    const oldest = new Date(subset.map(r => r.header["date-end"]).sort((a, b) => a.localeCompare(b))[0]);
+                    const newest = new Date(subset.map(r => r.header["date-end"]).sort((a, b) => b.localeCompare(a))[0]);
+                    console.log(`Oldest: ${oldest}, Newest: ${newest}`);
+                    const delta = newest.getTime() - oldest.getTime();
+                    const period = 60 * 24 * 60 * 60 * 1000;
+                    let numPeriods = Math.ceil(delta / period);
+                    if (numPeriods === 0) { numPeriods++; }
+                    console.log(`Number of periods: ${numPeriods}`);
+                    let toDate = new Map<string, IGlickoRating>();
+                    let ratedRecs = 0;
+                    for (let p = 0; p < numPeriods; p++) {
+                        glicko.knownRatings = new Map(toDate);
+                        const pMin = oldest.getTime() + (p * period);
+                        const pMax = oldest.getTime() + ((p + 1) * period)
+                        const recs: APGameRecord[] = [];
+                        for (const rec of subset) {
+                            const secs = new Date(rec.header["date-end"]).getTime();
+                            if ( (secs >= pMin) && (secs < pMax) ) {
+                                recs.push(rec);
+                            }
+                        }
+                        ratedRecs += recs.length;
+                        const results = glicko.runProcessed(recs);
+                        toDate = new Map(results.ratings as Map<string, IGlickoRating>);
+                    }
+                    if (ratedRecs !== subset.length) {
+                        throw new Error(`The record subset had ${subset.length} records, but only ${ratedRecs} were handed to the rater.`);
+                    }
+                    // toDate now has the final rating results
+                    if (ratingList.filter(r => r.game === metaName).length !== toDate.size) {
+                        const elo = new Set<string>(ratingList.map(r => r.user));
+                        const glicko = new Set<string>([...toDate.values()].map(r => {const [,u] = r.userid.split("|"); return u;}))
+                        const inElo = [...elo.values()].filter(u => ! glicko.has(u));
+                        const inGlicko = [...glicko.values()].filter(u => ! elo.has(u));
+                        throw new Error(`The list of Elo ratings is not the same length as the list of Glicko ratings.\nList of Elo ratings not in Glicko: ${JSON.stringify(inElo, null, 2)}\nList of Glicko ratings not in Elo: ${JSON.stringify(inGlicko, null, 2)}\nGlicko ratings: ${JSON.stringify(toDate, replacer, 2)}`);
+                    }
+                    console.log(`Final glicko rating results: ${JSON.stringify(toDate, replacer)}`)
+
+                    // Save Elo, Glicko2, and Trueskill ratings into rawList
+                    for (const userStr of toDate.keys()) {
+                        const [,user] = userStr.split("|");
+                        const elo = ratingList.find(r => r.user === user && r.game === metaName)?.rating;
+                        if (elo === undefined) {
+                            throw new Error(`Could not find a matching Elo rating for ${user}.`);
+                        }
+                        const ts = tsRatings.get(userStr);
+                        if (ts === undefined) {
+                            throw new Error(`Could not find a matching Trueskill rating for ${user}.`);
+                        }
+                        const glicko = toDate.get(userStr)!;
+                        if (elo.recCount !== glicko.recCount) {
+                            throw new Error(`Rated recCounts do not match.`);
+                        }
+                        if (elo.recCount !== ts.recCount) {
+                            throw new Error(`Rated recCounts do not match for user ${user}:\nElo: ${elo.recCount}\nTrueskill: ${glicko.recCount}`);
+                        }
+                        rawList.push({user, game: metaName, rating: Math.round(elo.rating), wld: [elo.wins, elo.losses, elo.draws], glicko: {rating: glicko.rating, rd: glicko.rd}, trueskill: {mu: ts.rating, sigma: ts.sigma}});
+                    }
+                }
             }
         }
 
@@ -278,7 +398,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             const ratings = ratingList.filter(r => r.game === g);
             ratings.sort((a, b) => b.rating.rating - a.rating.rating);
             const top = ratings[0];
-            topPlayers.push({user: top.user, game: g, rating: Math.round(top.rating.rating)});
+            topPlayers.push({user: top.user, game: g, rating: Math.round(top.rating.rating), wld: [top.rating.wins, top.rating.losses, top.rating.draws]});
         }
 
         // POPULAR GAMES
@@ -334,6 +454,28 @@ export const handler: Handler = async (event: any, context?: any) => {
                 }
             }
             social.push({user, value: opps.size});
+        }
+        // h-index
+        const h: UserNumber[] = [];
+        for (const [user, recs] of player2recs.entries()) {
+            console.log(`Calculating h-index for user ${user}`);
+            const gameNames = new Set<string>(recs.map(r => r.header.game.name));
+            console.log(JSON.stringify([...gameNames.values()]));
+            const counts = new Map<string, number>();
+            for (const name of gameNames) {
+                counts.set(name, recs.filter(r => r.header.game.name === name).length);
+            }
+            console.log(JSON.stringify([...counts.entries()]));
+            const sorted = [...counts.values()].sort((a, b) => b - a);
+            let index = sorted.length;
+            for (let i = 0; i < sorted.length; i++) {
+                if (sorted[i] < i + 1) {
+                    index = i;
+                    break;
+                }
+            }
+            console.log(`h-index is ${index}`);
+            h.push({user, value: index});
         }
 
         // HISTOGRAMS
@@ -425,6 +567,46 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
         }
 
+        // gathering geographical statistics
+        let users: Record<string, any>[]|undefined;
+        try {
+            const data = await ddbDocClient.send(
+              new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk",
+                ExpressionAttributeValues: { ":pk": "USERS" },
+                ExpressionAttributeNames: { "#pk": "pk"},
+                ProjectionExpression: "sk, country",
+                ReturnConsumedCapacity: "INDEXES"
+              }));
+
+            users = data.Items;
+            if (users === undefined) {
+              throw new Error("Found no users?");
+            }
+        } catch (err) {
+            console.log(`An error occurred fetching USERS data: ${err}`);
+            throw err;
+        }
+        const countryCounts = new Map<string, number>();
+        for (const user of users) {
+            const alpha2 = isoToCountryCode(user.country, "alpha2");
+            if (alpha2 !== undefined) {
+                if (countryCounts.has(alpha2)) {
+                    const num = countryCounts.get(alpha2)!;
+                    countryCounts.set(alpha2, num + 1);
+                } else {
+                    countryCounts.set(alpha2, 1);
+                }
+            }
+        }
+        const geoStats: GeoStats[] = [];
+        for (const [alpha2, count] of countryCounts.entries()) {
+            const name = isoToCountryCode(alpha2, "countryName");
+            geoStats.push({code: alpha2, n: count, name: name || alpha2});
+        }
+
+
         const summary: GameSummary = {
             numGames,
             numPlayers,
@@ -443,7 +625,8 @@ export const handler: Handler = async (event: any, context?: any) => {
             players: {
                 allPlays,
                 eclectic,
-                social
+                social,
+                h,
             },
             histograms: {
                 all: histAll,
@@ -454,6 +637,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             hoursPer,
             recent,
             metaStats,
+            geoStats,
         }
         const cmd = new PutObjectCommand({
             Bucket: REC_BUCKET,

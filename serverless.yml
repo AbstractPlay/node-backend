@@ -46,7 +46,7 @@ plugins:
 
 provider:
   name: aws
-  runtime: nodejs14.x
+  runtime: nodejs18.x
   versionFunctions: false
   stage: ${opt:stage, 'dev'}
   profile: ${param:profile}
@@ -70,6 +70,7 @@ provider:
             - dynamodb:UpdateItem
             - dynamodb:DeleteItem
             - dynamodb:ExportTableToPointInTime
+            - dynamodb:BatchWriteItem
             - ses:SendEmail
             - ses:SendRawEmail
             - cloudfront:CreateInvalidation
@@ -178,8 +179,8 @@ functions:
   records:
     handler: utils/records.handler
     description: Generates static lists of game records
-    timeout: 60
-    memorySize: 2048
+    timeout: 480
+    memorySize: 4096
     events:
       - eventBridge:
           name: abstractplay-${self:provider.stage}-records
