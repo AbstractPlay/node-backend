@@ -3623,6 +3623,7 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTSCOUNTER", "sk": sk },
       ExpressionAttributeValues: { ":val": tournamentN, ":inc": 1, ":zero": 0 },
+      ConditionExpression: "attribute_not_exists(count) OR count = :val",
       UpdateExpression: "set count = if_not_exists(count, :zero) + :inc"
     }));
   } catch (err: any) {
@@ -3631,6 +3632,8 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
       console.log(`Failed to update TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
       return;
     }
+    handleCommonErrors(err as {code: any; message: any});
+    console.log(err);
     return formatReturnError(`Unable to update TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   }
   console.log(`Updated TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`)
@@ -3653,7 +3656,7 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
     }));
     console.log(`Inserted tournament ${tournamentid} for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   } catch (err) {
-    logGetItemError(err);
+    handleCommonErrors(err as {code: any; message: any});
     return formatReturnError(`Unable to insert tournament for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   }
   return {
