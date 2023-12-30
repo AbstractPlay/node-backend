@@ -3606,6 +3606,9 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
     if (tournamentNumber.Item !== undefined) {
       tournamentN = tournamentNumber.Item.count;
       available = tournamentNumber.Item.over;
+      console.log(`Found tournament ${sk} with count ${tournamentN} and over ${available}`);
+    } else {
+      console.log(`No tournament ${sk} found`);
     }
   } catch (err) {
     logGetItemError(err);
@@ -3630,6 +3633,7 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
     }
     return formatReturnError(`Unable to update TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   }
+  console.log(`Updated TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`)
   // Insert tournament
   const tournamentid = uuid();
   const data = {
@@ -3647,10 +3651,16 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: data
     }));
+    console.log(`Inserted tournament ${tournamentid} for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   } catch (err) {
     logGetItemError(err);
     return formatReturnError(`Unable to insert tournament for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   }
+  return {
+    statusCode: 200,
+    body: "New tournament created",
+    headers
+  };
 }
 
 async function joinTournament(userid: string, pars: { tournamentid: string }) {
