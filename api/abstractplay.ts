@@ -3623,8 +3623,9 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTSCOUNTER", "sk": sk },
       ExpressionAttributeValues: { ":val": tournamentN, ":inc": 1, ":zero": 0 },
-      ConditionExpression: "attribute_not_exists(count) OR count = :val",
-      UpdateExpression: "set count = if_not_exists(count, :zero) + :inc"
+      ExpressionAttributeNames: { "#count": "count"},
+      ConditionExpression: "attribute_not_exists(#count) OR #count = :val",
+      UpdateExpression: "set #count = if_not_exists(#count, :zero) + :inc"
     }));
   } catch (err: any) {
     if (err.name === 'ConditionalCheckFailedException') {
