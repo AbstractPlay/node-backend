@@ -228,6 +228,7 @@ type Exploration = {
   outcome?: number; // Optional. 0 for player1 win, 1 for player2 win, -1 for undecided.
 };
 
+<<<<<<< HEAD
 type Tournament = {
   pk: string;
   sk: string;
@@ -265,7 +266,7 @@ type TournamentGame = {
   player2: string;
   winner?: number[];
 };
-
+=======
 type TagList = {
     meta: string;
     tags: string[];
@@ -287,6 +288,7 @@ type PaletteRec = {
     sk: string;
     palettes: Palette[];
 }
+>>>>>>> origin/develop
 
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
@@ -3184,9 +3186,8 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBaseSim
       game.winner = engine.winner;
       game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
     }
-    else {
-        game.toMove = game.players.map((p, i) => ! engine.isEliminated(i + 1));
-    }
+    else
+      game.toMove = game.players.map(() => true);
   }
 }
 
@@ -3606,9 +3607,6 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
     if (tournamentNumber.Item !== undefined) {
       tournamentN = tournamentNumber.Item.count;
       available = tournamentNumber.Item.over;
-      console.log(`Found tournament ${sk} with count ${tournamentN} and over ${available}`);
-    } else {
-      console.log(`No tournament ${sk} found`);
     }
   } catch (err) {
     logGetItemError(err);
@@ -3623,17 +3621,16 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTSCOUNTER", "sk": sk },
       ExpressionAttributeValues: { ":val": tournamentN, ":inc": 1, ":zero": 0 },
+      ConditionExpression: "attribute_not_exists(count) OR count = :val",
       UpdateExpression: "set count = if_not_exists(count, :zero) + :inc"
     }));
   } catch (err: any) {
     if (err.name === 'ConditionalCheckFailedException') {
       // Failed to update TOURNAMENTSCOUNTER, probably someone else beat us to it. So no harm done.
-      console.log(`Failed to update TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
       return;
     }
     return formatReturnError(`Unable to update TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   }
-  console.log(`Updated TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`)
   // Insert tournament
   const tournamentid = uuid();
   const data = {
@@ -3651,16 +3648,10 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: data
     }));
-    console.log(`Inserted tournament ${tournamentid} for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   } catch (err) {
     logGetItemError(err);
     return formatReturnError(`Unable to insert tournament for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   }
-  return {
-    statusCode: 200,
-    body: "New tournament created",
-    headers
-  };
 }
 
 async function joinTournament(userid: string, pars: { tournamentid: string }) {

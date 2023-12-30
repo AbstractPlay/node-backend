@@ -2,10 +2,10 @@
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
 // import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
-import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
+import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush, { RequestOptions } from "web-push";
 import i18n from 'i18next';
@@ -43,7 +43,6 @@ type MetaGameCounts = {
     standingchallenges: number;
     ratings?: Set<string>;
     stars?: number;
-    tags?: string[];
   }
 }
 
@@ -63,7 +62,7 @@ type FullChallenge = {
   standing?: boolean;
   duration?: number;
   seating: string;
-  variants: string[];
+  variants: string;
   challenger: User;
   challengees?: User[]; // players who were challenged
   players?: User[]; // players that have accepted
@@ -113,15 +112,11 @@ type FullUser = {
   }
   admin: boolean | undefined;
   language: string;
-  country: string;
-  lastSeen?: number;
   settings: UserSettings;
   ratings?: {
     [metaGame: string]: Rating
   };
   stars?: string[];
-  tags?: TagList[];
-  palettes?: Palette[];
   mayPush?: boolean;
 }
 
@@ -130,12 +125,6 @@ type Rating = {
   N: number;
   wins: number;
   draws: number;
-}
-
-type PlayerRating = {
-  id: string;
-  name: string;
-  rating: number;
 }
 
 type Note = {
@@ -187,15 +176,6 @@ type FullGame = {
   pieInvoked?: boolean;
   variants?: string[];
   published?: string[];
-  tournament?: string;
-  division?: number;
-}
-
-type Playground = {
-    pk: "PLAYGROUND";
-    sk: string;
-    metaGame: string;
-    state: string;
 }
 
 type Comment = {
@@ -215,7 +195,7 @@ type PushOptions = {
     userId: string;
     title: string;
     body: string;
-    topic: "yourturn"|"ended"|"started"|"challenges"|"test"|"tournament";
+    topic: "yourturn"|"ended"|"started"|"challenges"|"test";
     url?: string; //relative url of target page, if appropriate
 }
 
@@ -227,66 +207,6 @@ type Exploration = {
   children: Exploration[];
   outcome?: number; // Optional. 0 for player1 win, 1 for player2 win, -1 for undecided.
 };
-
-type Tournament = {
-  pk: string;
-  sk: string;
-  id: string;
-  metaGame: string;
-  variants: string[];
-  number: number;
-  started: boolean;
-  dateCreated: number;
-  datePreviousEnded?: number;
-  nextid?: string;
-  dateStarted?: number;
-  dateEnded?: number;
-  divisions?: {
-    [division: number]: {numGames: number, numCompleted: number, processed: boolean, winnerid?: string, winner?: string}
-  };
-};
-
-type TournamentPlayer = {
-  pk: string;
-  sk: string;
-  playerid: string;
-  playername: string;
-  division?: number;
-  score?: number;
-  tiebreak?: number;
-  rating?: number;
-};
-
-type TournamentGame = {
-  pk: string;
-  sk: string;
-  gameid: string;
-  player1: string;
-  player2: string;
-  winner?: number[];
-};
-
-type TagList = {
-    meta: string;
-    tags: string[];
-}
-
-type TagRec = {
-    pk: "TAG";
-    sk: string;
-    tags: TagList[];
-}
-
-type Palette = {
-    name: string;
-    colours: string[];
-}
-
-type PaletteRec = {
-    pk: "PALETTES";
-    sk: string;
-    palettes: Palette[];
-}
 
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
@@ -309,8 +229,6 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return await game("", pars);
     case "get_public_exploration":
       return await getPublicExploration(pars);
-    case "get_tournaments":
-      return await getTournaments();
     default:
       return {
         statusCode: 500,
@@ -343,10 +261,6 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await setPush(event.cognitoPoolClaims.sub, pars);
     case "save_push":
       return await savePush(event.cognitoPoolClaims.sub, pars);
-    case "save_tags":
-      return await saveTags(event.cognitoPoolClaims.sub, pars);
-    case "save_palettes":
-      return await savePalettes(event.cognitoPoolClaims.sub, pars);
     case "new_challenge":
       return await newChallenge(event.cognitoPoolClaims.sub, pars);
     case "challenge_revoke":
@@ -371,12 +285,6 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await getPrivateExploration(event.cognitoPoolClaims.sub, pars);
     case "get_game":
       return await game(event.cognitoPoolClaims.sub, pars);
-    case "get_playground":
-      return await getPlayground(event.cognitoPoolClaims.sub, pars);
-    case "new_playground":
-      return await newPlayground(event.cognitoPoolClaims.sub, pars);
-    case "reset_playground":
-      return await resetPlayground(event.cognitoPoolClaims.sub);
     case "toggle_star":
       return await toggleStar(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
@@ -391,10 +299,6 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await markAsPublished(event.cognitoPoolClaims.sub, pars);
     case "update_meta_game_ratings":
       return await updateMetaGameRatings(event.cognitoPoolClaims.sub);
-    case "new_tournament":
-      return await newTournament(event.cognitoPoolClaims.sub, pars);
-    case "join_tournament":
-      return await joinTournament(event.cognitoPoolClaims.sub, pars);
     case "onetime_fix":
       return await onetimeFix(event.cognitoPoolClaims.sub);
     case "test_push":
@@ -421,7 +325,7 @@ async function userNames() {
         KeyConditionExpression: "#pk = :pk",
         ExpressionAttributeValues: { ":pk": "USERS" },
         ExpressionAttributeNames: { "#pk": "pk", "#name": "name"},
-        ProjectionExpression: "sk, #name, lastSeen, country, stars",
+        ProjectionExpression: "sk, #name",
         ReturnConsumedCapacity: "INDEXES"
       }));
 
@@ -433,7 +337,7 @@ async function userNames() {
     }
     return {
       statusCode: 200,
-      body: JSON.stringify(users.map(u => ({"id": u.sk, "name": u.name, "country": u.country, "stars": u.stars, "lastSeen": u.lastSeen}))),
+      body: JSON.stringify(users.map(u => ({"id": u.sk, "name": u.name}))),
       headers
     };
   }
@@ -562,36 +466,6 @@ async function standingChallenges(pars: { metaGame: string; }) {
   }
 }
 
-async function assembleTags(): Promise<TagList[]|undefined> {
-    try {
-        const data = await ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk",
-                ExpressionAttributeValues: { ":pk": "TAG" },
-                ExpressionAttributeNames: { "#pk": "pk" },
-        }));
-        const allTags = data.Items as TagRec[];
-        const collated = new Map<string, string[]>();
-        if (allTags !== undefined) {
-            for (const rec of allTags) {
-                for (const {meta, tags} of rec.tags) {
-                    const uniques = new Set<string>(tags);
-                    if (collated.has(meta)) {
-                        for (const tag of collated.get(meta)!) {
-                            uniques.add(tag);
-                        }
-                    }
-                    collated.set(meta, [...uniques.values()].sort((a,b) => a.localeCompare(b)));
-                }
-            }
-        }
-        return [...collated.entries()].map(([meta, tags]) => {return {meta, tags}});
-    } catch (error) {
-        return undefined;
-    }
-}
-
 async function metaGamesDetails() {
   try {
     const data = await ddbDocClient.send(
@@ -602,29 +476,10 @@ async function metaGamesDetails() {
         },
       }));
     const details = data.Item as MetaGameCounts;
-    // console.log(`Got the following metagame counts:\n${JSON.stringify(details, undefined, 2)}`);
-    // get list of tags
-    const taglist = await assembleTags();
-    if (taglist === undefined) {
-        throw new Error("An error occured while fetching game tags");
-    }
-    for (const key of Object.keys(details)) {
-        if ( (key === "pk") || (key === "sk") ) {
-            continue;
-        }
-        const tags = taglist.find(l => l.meta === key);
-        if (tags !== undefined) {
-            details[key].tags = [...tags.tags]
-        } else {
-            details[key].tags = [];
-        }
-    }
-    // console.log(`Details:\n${JSON.stringify(details, undefined, 2)}`);
     // Change every "ratings" to the number of elements in the Set.
     const details2 = Object.keys(details)
       .filter(key => key !== "pk" && key !== "sk")
       .reduce( (a, k) => ({...a, [k]: { ...details[k], "ratings" : details[k].ratings?.size ?? 0}}), {})
-    // console.log(`Details2:\n${JSON.stringify(details2, undefined, 2)}`);
     return {
       statusCode: 200,
       body: JSON.stringify(details2),
@@ -719,177 +574,6 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
   }
 }
 
-async function newPlayground(userid: string, pars: { metaGame: string; state: string; }) {
-    console.log(`New playground request received:\nGame: ${pars.metaGame}\nState: ${pars.state}`);
-    // first make sure it's a 2-player non-simultaneous game
-    const info: APGamesInformation|undefined = gameinfo.get(pars.metaGame);
-    let valid = true;
-    if (info !== undefined) {
-        if ( (! info.playercounts.includes(2)) || (info.flags.includes("simultaneous")) ) {
-            valid = false;
-        }
-    } else {
-        valid = false;
-    }
-
-    if (! valid) {
-        console.log(`Invalid game (400)`);
-        return {
-            statusCode: 400,
-            headers
-        };
-    }
-
-    // initialize the playground
-    try {
-        // delete existing exploration
-        console.log(`Deleting existing exploration`);
-        const explorationQuery = ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk",
-                ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + userid },
-                ExpressionAttributeNames: { "#pk": "pk" },
-        }));
-        const explorationData = await explorationQuery;
-        const explorationRecs = explorationData.Items;
-        if (explorationRecs !== undefined) {
-            const batches = Math.ceil(explorationRecs.length / 10);
-            for (let batch = 0; batch < batches; batch++) {
-                const subset = explorationRecs.slice(batch * 10, 10);
-                await ddbDocClient.send(
-                    new BatchWriteCommand({
-                        "RequestItems": {
-                            [process.env.ABSTRACT_PLAY_TABLE!]: subset.map(item => ({
-                                DeleteRequest: {
-                                    Key: {
-                                        pk: item.pk,
-                                        sk: item.sk,
-                                    }
-                                }
-                            }))
-                        }
-                    })
-                );
-            }
-        }
-
-        // create new playground record
-        console.log(`Creating playground record`);
-        const Item: Playground = {
-            pk: "PLAYGROUND",
-            sk: userid,
-            metaGame: pars.metaGame,
-            state: pars.state,
-        };
-        await ddbDocClient.send(
-            new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item,
-            })
-        );
-        console.log(`Returning ${JSON.stringify(Item)}`);
-        return {
-            statusCode: 200,
-            body: JSON.stringify(Item),
-            headers
-        };
-    }
-    catch (error) {
-        handleCommonErrors(error as {code: any; message: any});
-        return formatReturnError(`Unable to create playground for ${userid}: ${error}`);
-    }
-}
-
-async function resetPlayground(userid: string) {
-    console.log(`Playground reset requested`);
-    try {
-        // delete existing exploration
-        console.log(`Deleting existing exploration`);
-        const explorationQuery = ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk",
-                ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + userid },
-                ExpressionAttributeNames: { "#pk": "pk" },
-        }));
-        const explorationData = await explorationQuery;
-        const explorationRecs = explorationData.Items;
-        if (explorationRecs !== undefined) {
-            const batches = Math.ceil(explorationRecs.length / 10);
-            for (let batch = 0; batch < batches; batch++) {
-                const subset = explorationRecs.slice(batch * 10, 10);
-                await ddbDocClient.send(
-                    new BatchWriteCommand({
-                        "RequestItems": {
-                            [process.env.ABSTRACT_PLAY_TABLE!]: subset.map(item => ({
-                                DeleteRequest: {
-                                    Key: {
-                                        pk: item.pk,
-                                        sk: item.sk,
-                                    }
-                                }
-                            }))
-                        }
-                    })
-                );
-            }
-        }
-
-        // delete existing playground record
-        await ddbDocClient.send(
-            new DeleteCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Key: {
-                "pk": "PLAYGROUND", "sk": userid
-              },
-            })
-        )
-        console.log(`Playground reset`);
-        return {
-            statusCode: 200,
-            headers
-        };
-    }
-    catch (error) {
-        handleCommonErrors(error as {code: any; message: any});
-        return formatReturnError(`Unable to reset playground for ${userid}: ${error}`);
-    }
-}
-
-async function getPlayground(userid: string, pars: any) {
-    try {
-      const getGame = ddbDocClient.send(
-         new GetCommand({
-           TableName: process.env.ABSTRACT_PLAY_TABLE,
-           Key: {
-             "pk": "PLAYGROUND",
-             "sk": userid
-           },
-         }));
-
-      const gameData = await getGame;
-      const game = gameData.Item as Playground;
-      if (game === undefined) {
-        return {
-             statusCode: 200,
-             body: JSON.stringify(null),
-             headers
-           };
-      }  else {
-         return {
-            headers,
-            statusCode: 200,
-            body: JSON.stringify(game),
-          };
-      }
-    }
-    catch (error) {
-      logGetItemError(error);
-      return formatReturnError(`Unable to get playground for user ${userid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-    }
-  }
-
 async function toggleStar(userid: string, pars: {metaGame: string}) {
     try {
         // get player
@@ -913,14 +597,6 @@ async function toggleStar(userid: string, pars: {metaGame: string}) {
             ddbDocClient.send(new UpdateCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: { "pk": "USER", "sk": player.id },
-            ExpressionAttributeValues: { ":ss": player.stars },
-            UpdateExpression: "set stars = :ss",
-            }))
-        );
-        list.push(
-            ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USERS", "sk": player.id },
             ExpressionAttributeValues: { ":ss": player.stars },
             UpdateExpression: "set stars = :ss",
             }))
@@ -951,8 +627,7 @@ async function toggleStar(userid: string, pars: {metaGame: string}) {
             ddbDocClient.send(new UpdateCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
                 Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-                ExpressionAttributeNames: { "#g": pars.metaGame },
-                ExpressionAttributeValues: {":n": delta},
+                ExpressionAttributeNames: { "#g": pars.metaGame },            ExpressionAttributeValues: {":n": delta},
                 UpdateExpression: "add #g.stars :n",
             }))
         );
@@ -1171,39 +846,6 @@ async function me(claim: PartialClaims, pars: { size: string }) {
       games = await getGamesForUser(userId);
       console.log("games after", games);
     }
-
-    // fetch tags
-    const tagData = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "TAG",
-            "sk": userId
-            },
-        })
-    );
-    let tags: TagList[] = [];
-    if (tagData.Item !== undefined) {
-        const tagRec = tagData.Item as TagRec;
-        tags = tagRec.tags;
-    }
-
-    // fetch palettes
-    const paletteData = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "PALETTES",
-            "sk": userId
-            },
-        })
-    );
-    let palettes: Palette[] = [];
-    if (paletteData.Item !== undefined) {
-        const paletteRec = paletteData.Item as PaletteRec;
-        palettes = paletteRec.palettes;
-    }
-
     // Check for "recently completed games"
     console.log(`Checking for recently completed games`);
     // As soon as a game is over move it to archive status (game.type = 0).
@@ -1280,12 +922,6 @@ async function me(claim: PartialClaims, pars: { size: string }) {
       ExpressionAttributeValues: { ":dt": Date.now(), ":gs": games },
       UpdateExpression: "set lastSeen = :dt, games = :gs"
     }));
-    await ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USERS", "sk": userId },
-        ExpressionAttributeValues: { ":dt": Date.now() },
-        UpdateExpression: "set lastSeen = :dt"
-    }));
     if (data) {
       // Still trying to get to the bottom of games shown as "to move" when already moved.
       console.log(`me returning for ${user.name}, id ${user.id} with games`, games);
@@ -1296,12 +932,9 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "name": user.name,
           "admin": (user.admin === true),
           "language": user.language,
-          "country": user.country,
           "games": games,
           "settings": user.settings,
           "stars": user.stars,
-          tags,
-          palettes,
           "mayPush": user.mayPush,
           "challengesIssued": data[0].map(d => d.Item),
           "challengesReceived": data[1].map(d => d.Item),
@@ -1318,12 +951,9 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           "name": user.name,
           "admin": (user.admin === true),
           "language": user.language,
-          "country": user.country,
           "games": games,
           "settings": user.settings,
           "stars": user.stars,
-          tags,
-          palettes,
         }, Set_toJSON),
         headers
       }
@@ -1472,10 +1102,6 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
       attr = "language";
       val = pars.value;
       break;
-    case "country":
-      attr = "country";
-      val = pars.value;
-      break;
     default:
       return;
   }
@@ -1495,15 +1121,6 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
       ExpressionAttributeValues: { ":newname": val },
       ExpressionAttributeNames: { "#name": "name" },
       UpdateExpression: "set #name = :newname"
-    })));
-  }
-  if (pars.attribute === "country") {
-    work.push(ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USERS", "sk": userId },
-        ExpressionAttributeValues: { ":newcountry": val },
-        ExpressionAttributeNames: { "#country": "country" },
-        UpdateExpression: "set #country = :newcountry"
     })));
   }
   try {
@@ -1694,6 +1311,7 @@ async function setPush(userid: string, pars: { state: boolean }) {
     };
 }
 
+
 async function savePush(userid: string, pars: { payload: any }) {
     try {
         console.log(`Attempting to save push notification credentials for user ${userid}:\n${JSON.stringify(pars.payload)}`);
@@ -1713,76 +1331,6 @@ async function savePush(userid: string, pars: { payload: any }) {
         statusCode: 200,
         body: JSON.stringify({
           message: `Successfully saved push notifications credentials for ${userid}`,
-        }),
-        headers
-    };
-}
-
-async function saveTags(userid: string, pars: { payload: TagList[] }) {
-    try {
-        console.log(`Attempting to save tags for user ${userid}:\n${JSON.stringify(pars.payload)}`);
-        if (pars.payload.length === 0) {
-            await ddbDocClient.send(
-                new DeleteCommand({
-                  TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Key: {
-                    "pk": "TAG", "sk": userid
-                  },
-                })
-            )
-        } else {
-            await ddbDocClient.send(new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Item: {
-                    "pk": "TAG",
-                    "sk": userid,
-                    "tags": pars.payload,
-                  }
-            }));
-        }
-    } catch (error) {
-        logGetItemError(error);
-        throw new Error("saveTags: Failed to save tags");
-    }
-    return {
-        statusCode: 200,
-        body: JSON.stringify({
-          message: `Successfully saved tags for ${userid}`,
-        }),
-        headers
-    };
-}
-
-async function savePalettes(userid: string, pars: { palettes: Palette[] }) {
-    try {
-        console.log(`Attempting to save palettes for user ${userid}:\n${JSON.stringify(pars.palettes)}`);
-        if (pars.palettes.length === 0) {
-            await ddbDocClient.send(
-                new DeleteCommand({
-                  TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Key: {
-                    "pk": "PALETTES", "sk": userid
-                  },
-                })
-            )
-        } else {
-            await ddbDocClient.send(new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Item: {
-                    "pk": "PALETTES",
-                    "sk": userid,
-                    "palettes": pars.palettes,
-                  } as PaletteRec
-            }));
-        }
-    } catch (error) {
-        logGetItemError(error);
-        throw new Error("saveTags: Failed to save palettes");
-    }
-    return {
-        statusCode: 200,
-        body: JSON.stringify({
-          message: `Successfully saved palettes for ${userid}`,
         }),
         headers
     };
@@ -2704,9 +2252,6 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         logGetItemError(err);
         return formatReturnError('Unable to process submit move');
       }
-      if (game.tournament !== undefined) {
-        list.push(tournamentUpdates(game, players));
-      }
     }
     game.lastMoveTime = timestamp;
     const updateGame = ddbDocClient.send(new PutCommand({
@@ -2782,41 +2327,6 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     logGetItemError(error);
     return formatReturnError('Unable to process submit move');
   }
-}
-
-async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
-  const work: Promise<any>[] = [];
-  for (const player of players) {
-    let score = 0;
-    if (game.winner?.length === 1 && game.players[game.winner[0] - 1].id === player.id) {
-      score = 1;
-    } else if (game.winner?.length === 2) {
-      score = 0.5;
-    }
-    work.push(ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "TOURNAMENTPLAYER", "sk": game.tournament + '#' + game.division!.toString() + '#' + player.id },
-      ExpressionAttributeNames: { "#s": "score" },
-      ExpressionAttributeValues: { ":inc": score },
-      UpdateExpression: "add #s :inc"
-    })));
-  }
-  const winner = game.winner?.map((w: number) => game.players[w - 1].id);
-  work.push(ddbDocClient.send(new UpdateCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "TOURNAMENTGAME", "sk": game.tournament + '#' + game.division!.toString() + '#' + game.id },
-    ExpressionAttributeNames: { "#w": "winner" },
-    ExpressionAttributeValues: { ":w": winner },
-    UpdateExpression: "set #w = :w"
-  })));
-  work.push(ddbDocClient.send(new UpdateCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "TOURNAMENT", "sk": game.tournament },
-    ExpressionAttributeNames: { "#d": "divisions", "#n": game.division!.toString() },
-    ExpressionAttributeValues: { ":inc": 1 },
-    UpdateExpression: "add #d.#n.numCompleted :inc"
-  })));
-  return Promise.all(work);
 }
 
 function updateRatings(game: FullGame, players: FullUser[]) {
@@ -3184,9 +2694,8 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBaseSim
       game.winner = engine.winner;
       game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
     }
-    else {
-        game.toMove = game.players.map((p, i) => ! engine.isEliminated(i + 1));
-    }
+    else
+      game.toMove = game.players.map(() => true);
   }
 }
 
@@ -3584,606 +3093,6 @@ async function getPublicExploration(pars: { game: string }) {
   return {
     statusCode: 200,
     body: JSON.stringify(trees),
-    headers
-  };
-}
-
-async function newTournament(userid: string, pars: { metaGame: string, variants: string[] }) {
-  const variantsKey = pars.variants.sort().join("|");
-  const sk = pars.metaGame + "#" + variantsKey;
-  let tournamentN = 0;
-  let available = true;
-  try {
-    const tournamentNumber = await ddbDocClient.send(
-        new GetCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "TOURNAMENTSCOUNTER",
-            "sk": sk
-          },
-        })
-    );
-    if (tournamentNumber.Item !== undefined) {
-      tournamentN = tournamentNumber.Item.count;
-      available = tournamentNumber.Item.over;
-      console.log(`Found tournament ${sk} with count ${tournamentN} and over ${available}`);
-    } else {
-      console.log(`No tournament ${sk} found`);
-    }
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to fetch TOURNAMENTSCOUNTER for '${sk}'`);
-  }
-  if (!available) {
-    return formatReturnError(`There is already a tournament for '${pars.metaGame}#${variantsKey}'`);
-  }
-  // Try to update counter
-  try {
-    await ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "TOURNAMENTSCOUNTER", "sk": sk },
-      ExpressionAttributeValues: { ":val": tournamentN, ":inc": 1, ":zero": 0 },
-      UpdateExpression: "set count = if_not_exists(count, :zero) + :inc"
-    }));
-  } catch (err: any) {
-    if (err.name === 'ConditionalCheckFailedException') {
-      // Failed to update TOURNAMENTSCOUNTER, probably someone else beat us to it. So no harm done.
-      console.log(`Failed to update TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
-      return;
-    }
-    return formatReturnError(`Unable to update TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
-  }
-  console.log(`Updated TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`)
-  // Insert tournament
-  const tournamentid = uuid();
-  const data = {
-    "pk": "TOURNAMENT",
-    "sk": tournamentid,
-    "id": tournamentid,
-    "metagame": pars.metaGame,
-    "variants": pars.variants,
-    "number": tournamentN + 1,
-    "started": false,
-    "dateCreated": Date.now()
-  };
-  try {
-    await ddbDocClient.send(new PutCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: data
-    }));
-    console.log(`Inserted tournament ${tournamentid} for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to insert tournament for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
-  }
-  return {
-    statusCode: 200,
-    body: "New tournament created",
-    headers
-  };
-}
-
-async function joinTournament(userid: string, pars: { tournamentid: string }) {
-  let tournament: Tournament;
-  let playername = '';
-  try {
-    const tournamentGet = ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "TOURNAMENT",
-          "sk": pars.tournamentid
-        },
-      }));
-    const user = ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "USERS",
-          "sk": userid
-        },
-      }));
-    const [tournamentData, userData] = await Promise.all([tournamentGet, user]);
-    if (!tournamentData.Item)
-      throw new Error(`No tournament ${pars.tournamentid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
-    tournament = tournamentData.Item as Tournament;
-    playername = (userData.Item as User).name;
-  }
-  catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to get tournament ${pars.tournamentid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-  }
-  if (tournament.started)
-    return formatReturnError(`Tournament ${pars.tournamentid} has already started`);
-  const sk = `${pars.tournamentid}#1#${userid}`;
-  const data = {
-    "pk": "TOURNAMENTPLAYER",
-    "sk": sk,
-    "playername": playername
-  };
-  try {
-    await ddbDocClient.send(new PutCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: data
-    }));
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to add player ${userid} to tournament ${pars.tournamentid}`);
-  }
-}
-
-async function getTournaments() {
-  try {
-    const tournamentsDataPromise = ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "TOURNAMENT" },
-        ExpressionAttributeNames: { "#pk": "pk" }
-      }));
-    const tournamentPlayersDataPromise = ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER" },
-        ExpressionAttributeNames: { "#pk": "pk" }
-      }));
-    const [tournamentsData, tournamentPlayersData] = await Promise.all([tournamentsDataPromise, tournamentPlayersDataPromise]);
-    return {
-      statusCode: 200,
-      body: JSON.stringify({tournaments: tournamentsData.Items, tournamentPlayers: tournamentPlayersData.Items}),
-      headers
-    };
-  }
-  catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to get tournaments from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-  }
-}
-
-async function startTournaments() {
-  try {
-    const tournamentsData = await ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "TOURNAMENT" },
-        ExpressionAttributeNames: { "#pk": "pk" }
-      }));
-    const tournaments = tournamentsData.Items as Tournament[];
-    const now = Date.now();
-    const oneWeek = 1000 * 60 * 60 * 24 * 7;
-    const twoWeeks = oneWeek * 2;
-    for (const tournament of tournaments) {
-      if (
-        !tournament.started && now > tournament.dateCreated + twoWeeks 
-        && (tournament.datePreviousEnded === undefined || now > tournament.datePreviousEnded + oneWeek )
-      ) {
-        startTournament(tournament);
-      }
-    }
-  }
-  catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to get tournaments from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-  }
-}
-
-async function startTournament(tournament: Tournament) {
-  // First, get the players
-  const playersData = await ddbDocClient.send(
-    new QueryCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournament.id + '#1#' },
-      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-      KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-    }));
-  const players = playersData.Items as TournamentPlayer[];
-  // Get players
-  const playersFull = await getPlayers(players.map(p => p.playerid));
-  if (players.length < 5) {
-    // Cancel tournament
-    // Delete tournament and tournament players
-    const work: Promise<any>[] = [];
-    work.push(ddbDocClient.send(
-      new DeleteCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "TOURNAMENT",
-          "sk": tournament.id
-        },
-      })));
-    for (let player of players) {
-      work.push(ddbDocClient.send(
-        new DeleteCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "TOURNAMENTPLAYER",
-            "sk": player.sk
-          },
-        })));
-    }
-    // Send email to players
-    for (let player of playersFull) {
-      await changeLanguageForPlayer(player);
-      let body = '';
-      if (tournament.variants.length === 0)
-        body = i18n.t("TournamentCancelBody", { "metaGame": tournament.metaGame, "number": tournament.number });
-      else
-        body = i18n.t("TournamentCancelBodyVariants", { "metaGame": tournament.metaGame, "number": tournament.number, "variants": tournament.variants.join(", ") });
-      if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-        const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentCancelSubject"), body);
-        work.push(sesClient.send(comm));
-      }
-    }
-  } else {
-    const clockStart = 3 * 3600000;
-    const clockInc = 2 * 3600000;
-    const clockMax = 6 * 3600000;
-    const allGamePlayers = [];
-    for (let i = 0; i < playersFull.length; i++) {
-      players[i].rating = playersFull[i]?.ratings?.[tournament.metaGame].rating;
-      if (players[i].rating === undefined)
-      players[i].rating = 0;
-      allGamePlayers.push({id: players[i].playerid, name: players[i].playername, time: clockStart} as User);
-    }
-    // Create divisions
-    const numDivisions = Math.ceil(players.length / 10.0); // at most 10 players per division
-    const divisionSizeSmall = Math.floor(players.length / numDivisions); 
-    const numBigDivisions = players.length - divisionSizeSmall * numDivisions; // big divisions have one more player than small divisions!
-    // Sort players into divisions by rating
-    players.sort((a, b) => b.rating! - a.rating!);
-    let division = 1;
-    let count = 0;
-    const work: Promise<any>[] = [];
-    for (let player of players) {
-      player.division = division;
-      player.sk = tournament.id + "#" + division.toString() + '#' + player.playerid;
-      work.push(ddbDocClient.send(new PutCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: player
-      })));
-      if (division > 1) {
-        work.push(ddbDocClient.send(new DeleteCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "TOURNAMENTPLAYER", "sk": tournament.id + "#1#" + player.playerid
-          },
-        })));
-      }
-      count++;
-      if ((division > numBigDivisions && count === divisionSizeSmall) || (division <= numBigDivisions && count === divisionSizeSmall + 1)) {
-        division++;
-        count = 0;
-      }
-    }
-    // Create games
-    const now = Date.now();
-    let player0 = 0;
-    let updatedGameIDs: string[][] = [];
-    for (let i = 0; i < players.length; i++) {
-      updatedGameIDs.push([]);
-      if (playersFull[i].games === undefined)
-        playersFull[i].games = [];
-    }
-    for (let division = 1; division <= numDivisions; division++) {
-      for (let i = 0; i < (division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall); i++) {
-        for (let j = i + 1; j < (division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall); j++) {
-          let player1 = player0 + i;
-          let player2 = player0 + j;
-          const gameId = uuid();
-          let playerIDs: string[] = [];
-          let gamePlayers: User[] = [];
-          if (i + j % 2 === 1) {
-            playerIDs.push(players[player1].playerid);
-            playerIDs.push(players[player2].playerid);
-            gamePlayers.push(allGamePlayers[player1]);
-            gamePlayers.push(allGamePlayers[player2]);
-          } else {
-            playerIDs.push(players[player2].playerid);
-            playerIDs.push(players[player1].playerid);
-            gamePlayers.push(allGamePlayers[player2]);
-            gamePlayers.push(allGamePlayers[player1]);
-          }
-          let whoseTurn: string | boolean[] = "0";
-          const info = gameinfo.get(tournament.metaGame);
-          if (info.flags !== undefined && info.flags.includes('simultaneous')) {
-            whoseTurn = playerIDs.map(() => true);
-          }
-          const variants = tournament.variants;
-          let engine;
-          if (info.playercounts.length > 1)
-            engine = GameFactory(tournament.metaGame, 2, variants);
-          else
-            engine = GameFactory(tournament.metaGame, undefined, variants);
-          if (!engine)
-            throw new Error(`Unknown metaGame ${tournament.metaGame}`);
-          const state = engine.serialize();
-          work.push(ddbDocClient.send(new PutCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Item: {
-                "pk": "GAME",
-                "sk": tournament.metaGame + "#0#" + gameId,
-                "id": gameId,
-                "metaGame": tournament.metaGame,
-                "numPlayers": 2,
-                "rated": true,
-                "players": info.flags !== undefined && info.flags.includes('perspective') ? 
-                  gamePlayers.map((p, ind) => {return {...p, settings: {"rotate": (ind + 1) * 180}}}) 
-                  : gamePlayers,
-                "clockStart": clockStart,
-                "clockInc": clockInc,
-                "clockMax": clockMax,
-                "clockHard": true,
-                "state": state,
-                "toMove": whoseTurn,
-                "lastMoveTime": now,
-                "gameStarted": now,
-                "variants": engine.variants,
-                "tournament": tournament.id,
-                "division": division
-              }
-            })));
-          // this should be all the info we want to show on the "my games" summary page.
-          const game = {
-            "id": gameId,
-            "metaGame": tournament.metaGame,
-            "players": gamePlayers,
-            "clockHard": true,
-            "toMove": whoseTurn,
-            "lastMoveTime": now,
-            "variants": engine.variants,
-          } as Game;
-          work.push(addToGameLists("CURRENTGAMES", game, now, false));
-          const tournamentGame = {
-            "pk": "TOURNAMENTGAME",
-            "sk": tournament.id + "#" + division.toString() + '#' + gameId,
-            "id": gameId,
-            "player1": gamePlayers[0].id,
-            "player2": gamePlayers[1].id
-          };
-          work.push(ddbDocClient.send(new PutCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Item: tournamentGame
-          })));
-          // Update players
-          playersFull[player1].games.push(game);
-          updatedGameIDs[player1].push(game.id);
-          playersFull[player2].games.push(game);
-          updatedGameIDs[player2].push(game.id);
-        }
-      }
-      player0 += division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall;
-    }
-    for (let i = 0; i < playersFull.length; i++) {
-      work.push(updateUserGames(playersFull[i].id, playersFull[i].gamesUpdate, updatedGameIDs[i], playersFull[i].games));
-    }
-    const newTournamentid = uuid();
-    work.push(ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "TOURNAMENT", "sk": tournament.id },
-      ExpressionAttributeValues: { ":dt": now, ":t": true, ":nextid": newTournamentid },
-      UpdateExpression: "set started = :t, dateStarted = :dt, nextid = :nextid",
-    })));
-    // open next tournament for sign-up.
-    const data = {
-      "pk": "TOURNAMENT",
-      "sk": newTournamentid,
-      "id": newTournamentid,
-      "metagame": tournament.metaGame,
-      "variants": tournament.variants,
-      "number": tournament.number + 1,
-      "started": false,
-      "dateCreated": now
-    };
-    work.push(ddbDocClient.send(new PutCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: data
-    })));
-    // Send e-mails to participants
-    for (let player of playersFull) {
-      await changeLanguageForPlayer(player);
-      let body = '';
-      if (tournament.variants.length === 0)
-        body = i18n.t("TournamentStartBody", { "metaGame": tournament.metaGame, "number": tournament.number });
-      else
-        body = i18n.t("TournamentStartBodyVariants", { "metaGame": tournament.metaGame, "number": tournament.number, "variants": tournament.variants.join(", ") });
-      if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-        const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentStartSubject"), body);
-        work.push(sesClient.send(comm));
-      }
-      // push notifications are sent no matter what
-      work.push(sendPush({
-          userId: player.id,
-          topic: "tournament",
-          title: i18n.t("PUSH.titles.tournament"),
-          body: body,
-          url: "/tournament=" + tournament.id,
-      }));
-    }
-  }
-}
-
-async function endTournament(tournamentid: string) {
-  try {
-    const data = await ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "TOURNAMENT", "sk": tournamentid
-        },
-      }));
-    console.log("Got:");
-    console.log(data);
-    if (!data.Item)
-      throw new Error(`No tournament ${tournamentid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
-    const tournament = data.Item as Tournament;
-    if (tournament.divisions) {
-      const work: Promise<any>[] = [];
-      let alldone = true;
-      let tournamentUpdated = false;
-      for (const [divisionNumber, division] of Object.entries(tournament.divisions)) {
-        if (division.numCompleted < division.numGames) {
-          alldone = false;
-        }
-        if (division.numCompleted === division.numGames && !division.processed) {
-          // Get games
-          const work2: Promise<any>[] = [];
-          work2.push(ddbDocClient.send(
-            new QueryCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-              KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-              ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": tournamentid + '#' + division + '#' },
-              ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-            })));
-          // And players (we need the ratings at the start of the tournament)
-          work2.push(ddbDocClient.send(
-            new QueryCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-              ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournamentid + '#' + division + '#' },
-              ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-              KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-            })));
-          const [gamesData, playersData] = await Promise.all(work2);            
-          const gamelist = gamesData.Items as TournamentGame[];
-          const players = playersData.Items as TournamentPlayer[];
-          var tournamentPlayers: Map<string, TournamentPlayer> = new Map();
-          for (let i = 0; i < players.length; i++) {
-            players[i].tiebreak = 0;
-            players[i].score = 0;
-            tournamentPlayers.set(players[i].playerid, players[i]);
-          }
-          for (const game of gamelist) {
-            if (game.winner?.length === 2) {
-              tournamentPlayers.get(game.player1)!.score! += 0.5;
-              tournamentPlayers.get(game.player2)!.score! += 0.5;
-            } else if (game.winner![0] === 1) {
-              tournamentPlayers.get(game.player1)!.score! += 1;
-            } else {
-              tournamentPlayers.get(game.player2)!.score! += 1;
-            }
-          }
-          const n = tournamentPlayers.size;
-          /*
-            In SON tiebreak your tiebreak is the sum of the scores of the players you beat.
-            In RSON tiebreak you get "full" credit for each win, but you get penalized for each loss, with the penalty being higher for losing against lower scoring opponents.
-            RSON tiebreak:
-              For every win you get n/2 - 1 points.
-              For every loss you get (opponent's score) - n/2.
-              For every draw you get (n/2 - 1 + (opponent's score) - n/2) / 2 = (opponent's score - 1) / 2.
-            Note that at the end of the tournament
-              - RSON = SON for a player that wins all his games.
-              - RSON = SON for a player that loses all his games.
-              - RSON can't be negative.
-              - If no draws, RSON is an integer.
-          */
-          for (const game of gamelist) {
-            if (game.winner?.length === 2) {
-              tournamentPlayers.get(game.player1)!.tiebreak! += (tournamentPlayers.get(game.player2)!.score! - 1) / 2;
-              tournamentPlayers.get(game.player2)!.tiebreak! += (tournamentPlayers.get(game.player1)!.score! - 1) / 2;
-            } else if (game.winner![0] === 1) {
-              tournamentPlayers.get(game.player1)!.tiebreak! += n / 2 - 1;
-              tournamentPlayers.get(game.player2)!.tiebreak! += tournamentPlayers.get(game.player1)!.score! - n / 2;
-            } else {
-              tournamentPlayers.get(game.player2)!.tiebreak! += n / 2 - 1;
-              tournamentPlayers.get(game.player1)!.tiebreak! += tournamentPlayers.get(game.player2)!.score! - n / 2;
-            }
-          }
-          // Find winner
-          let bestScore = 0;
-          let bestTiebreak = 0;
-          let bestRating = 0;
-          let bestPlayer = '';
-          let bestPlayerName = '';
-          for (const player of players) {
-            if (player.score! > bestScore) {
-              bestScore = player.score!;
-              bestTiebreak = player.tiebreak!;
-              bestRating = player.rating!;
-              bestPlayer = player.playerid;
-              bestPlayerName = player.playername;
-            } else if (player.score! === bestScore) {
-              if (player.tiebreak! > bestTiebreak) {
-                bestTiebreak = player.tiebreak!;
-                bestRating = player.rating!;
-                bestPlayer = player.playerid;
-                bestPlayerName = player.playername;
-              } else if (player.tiebreak! === bestTiebreak) {
-                if (player.rating! > bestRating) {
-                  bestRating = player.rating!;
-                  bestPlayer = player.playerid;
-                  bestPlayerName = player.playername;
-                }
-              }
-            }
-          }
-          division.processed = true;
-          division.winnerid = bestPlayer;
-          division.winner = bestPlayerName;
-          // Update tournament players
-
-          tournamentUpdated = true;
-        }
-      }
-      if (tournamentUpdated) {
-        // Update tournament
-        if (!alldone) {
-          work.push(ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "TOURNAMENT", "sk": tournament.id },
-            ExpressionAttributeValues: { ":ds": tournament.divisions },
-            UpdateExpression: "set divisions = :ds",
-          })));
-        } else {
-          const now = Date.now();
-          work.push(ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "TOURNAMENT", "sk": tournament.id },
-            ExpressionAttributeValues: { ":ds": tournament.divisions, ":dt": now },
-            UpdateExpression: "set divisions = :ds, dateEnded = :dt",
-          })));
-          // Start the clock for next tournament start
-          work.push(ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "TOURNAMENT", "sk": tournament.nextid },
-            ExpressionAttributeValues: { ":dt": now },
-            UpdateExpression: "set datePreviousEnded = :dt",
-          })));
-          // Send e-mails to participants
-          // Now we need ALL players, not just the ones in the current division
-          const playersData = await ddbDocClient.send(
-            new QueryCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-              ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournament.id },
-              ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-              KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-            }));
-          const players = playersData.Items as TournamentPlayer[];
-          // And, in fact, full players (just for e-mail!? and language... Don't want to put these in the tournament player because then those will have to be maintained if e-mail or language changes)
-          const playersFull = await getPlayers(players.map(p => p.playerid));
-          for (const player of playersFull) {
-            await changeLanguageForPlayer(player);
-            let body = '';
-            if (tournament.variants.length === 0)
-              body = i18n.t("TournamentEndBody", { "metaGame": tournament.metaGame, "number": tournament.number });
-            else
-              body = i18n.t("TournamentEndBodyVariants", { "metaGame": tournament.metaGame, "number": tournament.number, "variants": tournament.variants.join(", ") });
-            if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-              const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject"), body);
-              work.push(sesClient.send(comm));
-            }
-          }
-        }
-      }
-    }
-  }
-  catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Error during update tournament ${tournamentid}: {error}`);
-  }
-  return {
-    statusCode: 200,
-    body: "Done",
     headers
   };
 }
@@ -4636,7 +3545,7 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
         }
     } catch (err) {
         logGetItemError(err);
-        return formatReturnError(`Unable to setLastSeen ${userId}`);
+        return formatReturnError(`Unable to onetimeFix ${userId}`);
     }
     if (user !== undefined) {
         // find matching game
@@ -4696,46 +3605,31 @@ async function onetimeFix(userId: string) {
         logGetItemError(err);
         return formatReturnError(`Unable to onetimeFix ${userId}`);
   }
-
-  let totalUnits = 0;
-  // get all USER records
-  let data: any;
-  let users: FullUser[] = [];
-  try {
-    data = await ddbDocClient.send(
-        new QueryCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            KeyConditionExpression: "#pk = :pk",
-            ExpressionAttributeValues: { ":pk": "USER" },
-            ExpressionAttributeNames: { "#pk": "pk" },
-            ReturnConsumedCapacity: "INDEXES",
-        })
-      )
-      if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
-        totalUnits += data.ConsumedCapacity.CapacityUnits;
-      } else {
-        console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
-      }
-      users = data?.Items as FullUser[];
-      console.log(JSON.stringify(users, null, 2));
-      console.log(`Total units used: ${totalUnits}`);
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to onetimeFix get all users`);
-  }
-
-  const work: Promise<any>[] = [];
-  for (const user of users) {
-    work.push(
-        ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USERS", "sk": user.id },
-            ExpressionAttributeValues: { ":ss": user.stars || [], ":ls": user.lastSeen || 0, ":country": user.country },
-            UpdateExpression: "set stars = :ss, lastSeen = :ls, country = :country",
-        }))
-    );
-  }
-  return Promise.all(work);
+//   let totalUnits = 0;
+//   // get all USER records
+//   let data: any;
+//   let users: FullUser[] = [];
+//   try {
+//     data = await ddbDocClient.send(
+//         new QueryCommand({
+//             TableName: process.env.ABSTRACT_PLAY_TABLE,
+//             KeyConditionExpression: "#pk = :pk",
+//             ExpressionAttributeValues: { ":pk": "USER" },
+//             ExpressionAttributeNames: { "#pk": "pk" },
+//             ReturnConsumedCapacity: "INDEXES",
+//         })
+//       )
+//       if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
+//         totalUnits += data.ConsumedCapacity.CapacityUnits;
+//       } else {
+//         console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+//       }
+//       users = data?.Items as FullUser[];
+//       console.log(JSON.stringify(users, null, 2));
+//   } catch (err) {
+//     logGetItemError(err);
+//     return formatReturnError(`Unable to onetimeFix get all users`);
+//   }
 //   const memoGame = new Map<string, FullGame>();
 //   const memoComments = new Map<string, Comment[]>();
 //   // foreach USER

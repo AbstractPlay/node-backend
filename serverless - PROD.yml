@@ -1,0 +1,186 @@
+# Welcome to Serverless!
+#
+# This file is the main config file for your service.
+# It's very minimal at this point and uses default values.
+# You can always add more config options for more control.
+# We've included some commented out config examples here.
+# Just uncomment any of them to get that config option.
+#
+# For full config options, check the docs:
+#    docs.serverless.com
+#
+# Happy Coding!
+
+service: abstract-play
+# app and org for use with dashboard.serverless.com
+# app: apfront
+# org: wamelen
+
+# You can pin your service to only deploy with a specific Serverless version
+# Check out our docs for more details
+frameworkVersion: '3'
+
+custom:
+  scheduleEnabled:
+    prod: true
+    dev: false
+  recbucket:
+    prod: "records.abstractplay.com"
+    dev: "records.abstractplay.com"
+  dumpbucket: "abstractplay-db-dump"
+
+params:
+  dev:
+    profile: AbstractPlayDev
+    userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_2zrzbEjoU
+  prod:
+    profile: AbstractPlayProd
+    userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_YCjgSZHJm
+
+package:
+  excludeDevDependencies: false
+
+plugins:
+  - serverless-plugin-common-excludes
+  - serverless-plugin-include-dependencies
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  versionFunctions: false
+  stage: ${opt:stage, 'dev'}
+  profile: ${param:profile}
+  region: us-east-1
+  environment:
+    ABSTRACT_PLAY_TABLE: abstract-play-${self:provider.stage}
+    userpool: ${param:userpool}
+    VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
+    VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
+    # VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
+    # VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:ExportTableToPointInTime
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: "*"
+        - Effect: 'Allow'
+          Action:
+            - 's3:ListBucket'
+          Resource: 'arn:aws:s3:::abstractplay-db-dump'
+        - Effect: 'Allow'
+          Action:
+            - 's3:GetObject'
+            - 's3:PutObject'
+          Resource: 'arn:aws:s3:::abstractplay-db-dump/*'
+        - Effect: 'Allow'
+          Action:
+            - 's3:ListBucket'
+          Resource: 'arn:aws:s3:::records.abstractplay.com'
+        - Effect: 'Allow'
+          Action:
+            - 's3:PutObject'
+          Resource: 'arn:aws:s3:::records.abstractplay.com/*'
+
+resources:
+  Resources:
+    # One table design
+    AbstractGamesDynamoDbTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: "pk"
+            AttributeType: "S"
+          -
+            AttributeName: "sk"
+            AttributeType: "S"
+        KeySchema:
+          -
+            AttributeName: "pk"
+            KeyType: "HASH"
+          -
+            AttributeName: "sk"
+            KeyType: "RANGE"
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        StreamSpecification:
+          StreamViewType: "NEW_AND_OLD_IMAGES"
+        TableName: ${self:provider.environment.ABSTRACT_PLAY_TABLE}
+
+    GatewayResponseDefault4XX:
+       Type: 'AWS::ApiGateway::GatewayResponse'
+       Properties:
+         ResponseParameters:
+           gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+           gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+         ResponseType: DEFAULT_4XX
+         RestApiId:
+           Ref: 'ApiGatewayRestApi'
+
+functions:
+  authQuery:
+    handler: api/abstractplay.authQuery
+    memorySize: 1024
+    description: Abstract Play queries that need authorization.
+    events:
+      - http:
+          path: authQuery
+          method: post
+          cors: true
+          integration: lambda
+          authorizer:
+            name: authorizer
+            arn: ${self:provider.environment.userpool}
+            claims:
+              - email
+              - 'cognito:username'
+  query:
+    handler: api/abstractplay.query
+    memorySize: 128
+    description: Abstract Play queries that does not need authorization.
+    events:
+      - http:
+          path: query
+          method: get
+          cors: true
+  yourturn:
+    handler: utils/yourturn.handler
+    description: Sends out "your turn" notifications
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-yourturn
+          description: Send out "your turn" notifications
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(0 14,22 * * ? *)
+  records:
+    handler: utils/records.handler
+    description: Generates static lists of game records
+    timeout: 60
+    memorySize: 2048
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-records
+          description: Generates static lists of game records
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(0 3 ? * 1 *)
+  dumpdb:
+    handler: utils/dumpdb.handler
+    description: Triggers a full export of production DB to S3
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-dumpdb
+          description: Triggers a full export of production DB to S3
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(0 0 ? * 1 *)
