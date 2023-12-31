@@ -86,7 +86,7 @@ All data is in a single table. The primary key (or the first part of the primary
   * pk: TOURNAMENTGAME
   * sk: \<tournamentid\>#\<division\>#\<gameid\>
 
-- **Completed Tournaments** List of tournaments that are not completed yet. Either waiting for players to sign up, or ongoing.
+- **Completed Tournaments** List of completed tournaments.
   * pk: COMPLETEDTOURNAMENT
   * sk: \<tournamentid\>
 

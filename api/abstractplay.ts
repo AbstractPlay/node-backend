@@ -1173,7 +1173,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
     }
 
     // fetch tags
-    const tagData = await ddbDocClient.send(
+    const tagWork = ddbDocClient.send(
         new GetCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: {
@@ -1182,14 +1182,9 @@ async function me(claim: PartialClaims, pars: { size: string }) {
             },
         })
     );
-    let tags: TagList[] = [];
-    if (tagData.Item !== undefined) {
-        const tagRec = tagData.Item as TagRec;
-        tags = tagRec.tags;
-    }
 
     // fetch palettes
-    const paletteData = await ddbDocClient.send(
+    const paletteWork = ddbDocClient.send(
         new GetCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: {
@@ -1198,11 +1193,6 @@ async function me(claim: PartialClaims, pars: { size: string }) {
             },
         })
     );
-    let palettes: Palette[] = [];
-    if (paletteData.Item !== undefined) {
-        const paletteRec = paletteData.Item as PaletteRec;
-        palettes = paletteRec.palettes;
-    }
 
     // Check for "recently completed games"
     console.log(`Checking for recently completed games`);
@@ -1240,6 +1230,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
         } else {
           const toMove = parseInt(game.toMove);
           if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
+            // To make sure games are up to date before we update further. Note this is a noop if removedGameIDs === [].
             await updateUserGames(userId, user.gamesUpdate, removedGameIDs, games);
             game.lastMoveTime = game.lastMoveTime + game.players[toMove].time!;
             game.toMove = '';
@@ -1249,44 +1240,56 @@ async function me(claim: PartialClaims, pars: { size: string }) {
         }
       }
     }
-    let challengesIssuedIDs: string[] = [];
-    let challengesReceivedIDs: string[] = [];
-    let challengesAcceptedIDs: string[] = [];
-    let standingChallengeIDs: string[] = [];
-    if (user.challenges !== undefined) {
-      if (user.challenges.issued !== undefined)
-        challengesIssuedIDs = user.challenges.issued;
-      if (user.challenges.received !== undefined)
-        challengesReceivedIDs = user.challenges.received;
-      if (user.challenges.accepted !== undefined)
-        challengesAcceptedIDs = user.challenges.accepted;
-      if (user.challenges.standing !== undefined)
-        standingChallengeIDs = user.challenges.standing;
-    }
-    let data = null;
-    console.log(`Fetching challenges`);
-    if (!pars || !pars.size || pars.size !== "small") {
-      const challengesIssued = getChallenges(challengesIssuedIDs);
-      const challengesReceived = getChallenges(challengesReceivedIDs);
-      const challengesAccepted = getChallenges(challengesAcceptedIDs);
-      const standingChallenges = getChallenges(standingChallengeIDs);
-      data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges, updateUserGames(userId, user.gamesUpdate, removedGameIDs, games)]);
-    }
+
     // Update last seen date for user
-    console.log(`Updating last seen date`);
-    await ddbDocClient.send(new UpdateCommand({
+    console.log(`Updating last seen date for USER and USERS`);
+    const lastSeenUserWork = ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userId },
-      ExpressionAttributeValues: { ":dt": Date.now(), ":gs": games },
-      UpdateExpression: "set lastSeen = :dt, games = :gs"
+      ExpressionAttributeValues: { ":dt": Date.now() },
+      UpdateExpression: "set lastSeen = :dt"
     }));
-    await ddbDocClient.send(new UpdateCommand({
+    const lastSeenUsersWork = ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "USERS", "sk": userId },
         ExpressionAttributeValues: { ":dt": Date.now() },
         UpdateExpression: "set lastSeen = :dt"
     }));
-    if (data) {
+    
+    let data = null;
+    console.log(`Fetching challenges`);
+    let tagData, paletteData
+    if (!pars || !pars.size || pars.size !== "small") {
+      const challengesIssuedIDs: string[] = user?.challenges?.issued ?? [];
+      const challengesReceivedIDs: string[] = user?.challenges?.received ?? [];
+      const challengesAcceptedIDs: string[] = user?.challenges?.accepted ?? [];
+      const standingChallengeIDs: string[] = user?.challenges?.standing ?? [];
+      const challengesIssued = getChallenges(challengesIssuedIDs);
+      const challengesReceived = getChallenges(challengesReceivedIDs);
+      const challengesAccepted = getChallenges(challengesAcceptedIDs);
+      const standingChallenges = getChallenges(standingChallengeIDs);
+      data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges, tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
+        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games)]);
+      tagData = data[4];
+      paletteData = data[5];
+    } else {
+      data = await Promise.all([tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
+        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games)]);
+      tagData = data[0];
+      paletteData = data[1];
+    }
+    let tags: TagList[] = [];
+    if (tagData.Item !== undefined) {
+        const tagRec = tagData.Item as TagRec;
+        tags = tagRec.tags;
+    }
+    let palettes: Palette[] = [];
+    if (paletteData.Item !== undefined) {
+        const paletteRec = paletteData.Item as PaletteRec;
+        palettes = paletteRec.palettes;
+    }
+
+    if (data && (!pars || !pars.size || pars.size !== "small")) {
       // Still trying to get to the bottom of games shown as "to move" when already moved.
       console.log(`me returning for ${user.name}, id ${user.id} with games`, games);
       return {
@@ -1303,10 +1306,10 @@ async function me(claim: PartialClaims, pars: { size: string }) {
           tags,
           palettes,
           "mayPush": user.mayPush,
-          "challengesIssued": data[0].map(d => d.Item),
-          "challengesReceived": data[1].map(d => d.Item),
-          "challengesAccepted": data[2].map(d => d.Item),
-          "standingChallenges": data[3].map(d => d.Item)
+          "challengesIssued": (data[0] as any[]).map(d => d.Item),
+          "challengesReceived": (data[1] as any[]).map(d => d.Item),
+          "challengesAccepted": (data[2] as any[]).map(d => d.Item),
+          "standingChallenges": (data[3] as any[]).map(d => d.Item)
         }, Set_toJSON),
         headers
       };
@@ -3061,7 +3064,6 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
   game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   game.lastMoveTime = timestamp;
   const playerIDs = game.players.map((p: { id: any; }) => p.id);
-  // TODO: We are updating players and their games. TODO: implement optimistic locking
   const players = await getPlayers(playerIDs);
 
   // this should be all the info we want to show on the "my games" summary page.
@@ -3077,7 +3079,7 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
     "gameEnded": new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime(),
     "numMoves": engine.stack.length - 1,
     "variants": engine.variants,
-} as Game;
+  } as Game;
   const work: Promise<any>[] = [];
   work.push(addToGameLists("COMPLETEDGAMES", playerGame, game.lastMoveTime, game.numMoves !== undefined && game.numMoves > game.numPlayers));
 
@@ -3644,7 +3646,7 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
     "pk": "TOURNAMENT",
     "sk": tournamentid,
     "id": tournamentid,
-    "metagame": pars.metaGame,
+    "metaGame": pars.metaGame,
     "variants": pars.variants,
     "number": tournamentN + 1,
     "started": false,
@@ -3974,7 +3976,7 @@ async function startTournament(tournament: Tournament) {
       "pk": "TOURNAMENT",
       "sk": newTournamentid,
       "id": newTournamentid,
-      "metagame": tournament.metaGame,
+      "metaGame": tournament.metaGame,
       "variants": tournament.variants,
       "number": tournament.number + 1,
       "started": false,
