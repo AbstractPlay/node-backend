@@ -237,7 +237,7 @@ type Tournament = {
   number: number;
   started: boolean;
   dateCreated: number;
-  datePreviousEnded?: number;
+  datePreviousEnded: number; // 0 means either the first tournament or a restart of the series (after it stopped because not enough participants), 3000000000000 means previous tournament still running.
   nextid?: string;
   dateStarted?: number;
   dateEnded?: number;
@@ -311,6 +311,10 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return await getPublicExploration(pars);
     case "get_tournaments":
       return await getTournaments();
+    case "start_tournaments":
+      return await startTournaments();
+    case "end_tournament":
+      return await endTournament(pars);
     default:
       return {
         statusCode: 500,
@@ -3644,7 +3648,7 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
   console.log(`Updated TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`)
   // Insert tournament
   const tournamentid = uuid();
-  const data = {
+  const data: Tournament = {
     "pk": "TOURNAMENT",
     "sk": tournamentid,
     "id": tournamentid,
@@ -3652,7 +3656,8 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
     "variants": pars.variants,
     "number": tournamentN + 1,
     "started": false,
-    "dateCreated": Date.now()
+    "dateCreated": Date.now(),
+    "datePreviousEnded": 0
   };
   try {
     await ddbDocClient.send(new PutCommand({
@@ -3802,7 +3807,7 @@ async function startTournaments() {
     for (const tournament of tournaments) {
       if (
         !tournament.started && now > tournament.dateCreated + twoWeeks 
-        && (tournament.datePreviousEnded === undefined || now > tournament.datePreviousEnded + oneWeek )
+        && (tournament.datePreviousEnded === 0 || now > tournament.datePreviousEnded + oneWeek )
       ) {
         startTournament(tournament);
       }
@@ -3826,27 +3831,41 @@ async function startTournament(tournament: Tournament) {
   const players = playersData.Items as TournamentPlayer[];
   // Get players
   const playersFull = await getPlayers(players.map(p => p.playerid));
+  console.log(playersFull);
   if (players.length < 5) {
     // Cancel tournament
     // Delete tournament and tournament players
     const work: Promise<any>[] = [];
-    work.push(ddbDocClient.send(
-      new DeleteCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "TOURNAMENT",
-          "sk": tournament.id
-        },
-      })));
-    for (let player of players) {
+    try {
       work.push(ddbDocClient.send(
         new DeleteCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
-            "pk": "TOURNAMENTPLAYER",
-            "sk": player.sk
+            "pk": "TOURNAMENT",
+            "sk": tournament.id
           },
-        })));
+        }))
+      );
+    }
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to delete tournament ${tournament.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    }
+    try {
+      for (let player of players) {
+        work.push(ddbDocClient.send(
+          new DeleteCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "TOURNAMENTPLAYER",
+              "sk": player.sk
+            },
+          })));
+      }
+    }
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to delete tournament players from table ${process.env.ABSTRACT_PLAY_TABLE}`);
     }
     // Send email to players
     for (let player of playersFull) {
@@ -3869,7 +3888,7 @@ async function startTournament(tournament: Tournament) {
     for (let i = 0; i < playersFull.length; i++) {
       players[i].rating = playersFull[i]?.ratings?.[tournament.metaGame].rating;
       if (players[i].rating === undefined)
-      players[i].rating = 0;
+        players[i].rating = 0;
       allGamePlayers.push({id: players[i].playerid, name: players[i].playername, time: clockStart} as User);
     }
     // Create divisions
@@ -3896,6 +3915,7 @@ async function startTournament(tournament: Tournament) {
           },
         })));
       }
+      console.log(`Player ${player.playername} in division ${division}`);
       count++;
       if ((division > numBigDivisions && count === divisionSizeSmall) || (division <= numBigDivisions && count === divisionSizeSmall + 1)) {
         division++;
@@ -3991,6 +4011,7 @@ async function startTournament(tournament: Tournament) {
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Item: tournamentGame
           })));
+          console.log(`Game ${gameId} created between ${gamePlayers[0].name} and ${gamePlayers[1].name}`);
           // Update players
           playersFull[player1].games.push(game);
           updatedGameIDs[player1].push(game.id);
@@ -4011,6 +4032,13 @@ async function startTournament(tournament: Tournament) {
       UpdateExpression: "set started = :t, dateStarted = :dt, nextid = :nextid",
     })));
     // open next tournament for sign-up.
+    work.push(ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "TOURNAMENTSCOUNTER", "sk": tournament.metaGame + "#" + tournament.variants.sort().join("|") },
+      ExpressionAttributeValues: { ":val": tournament.number, ":inc": 1, ":zero": 0 },
+      ExpressionAttributeNames: { "#count": "count"},
+      UpdateExpression: "set #count = #count + :inc"
+    })));
     const data = {
       "pk": "TOURNAMENT",
       "sk": newTournamentid,
@@ -4019,12 +4047,14 @@ async function startTournament(tournament: Tournament) {
       "variants": tournament.variants,
       "number": tournament.number + 1,
       "started": false,
-      "dateCreated": now
+      "dateCreated": now,
+      "datePreviousEnded": 3000000000000
     };
     work.push(ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: data
     })));
+    console.log(`Next tournament ${tournament.id} openened for sign-up`);
     // Send e-mails to participants
     for (let player of playersFull) {
       await changeLanguageForPlayer(player);
