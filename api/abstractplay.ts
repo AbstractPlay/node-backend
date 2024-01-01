@@ -3900,6 +3900,7 @@ async function startTournament(tournament: Tournament) {
       return formatReturnError(`Unable to delete tournament players from table ${process.env.ABSTRACT_PLAY_TABLE}`);
     }
     // Send email to players
+    await initi18n('en');
     for (let player of playersFull) {
       await changeLanguageForPlayer(player);
       let body = '';
@@ -4091,6 +4092,7 @@ async function startTournament(tournament: Tournament) {
     })));
     console.log(`Next tournament ${tournament.id} openened for sign-up`);
     // Send e-mails to participants
+    await initi18n('en');
     for (let player of playersFull) {
       await changeLanguageForPlayer(player);
       let body = '';
@@ -4274,6 +4276,7 @@ async function endTournament(tournamentid: string) {
           const players = playersData.Items as TournamentPlayer[];
           // And, in fact, full players (just for e-mail!? and language... Don't want to put these in the tournament player because then those will have to be maintained if e-mail or language changes)
           const playersFull = await getPlayers(players.map(p => p.playerid));
+          await initi18n('en');
           for (const player of playersFull) {
             await changeLanguageForPlayer(player);
             let body = '';
