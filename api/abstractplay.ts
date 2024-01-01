@@ -395,6 +395,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await newTournament(event.cognitoPoolClaims.sub, pars);
     case "join_tournament":
       return await joinTournament(event.cognitoPoolClaims.sub, pars);
+    case "withdraw_tournament":
+      return await withdrawTournament(event.cognitoPoolClaims.sub, pars);
     case "onetime_fix":
       return await onetimeFix(event.cognitoPoolClaims.sub);
     case "test_push":
@@ -3715,6 +3717,43 @@ async function joinTournament(userid: string, pars: { tournamentid: string }) {
   } catch (err) {
     logGetItemError(err);
     return formatReturnError(`Unable to add player ${userid} to tournament ${pars.tournamentid}`);
+  }
+}
+
+async function withdrawTournament(userid: string, pars: { tournamentid: string }) {
+  let tournament: Tournament;
+  try {
+    const tournamentData = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "TOURNAMENT",
+          "sk": pars.tournamentid
+        },
+      }));
+    if (!tournamentData.Item)
+      throw new Error(`No tournament ${pars.tournamentid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    tournament = tournamentData.Item as Tournament;
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get tournament ${pars.tournamentid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+  if (tournament.started)
+    return formatReturnError(`Tournament ${pars.tournamentid} has already started`);
+  const sk = `${pars.tournamentid}#1#${userid}`;
+  try {
+    await ddbDocClient.send(
+      new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "TOURNAMENTPLAYER", "sk": sk
+        },
+      })
+    )
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to withdraw player ${userid} from tournament ${pars.tournamentid}`);
   }
 }
 
