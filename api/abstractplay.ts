@@ -3922,15 +3922,18 @@ async function startTournament(tournament: Tournament) {
     const clockMax = 6 * 3600000;
     const allGamePlayers = [];
     for (let i = 0; i < playersFull.length; i++) {
-      players[i].rating = playersFull[i]?.ratings?.[tournament.metaGame].rating;
+      players[i].rating = playersFull[i]?.ratings?.[tournament.metaGame]?.rating;
       if (players[i].rating === undefined)
         players[i].rating = 0;
       allGamePlayers.push({id: players[i].playerid, name: players[i].playername, time: clockStart} as User);
     }
+    console.log("allGamePlayers");
+    console.log(allGamePlayers);
     // Create divisions
     const numDivisions = Math.ceil(players.length / 10.0); // at most 10 players per division
     const divisionSizeSmall = Math.floor(players.length / numDivisions); 
     const numBigDivisions = players.length - divisionSizeSmall * numDivisions; // big divisions have one more player than small divisions!
+    console.log(`numDivisions: ${numDivisions}, divisionSizeSmall: ${divisionSizeSmall}, numBigDivisions: ${numBigDivisions}`);
     // Sort players into divisions by rating
     players.sort((a, b) => b.rating! - a.rating!);
     let division = 1;
@@ -3939,17 +3942,29 @@ async function startTournament(tournament: Tournament) {
     for (let player of players) {
       player.division = division;
       player.sk = tournament.id + "#" + division.toString() + '#' + player.playerid;
-      work.push(ddbDocClient.send(new PutCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: player
-      })));
-      if (division > 1) {
-        work.push(ddbDocClient.send(new DeleteCommand({
+      try {
+        work.push(ddbDocClient.send(new PutCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "TOURNAMENTPLAYER", "sk": tournament.id + "#1#" + player.playerid
-          },
+          Item: player
         })));
+      }
+      catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to add player ${player.playerid} to tournament ${tournament.id} with division ${division}. Error ${error}`);
+      }
+      if (division > 1) {
+        try {
+          work.push(ddbDocClient.send(new DeleteCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "TOURNAMENTPLAYER", "sk": tournament.id + "#1#" + player.playerid
+            },
+          })));
+        }
+        catch (error) {
+          logGetItemError(error);
+          return formatReturnError(`Unable to delete player ${player.playerid} from tournament ${tournament.id} with division 1. Error ${error}`);
+        }
       }
       console.log(`Player ${player.playername} in division ${division}`);
       count++;
@@ -4000,6 +4015,7 @@ async function startTournament(tournament: Tournament) {
           if (!engine)
             throw new Error(`Unknown metaGame ${tournament.metaGame}`);
           const state = engine.serialize();
+          try {
           work.push(ddbDocClient.send(new PutCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
               Item: {
@@ -4025,6 +4041,11 @@ async function startTournament(tournament: Tournament) {
                 "division": division
               }
             })));
+          }
+          catch (error) {
+            logGetItemError(error);
+            return formatReturnError(`Unable to create game ${gameId} for tournament ${tournament.id} with division ${division}. Error ${error}`);
+          }
           // this should be all the info we want to show on the "my games" summary page.
           const game = {
             "id": gameId,
@@ -4068,13 +4089,18 @@ async function startTournament(tournament: Tournament) {
       UpdateExpression: "set started = :t, dateStarted = :dt, nextid = :nextid",
     })));
     // open next tournament for sign-up.
-    work.push(ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "TOURNAMENTSCOUNTER", "sk": tournament.metaGame + "#" + tournament.variants.sort().join("|") },
-      ExpressionAttributeValues: { ":val": tournament.number, ":inc": 1, ":zero": 0 },
-      ExpressionAttributeNames: { "#count": "count"},
-      UpdateExpression: "set #count = #count + :inc"
-    })));
+    try {
+      work.push(ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "TOURNAMENTSCOUNTER", "sk": tournament.metaGame + "#" + tournament.variants.sort().join("|") },
+        ExpressionAttributeValues: { ":val": tournament.number, ":inc": 1, ":zero": 0, ":f": false },
+        ExpressionAttributeNames: { "#count": "count", "#over": "over"},
+        UpdateExpression: "set #count = #count + :inc, #over = :f"
+      })));
+    } catch (err) {
+      logGetItemError(err);
+      return formatReturnError(`Unable to update TOURNAMENTSCOUNTER for '${tournament.metaGame}#${tournament.variants.sort().join("|")}'. Error: ${err}`);
+    }
     const data = {
       "pk": "TOURNAMENT",
       "sk": newTournamentid,
@@ -4086,10 +4112,16 @@ async function startTournament(tournament: Tournament) {
       "dateCreated": now,
       "datePreviousEnded": 3000000000000
     };
-    work.push(ddbDocClient.send(new PutCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: data
-    })));
+    try {
+      work.push(ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: data
+      })));
+    }
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to insert new tournament ${newTournamentid}. Error: ${error}`);
+    }
     console.log(`Next tournament ${tournament.id} openened for sign-up`);
     // Send e-mails to participants
     await initi18n('en');
