@@ -3630,8 +3630,8 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
     await ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTSCOUNTER", "sk": sk },
-      ExpressionAttributeValues: { ":val": tournamentN, ":inc": 1, ":zero": 0 },
-      ExpressionAttributeNames: { "#count": "count", "#over": "over", "#f": "false"},
+      ExpressionAttributeValues: { ":val": tournamentN, ":inc": 1, ":zero": 0, "#f": false },
+      ExpressionAttributeNames: { "#count": "count", "#over": "over"},
       ConditionExpression: "attribute_not_exists(#count) OR #count = :val",
       UpdateExpression: "set #count = if_not_exists(#count, :zero) + :inc, #over = #f"
     }));
