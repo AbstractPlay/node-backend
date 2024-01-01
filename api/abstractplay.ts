@@ -3835,13 +3835,21 @@ async function startTournaments() {
 
 async function startTournament(tournament: Tournament) {
   // First, get the players
-  const playersData = await ddbDocClient.send(
-    new QueryCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournament.id + '#1#' },
-      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-      KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-    }));
+  let playersData;
+  try {
+    playersData = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournament.id + '#1#' },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+      })
+    );
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get players for tournament ${tournament.id} from table ${process.env.ABSTRACT_PLAY_TABLE}. Error: ${error}`);
+  }
+  console.log(playersData.Items);
   const players = playersData.Items as TournamentPlayer[];
   // Get players
   const playersFull = await getPlayers(players.map(p => p.playerid));
