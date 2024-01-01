@@ -3874,8 +3874,9 @@ async function startTournament(tournament: Tournament) {
         new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {"pk": "TOURNAMENTSCOUNTER", "sk": sk},
+          ExpressionAttributeValues: { ":t": true },
           ExpressionAttributeNames: {"#o": "over"},
-          UpdateExpression: "set #o = true"
+          UpdateExpression: "set #o = :t"
         }))
       );
     }
@@ -3901,15 +3902,16 @@ async function startTournament(tournament: Tournament) {
     }
     // Send email to players
     await initi18n('en');
+    const metaGameName = gameinfo.get(tournament.metaGame)?.name;
     for (let player of playersFull) {
       await changeLanguageForPlayer(player);
       let body = '';
       if (tournament.variants.length === 0)
-        body = i18n.t("TournamentCancelBody", { "metaGame": tournament.metaGame, "number": tournament.number });
+        body = i18n.t("TournamentCancelBody", { "metaGame": metaGameName, "number": tournament.number });
       else
-        body = i18n.t("TournamentCancelBodyVariants", { "metaGame": tournament.metaGame, "number": tournament.number, "variants": tournament.variants.join(", ") });
+        body = i18n.t("TournamentCancelBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
       if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-        const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentCancelSubject"), body);
+        const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentCancelSubject", { "metaGame": metaGameName }), body);
         work.push(sesClient.send(comm));
       }
     }
@@ -3920,13 +3922,15 @@ async function startTournament(tournament: Tournament) {
     const clockStart = 3 * 3600000;
     const clockInc = 2 * 3600000;
     const clockMax = 6 * 3600000;
-    const allGamePlayers = [];
     for (let i = 0; i < playersFull.length; i++) {
       players[i].rating = playersFull[i]?.ratings?.[tournament.metaGame]?.rating;
       if (players[i].rating === undefined)
         players[i].rating = 0;
-      allGamePlayers.push({id: players[i].playerid, name: players[i].playername, time: clockStart} as User);
     }
+    // Sort players into divisions by rating
+    players.sort((a, b) => b.rating! - a.rating!);
+    const allGamePlayers = players.map(p => {return {id: p.playerid, name: p.playername, time: clockStart} as User});
+
     console.log("allGamePlayers");
     console.log(allGamePlayers);
     // Create divisions
@@ -3988,23 +3992,18 @@ async function startTournament(tournament: Tournament) {
           let player1 = player0 + i;
           let player2 = player0 + j;
           const gameId = uuid();
-          let playerIDs: string[] = [];
           let gamePlayers: User[] = [];
           if (i + j % 2 === 1) {
-            playerIDs.push(players[player1].playerid);
-            playerIDs.push(players[player2].playerid);
             gamePlayers.push(allGamePlayers[player1]);
             gamePlayers.push(allGamePlayers[player2]);
           } else {
-            playerIDs.push(players[player2].playerid);
-            playerIDs.push(players[player1].playerid);
             gamePlayers.push(allGamePlayers[player2]);
             gamePlayers.push(allGamePlayers[player1]);
           }
           let whoseTurn: string | boolean[] = "0";
           const info = gameinfo.get(tournament.metaGame);
           if (info.flags !== undefined && info.flags.includes('simultaneous')) {
-            whoseTurn = playerIDs.map(() => true);
+            whoseTurn = gamePlayers.map(() => true);
           }
           const variants = tournament.variants;
           let engine;
@@ -4093,7 +4092,7 @@ async function startTournament(tournament: Tournament) {
       work.push(ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "TOURNAMENTSCOUNTER", "sk": tournament.metaGame + "#" + tournament.variants.sort().join("|") },
-        ExpressionAttributeValues: { ":val": tournament.number, ":inc": 1, ":zero": 0, ":f": false },
+        ExpressionAttributeValues: { ":inc": 1, ":f": false },
         ExpressionAttributeNames: { "#count": "count", "#over": "over"},
         UpdateExpression: "set #count = #count + :inc, #over = :f"
       })));
@@ -4125,15 +4124,16 @@ async function startTournament(tournament: Tournament) {
     console.log(`Next tournament ${tournament.id} openened for sign-up`);
     // Send e-mails to participants
     await initi18n('en');
+    const metaGameName = gameinfo.get(tournament.metaGame)?.name;
     for (let player of playersFull) {
       await changeLanguageForPlayer(player);
       let body = '';
       if (tournament.variants.length === 0)
-        body = i18n.t("TournamentStartBody", { "metaGame": tournament.metaGame, "number": tournament.number });
+        body = i18n.t("TournamentStartBody", { "metaGame": metaGameName, "number": tournament.number });
       else
-        body = i18n.t("TournamentStartBodyVariants", { "metaGame": tournament.metaGame, "number": tournament.number, "variants": tournament.variants.join(", ") });
+        body = i18n.t("TournamentStartBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
       if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-        const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentStartSubject"), body);
+        const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentStartSubject", { "metaGame": metaGameName }), body);
         work.push(sesClient.send(comm));
       }
       // push notifications are sent no matter what
