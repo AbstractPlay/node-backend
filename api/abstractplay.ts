@@ -3709,10 +3709,11 @@ async function joinTournament(userid: string, pars: { tournamentid: string }) {
   if (tournament.started)
     return formatReturnError(`Tournament ${pars.tournamentid} has already started`);
   const sk = `${pars.tournamentid}#1#${userid}`;
-  const data = {
+  const data: TournamentPlayer = {
     "pk": "TOURNAMENTPLAYER",
     "sk": sk,
-    "playername": playername
+    "playername": playername,
+    "playerid": userid,
   };
   try {
     await ddbDocClient.send(new PutCommand({
