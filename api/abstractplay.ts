@@ -3805,7 +3805,8 @@ async function startTournaments() {
     const tournaments = tournamentsData.Items as Tournament[];
     const now = Date.now();
     const oneWeek = 1000 * 60 * 60 * 24 * 7;
-    const twoWeeks = oneWeek * 2;
+    // const twoWeeks = oneWeek * 2;
+    const twoWeeks = 1000 * 60 * 5; // really 5 minutes. Just for testing!
     for (const tournament of tournaments) {
       if (
         !tournament.started && now > tournament.dateCreated + twoWeeks 
@@ -3825,7 +3826,9 @@ async function startTournaments() {
   }
   return {
     statusCode: 200,
-    body: `Started ${newcount} new tournaments and cancelled ${cancelledcount} tournaments`,
+    body: JSON.stringify({
+      message: `Started ${newcount} new tournaments and cancelled ${cancelledcount} tournaments`
+    }),
     headers
   };
 }
