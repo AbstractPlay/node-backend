@@ -3631,9 +3631,9 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTSCOUNTER", "sk": sk },
       ExpressionAttributeValues: { ":val": tournamentN, ":inc": 1, ":zero": 0 },
-      ExpressionAttributeNames: { "#count": "count"},
+      ExpressionAttributeNames: { "#count": "count", "#over": "over"},
       ConditionExpression: "attribute_not_exists(#count) OR #count = :val",
-      UpdateExpression: "set #count = if_not_exists(#count, :zero) + :inc"
+      UpdateExpression: "set #count = if_not_exists(#count, :zero) + :inc, #over = false"
     }));
   } catch (err: any) {
     if (err.name === 'ConditionalCheckFailedException') {
@@ -3792,6 +3792,8 @@ async function getTournaments() {
 }
 
 async function startTournaments() {
+  let newcount = 0;
+  let cancelledcount = 0;
   try {
     const tournamentsData = await ddbDocClient.send(
       new QueryCommand({
@@ -3809,7 +3811,11 @@ async function startTournaments() {
         !tournament.started && now > tournament.dateCreated + twoWeeks 
         && (tournament.datePreviousEnded === 0 || now > tournament.datePreviousEnded + oneWeek )
       ) {
-        startTournament(tournament);
+        if(await startTournament(tournament)) {
+          newcount++;
+        } else {
+          cancelledcount++;
+        }
       }
     }
   }
@@ -3817,6 +3823,11 @@ async function startTournaments() {
     logGetItemError(error);
     return formatReturnError(`Unable to get tournaments from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
+  return {
+    statusCode: 200,
+    body: `Started ${newcount} new tournaments and cancelled ${cancelledcount} tournaments`,
+    headers
+  };
 }
 
 async function startTournament(tournament: Tournament) {
@@ -3844,6 +3855,15 @@ async function startTournament(tournament: Tournament) {
             "pk": "TOURNAMENT",
             "sk": tournament.id
           },
+        }))
+      );
+      const sk = tournament.metaGame + "#" + tournament.variants.sort().join("|");
+      work.push(ddbDocClient.send(
+        new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {"pk": "TOURNAMENTSCOUNTER", "sk": sk},
+          ExpressionAttributeNames: {"#o": "over"},
+          UpdateExpression: "set #o = true"
         }))
       );
     }
@@ -3880,6 +3900,9 @@ async function startTournament(tournament: Tournament) {
         work.push(sesClient.send(comm));
       }
     }
+    await Promise.all(work);
+    console.log("Tournament cancelled");
+    return false;
   } else {
     const clockStart = 3 * 3600000;
     const clockInc = 2 * 3600000;
@@ -4076,6 +4099,9 @@ async function startTournament(tournament: Tournament) {
           url: "/tournament=" + tournament.id,
       }));
     }
+    await Promise.all(work);
+    console.log("Tournament started");
+    return true;
   }
 }
 
