@@ -78,11 +78,11 @@ All data is in a single table. The primary key (or the first part of the primary
   * pk: TOURNAMENT
   * sk: \<tournamentid\>
 
-- **Tournament Player**
+- **Tournament Player** Just a reference to the player
   * pk: TOURNAMENTPLAYER
   * sk: \<tournamentid\>#\<division\>#\<playerid\>
 
-- **Tournament Game**
+- **Tournament Game** Just a reference to the game
   * pk: TOURNAMENTGAME
   * sk: \<tournamentid\>#\<division\>#\<gameid\>
 

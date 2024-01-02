@@ -311,7 +311,9 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return await getPublicExploration(pars);
     case "get_tournaments":
       return await getTournaments();
-    case "start_tournaments":
+      case "get_tournament":
+        return await getTournament(pars);
+      case "start_tournaments":
       return await startTournaments();
     case "end_tournament":
       return await endTournament(pars);
@@ -3789,6 +3791,45 @@ async function getTournaments() {
   catch (error) {
     logGetItemError(error);
     return formatReturnError(`Unable to get tournaments from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+}
+
+async function getTournament(pars: { tournamentid: string }) {
+  try {
+    const tournamentsDataPromise = ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk, #sk = :sk",
+        ExpressionAttributeValues: { ":pk": "TOURNAMENT", ":sk": pars.tournamentid },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" }
+      })
+    );
+    const tournamentPlayersDataPromise = ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": pars.tournamentid + '#' },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+      })
+    );
+    const tournamentGamessDataPromise = ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": pars.tournamentid + '#' },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+      })
+    );
+    const [tournamentsData, tournamentPlayersData, tournamentGamesData] = await Promise.all([tournamentsDataPromise, tournamentPlayersDataPromise, tournamentGamessDataPromise]);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({tournaments: tournamentsData.Items, tournamentPlayers: tournamentPlayersData.Items, tournamentGames: tournamentGamesData.Items}),
+      headers
+    };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get tournament ${pars.tournamentid}. Error: ${error}`);
   }
 }
 
