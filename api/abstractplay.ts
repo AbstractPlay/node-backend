@@ -4700,6 +4700,8 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
       if (flags.includes("pie-even")) {
         try {
             engine.move("pass")
+            game.state = engine.serialize();
+            game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
             game.toMove = `${engine.currplayer! - 1}`;
         } catch (err) {
             logGetItemError(err);
