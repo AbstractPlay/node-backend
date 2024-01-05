@@ -1263,7 +1263,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
         ExpressionAttributeValues: { ":dt": Date.now() },
         UpdateExpression: "set lastSeen = :dt"
     }));
-    
+
     let data = null;
     console.log(`Fetching challenges`);
     let tagData, paletteData
@@ -3851,7 +3851,7 @@ async function startTournaments() {
     const twoWeeks = 1000 * 60 * 5; // really 5 minutes. Just for testing!
     for (const tournament of tournaments) {
       if (
-        !tournament.started && now > tournament.dateCreated + twoWeeks 
+        !tournament.started && now > tournament.dateCreated + twoWeeks
         && (tournament.datePreviousEnded === 0 || now > tournament.datePreviousEnded + oneWeek )
       ) {
         if(await startTournament(tournament)) {
@@ -3976,7 +3976,7 @@ async function startTournament(tournament: Tournament) {
     console.log(allGamePlayers);
     // Create divisions
     const numDivisions = Math.ceil(players.length / 10.0); // at most 10 players per division
-    const divisionSizeSmall = Math.floor(players.length / numDivisions); 
+    const divisionSizeSmall = Math.floor(players.length / numDivisions);
     const numBigDivisions = players.length - divisionSizeSmall * numDivisions; // big divisions have one more player than small divisions!
     console.log(`numDivisions: ${numDivisions}, divisionSizeSmall: ${divisionSizeSmall}, numBigDivisions: ${numBigDivisions}`);
     // Sort players into divisions by rating
@@ -4065,8 +4065,8 @@ async function startTournament(tournament: Tournament) {
                 "metaGame": tournament.metaGame,
                 "numPlayers": 2,
                 "rated": true,
-                "players": info.flags !== undefined && info.flags.includes('perspective') ? 
-                  gamePlayers.map((p, ind) => {return {...p, settings: {"rotate": (ind + 1) * 180}}}) 
+                "players": info.flags !== undefined && info.flags.includes('perspective') ?
+                  gamePlayers.map((p, ind) => {return {...p, settings: {"rotate": (ind + 1) * 180}}})
                   : gamePlayers,
                 "clockStart": clockStart,
                 "clockInc": clockInc,
@@ -4232,7 +4232,7 @@ async function endTournament(tournamentid: string) {
               ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
               KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
             })));
-          const [gamesData, playersData] = await Promise.all(work2);            
+          const [gamesData, playersData] = await Promise.all(work2);
           const gamelist = gamesData.Items as TournamentGame[];
           const players = playersData.Items as TournamentPlayer[];
           var tournamentPlayers: Map<string, TournamentPlayer> = new Map();
@@ -4700,6 +4700,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
       if (flags.includes("pie-even")) {
         try {
             engine.move("pass")
+            game.toMove = `${engine.currplayer! - 1}`;
         } catch (err) {
             logGetItemError(err);
             return formatReturnError('Error passing while invoking "pie-even"');
