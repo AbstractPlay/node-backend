@@ -13,22 +13,8 @@ Set up a Cognito user group for each of Dev and Prod using all the defaults. Now
 After the pool is created copy the arn to serverless.yml for the authQuery function. Under "App client settings" check "Select all" for Enabled Identity Providers. Add Callback and Sign out URLs. For local debugging of the front end use "http://localhost:3000". For dev and prod use https://play.dev.abstractplay.com and https://play.abstractplay.com. Under OAuth 2.0 check "Authorization code grant", "Implicit grant" and "openid". Also select "aws.cognito.signin.user.admin" and "Email" under scopes.
 
 ## Deployment
-Running
-```npm run full-dev```
-and
-```npm run full-prod```
-for the first time will create the DynamoDB and also the lambdas with the back end functionality (it is completely specified in serverless.yml). On subsequent runs it will just update the lambdas (and the DynamoDB is case you made changes).
-But don't run this before doing ```npm install```. sls needs to deploy the node_modules folder and unless that has the correct packages stuff don't work. If you are using PowerShell as your Terminal in VSCode, you might need to run `Remove-Item alias:sls` before `sls` will work. By default it is an alias for the `Select-String` PowerShell cmdlet. Or just use `serverless` instead of `sls`.
-
-If you need to delete (or start over) run ```sls remove```. After running `sls deploy`, update the API endpoint in the front end code. If you get the dreaded "blocked by CORS" error, go to API Gateway and for both authQuery and query, under Actions, do "Enable CORS". Then "Deploy API" again. But this is probably fixed now (by just including cors: true in serverless.yml)
-
-Some more useful things:
-```sls invoke local --function query```
-will trigger a "compile" and show you syntax errors without having to deploy and run. It won't run, but at least you can check that it compiles.
-
-After deployment
-```curl -H "Content-Type: application/json" -X GET [my lambda location]/dev/query?query=list_games```
-will return the list of current games if you want a quick sanity check that the deployment succeeded and the DB is reachable.
+Just commit your code. github actions will deploy automatically (from the develop and main branches). See the scripts in \.github\workflows.
+You can run ```npm install``` and ```npm run build``` to see if the TypeScript compiles. If you have a local copy of gameslib you can install it with ```npm install gameslib_tgz_file```.
 
 ## DB Schema
 All data is in a single table. The primary key (or the first part of the primary key) is like a SQL table.
@@ -86,5 +72,25 @@ All data is in a single table. The primary key (or the first part of the primary
 
 - **Meta games** Stats for all metaGames
 	* pk: METAGAMES
-  * sh: COUNTS
+  * sk: COUNTS
 
+- **Tournaments** List of tournaments that are not completed yet. Either waiting for players to sign up, or ongoing.
+  * pk: TOURNAMENT
+  * sk: \<tournamentid\>
+
+- **Tournament Player** Just a reference to the player
+  * pk: TOURNAMENTPLAYER
+  * sk: \<tournamentid\>#\<division\>#\<playerid\>
+
+- **Tournament Game** Just a reference to the game
+  * pk: TOURNAMENTGAME
+  * sk: \<tournamentid\>#\<division\>#\<gameid\>
+
+- **Completed Tournaments** List of completed tournaments.
+  * pk: COMPLETEDTOURNAMENT
+  * sk: \<tournamentid\>
+
+- **Tournament count** Counter for tournaments. Each metaGame + variants combination gets a count. Variants is a pipe delimited concatenation of (sorted) variations.
+  * pk: TOURNAMENTSCOUNTER
+  * sk: \<metaGame\>#<\variants\>
+{ counter, over }
