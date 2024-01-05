@@ -3788,7 +3788,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
       if (!engine)
         throw new Error(`Unknown metaGame ${game.metaGame}`);
       const flags = gameinfo.get(game.metaGame).flags;
-      if ( (flags === undefined) || (! flags.includes("pie"))) {
+      if ( (flags === undefined) || ( (! flags.includes("pie")) && (! flags.includes("pie-even")) ) ) {
         throw new Error(`Metagame ${pars.metaGame} does not have the "pie" flag. Aborting.`);
       }
       const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
@@ -3815,6 +3815,16 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
       console.log(`Reversed: ${JSON.stringify(reversed)}`);
       game.players = [...reversed];
       game.pieInvoked = true;
+
+      // if flag is `pie-even`, issue a "pass" command
+      if (flags.includes("pie-even")) {
+        try {
+            engine.move("pass")
+        } catch (err) {
+            logGetItemError(err);
+            return formatReturnError('Error passing while invoking "pie-even"');
+        }
+      }
 
       // this should be all the info we want to show on the "my games" summary page.
       const playerGame = {
