@@ -198,13 +198,6 @@ type Playground = {
     state: string;
 }
 
-type Playground = {
-    pk: "PLAYGROUND";
-    sk: string;
-    metaGame: string;
-    state: string;
-}
-
 type Comment = {
   comment: string;
   userId: string;
