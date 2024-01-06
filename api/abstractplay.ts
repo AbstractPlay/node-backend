@@ -4470,6 +4470,15 @@ async function deleteGames(userId: string, pars: { metaGame: string, cbit: numbe
             ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + gameid },
             ExpressionAttributeNames: { "#pk": "pk" },
         })));
+      if (pars.cbit === 1) {
+        work2.push(ddbDocClient.send(
+          new QueryCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            KeyConditionExpression: "#pk = :pk",
+            ExpressionAttributeValues: { ":pk": "PUBLICEXPLORATION#" + gameid },
+            ExpressionAttributeNames: { "#pk": "pk" },
+          })));
+      }
     }
     const gamesData = await Promise.all(work);
     work.length = 0;
@@ -4531,6 +4540,7 @@ async function deleteGames(userId: string, pars: { metaGame: string, cbit: numbe
     // delete game explorations
     const gameExplorationsData = await Promise.all(work2);
     const gameExplorations = gameExplorationsData.map(g => g.Items).flat();
+    console.log("gameExplorations", gameExplorations);
     if (gameExplorations !== undefined) {
       const batches = Math.ceil(gameExplorations.length / 25);
       for (let batch = 0; batch < batches; batch++) {
