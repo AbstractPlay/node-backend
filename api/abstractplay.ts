@@ -311,9 +311,9 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return await getPublicExploration(pars);
     case "get_tournaments":
       return await getTournaments();
-      case "get_tournament":
-        return await getTournament(pars);
-      case "start_tournaments":
+    case "get_tournament":
+      return await getTournament(pars);
+    case "start_tournaments":
       return await startTournaments();
     case "end_tournament":
       return await endTournament(pars);
@@ -409,6 +409,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await testPush(event.cognitoPoolClaims.sub);
     case "test_async":
       return await testAsync(event.cognitoPoolClaims.sub, pars);
+    case "delete_games":
+      return await deleteGames(event.cognitoPoolClaims.sub, pars);
     default:
       return {
         statusCode: 500,
@@ -2567,6 +2569,49 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
   return Promise.all(work);
 }
 
+function deleteFromGameLists(type: string, game: FullGame) {
+  const work: Promise<any>[] = [];
+  if (type === "COMPLETEDGAMES") {
+    const sk = game.lastMoveTime + "#" + game.id;
+    work.push(ddbDocClient.send(new DeleteCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        "pk": "COMPLETEDGAMES", "sk": sk
+      },
+    })));
+    work.push(ddbDocClient.send(new DeleteCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        "pk": "COMPLETEDGAMES#" + game.metaGame, "sk": sk
+      },
+    })));
+    game.players.forEach((player: { id: string; }) => {
+      work.push(ddbDocClient.send(new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "COMPLETEDGAMES#" + player.id, "sk": sk
+        },
+      })));
+      work.push(ddbDocClient.send(new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "COMPLETEDGAMES#" + game.metaGame + "#" + player.id, "sk": sk
+        },
+      })));
+    });
+  }
+  if (type === "CURRENTGAMES") {
+    work.push(ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+      ExpressionAttributeNames: { "#g": game.metaGame },
+      ExpressionAttributeValues: {":n": -1},
+      UpdateExpression: "add #g.currentgames :n"
+    })));
+  }
+  return Promise.all(work);
+}
+
 async function submitMove(userid: string, pars: { id: string, move: string, draw: string, metaGame: string, cbit: number}) {
   if (pars.cbit !== 0) {
     return formatReturnError("cbit must be 0");
@@ -3823,7 +3868,7 @@ async function getTournament(pars: { tournamentid: string }) {
     const [tournamentsData, tournamentPlayersData, tournamentGamesData] = await Promise.all([tournamentsDataPromise, tournamentPlayersDataPromise, tournamentGamessDataPromise]);
     return {
       statusCode: 200,
-      body: JSON.stringify({tournaments: tournamentsData.Items, tournamentPlayers: tournamentPlayersData.Items, tournamentGames: tournamentGamesData.Items}),
+      body: JSON.stringify({tournament: tournamentsData.Items, tournamentPlayers: tournamentPlayersData.Items, tournamentGames: tournamentGamesData.Items}),
       headers
     };
   }
@@ -3967,6 +4012,7 @@ async function startTournament(tournament: Tournament) {
       players[i].rating = playersFull[i]?.ratings?.[tournament.metaGame]?.rating;
       if (players[i].rating === undefined)
         players[i].rating = 0;
+      players[i].score = 0;
     }
     // Sort players into divisions by rating
     players.sort((a, b) => b.rating! - a.rating!);
@@ -4027,9 +4073,12 @@ async function startTournament(tournament: Tournament) {
       if (playersFull[i].games === undefined)
         playersFull[i].games = [];
     }
+    let divisions: { [division: number]: {numGames: number, numCompleted: number, processed: boolean} } = {};
     for (let division = 1; division <= numDivisions; division++) {
+      divisions[division] = {numGames: 0, numCompleted: 0, processed: false};
       for (let i = 0; i < (division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall); i++) {
         for (let j = i + 1; j < (division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall); j++) {
+          divisions[division].numGames += 1;
           let player1 = player0 + i;
           let player2 = player0 + j;
           const gameId = uuid();
@@ -4133,9 +4182,9 @@ async function startTournament(tournament: Tournament) {
       work.push(ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "TOURNAMENTSCOUNTER", "sk": tournament.metaGame + "#" + tournament.variants.sort().join("|") },
-        ExpressionAttributeValues: { ":inc": 1, ":f": false },
-        ExpressionAttributeNames: { "#count": "count", "#over": "over"},
-        UpdateExpression: "set #count = #count + :inc, #over = :f"
+        ExpressionAttributeValues: { ":inc": 1, ":f": false, ":ds": divisions },
+        ExpressionAttributeNames: { "#count": "count", "#over": "over", "#ds": "divisions" },
+        UpdateExpression: "set #count = #count + :inc, #over = :f, #ds = :ds"
       })));
     } catch (err) {
       logGetItemError(err);
@@ -4375,6 +4424,144 @@ async function endTournament(tournamentid: string) {
     body: "Done",
     headers
   };
+}
+
+// Delete every trace of a list of games. Only for admins and probably only for dev!
+async function deleteGames(userId: string, pars: { metaGame: string, cbit: number, gameids: string }) {
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get user ${userId}. Error: ${error}`);
+  }
+  const gameids = pars.gameids.split(",");
+  const work: Promise<any>[] = [];
+  const work2: Promise<any>[] = [];
+  try {
+    for (const gameid of gameids) {
+      work.push(ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "GAME",
+            "sk": pars.metaGame + "#" + pars.cbit + '#' + gameid
+          },
+        })
+      ));
+      work2.push(ddbDocClient.send(
+        new QueryCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            KeyConditionExpression: "#pk = :pk",
+            ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + gameid },
+            ExpressionAttributeNames: { "#pk": "pk" },
+        })));
+    }
+    const gamesData = await Promise.all(work);
+    work.length = 0;
+    const games = gamesData.map(g => g.Item as FullGame);
+    // players to update
+    const playersGameIDs = new Map<string, string[]>();
+    for (const game of games) {
+      for (const player of game.players) {
+        if (!playersGameIDs.has(player.id))
+        playersGameIDs.set(player.id, []);
+        playersGameIDs.get(player.id)!.push(game.id);
+      }
+    }
+    const playersFull = await getPlayers([...playersGameIDs.keys()]);
+    for (const player of playersFull) {
+      const gameIDs = playersGameIDs.get(player.id)!;
+      const games = player.games.filter(g => !gameIDs.includes(g.id));
+      work.push(updateUserGames(player.id, player.gamesUpdate, gameIDs, games));
+    }
+    // delete games
+    for (const game of games) {
+      work.push(ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "GAME",
+            "sk": pars.metaGame + "#" + pars.cbit + '#' + game.id
+          },
+        })
+      ));
+      // delete from lists
+      if (pars.cbit === 0)
+        work.push(deleteFromGameLists("CURRENTGAMES", game));
+      else
+        work.push(deleteFromGameLists("COMPLETEDGAMES", game));
+      // delete NOTES
+      for (const player of game.players) {
+        work.push(ddbDocClient.send(
+          new DeleteCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "NOTE",
+              "sk": game.id + '#' + player.id
+            },
+          })
+        ));
+      }
+      // and COMMENTS
+      work.push(ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "GAMECOMMENTS",
+            "sk": game.id
+          },
+        })
+      ));
+    }
+    // delete game explorations
+    const gameExplorationsData = await Promise.all(work2);
+    const gameExplorations = gameExplorationsData.map(g => g.Items).flat();
+    if (gameExplorations !== undefined) {
+      const batches = Math.ceil(gameExplorations.length / 25);
+      for (let batch = 0; batch < batches; batch++) {
+        const subset = gameExplorations.slice(batch * 25, 25);
+        work.push(ddbDocClient.send(
+          new BatchWriteCommand({
+            "RequestItems": {
+              [process.env.ABSTRACT_PLAY_TABLE!]: subset.map(item => ({
+                DeleteRequest: {
+                  Key: {
+                    pk: item.pk,
+                    sk: item.sk,
+                  }
+                }
+              }))
+            }
+          })
+        ));
+      }
+    }
+    await Promise.all(work);
+    return {
+      statusCode: 200,
+      body: "Done",
+      headers
+    };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to delete games ${pars.gameids}. Error: ${error}`);
+  }
 }
 
 async function sendPush(opts: PushOptions) {
