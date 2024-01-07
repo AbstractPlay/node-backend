@@ -1114,12 +1114,7 @@ async function setSeenTime(userid: string, gameid: any) {
   if (thegame !== undefined) {
     thegame.seen = Date.now();
   }
-  return ddbDocClient.send(new UpdateCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "USER", "sk": userid },
-    ExpressionAttributeValues: { ":gs": games },
-    UpdateExpression: "set games = :gs",
-  }));
+  return updateUserGames(userid, user.gamesUpdate, [gameid], games);
 }
 
 async function updateUserSettings(userid: string, pars: { settings: any; }) {
@@ -4967,14 +4962,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
           else
             games.push(g)
         });
-        list.push(
-        ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USER", "sk": player.id },
-            ExpressionAttributeValues: { ":gs": games },
-            UpdateExpression: "set games = :gs",
-        }))
-        );
+        list.push(updateUserGames(player.id, player.gamesUpdate, [playerGame.id], games));
         console.log(`Scheduled update to player ${player.id}, ${player.name}, with games`, games);
       });
 
