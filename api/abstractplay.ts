@@ -4620,8 +4620,20 @@ async function sendPush(opts: PushOptions) {
           const result = await webpush.sendNotification(subscription.payload, JSON.stringify(payload), options);
           console.log(`Result of webpush:`);
           console.log(result);
-      } catch (err) {
-          logGetItemError(err);
+      } catch (err: any) {
+          if ( ("statusCode" in err) && (err.statusCode === 410) ) {
+            await ddbDocClient.send(
+                new DeleteCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "PUSH",
+                    "sk": userId
+                  },
+                })
+            );
+          } else {
+            logGetItemError(err);
+          }
           return formatReturnError(`Unable to send push notification: ${err}`);
       }
     }
