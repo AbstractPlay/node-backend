@@ -3195,6 +3195,10 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
       })));
     }
   });
+  if (game.tournament !== undefined) {
+    work.push(tournamentUpdates(game, players));
+  }
+
   return Promise.all(work);
 }
 
@@ -4005,9 +4009,9 @@ async function startTournament(tournament: Tournament) {
     console.log("Tournament cancelled");
     return false;
   } else {
-    const clockStart = 3 * 3600000;
-    const clockInc = 2 * 3600000;
-    const clockMax = 6 * 3600000;
+    const clockStart = 72;
+    const clockInc = 36;
+    const clockMax = 120;
     for (let i = 0; i < playersFull.length; i++) {
       players[i].rating = playersFull[i]?.ratings?.[tournament.metaGame]?.rating;
       if (players[i].rating === undefined)
@@ -4016,8 +4020,11 @@ async function startTournament(tournament: Tournament) {
     }
     // Sort players into divisions by rating
     players.sort((a, b) => b.rating! - a.rating!);
-    const allGamePlayers = players.map(p => {return {id: p.playerid, name: p.playername, time: clockStart} as User});
-
+    const allGamePlayers = players.map(p => {return {id: p.playerid, name: p.playername, time: clockStart * 3600000} as User});
+    // Sort playersFull in the same order as players
+    const playersFull2: FullUser[] = [];
+    for (let player of players)
+      playersFull2.push(playersFull.find(p => p.id === player.playerid)!);
     console.log("allGamePlayers");
     console.log(allGamePlayers);
     // Create divisions
@@ -4070,8 +4077,8 @@ async function startTournament(tournament: Tournament) {
     let updatedGameIDs: string[][] = [];
     for (let i = 0; i < players.length; i++) {
       updatedGameIDs.push([]);
-      if (playersFull[i].games === undefined)
-        playersFull[i].games = [];
+      if (playersFull2[i].games === undefined)
+        playersFull2[i].games = [];
     }
     let divisions: { [division: number]: {numGames: number, numCompleted: number, processed: boolean} } = {};
     for (let division = 1; division <= numDivisions; division++) {
@@ -4159,32 +4166,32 @@ async function startTournament(tournament: Tournament) {
           })));
           console.log(`Game ${gameId} created between ${gamePlayers[0].name} and ${gamePlayers[1].name}`);
           // Update players
-          playersFull[player1].games.push(game);
+          playersFull2[player1].games.push(game);
           updatedGameIDs[player1].push(game.id);
-          playersFull[player2].games.push(game);
+          playersFull2[player2].games.push(game);
           updatedGameIDs[player2].push(game.id);
         }
       }
       player0 += division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall;
     }
-    for (let i = 0; i < playersFull.length; i++) {
-      work.push(updateUserGames(playersFull[i].id, playersFull[i].gamesUpdate, updatedGameIDs[i], playersFull[i].games));
+    for (let i = 0; i < playersFull2.length; i++) {
+      work.push(updateUserGames(playersFull2[i].id, playersFull2[i].gamesUpdate, updatedGameIDs[i], playersFull2[i].games));
     }
     const newTournamentid = uuid();
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENT", "sk": tournament.id },
-      ExpressionAttributeValues: { ":dt": now, ":t": true, ":nextid": newTournamentid },
-      UpdateExpression: "set started = :t, dateStarted = :dt, nextid = :nextid",
+      ExpressionAttributeValues: { ":dt": now, ":t": true, ":nextid": newTournamentid, ":ds": divisions },
+      UpdateExpression: "set started = :t, dateStarted = :dt, nextid = :nextid, divisions = :ds"
     })));
     // open next tournament for sign-up.
     try {
       work.push(ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "TOURNAMENTSCOUNTER", "sk": tournament.metaGame + "#" + tournament.variants.sort().join("|") },
-        ExpressionAttributeValues: { ":inc": 1, ":f": false, ":ds": divisions },
-        ExpressionAttributeNames: { "#count": "count", "#over": "over", "#ds": "divisions" },
-        UpdateExpression: "set #count = #count + :inc, #over = :f, #ds = :ds"
+        ExpressionAttributeValues: { ":inc": 1, ":f": false },
+        ExpressionAttributeNames: { "#count": "count", "#over": "over" },
+        UpdateExpression: "set #count = #count + :inc, #over = :f"
       })));
     } catch (err) {
       logGetItemError(err);
@@ -4215,7 +4222,7 @@ async function startTournament(tournament: Tournament) {
     // Send e-mails to participants
     await initi18n('en');
     const metaGameName = gameinfo.get(tournament.metaGame)?.name;
-    for (let player of playersFull) {
+    for (let player of playersFull2) {
       await changeLanguageForPlayer(player);
       let body = '';
       if (tournament.variants.length === 0)
@@ -4459,7 +4466,7 @@ async function deleteGames(userId: string, pars: { metaGame: string, cbit: numbe
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
             "pk": "GAME",
-            "sk": pars.metaGame + "#" + pars.cbit + '#' + gameid
+            "sk": pars.metaGame + "#" + pars.cbit + '#' + gameid.trim()
           },
         })
       ));
@@ -4564,7 +4571,9 @@ async function deleteGames(userId: string, pars: { metaGame: string, cbit: numbe
     await Promise.all(work);
     return {
       statusCode: 200,
-      body: "Done",
+      body: JSON.stringify({
+        message: "Done"
+      }),
       headers
     };
   }
