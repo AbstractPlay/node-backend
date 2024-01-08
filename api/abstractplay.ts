@@ -3843,9 +3843,9 @@ async function getTournament(pars: { tournamentid: string }) {
     const tournamentsDataPromise = ddbDocClient.send(
       new QueryCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk, #sk = :sk",
         ExpressionAttributeValues: { ":pk": "TOURNAMENT", ":sk": pars.tournamentid },
-        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" }
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        KeyConditionExpression: "#pk = :pk and #sk = :sk",
       })
     );
     const tournamentPlayersDataPromise = ddbDocClient.send(
@@ -4085,7 +4085,7 @@ async function startTournament(tournament: Tournament) {
           let player2 = player0 + j;
           const gameId = uuid();
           let gamePlayers: User[] = [];
-          if (i + j % 2 === 1) {
+          if ((i + j) % 2 === 1) {
             gamePlayers.push(allGamePlayers[player1]);
             gamePlayers.push(allGamePlayers[player2]);
           } else {
