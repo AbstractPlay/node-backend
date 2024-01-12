@@ -2846,6 +2846,7 @@ async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
     } else if (game.winner?.length === 2) {
       score = 0.5;
     }
+    console.log(`player ${player.name} score ${score} in game ${game.id} from tournament ${game.tournament}`);
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTPLAYER", "sk": game.tournament + '#' + game.division!.toString() + '#' + player.id },
@@ -4245,19 +4246,19 @@ async function startTournament(tournament: Tournament) {
   }
 }
 
-async function endTournament(tournamentid: string) {
+async function endTournament(pars: { tournamentid: string }) {
   try {
     const data = await ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "TOURNAMENT", "sk": tournamentid
+          "pk": "TOURNAMENT", "sk": pars.tournamentid
         },
       }));
     console.log("Got:");
     console.log(data);
     if (!data.Item)
-      throw new Error(`No tournament ${tournamentid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+      throw new Error(`No tournament ${pars.tournamentid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
     const tournament = data.Item as Tournament;
     if (tournament.divisions) {
       const work: Promise<any>[] = [];
@@ -4274,14 +4275,14 @@ async function endTournament(tournamentid: string) {
             new QueryCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-              ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": tournamentid + '#' + division + '#' },
+              ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": pars.tournamentid + '#' + division + '#' },
               ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
             })));
           // And players (we need the ratings at the start of the tournament)
           work2.push(ddbDocClient.send(
             new QueryCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
-              ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournamentid + '#' + division + '#' },
+              ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": pars.tournamentid + '#' + division + '#' },
               ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
               KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
             })));
@@ -4423,7 +4424,7 @@ async function endTournament(tournamentid: string) {
   }
   catch (error) {
     logGetItemError(error);
-    return formatReturnError(`Error during update tournament ${tournamentid}: {error}`);
+    return formatReturnError(`Error during update tournament ${pars.tournamentid}: {error}`);
   }
   return {
     statusCode: 200,
