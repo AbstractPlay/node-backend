@@ -1110,9 +1110,11 @@ async function setSeenTime(userid: string, gameid: any) {
   }
 
   const games = user.games;
-  const thegame = games.find((g: { id: any; }) => g.id == gameid);
-  if (thegame !== undefined) {
-    thegame.seen = Date.now();
+  if (games !== undefined) {
+    const thegame = games.find((g: { id: any; }) => g.id == gameid);
+    if (thegame !== undefined) {
+      thegame.seen = Date.now();
+    }
   }
   return updateUserGames(userid, user.gamesUpdate, [gameid], games);
 }
@@ -4315,6 +4317,8 @@ async function endTournament(tournamentid: string) {
               - RSON = SON for a player that loses all his games.
               - RSON can't be negative.
               - If no draws, RSON is an integer.
+
+            During the tournament, let n = 1 + number of games you have finished (so that when you are done with all your games, it's n)
           */
           for (const game of gamelist) {
             if (game.winner?.length === 2) {
