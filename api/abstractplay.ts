@@ -4288,7 +4288,11 @@ async function endTournament(pars: { tournamentid: string }) {
             })));
           const [gamesData, playersData] = await Promise.all(work2);
           const gamelist = gamesData.Items as TournamentGame[];
+          console.log("Got games:");
+          console.log(gamelist);
           const players = playersData.Items as TournamentPlayer[];
+          console.log("Got players:");
+          console.log(players);
           var tournamentPlayers: Map<string, TournamentPlayer> = new Map();
           for (let i = 0; i < players.length; i++) {
             players[i].tiebreak = 0;
