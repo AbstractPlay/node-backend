@@ -4275,14 +4275,14 @@ async function endTournament(pars: { tournamentid: string }) {
             new QueryCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-              ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": pars.tournamentid + '#' + division + '#' },
+              ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": pars.tournamentid + '#' + divisionNumber + '#' },
               ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
             })));
           // And players (we need the ratings at the start of the tournament)
           work2.push(ddbDocClient.send(
             new QueryCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
-              ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": pars.tournamentid + '#' + division + '#' },
+              ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": pars.tournamentid + '#' + divisionNumber + '#' },
               ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
               KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
             })));
@@ -4340,6 +4340,7 @@ async function endTournament(pars: { tournamentid: string }) {
           let bestPlayer = '';
           let bestPlayerName = '';
           for (const player of players) {
+            console.log(`Player ${player.playername} score ${player.score} tiebreak ${player.tiebreak} rating ${player.rating}`)
             if (player.score! > bestScore) {
               bestScore = player.score!;
               bestTiebreak = player.tiebreak!;
