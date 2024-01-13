@@ -3963,9 +3963,10 @@ async function startTournaments() {
       }));
     const tournaments = tournamentsData.Items as Tournament[];
     const now = Date.now();
-    const oneWeek = 1000 * 60 * 60 * 24 * 7;
+    // const oneWeek = 1000 * 60 * 60 * 24 * 7;
     // const twoWeeks = oneWeek * 2;
     const twoWeeks = 1000 * 60 * 5; // really 5 minutes. Just for testing!
+    const oneWeek = 1000 * 60 * 5; // really 5 minutes. Just for testing!
     for (const tournament of tournaments) {
       if (
         !tournament.started && now > tournament.dateCreated + twoWeeks
@@ -4013,7 +4014,7 @@ async function startTournament(tournament: Tournament) {
   // Get players
   const playersFull = await getPlayers(players.map(p => p.playerid));
   console.log(playersFull);
-  if (players.length < 5) {
+  if (players.length < 3) {
     // Cancel tournament
     // Delete tournament and tournament players
     const work: Promise<any>[] = [];
@@ -4096,7 +4097,7 @@ async function startTournament(tournament: Tournament) {
     console.log("allGamePlayers");
     console.log(allGamePlayers);
     // Create divisions
-    const numDivisions = Math.ceil(players.length / 10.0); // at most 10 players per division
+    const numDivisions = Math.ceil(players.length / 3.0); // at most 10 players per division
     const divisionSizeSmall = Math.floor(players.length / numDivisions);
     const numBigDivisions = players.length - divisionSizeSmall * numDivisions; // big divisions have one more player than small divisions!
     console.log(`numDivisions: ${numDivisions}, divisionSizeSmall: ${divisionSizeSmall}, numBigDivisions: ${numBigDivisions}`);
@@ -4479,15 +4480,16 @@ async function endTournament(pars: { tournamentid: string }) {
           // And, in fact, full players (just for e-mail!? and language... Don't want to put these in the tournament player because then those will have to be maintained if e-mail or language changes)
           const playersFull = await getPlayers(players.map(p => p.playerid));
           await initi18n('en');
+          const metaGameName = gameinfo.get(tournament.metaGame)?.name;
           for (const player of playersFull) {
             await changeLanguageForPlayer(player);
             let body = '';
             if (tournament.variants.length === 0)
-              body = i18n.t("TournamentEndBody", { "metaGame": tournament.metaGame, "number": tournament.number });
+              body = i18n.t("TournamentEndBody", { "metaGame": metaGameName, "number": tournament.number });
             else
-              body = i18n.t("TournamentEndBodyVariants", { "metaGame": tournament.metaGame, "number": tournament.number, "variants": tournament.variants.join(", ") });
+              body = i18n.t("TournamentEndBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-              const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject"), body);
+              const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName }), body);
               work.push(sesClient.send(comm));
             }
           }
