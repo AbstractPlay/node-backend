@@ -8,6 +8,7 @@ import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush, { RequestOptions } from "web-push";
+import { totp } from 'otplib';
 import i18n from 'i18next';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
@@ -288,6 +289,13 @@ type PaletteRec = {
     palettes: Palette[];
 }
 
+type BotRec = {
+    pk: "BOT";
+    sk: string;
+    name: string;
+    games: string[];
+}
+
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
   const pars = event.queryStringParameters;
@@ -309,6 +317,8 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return await game("", pars);
     case "get_public_exploration":
       return await getPublicExploration(pars);
+    case "bot_move":
+      return await botMove(pars);
     case "get_tournaments":
       return await getTournaments();
     case "get_tournament":
@@ -3643,6 +3653,26 @@ async function getPublicExploration(pars: { game: string }) {
     body: JSON.stringify(trees),
     headers
   };
+}
+
+async function botMove(pars: {uid: string, token: string, metaGame: string, gameid: string, move: string}) {
+    // validate token
+    totp.options = {
+        digits: 6,
+        step: 30,
+        window: 1,
+    };
+    try {
+        if (! totp.check(pars.token, process.env.TOTP_KEY as string)) {
+            return formatReturnError(`Invalid token provided: ${JSON.stringify(pars)}`);
+        }
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Something went wrong while validating the token: ${JSON.stringify(pars)}`);
+    }
+
+    // apply move
+    return await submitMove(pars.uid, {id: pars.gameid, move: pars.move, metaGame: pars.metaGame, cbit: 0, draw: ""});
 }
 
 async function newTournament(userid: string, pars: { metaGame: string, variants: string[] }) {
