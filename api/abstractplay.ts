@@ -3,12 +3,13 @@
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
+import { SQSClient, SendMessageCommand, SendMessageRequest } from "@aws-sdk/client-sqs";
 // import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush, { RequestOptions } from "web-push";
-import { totp } from 'otplib';
+import { validateToken } from '@sunknudsen/totp';
 import i18n from 'i18next';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
@@ -16,6 +17,7 @@ import it from '../locales/it/apback.json';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
+const sqsClient = new SQSClient({ region: REGION });
 const clnt = new DynamoDBClient({ region: REGION });
 const marshallOptions = {
   // Whether to automatically convert empty strings, blobs, and sets to `null`.
@@ -295,6 +297,11 @@ type BotRec = {
     name: string;
     games: string[];
 }
+
+const aiSupported = ["scaffold"];
+const aiaiUserID = "SkQfHAjeDxs8eeEnScuYA";
+const aiaiQueueARN = "arn:aws:sqs:us-east-1:153672715141:abstractplay-aiai-dev-aiai-queue";
+const aiaiQueueURL = "https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue";
 
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
@@ -2833,6 +2840,33 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
 
     list.push(sendSubmittedMoveEmails(game, players, simultaneous, newRatings));
     console.log("Scheduled emails");
+
+    // notify AiAi bot, if necessary
+    // get list of userIDs whose turn it is
+    const ids: string[] = [];
+    if (simultaneous) {
+        for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
+            if (game.toMove[i]) {
+                ids.push(players[i].id);
+            }
+        }
+    } else {
+        ids.push(players[parseInt(game.toMove as string, 10)].id);
+    }
+    if (ids.includes(aiaiUserID)) {
+        const moves = state2aiai(pars.metaGame, engine.moveHistory());
+        const body = {
+            mgl: pars.metaGame,
+            history: moves.join(" "),
+        }
+        const input: SendMessageRequest = {
+            QueueUrl: aiaiQueueURL,
+            MessageBody: JSON.stringify(body),
+        }
+        const cmd = new SendMessageCommand(input);
+        list.push(sqsClient.send(cmd));
+    }
+
     await Promise.all(list);
     console.log("All updates complete");
     return {
@@ -3657,13 +3691,8 @@ async function getPublicExploration(pars: { game: string }) {
 
 async function botMove(pars: {uid: string, token: string, metaGame: string, gameid: string, move: string}) {
     // validate token
-    totp.options = {
-        digits: 6,
-        step: 30,
-        window: 1,
-    };
     try {
-        if (! totp.check(pars.token, process.env.TOTP_KEY as string)) {
+        if (! validateToken(process.env.TOTP_KEY as string, pars.token, 1)) {
             return formatReturnError(`Invalid token provided: ${JSON.stringify(pars)}`);
         }
     } catch (error) {
@@ -3671,8 +3700,47 @@ async function botMove(pars: {uid: string, token: string, metaGame: string, game
         return formatReturnError(`Something went wrong while validating the token: ${JSON.stringify(pars)}`);
     }
 
+    // translate move
+    const realmove = ai2ap(pars.metaGame, pars.move);
+
     // apply move
-    return await submitMove(pars.uid, {id: pars.gameid, move: pars.move, metaGame: pars.metaGame, cbit: 0, draw: ""});
+    return await submitMove(pars.uid, {id: pars.gameid, move: realmove, metaGame: pars.metaGame, cbit: 0, draw: ""});
+}
+
+function ai2ap(meta: string, move: string): string {
+    if (! aiSupported.includes(meta)) {
+        throw new Error(`AiAi translation of "${meta}" games is not supported.`);
+    }
+
+    switch (meta) {
+        case "scaffold":
+            return move;
+        default:
+            throw new Error(`No translation logic found for game "${meta}"`);
+    }
+}
+
+function ap2ai(meta: string, move: string): string {
+    if (! aiSupported.includes(meta)) {
+        throw new Error(`AiAi translation of "${meta}" games is not supported.`);
+    }
+
+    switch (meta) {
+        case "scaffold":
+            return move;
+        default:
+            throw new Error(`No translation logic found for game "${meta}"`);
+    }
+}
+
+function state2aiai(meta: string, moves: string[][]): string[] {
+    const lst: string[] = [];
+    for (const round of moves) {
+        for (const move of round) {
+            lst.push(ap2ai(meta, move));
+        }
+    }
+    return lst;
 }
 
 async function newTournament(userid: string, pars: { metaGame: string, variants: string[] }) {
