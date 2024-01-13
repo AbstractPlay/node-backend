@@ -3829,9 +3829,49 @@ async function getTournaments() {
         ExpressionAttributeNames: { "#pk": "pk" }
       }));
     const [tournamentsData, tournamentPlayersData] = await Promise.all([tournamentsDataPromise, tournamentPlayersDataPromise]);
+    // Check for "old" tournaments and "archive" them. Old = the next one already ended or ended more than 6 months ago.
+    let latestCompleted: Map<string, number> = new Map();
+    for (const tournament of tournamentsData.Items as Tournament[]) {
+      if (tournament.dateEnded !== undefined) {
+        const key = tournament.metaGame + "#" + tournament.variants.sort().join("|");
+        let latest = latestCompleted.get(key);
+        if (latest === undefined || tournament.dateEnded > latest) {
+          latestCompleted.set(key, tournament.dateEnded);
+        }
+      }
+    }
+    const now = Date.now();
+    const work: Promise<any>[] = [];
+    const tournaments = (tournamentsData.Items as Tournament[]).filter(tournament => {
+      if (tournament.dateEnded !== undefined) {
+        const key = tournament.metaGame + "#" + tournament.variants.sort().join("|");
+        if (tournament.dateEnded < latestCompleted.get(key)! || tournament.dateEnded < now - 1000 * 60 * 60 * 24 * 30 * 60) {
+          // add archive (by metaGame)
+          tournament.pk = "COMPLETEDTOURNAMENT";
+          tournament.sk = tournament.metaGame + "#" + tournament.id;
+          work.push(ddbDocClient.send(new PutCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Item: tournament
+            })));
+          // delete tournament
+          work.push(ddbDocClient.send(
+            new DeleteCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Key: {
+                "pk": "TOURNAMENT",
+                "sk": tournament.id
+              },
+            })
+          ));
+          return false;
+        }
+      }
+      return true;
+    });
+    await Promise.all(work);
     return {
       statusCode: 200,
-      body: JSON.stringify({tournaments: tournamentsData.Items, tournamentPlayers: tournamentPlayersData.Items}),
+      body: JSON.stringify({tournaments: tournaments, tournamentPlayers: tournamentPlayersData.Items}),
       headers
     };
   }
