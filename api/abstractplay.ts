@@ -263,7 +263,7 @@ type TournamentGame = {
   gameid: string;
   player1: string;
   player2: string;
-  winner?: number[];
+  winner?: string[];
 };
 
 type TagList = {
@@ -4303,10 +4303,8 @@ async function endTournament(pars: { tournamentid: string }) {
             if (game.winner?.length === 2) {
               tournamentPlayers.get(game.player1)!.score! += 0.5;
               tournamentPlayers.get(game.player2)!.score! += 0.5;
-            } else if (game.winner![0] === 1) {
-              tournamentPlayers.get(game.player1)!.score! += 1;
             } else {
-              tournamentPlayers.get(game.player2)!.score! += 1;
+              tournamentPlayers.get(game.winner![0])!.score! += 1;
             }
           }
           const n = tournamentPlayers.size;
@@ -4329,7 +4327,7 @@ async function endTournament(pars: { tournamentid: string }) {
             if (game.winner?.length === 2) {
               tournamentPlayers.get(game.player1)!.tiebreak! += (tournamentPlayers.get(game.player2)!.score! - 1) / 2;
               tournamentPlayers.get(game.player2)!.tiebreak! += (tournamentPlayers.get(game.player1)!.score! - 1) / 2;
-            } else if (game.winner![0] === 1) {
+            } else if (game.winner![0] === game.player1) {
               tournamentPlayers.get(game.player1)!.tiebreak! += n / 2 - 1;
               tournamentPlayers.get(game.player2)!.tiebreak! += tournamentPlayers.get(game.player1)!.score! - n / 2;
             } else {
