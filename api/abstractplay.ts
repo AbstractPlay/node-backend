@@ -4147,7 +4147,7 @@ async function archiveTournament(tournament: Tournament) {
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
             "pk": "TOURNAMENTPLAYER",
-            "sk": tournament.id + "#" + player.playerid
+            "sk": player.sk
           },
         })
       ));
