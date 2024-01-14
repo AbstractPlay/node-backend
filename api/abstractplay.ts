@@ -1110,16 +1110,13 @@ async function setSeenTime(userid: string, gameid: any) {
   }
 
   const games = user.games;
-  const thegame = games.find((g: { id: any; }) => g.id == gameid);
-  if (thegame !== undefined) {
-    thegame.seen = Date.now();
+  if (games !== undefined) {
+    const thegame = games.find((g: { id: any; }) => g.id == gameid);
+    if (thegame !== undefined) {
+      thegame.seen = Date.now();
+    }
   }
-  return ddbDocClient.send(new UpdateCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "USER", "sk": userid },
-    ExpressionAttributeValues: { ":gs": games },
-    UpdateExpression: "set games = :gs",
-  }));
+  return updateUserGames(userid, user.gamesUpdate, [gameid], games);
 }
 
 async function updateUserSettings(userid: string, pars: { settings: any; }) {
@@ -3848,9 +3845,9 @@ async function getTournament(pars: { tournamentid: string }) {
     const tournamentsDataPromise = ddbDocClient.send(
       new QueryCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk, #sk = :sk",
         ExpressionAttributeValues: { ":pk": "TOURNAMENT", ":sk": pars.tournamentid },
-        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" }
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        KeyConditionExpression: "#pk = :pk and #sk = :sk",
       })
     );
     const tournamentPlayersDataPromise = ddbDocClient.send(
@@ -4090,7 +4087,7 @@ async function startTournament(tournament: Tournament) {
           let player2 = player0 + j;
           const gameId = uuid();
           let gamePlayers: User[] = [];
-          if (i + j % 2 === 1) {
+          if ((i + j) % 2 === 1) {
             gamePlayers.push(allGamePlayers[player1]);
             gamePlayers.push(allGamePlayers[player2]);
           } else {
@@ -4320,6 +4317,8 @@ async function endTournament(tournamentid: string) {
               - RSON = SON for a player that loses all his games.
               - RSON can't be negative.
               - If no draws, RSON is an integer.
+
+            During the tournament, let n = 1 + number of games you have finished (so that when you are done with all your games, it's n)
           */
           for (const game of gamelist) {
             if (game.winner?.length === 2) {
@@ -4967,14 +4966,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
           else
             games.push(g)
         });
-        list.push(
-        ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USER", "sk": player.id },
-            ExpressionAttributeValues: { ":gs": games },
-            UpdateExpression: "set games = :gs",
-        }))
-        );
+        list.push(updateUserGames(player.id, player.gamesUpdate, [playerGame.id], games));
         console.log(`Scheduled update to player ${player.id}, ${player.name}, with games`, games);
       });
 
