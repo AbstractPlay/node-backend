@@ -1887,6 +1887,7 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
     if (challenge.challengees !== undefined) {
         const idx = challenge.challengees.findIndex(u => u.id === aiaiUserID);
         if (idx !== -1) {
+            console.log("Triggering bot management code");
             await botManageChallenges();
         }
     }
