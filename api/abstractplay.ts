@@ -2881,7 +2881,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
             const body = {
                 mgl: pars.metaGame,
                 gameid: pars.id,
-                history: moves.join(" "),
+                history: moves.map(m => `"${m}"`).join(" "),
             }
             const input: SendMessageRequest = {
                 QueueUrl: aiaiQueueURL,
@@ -3767,7 +3767,9 @@ function ai2ap(meta: string, move: string): string {
             sub = move.substring(7);
             op = ">";
         }
-        const [from,to] = sub.split(":");
+        let [from,to] = sub.split(":");
+        from = translateHexhexAi2Ap(from, 4);
+        to = translateHexhexAi2Ap(to, 4);
         return `${from}${op}${to}`;
     } else {
         throw new Error(`No translation logic found for game "${meta}"`);
@@ -3786,7 +3788,9 @@ function ap2ai(meta: string, move: string): string {
         if (move.includes(">")) {
             split = ">";
         }
-        const [from,to] = move.split(split);
+        let [from,to] = move.split(split);
+        from = translateHexhexAp2Ai(from, 4);
+        to = translateHexhexAp2Ai(to, 4);
         if (split === "<") {
             return `Furl ${from}:${to}`
         } else {
@@ -3795,6 +3799,42 @@ function ap2ai(meta: string, move: string): string {
     } else {
         throw new Error(`No translation logic found for game "${meta}"`);
     }
+}
+
+function translateHexhexAp2Ai(cell: string, width: number): string {
+    const labels = "abcdefghijklmnopqrstuvwxyz";
+    const height = (width * 2) - 1;
+    const midrow = Math.floor(height / 2);
+
+    const [left,right] = cell.split("");
+    const row = height - labels.indexOf(left) - 1;
+    const col = parseInt(right, 10);
+    let letter = labels[col - 1];
+    if (row > midrow) {
+        const delta = row - midrow;
+        letter = labels[col - 1 + delta];
+    }
+    const number = height - row;
+    return `${letter}${number}`;
+}
+
+function translateHexhexAi2Ap(cell: string, width: number): string {
+    const labels = "abcdefghijklmnopqrstuvwxyz";
+    const height = (width * 2) - 1;
+    const midrow = Math.floor(height / 2);
+
+    const [left,right] = cell.split("");
+
+    const row = parseInt(right, 10);
+    const y = height - row;
+
+    let col = labels.indexOf(left);
+    if (y > midrow) {
+        const delta = y - midrow;
+        col -= delta;
+    }
+
+    return labels[height - y - 1] + (col + 1).toString();
 }
 
 function state2aiai(meta: string, moves: string[][]): string[] {
