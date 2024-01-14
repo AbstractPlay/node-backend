@@ -292,7 +292,7 @@ type PaletteRec = {
     palettes: Palette[];
 }
 
-const aiSupported = ["scaffold"];
+const aiSupported = ["furl"];
 const aiaiUserID = "SkQfHAjeDxs8eeEnScuYA";
 // const aiaiQueueARN = "arn:aws:sqs:us-east-1:153672715141:abstractplay-aiai-dev-aiai-queue";
 const aiaiQueueURL = "https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue";
@@ -3734,11 +3734,22 @@ function ai2ap(meta: string, move: string): string {
         throw new Error(`AiAi translation of "${meta}" games is not supported.`);
     }
 
-    switch (meta) {
-        case "scaffold":
-            return move.replaceAll(" ", ",");
-        default:
-            throw new Error(`No translation logic found for game "${meta}"`);
+    if (meta === "scaffold") {
+        return move.replaceAll(" ", ",");
+    } else if (meta === "furl") {
+        let sub: string;
+        let op: string;
+        if (move.startsWith("Furl")) {
+            sub = move.substring(5);
+            op = "<";
+        } else {
+            sub = move.substring(7);
+            op = ">";
+        }
+        const [from,to] = sub.split(":");
+        return `${from}${op}${to}`;
+    } else {
+        throw new Error(`No translation logic found for game "${meta}"`);
     }
 }
 
@@ -3747,11 +3758,21 @@ function ap2ai(meta: string, move: string): string {
         throw new Error(`AiAi translation of "${meta}" games is not supported.`);
     }
 
-    switch (meta) {
-        case "scaffold":
-            return move.replaceAll(",", " ");
-        default:
-            throw new Error(`No translation logic found for game "${meta}"`);
+    if (meta === "scaffold") {
+        return move.replaceAll(",", " ");
+    } else if (meta === "furl") {
+        let split = "<";
+        if (move.includes(">")) {
+            split = ">";
+        }
+        const [from,to] = move.split(split);
+        if (split === "<") {
+            return `Furl ${from}:${to}`
+        } else {
+            return `Unfurl ${from}:${to}`;
+        }
+    } else {
+        throw new Error(`No translation logic found for game "${meta}"`);
     }
 }
 
