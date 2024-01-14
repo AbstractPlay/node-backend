@@ -2894,6 +2894,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
 
     if (tournamentWork !== undefined) {
       const tournament = await tournamentWork;
+      console.log("tournament:", tournament);
       const divisions = tournament[tournament.length - 1].Attributes.divisions as Division[];
       console.log("divisions:", divisions);
       let divisionCompleted = false;
@@ -2954,7 +2955,7 @@ async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
     ExpressionAttributeNames: { "#d": "divisions", "#n": game.division!.toString() },
     ExpressionAttributeValues: { ":inc": 1 },
     UpdateExpression: "add #d.#n.numCompleted :inc",
-    ReturnValues: "UPDATED_NEW"
+    ReturnValues: "UPDATED_ALL"
   })));
   return Promise.all(work);
 }
