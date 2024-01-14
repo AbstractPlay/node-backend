@@ -5269,7 +5269,8 @@ async function botManageChallenges() {
 
       console.log(`Fetching challenges`);
       const challengesReceivedIDs: string[] = user?.challenges?.received ?? [];
-      const challengesReceived = await getChallenges(challengesReceivedIDs) as FullChallenge[];
+      const data = await getChallenges(challengesReceivedIDs);
+      const challengesReceived = data.map(r => r.Item as FullChallenge);
       console.log(`Got the following challenges:\n${JSON.stringify(challengesReceived, null, 2)}`);
 
       // process each challenge and accept/reject as appropriate
