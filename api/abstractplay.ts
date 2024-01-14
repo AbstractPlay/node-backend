@@ -2955,7 +2955,7 @@ async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
     ExpressionAttributeNames: { "#d": "divisions", "#n": game.division!.toString() },
     ExpressionAttributeValues: { ":inc": 1 },
     UpdateExpression: "add #d.#n.numCompleted :inc",
-    ReturnValues: "UPDATED_ALL"
+    ReturnValues: "ALL_NEW"
   })));
   return Promise.all(work);
 }
