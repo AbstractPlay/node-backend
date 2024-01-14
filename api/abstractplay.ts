@@ -2857,29 +2857,31 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
 
     // notify AiAi bot, if necessary
     // get list of userIDs whose turn it is
-    const ids: string[] = [];
-    if (simultaneous) {
-        for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
-            if (game.toMove[i]) {
-                ids.push(players[i].id);
+    if (! engine.gameover) {
+        const ids: string[] = [];
+        if (simultaneous) {
+            for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
+                if (game.toMove[i]) {
+                    ids.push(players[i].id);
+                }
             }
+        } else {
+            ids.push(players[parseInt(game.toMove as string, 10)].id);
         }
-    } else {
-        ids.push(players[parseInt(game.toMove as string, 10)].id);
-    }
-    if (ids.includes(aiaiUserID)) {
-        const moves = state2aiai(pars.metaGame, engine.moveHistory());
-        const body = {
-            mgl: pars.metaGame,
-            gameid: pars.id,
-            history: moves.join(" "),
+        if (ids.includes(aiaiUserID)) {
+            const moves = state2aiai(pars.metaGame, engine.moveHistory());
+            const body = {
+                mgl: pars.metaGame,
+                gameid: pars.id,
+                history: moves.join(" "),
+            }
+            const input: SendMessageRequest = {
+                QueueUrl: aiaiQueueURL,
+                MessageBody: JSON.stringify(body),
+            }
+            const cmd = new SendMessageCommand(input);
+            list.push(sqsClient.send(cmd));
         }
-        const input: SendMessageRequest = {
-            QueueUrl: aiaiQueueURL,
-            MessageBody: JSON.stringify(body),
-        }
-        const cmd = new SendMessageCommand(input);
-        list.push(sqsClient.send(cmd));
     }
 
     await Promise.all(list);
