@@ -2881,7 +2881,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
             const body = {
                 mgl: pars.metaGame,
                 gameid: pars.id,
-                history: moves.map(m => `"${m}"`).join(" "),
+                history: moves,
             }
             const input: SendMessageRequest = {
                 QueueUrl: aiaiQueueURL,
