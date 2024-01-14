@@ -245,6 +245,7 @@ type Tournament = {
   divisions?: {
     [division: number]: {numGames: number, numCompleted: number, processed: boolean, winnerid?: string, winner?: string}
   };
+  players?: TournamentPlayer[]; // only on archived tournaments
 };
 
 type TournamentPlayer = {
@@ -321,6 +322,8 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return await botMove(pars);
     case "get_tournaments":
       return await getTournaments();
+    case "get_old_tournaments":
+      return await getOldTournaments(pars);
     case "get_tournament":
       return await getTournament(pars);
     case "start_tournaments":
@@ -2723,6 +2726,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     }
     const list: Promise<any>[] = [];
     let newRatings: {[metaGame: string] : Rating}[] | null = null;
+    let tournamentWork;
     if ((game.toMove === "" || game.toMove === null)) {
       newRatings = updateRatings(game, players);
       myGame.seen = Date.now();
@@ -2768,7 +2772,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         return formatReturnError('Unable to process submit move');
       }
       if (game.tournament !== undefined) {
-        list.push(tournamentUpdates(game, players));
+        tournamentWork = tournamentUpdates(game, players);
       }
     }
     game.lastMoveTime = timestamp;
@@ -2834,6 +2838,10 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     list.push(sendSubmittedMoveEmails(game, players, simultaneous, newRatings));
     console.log("Scheduled emails");
     await Promise.all(list);
+    if (tournamentWork !== undefined) {
+      const tournament = await tournamentWork;
+      console.log("tournament:", tournament);
+    }
     console.log("All updates complete");
     return {
       statusCode: 200,
@@ -2878,7 +2886,8 @@ async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
     Key: { "pk": "TOURNAMENT", "sk": game.tournament },
     ExpressionAttributeNames: { "#d": "divisions", "#n": game.division!.toString() },
     ExpressionAttributeValues: { ":inc": 1 },
-    UpdateExpression: "add #d.#n.numCompleted :inc"
+    UpdateExpression: "add #d.#n.numCompleted :inc",
+    ReturnValues: "UPDATED_NEW"
   })));
   return Promise.all(work);
 }
@@ -3859,6 +3868,48 @@ async function getTournaments() {
         ExpressionAttributeNames: { "#pk": "pk" }
       }));
     const [tournamentsData, tournamentPlayersData] = await Promise.all([tournamentsDataPromise, tournamentPlayersDataPromise]);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({tournaments: tournamentsData.Items, tournamentPlayers: tournamentPlayersData.Items}),
+      headers
+    };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get tournaments from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+}
+
+async function getOldTournaments(pars: { metaGame: string }) {
+  try {
+    const tournamentsData = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        ExpressionAttributeValues: { ":pk": "COMPLETEDTOURNAMENT", ":sk": pars.metaGame + '#' },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+      }));
+    return {
+      statusCode: 200,
+      body: JSON.stringify({tournaments: tournamentsData.Items}),
+      headers
+    };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get tournaments from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+}
+
+async function archiveTournaments() {
+  try {
+    const tournamentsData = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "TOURNAMENT" },
+        ExpressionAttributeNames: { "#pk": "pk" }
+      }));
     // Check for "old" tournaments and "archive" them. Old = the next one already ended or ended more than 6 months ago.
     let latestCompleted: Map<string, number> = new Map();
     for (const tournament of tournamentsData.Items as Tournament[]) {
@@ -3872,42 +3923,76 @@ async function getTournaments() {
     }
     const now = Date.now();
     const work: Promise<any>[] = [];
-    const tournaments = (tournamentsData.Items as Tournament[]).filter(tournament => {
+    let list: string[] = [];
+    for (const tournament of tournamentsData.Items as Tournament[]) {
       if (tournament.dateEnded !== undefined) {
         const key = tournament.metaGame + "#" + tournament.variants.sort().join("|");
         if (tournament.dateEnded < latestCompleted.get(key)! || tournament.dateEnded < now - 1000 * 60 * 60 * 24 * 30 * 60) {
-          // add archive (by metaGame)
-          tournament.pk = "COMPLETEDTOURNAMENT";
-          tournament.sk = tournament.metaGame + "#" + tournament.id;
-          work.push(ddbDocClient.send(new PutCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Item: tournament
-            })));
-          // delete tournament
-          work.push(ddbDocClient.send(
-            new DeleteCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Key: {
-                "pk": "TOURNAMENT",
-                "sk": tournament.id
-              },
-            })
-          ));
-          return false;
+          work.push(archiveTournament(tournament));
+          list.push(tournament.id);
         }
       }
-      return true;
-    });
+    };
     await Promise.all(work);
     return {
       statusCode: 200,
-      body: JSON.stringify({tournaments: tournaments, tournamentPlayers: tournamentPlayersData.Items}),
+      body: JSON.stringify({message: "Archived old tournaments: " + list.join(", ")}),
       headers
     };
   }
   catch (error) {
     logGetItemError(error);
     return formatReturnError(`Unable to get tournaments from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+}
+
+async function archiveTournament(tournament: Tournament) {
+  try {
+    // Now that player won't change anymore, just add them to the tournament record and (more importantly) get them out of the TOURNAMENTPLAYER list
+    const tournamentPlayersData = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournament.id + '#' },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+      })
+    );
+    const players = tournamentPlayersData.Items as TournamentPlayer[];
+    // add archive (by metaGame)
+    tournament.pk = "COMPLETEDTOURNAMENT";
+    tournament.sk = tournament.metaGame + "#" + tournament.id;
+    tournament.players = players;
+    const work: Promise<any>[] = [];
+    work.push(ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: tournament
+      })));
+    // delete tournament
+    work.push(ddbDocClient.send(
+      new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "TOURNAMENT",
+          "sk": tournament.id
+        },
+      })
+    ));
+    // and tournament players
+    for (const player of players) {
+      work.push(ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "TOURNAMENTPLAYER",
+            "sk": tournament.id + "#" + player.playerid
+          },
+        })
+      ));
+    }
+    return Promise.all(work);
+  }
+  catch (error) {
+    logGetItemError(error);
   }
 }
 
@@ -4439,7 +4524,15 @@ async function endTournament(pars: { tournamentid: string }) {
           division.winnerid = bestPlayer;
           division.winner = bestPlayerName;
           // Update tournament players
-
+          for (const player of players) {
+            work.push(ddbDocClient.send(new UpdateCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Key: { "pk": "TOURNAMENTPLAYER", "sk": `${pars.tournamentid}#${divisionNumber}#${player.playerid}` },
+              ExpressionAttributeNames: { "#t": "tiebreak" },
+              ExpressionAttributeValues: { ":t": player.tiebreak },
+              UpdateExpression: "set #t :t"
+            })));
+          }
           tournamentUpdated = true;
         }
       }
