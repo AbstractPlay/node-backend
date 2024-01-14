@@ -300,7 +300,6 @@ type PaletteRec = {
     palettes: Palette[];
 }
 
-const aiSupported = ["furl"];
 const aiaiUserID = "SkQfHAjeDxs8eeEnScuYA";
 // const aiaiQueueARN = "arn:aws:sqs:us-east-1:153672715141:abstractplay-aiai-dev-aiai-queue";
 const aiaiQueueURL = "https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue";
@@ -2877,11 +2876,10 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
             ids.push(players[parseInt(game.toMove as string, 10)].id);
         }
         if (ids.includes(aiaiUserID)) {
-            const moves = state2aiai(pars.metaGame, engine.moveHistory());
             const body = {
                 mgl: pars.metaGame,
                 gameid: pars.id,
-                history: moves.map(m => `"${m}"`).join(" "),
+                history: engine.state2aiai(),
             }
             const input: SendMessageRequest = {
                 QueueUrl: aiaiQueueURL,
@@ -3743,108 +3741,39 @@ async function botMove(pars: {uid: string, token: string, metaGame: string, game
         return formatReturnError(`Something went wrong while validating the token: ${JSON.stringify(pars)}`);
     }
 
+    // fetch game record and state
+    let game: FullGame|undefined;
+    try {
+        const data = await ddbDocClient.send(
+          new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "GAME",
+              "sk": pars.metaGame + "#0#" + pars.gameid
+            },
+          }));
+        if (!data.Item)
+          throw new Error(`No game ${pars.metaGame + "#0#" + pars.gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+        game = data.Item as FullGame;
+    }
+    catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to load game ${pars.gameid} to make a bot move`);
+    }
+
+    // instantiate game object
+    if (game === undefined) {
+        throw new Error("Unable to load game object");
+    }
+    const engine = GameFactory(pars.metaGame, game.state);
+    if (!engine)
+      throw new Error(`Unknown metaGame ${pars.metaGame}`);
+
     // translate move
-    const realmove = ai2ap(pars.metaGame, pars.move);
+    const realmove = engine.translateAiai(pars.move);
 
     // apply move
     return await submitMove(pars.uid, {id: pars.gameid, move: realmove, metaGame: pars.metaGame, cbit: 0, draw: ""});
-}
-
-function ai2ap(meta: string, move: string): string {
-    if (! aiSupported.includes(meta)) {
-        throw new Error(`AiAi translation of "${meta}" games is not supported.`);
-    }
-
-    if (meta === "scaffold") {
-        return move.replaceAll(" ", ",");
-    } else if (meta === "furl") {
-        let sub: string;
-        let op: string;
-        if (move.startsWith("Furl")) {
-            sub = move.substring(5);
-            op = "<";
-        } else {
-            sub = move.substring(7);
-            op = ">";
-        }
-        let [from,to] = sub.split(":");
-        from = translateHexhexAi2Ap(from, 4);
-        to = translateHexhexAi2Ap(to, 4);
-        return `${from}${op}${to}`;
-    } else {
-        throw new Error(`No translation logic found for game "${meta}"`);
-    }
-}
-
-function ap2ai(meta: string, move: string): string {
-    if (! aiSupported.includes(meta)) {
-        throw new Error(`AiAi translation of "${meta}" games is not supported.`);
-    }
-
-    if (meta === "scaffold") {
-        return move.replaceAll(",", " ");
-    } else if (meta === "furl") {
-        let split = "<";
-        if (move.includes(">")) {
-            split = ">";
-        }
-        let [from,to] = move.split(split);
-        from = translateHexhexAp2Ai(from, 4);
-        to = translateHexhexAp2Ai(to, 4);
-        if (split === "<") {
-            return `Furl ${from}:${to}`
-        } else {
-            return `Unfurl ${from}:${to}`;
-        }
-    } else {
-        throw new Error(`No translation logic found for game "${meta}"`);
-    }
-}
-
-function translateHexhexAp2Ai(cell: string, width: number): string {
-    const labels = "abcdefghijklmnopqrstuvwxyz";
-    const height = (width * 2) - 1;
-    const midrow = Math.floor(height / 2);
-
-    const [left,right] = cell.split("");
-    const row = height - labels.indexOf(left) - 1;
-    const col = parseInt(right, 10);
-    let letter = labels[col - 1];
-    if (row > midrow) {
-        const delta = row - midrow;
-        letter = labels[col - 1 + delta];
-    }
-    const number = height - row;
-    return `${letter}${number}`;
-}
-
-function translateHexhexAi2Ap(cell: string, width: number): string {
-    const labels = "abcdefghijklmnopqrstuvwxyz";
-    const height = (width * 2) - 1;
-    const midrow = Math.floor(height / 2);
-
-    const [left,right] = cell.split("");
-
-    const row = parseInt(right, 10);
-    const y = height - row;
-
-    let col = labels.indexOf(left);
-    if (y > midrow) {
-        const delta = y - midrow;
-        col -= delta;
-    }
-
-    return labels[height - y - 1] + (col + 1).toString();
-}
-
-function state2aiai(meta: string, moves: string[][]): string[] {
-    const lst: string[] = [];
-    for (const round of moves) {
-        for (const move of round) {
-            lst.push(ap2ai(meta, move));
-        }
-    }
-    return lst;
 }
 
 async function newTournament(userid: string, pars: { metaGame: string, variants: string[] }) {
@@ -5449,7 +5378,8 @@ async function botManageChallenges() {
       for (const challenge of challengesReceived) {
         let accepted = false;
         // the overall meta must be supported
-        if (aiSupported.includes(challenge.metaGame)) {
+        const info = gameinfo.get(challenge.metaGame);
+        if (info?.flags.includes("aiai")) {
             accepted = true;
         }
         // add any variant exceptions here too
