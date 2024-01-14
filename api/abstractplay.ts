@@ -4695,7 +4695,7 @@ async function endTournament(tournament: Tournament) {
               Key: { "pk": "TOURNAMENTPLAYER", "sk": `${tournament.id}#${divisionNumber}#${player.playerid}` },
               ExpressionAttributeNames: { "#t": "tiebreak" },
               ExpressionAttributeValues: { ":t": player.tiebreak },
-              UpdateExpression: "set #t :t"
+              UpdateExpression: "set #t = :t"
             })));
           }
           tournamentUpdated = true;
