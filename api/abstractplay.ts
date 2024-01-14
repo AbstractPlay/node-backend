@@ -2893,12 +2893,12 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     }
 
     if (tournamentWork !== undefined) {
-      const tournament = await tournamentWork;
+      const tournamentData = await tournamentWork;
+      console.log("tournamentData:", tournamentWork);
+      const tournament = tournamentData[tournamentData.length - 1].Attributes as Tournament;
       console.log("tournament:", tournament);
-      const divisions = tournament[tournament.length - 1].Attributes.divisions as Division[];
-      console.log("divisions:", divisions);
       let divisionCompleted = false;
-      for (const division of divisions) {
+      for (const division of Object.values(tournament.divisions!)) {
         if (division.numCompleted === division.numGames && !division.processed) {
           divisionCompleted = true;
           break;
@@ -2906,7 +2906,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       }
       if (divisionCompleted) {
         console.log("division completed, processing tournament");
-        list.push(endTournament(game.tournament!))
+        list.push(endTournament(tournament))
       }
     }
     await Promise.all(list);
@@ -4525,8 +4525,8 @@ async function startTournament(tournament: Tournament) {
   }
 }
 
-async function endTournament(tournamentid: string) {
-  try {
+async function endTournament(tournament: Tournament) {
+  /*
     const data = await ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4539,6 +4539,8 @@ async function endTournament(tournamentid: string) {
     if (!data.Item)
       throw new Error(`No tournament ${tournamentid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
     const tournament = data.Item as Tournament;
+  */
+  try {
     if (tournament.divisions) {
       const work: Promise<any>[] = [];
       let alldone = true;
@@ -4554,14 +4556,14 @@ async function endTournament(tournamentid: string) {
             new QueryCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-              ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": tournamentid + '#' + divisionNumber + '#' },
+              ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": tournament.id + '#' + divisionNumber + '#' },
               ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
             })));
           // And players (we need the ratings at the start of the tournament)
           work2.push(ddbDocClient.send(
             new QueryCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
-              ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournamentid + '#' + divisionNumber + '#' },
+              ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournament.id + '#' + divisionNumber + '#' },
               ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
               KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
             })));
@@ -4650,7 +4652,7 @@ async function endTournament(tournamentid: string) {
           for (const player of players) {
             work.push(ddbDocClient.send(new UpdateCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Key: { "pk": "TOURNAMENTPLAYER", "sk": `${tournamentid}#${divisionNumber}#${player.playerid}` },
+              Key: { "pk": "TOURNAMENTPLAYER", "sk": `${tournament.id}#${divisionNumber}#${player.playerid}` },
               ExpressionAttributeNames: { "#t": "tiebreak" },
               ExpressionAttributeValues: { ":t": player.tiebreak },
               UpdateExpression: "set #t :t"
@@ -4715,7 +4717,7 @@ async function endTournament(tournamentid: string) {
   }
   catch (error) {
     logGetItemError(error);
-    return formatReturnError(`Error during update tournament ${tournamentid}: {error}`);
+    return formatReturnError(`Error during update tournament ${tournament.id}: {error}`);
   }
   return {
     statusCode: 200,
