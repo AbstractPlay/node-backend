@@ -1882,6 +1882,15 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
   try {
     await Promise.all(list);
     console.log("Successfully added challenge" + challengeId);
+
+    // TODO: If the bot is challenged, trigger its challenge mgmt code here
+    if (challenge.challengees !== undefined) {
+        const idx = challenge.challengees.findIndex(u => u.id === aiaiUserID);
+        if (idx !== -1) {
+            await botManageChallenges();
+        }
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -5235,6 +5244,49 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
         body: "",
         headers
     };
+}
+
+async function botManageChallenges() {
+    const userId = aiaiUserID;
+    try {
+      console.log(`Getting USER record`);
+      const userData = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "USER",
+            "sk": userId
+          },
+        }));
+      if (userData.Item === undefined) {
+        throw new Error("Could not find a USER record for the AiAi bot");
+      }
+      const user = userData.Item as FullUser;
+      let games = user.games;
+      if (games === undefined)
+        games= [];
+
+      console.log(`Fetching challenges`);
+      const challengesReceivedIDs: string[] = user?.challenges?.received ?? [];
+      const challengesReceived = await getChallenges(challengesReceivedIDs) as FullChallenge[];
+
+      // process each challenge and accept/reject as appropriate
+      for (const challenge of challengesReceived) {
+        let accepted = false;
+        // the overall meta must be supported
+        if (aiSupported.includes(challenge.metaGame)) {
+            accepted = true;
+        }
+        // add any variant exceptions here too
+
+        // accept/reject challenge
+        await respondedChallenge(aiaiUserID, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame});
+      }
+
+    } catch (err) {
+      logGetItemError(err);
+      return formatReturnError(`Unable to manage bot challenges: ${err}`);
+    }
 }
 
 async function onetimeFix(userId: string) {
