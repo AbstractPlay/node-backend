@@ -3,12 +3,13 @@
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
+import { SQSClient, SendMessageCommand, SendMessageRequest } from "@aws-sdk/client-sqs";
 // import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush, { RequestOptions } from "web-push";
-import { totp } from 'otplib';
+import { validateToken } from '@sunknudsen/totp';
 import i18n from 'i18next';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
@@ -16,6 +17,7 @@ import it from '../locales/it/apback.json';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
+const sqsClient = new SQSClient({ region: REGION });
 const clnt = new DynamoDBClient({ region: REGION });
 const marshallOptions = {
   // Whether to automatically convert empty strings, blobs, and sets to `null`.
@@ -297,6 +299,11 @@ type BotRec = {
     games: string[];
 }
 
+const aiSupported = ["scaffold"];
+const aiaiUserID = "SkQfHAjeDxs8eeEnScuYA";
+const aiaiQueueARN = "arn:aws:sqs:us-east-1:153672715141:abstractplay-aiai-dev-aiai-queue";
+const aiaiQueueURL = "https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue";
+
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
   const pars = event.queryStringParameters;
@@ -454,6 +461,13 @@ async function userNames() {
     if (users == undefined) {
       throw new Error("Found no users?");
     }
+
+    // tweak bot info
+    const idx = users.findIndex(u => u.sk === aiaiUserID);
+    if (idx !== -1) {
+        users[idx].lastSeen = Date.now();
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify(users.map(u => ({"id": u.sk, "name": u.name, "country": u.country, "stars": u.stars, "lastSeen": u.lastSeen}))),
@@ -1871,6 +1885,16 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
   try {
     await Promise.all(list);
     console.log("Successfully added challenge" + challengeId);
+
+    // TODO: If the bot is challenged, trigger its challenge mgmt code here
+    if (challenge.challengees !== undefined) {
+        const idx = challenge.challengees.findIndex(u => u.id === aiaiUserID);
+        if (idx !== -1) {
+            console.log("Triggering bot management code");
+            await botManageChallenges();
+        }
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -2837,6 +2861,34 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
 
     list.push(sendSubmittedMoveEmails(game, players, simultaneous, newRatings));
     console.log("Scheduled emails");
+
+    // notify AiAi bot, if necessary
+    // get list of userIDs whose turn it is
+    const ids: string[] = [];
+    if (simultaneous) {
+        for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
+            if (game.toMove[i]) {
+                ids.push(players[i].id);
+            }
+        }
+    } else {
+        ids.push(players[parseInt(game.toMove as string, 10)].id);
+    }
+    if (ids.includes(aiaiUserID)) {
+        const moves = state2aiai(pars.metaGame, engine.moveHistory());
+        const body = {
+            mgl: pars.metaGame,
+            gameid: pars.id,
+            history: moves.join(" "),
+        }
+        const input: SendMessageRequest = {
+            QueueUrl: aiaiQueueURL,
+            MessageBody: JSON.stringify(body),
+        }
+        const cmd = new SendMessageCommand(input);
+        list.push(sqsClient.send(cmd));
+    }
+
     await Promise.all(list);
     if (tournamentWork !== undefined) {
       const tournament = await tournamentWork;
@@ -3666,13 +3718,8 @@ async function getPublicExploration(pars: { game: string }) {
 
 async function botMove(pars: {uid: string, token: string, metaGame: string, gameid: string, move: string}) {
     // validate token
-    totp.options = {
-        digits: 6,
-        step: 30,
-        window: 1,
-    };
     try {
-        if (! totp.check(pars.token, process.env.TOTP_KEY as string)) {
+        if (! validateToken(process.env.TOTP_KEY as string, pars.token, 1)) {
             return formatReturnError(`Invalid token provided: ${JSON.stringify(pars)}`);
         }
     } catch (error) {
@@ -3680,8 +3727,47 @@ async function botMove(pars: {uid: string, token: string, metaGame: string, game
         return formatReturnError(`Something went wrong while validating the token: ${JSON.stringify(pars)}`);
     }
 
+    // translate move
+    const realmove = ai2ap(pars.metaGame, pars.move);
+
     // apply move
-    return await submitMove(pars.uid, {id: pars.gameid, move: pars.move, metaGame: pars.metaGame, cbit: 0, draw: ""});
+    return await submitMove(pars.uid, {id: pars.gameid, move: realmove, metaGame: pars.metaGame, cbit: 0, draw: ""});
+}
+
+function ai2ap(meta: string, move: string): string {
+    if (! aiSupported.includes(meta)) {
+        throw new Error(`AiAi translation of "${meta}" games is not supported.`);
+    }
+
+    switch (meta) {
+        case "scaffold":
+            return move;
+        default:
+            throw new Error(`No translation logic found for game "${meta}"`);
+    }
+}
+
+function ap2ai(meta: string, move: string): string {
+    if (! aiSupported.includes(meta)) {
+        throw new Error(`AiAi translation of "${meta}" games is not supported.`);
+    }
+
+    switch (meta) {
+        case "scaffold":
+            return move;
+        default:
+            throw new Error(`No translation logic found for game "${meta}"`);
+    }
+}
+
+function state2aiai(meta: string, moves: string[][]): string[] {
+    const lst: string[] = [];
+    for (const round of moves) {
+        for (const move of round) {
+            lst.push(ap2ai(meta, move));
+        }
+    }
+    return lst;
 }
 
 async function newTournament(userid: string, pars: { metaGame: string, variants: string[] }) {
@@ -5252,6 +5338,52 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
         body: "",
         headers
     };
+}
+
+async function botManageChallenges() {
+    const userId = aiaiUserID;
+    try {
+      console.log(`Getting USER record`);
+      const userData = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "USER",
+            "sk": userId
+          },
+        }));
+      if (userData.Item === undefined) {
+        throw new Error("Could not find a USER record for the AiAi bot");
+      }
+      const user = userData.Item as FullUser;
+      let games = user.games;
+      if (games === undefined)
+        games= [];
+
+      console.log(`Fetching challenges`);
+      const challengesReceivedIDs: string[] = user?.challenges?.received ?? [];
+      const data = await getChallenges(challengesReceivedIDs);
+      const challengesReceived = data.map(r => r.Item as FullChallenge);
+      console.log(`Got the following challenges:\n${JSON.stringify(challengesReceived, null, 2)}`);
+
+      // process each challenge and accept/reject as appropriate
+      for (const challenge of challengesReceived) {
+        let accepted = false;
+        // the overall meta must be supported
+        if (aiSupported.includes(challenge.metaGame)) {
+            accepted = true;
+        }
+        // add any variant exceptions here too
+
+        // accept/reject challenge
+        console.log(`About to ${accepted ? "accept" : "deny"} challenge ${challenge.sk}`)
+        await respondedChallenge(aiaiUserID, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame});
+      }
+
+    } catch (err) {
+      logGetItemError(err);
+      return formatReturnError(`Unable to manage bot challenges: ${err}`);
+    }
 }
 
 async function onetimeFix(userId: string) {

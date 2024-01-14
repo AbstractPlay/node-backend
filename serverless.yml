@@ -75,6 +75,7 @@ provider:
             - dynamodb:BatchWriteItem
             - ses:SendEmail
             - ses:SendRawEmail
+            - sqs:SendMessage
             - cloudfront:CreateInvalidation
           Resource: "*"
         - Effect: 'Allow'
