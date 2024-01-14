@@ -300,16 +300,9 @@ type PaletteRec = {
     palettes: Palette[];
 }
 
-type BotRec = {
-    pk: "BOT";
-    sk: string;
-    name: string;
-    games: string[];
-}
-
-const aiSupported = ["scaffold"];
+const aiSupported = ["furl"];
 const aiaiUserID = "SkQfHAjeDxs8eeEnScuYA";
-const aiaiQueueARN = "arn:aws:sqs:us-east-1:153672715141:abstractplay-aiai-dev-aiai-queue";
+// const aiaiQueueARN = "arn:aws:sqs:us-east-1:153672715141:abstractplay-aiai-dev-aiai-queue";
 const aiaiQueueURL = "https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue";
 
 module.exports.query = async (event: { queryStringParameters: any; }) => {
@@ -2872,29 +2865,31 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
 
     // notify AiAi bot, if necessary
     // get list of userIDs whose turn it is
-    const ids: string[] = [];
-    if (simultaneous) {
-        for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
-            if (game.toMove[i]) {
-                ids.push(players[i].id);
+    if (! engine.gameover) {
+        const ids: string[] = [];
+        if (simultaneous) {
+            for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
+                if (game.toMove[i]) {
+                    ids.push(players[i].id);
+                }
             }
+        } else {
+            ids.push(players[parseInt(game.toMove as string, 10)].id);
         }
-    } else {
-        ids.push(players[parseInt(game.toMove as string, 10)].id);
-    }
-    if (ids.includes(aiaiUserID)) {
-        const moves = state2aiai(pars.metaGame, engine.moveHistory());
-        const body = {
-            mgl: pars.metaGame,
-            gameid: pars.id,
-            history: moves.join(" "),
+        if (ids.includes(aiaiUserID)) {
+            const moves = state2aiai(pars.metaGame, engine.moveHistory());
+            const body = {
+                mgl: pars.metaGame,
+                gameid: pars.id,
+                history: moves.join(" "),
+            }
+            const input: SendMessageRequest = {
+                QueueUrl: aiaiQueueURL,
+                MessageBody: JSON.stringify(body),
+            }
+            const cmd = new SendMessageCommand(input);
+            list.push(sqsClient.send(cmd));
         }
-        const input: SendMessageRequest = {
-            QueueUrl: aiaiQueueURL,
-            MessageBody: JSON.stringify(body),
-        }
-        const cmd = new SendMessageCommand(input);
-        list.push(sqsClient.send(cmd));
     }
 
     if (tournamentWork !== undefined) {
@@ -3759,11 +3754,22 @@ function ai2ap(meta: string, move: string): string {
         throw new Error(`AiAi translation of "${meta}" games is not supported.`);
     }
 
-    switch (meta) {
-        case "scaffold":
-            return move;
-        default:
-            throw new Error(`No translation logic found for game "${meta}"`);
+    if (meta === "scaffold") {
+        return move.replaceAll(" ", ",");
+    } else if (meta === "furl") {
+        let sub: string;
+        let op: string;
+        if (move.startsWith("Furl")) {
+            sub = move.substring(5);
+            op = "<";
+        } else {
+            sub = move.substring(7);
+            op = ">";
+        }
+        const [from,to] = sub.split(":");
+        return `${from}${op}${to}`;
+    } else {
+        throw new Error(`No translation logic found for game "${meta}"`);
     }
 }
 
@@ -3772,11 +3778,21 @@ function ap2ai(meta: string, move: string): string {
         throw new Error(`AiAi translation of "${meta}" games is not supported.`);
     }
 
-    switch (meta) {
-        case "scaffold":
-            return move;
-        default:
-            throw new Error(`No translation logic found for game "${meta}"`);
+    if (meta === "scaffold") {
+        return move.replaceAll(",", " ");
+    } else if (meta === "furl") {
+        let split = "<";
+        if (move.includes(">")) {
+            split = ">";
+        }
+        const [from,to] = move.split(split);
+        if (split === "<") {
+            return `Furl ${from}:${to}`
+        } else {
+            return `Unfurl ${from}:${to}`;
+        }
+    } else {
+        throw new Error(`No translation logic found for game "${meta}"`);
     }
 }
 
