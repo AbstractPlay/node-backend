@@ -291,16 +291,9 @@ type PaletteRec = {
     palettes: Palette[];
 }
 
-type BotRec = {
-    pk: "BOT";
-    sk: string;
-    name: string;
-    games: string[];
-}
-
 const aiSupported = ["scaffold"];
 const aiaiUserID = "SkQfHAjeDxs8eeEnScuYA";
-const aiaiQueueARN = "arn:aws:sqs:us-east-1:153672715141:abstractplay-aiai-dev-aiai-queue";
+// const aiaiQueueARN = "arn:aws:sqs:us-east-1:153672715141:abstractplay-aiai-dev-aiai-queue";
 const aiaiQueueURL = "https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue";
 
 module.exports.query = async (event: { queryStringParameters: any; }) => {
@@ -3732,7 +3725,7 @@ function ai2ap(meta: string, move: string): string {
 
     switch (meta) {
         case "scaffold":
-            return move;
+            return move.replaceAll(" ", ",");
         default:
             throw new Error(`No translation logic found for game "${meta}"`);
     }
@@ -3745,7 +3738,7 @@ function ap2ai(meta: string, move: string): string {
 
     switch (meta) {
         case "scaffold":
-            return move;
+            return move.replaceAll(",", " ");
         default:
             throw new Error(`No translation logic found for game "${meta}"`);
     }
