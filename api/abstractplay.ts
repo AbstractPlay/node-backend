@@ -5270,6 +5270,7 @@ async function botManageChallenges() {
       console.log(`Fetching challenges`);
       const challengesReceivedIDs: string[] = user?.challenges?.received ?? [];
       const challengesReceived = await getChallenges(challengesReceivedIDs) as FullChallenge[];
+      console.log(`Got the following challenges:\n${JSON.stringify(challengesReceived, null, 2)}`);
 
       // process each challenge and accept/reject as appropriate
       for (const challenge of challengesReceived) {
@@ -5281,6 +5282,7 @@ async function botManageChallenges() {
         // add any variant exceptions here too
 
         // accept/reject challenge
+        console.log(`About to ${accepted ? "accept" : "deny"} challenge ${challenge.sk}`)
         await respondedChallenge(aiaiUserID, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame});
       }
 
