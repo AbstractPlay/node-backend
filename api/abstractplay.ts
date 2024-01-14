@@ -458,6 +458,13 @@ async function userNames() {
     if (users == undefined) {
       throw new Error("Found no users?");
     }
+
+    // tweak bot info
+    const idx = users.findIndex(u => u.sk === aiaiUserID);
+    if (idx !== -1) {
+        users[idx].lastSeen = Date.now();
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify(users.map(u => ({"id": u.sk, "name": u.name, "country": u.country, "stars": u.stars, "lastSeen": u.lastSeen}))),
