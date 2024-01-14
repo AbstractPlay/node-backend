@@ -423,6 +423,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await joinTournament(event.cognitoPoolClaims.sub, pars);
     case "withdraw_tournament":
       return await withdrawTournament(event.cognitoPoolClaims.sub, pars);
+    case "ping_bot":
+      return await pingBot(event.cognitoPoolClaims.sub, pars);
     case "onetime_fix":
       return await onetimeFix(event.cognitoPoolClaims.sub);
     case "test_push":
@@ -5639,6 +5641,93 @@ async function testAsync(userId: string, pars: { N: number; }) {
     logGetItemError(err);
     return formatReturnError(`Unable to test_async ${userId}`);
   }
+}
+
+async function pingBot(userId: string, pars: {metaGame: string, gameid: string}) {
+    // Make sure people aren't getting clever
+    try {
+      const user = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "USER",
+            "sk": userId
+          },
+        })
+      );
+      if (user.Item === undefined || user.Item.admin !== true) {
+        return {
+          statusCode: 200,
+          body: JSON.stringify({}),
+          headers
+        };
+      }
+    } catch (err) {
+          logGetItemError(err);
+          return formatReturnError(`Unable to testPush ${userId}`);
+    }
+
+    // fetch game record and state
+    let game: FullGame|undefined;
+    try {
+        const data = await ddbDocClient.send(
+          new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "GAME",
+              "sk": pars.metaGame + "#0#" + pars.gameid
+            },
+          }));
+        if (!data.Item)
+          throw new Error(`No game ${pars.metaGame + "#0#" + pars.gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+        game = data.Item as FullGame;
+    }
+    catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to load game ${pars.gameid} to make a bot move`);
+    }
+
+    // instantiate game object
+    if (game === undefined) {
+        throw new Error("Unable to load game object");
+    }
+    const engine = GameFactory(pars.metaGame, game.state);
+    if (!engine)
+      throw new Error(`Unknown metaGame ${pars.metaGame}`);
+    const info = gameinfo.get(pars.metaGame);
+
+    // notify AiAi bot, if necessary
+    // get list of userIDs whose turn it is
+    if (! engine.gameover) {
+        const ids: string[] = [];
+        if (info.flags.includes("simultaneous")) {
+            for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
+                if (game.toMove[i]) {
+                    ids.push(game.players[i].id);
+                }
+            }
+        } else {
+            ids.push(game.players[parseInt(game.toMove as string, 10)].id);
+        }
+        if (ids.includes(aiaiUserID)) {
+            const body = {
+                mgl: pars.metaGame,
+                gameid: pars.gameid,
+                history: engine.state2aiai(),
+            }
+            const input: SendMessageRequest = {
+                QueueUrl: aiaiQueueURL,
+                MessageBody: JSON.stringify(body),
+            }
+            const cmd = new SendMessageCommand(input);
+            await sqsClient.send(cmd);
+        }
+    }
+    return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+    };
 }
 
 function makeWork() {
