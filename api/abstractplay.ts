@@ -461,7 +461,7 @@ async function userNames() {
     }
 
     // tweak bot info
-    const idx = users.findIndex(u => u.sk === process.env.SQS_USERID);
+    const idx = users.findIndex(u => u.sk === process.env.AIAI_USERID);
     if (idx !== -1) {
         users[idx].lastSeen = Date.now();
     }
@@ -1886,7 +1886,7 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
 
     // If the bot is challenged, trigger its challenge mgmt code here
     if (challenge.challengees !== undefined) {
-        const idx = challenge.challengees.findIndex(u => u.id === process.env.SQS_USERID);
+        const idx = challenge.challengees.findIndex(u => u.id === process.env.AIAI_USERID);
         if (idx !== -1) {
             console.log("Triggering bot management code");
             await botManageChallenges();
@@ -5212,6 +5212,10 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
       console.log("Scheduled emails");
       await Promise.all(list);
       console.log("All updates complete");
+      // if bot is involved, trigger ping
+      if (players.map(p => p.id).includes(process.env.AIAI_USERID!)) {
+        await realPingBot(pars.metaGame, pars.id);
+      }
       return {
         statusCode: 200,
         body: JSON.stringify(game),
@@ -5321,7 +5325,7 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
 }
 
 async function botManageChallenges() {
-    const userId = process.env.SQS_USERID;
+    const userId = process.env.AIAI_USERID;
     try {
       console.log(`Getting USER record`);
       const userData = await ddbDocClient.send(
@@ -5358,7 +5362,7 @@ async function botManageChallenges() {
 
         // accept/reject challenge
         console.log(`About to ${accepted ? "accept" : "deny"} challenge ${challenge.sk}`)
-        await respondedChallenge(process.env.SQS_USERID!, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame});
+        await respondedChallenge(process.env.AIAI_USERID!, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame});
       }
     } catch (err) {
       logGetItemError(err);
@@ -5399,7 +5403,7 @@ async function botManageChallenges() {
                 } else {
                     ids.push(game.players[parseInt(game.toMove as string, 10)].id);
                 }
-                if (ids.includes(process.env.SQS_USERID!)) {
+                if (ids.includes(process.env.AIAI_USERID!)) {
                     await realPingBot(game.metaGame, game.id);
                 }
             }
@@ -5733,7 +5737,7 @@ async function realPingBot(metaGame: string, gameid: string, game?: FullGame) {
         } else {
             ids.push(game.players[parseInt(game.toMove as string, 10)].id);
         }
-        if (ids.includes(process.env.SQS_USERID!)) {
+        if (ids.includes(process.env.AIAI_USERID!)) {
             const body = {
                 mgl: metaGame,
                 gameid: gameid,
