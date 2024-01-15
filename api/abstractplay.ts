@@ -300,10 +300,6 @@ type PaletteRec = {
     palettes: Palette[];
 }
 
-const aiaiUserID = "SkQfHAjeDxs8eeEnScuYA";
-// const aiaiQueueARN = "arn:aws:sqs:us-east-1:153672715141:abstractplay-aiai-dev-aiai-queue";
-const aiaiQueueURL = "https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue";
-
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
   const pars = event.queryStringParameters;
@@ -465,7 +461,7 @@ async function userNames() {
     }
 
     // tweak bot info
-    const idx = users.findIndex(u => u.sk === aiaiUserID);
+    const idx = users.findIndex(u => u.sk === process.env.SQS_USERID);
     if (idx !== -1) {
         users[idx].lastSeen = Date.now();
     }
@@ -1890,7 +1886,7 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
 
     // TODO: If the bot is challenged, trigger its challenge mgmt code here
     if (challenge.challengees !== undefined) {
-        const idx = challenge.challengees.findIndex(u => u.id === aiaiUserID);
+        const idx = challenge.challengees.findIndex(u => u.id === process.env.SQS_USERID);
         if (idx !== -1) {
             console.log("Triggering bot management code");
             await botManageChallenges();
@@ -2877,14 +2873,14 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         } else {
             ids.push(players[parseInt(game.toMove as string, 10)].id);
         }
-        if (ids.includes(aiaiUserID)) {
+        if (ids.includes(process.env.SQS_USERID!)) {
             const body = {
                 mgl: pars.metaGame,
                 gameid: pars.id,
                 history: engine.state2aiai(),
             }
             const input: SendMessageRequest = {
-                QueueUrl: aiaiQueueURL,
+                QueueUrl: process.env.SQS_URL,
                 MessageBody: JSON.stringify(body),
             }
             const cmd = new SendMessageCommand(input);
@@ -5351,7 +5347,7 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
 }
 
 async function botManageChallenges() {
-    const userId = aiaiUserID;
+    const userId = process.env.SQS_USERID;
     try {
       console.log(`Getting USER record`);
       const userData = await ddbDocClient.send(
@@ -5388,7 +5384,7 @@ async function botManageChallenges() {
 
         // accept/reject challenge
         console.log(`About to ${accepted ? "accept" : "deny"} challenge ${challenge.sk}`)
-        await respondedChallenge(aiaiUserID, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame});
+        await respondedChallenge(process.env.SQS_USERID!, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame});
       }
 
     } catch (err) {
@@ -5709,14 +5705,14 @@ async function pingBot(userId: string, pars: {metaGame: string, gameid: string})
         } else {
             ids.push(game.players[parseInt(game.toMove as string, 10)].id);
         }
-        if (ids.includes(aiaiUserID)) {
+        if (ids.includes(process.env.SQS_USERID!)) {
             const body = {
                 mgl: pars.metaGame,
                 gameid: pars.gameid,
                 history: engine.state2aiai(),
             }
             const input: SendMessageRequest = {
-                QueueUrl: aiaiQueueURL,
+                QueueUrl: process.env.SQS_URL,
                 MessageBody: JSON.stringify(body),
             }
             const cmd = new SendMessageCommand(input);

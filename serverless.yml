@@ -33,9 +33,11 @@ params:
   dev:
     profile: AbstractPlayDev
     userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_2zrzbEjoU
+    sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue
   prod:
     profile: AbstractPlayProd
     userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_YCjgSZHJm
+    sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-prod-aiai-queue
 
 package:
   excludeDevDependencies: false
@@ -57,6 +59,8 @@ provider:
     TOTP_KEY: ${env:TOTP_KEY}
     VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
     VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
+    SQS_URL: ${param:sqsurl}
+    SQS_USERID: SkQfHAjeDxs8eeEnScuYA
     # TOTP_KEY: ${file(../apsecrets.yml):totp_key}
     # VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
     # VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
