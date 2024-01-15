@@ -2748,7 +2748,6 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     }
     const list: Promise<any>[] = [];
     let newRatings: {[metaGame: string] : Rating}[] | null = null;
-    let tournamentWork;
     if ((game.toMove === "" || game.toMove === null)) {
       newRatings = updateRatings(game, players);
       myGame.seen = Date.now();
@@ -2794,7 +2793,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         return formatReturnError('Unable to process submit move');
       }
       if (game.tournament !== undefined) {
-        tournamentWork = tournamentUpdates(game, players);
+        list.push(tournamentUpdates(game, players));
       }
     }
     game.lastMoveTime = timestamp;
@@ -2861,24 +2860,6 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     console.log("Scheduled emails");
 
     await realPingBot(game.metaGame, game.id, game);
-
-    if (tournamentWork !== undefined) {
-      const tournamentData = await tournamentWork;
-      console.log("tournamentData:", tournamentWork);
-      const tournament = tournamentData[tournamentData.length - 1].Attributes as Tournament;
-      console.log("tournament:", tournament);
-      let divisionCompleted = false;
-      for (const division of Object.values(tournament.divisions!)) {
-        if (division.numCompleted === division.numGames && !division.processed) {
-          divisionCompleted = true;
-          break;
-        }
-      }
-      if (divisionCompleted) {
-        console.log("division completed, processing tournament");
-        list.push(endTournament(tournament))
-      }
-    }
     await Promise.all(list);
     console.log("All updates complete");
     return {
@@ -2919,14 +2900,27 @@ async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
     ExpressionAttributeValues: { ":w": winner },
     UpdateExpression: "set #w = :w"
   })));
-  work.push(ddbDocClient.send(new UpdateCommand({
+  const tournamentData = await ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "TOURNAMENT", "sk": game.tournament },
     ExpressionAttributeNames: { "#d": "divisions", "#n": game.division!.toString() },
     ExpressionAttributeValues: { ":inc": 1 },
     UpdateExpression: "add #d.#n.numCompleted :inc",
     ReturnValues: "ALL_NEW"
-  })));
+  }));
+  const tournament = tournamentData.Attributes as Tournament;
+  console.log("tournament:", tournament);
+  let divisionCompleted = false;
+  for (const division of Object.values(tournament.divisions!)) {
+    if (division.numCompleted === division.numGames && !division.processed) {
+      divisionCompleted = true;
+      break;
+    }
+  }
+  if (divisionCompleted) {
+    console.log("division completed, processing tournament");
+    work.push(endTournament(tournament))
+  }
   return Promise.all(work);
 }
 
@@ -4488,20 +4482,6 @@ async function startTournament(tournament: Tournament) {
 }
 
 async function endTournament(tournament: Tournament) {
-  /*
-    const data = await ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "TOURNAMENT", "sk": tournamentid
-        },
-      }));
-    console.log("Got:");
-    console.log(data);
-    if (!data.Item)
-      throw new Error(`No tournament ${tournamentid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
-    const tournament = data.Item as Tournament;
-  */
   try {
     if (tournament.divisions) {
       const work: Promise<any>[] = [];
