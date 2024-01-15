@@ -2883,7 +2883,7 @@ async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
     } else if (game.winner?.length === 2) {
       score = 0.5;
     }
-    console.log(`player ${player.name} score ${score} in game ${game.id} from tournament ${game.tournament}`);
+    console.log(`player ${player.name} now has score ${score} in game ${game.id} from tournament ${game.tournament}`);
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTPLAYER", "sk": game.tournament + '#' + game.division!.toString() + '#' + player.id },
@@ -2909,7 +2909,6 @@ async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
     ReturnValues: "ALL_NEW"
   }));
   const tournament = tournamentData.Attributes as Tournament;
-  console.log("tournament:", tournament);
   let divisionCompleted = false;
   for (const division of Object.values(tournament.divisions!)) {
     if (division.numCompleted === division.numGames && !division.processed) {
@@ -3760,9 +3759,7 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
     if (tournamentNumber.Item !== undefined) {
       tournamentN = tournamentNumber.Item.count;
       available = tournamentNumber.Item.over;
-      console.log(`Found tournament ${sk} with count ${tournamentN} and over ${available}`);
-    } else {
-      console.log(`No tournament ${sk} found`);
+      // console.log(`Found tournament ${sk} with count ${tournamentN} and over ${available}`);
     }
   } catch (err) {
     logGetItemError(err);
@@ -3791,7 +3788,6 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
     console.log(err);
     return formatReturnError(`Unable to update TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   }
-  console.log(`Updated TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`)
   // Insert tournament
   const tournamentid = uuid();
   const data: Tournament = {
@@ -3810,7 +3806,6 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: data
     }));
-    console.log(`Inserted tournament ${tournamentid} for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   } catch (err) {
     handleCommonErrors(err as {code: any; message: any});
     return formatReturnError(`Unable to insert tournament for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
@@ -3939,7 +3934,6 @@ async function getTournaments() {
 }
 
 async function getOldTournaments(pars: { metaGame: string }) {
-  console.log(pars.metaGame);
   try {
     const tournamentsData = await ddbDocClient.send(
       new QueryCommand({
@@ -4059,7 +4053,6 @@ async function getTournament(pars: { tournamentid: string, metaGame: string }) {
   try {
     let work: Promise<any>[] = [];
     if (pars.metaGame === 'undefined') {
-      console.log("Getting tournament: " + pars.tournamentid);
       work.push(ddbDocClient.send(
         new QueryCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4095,7 +4088,6 @@ async function getTournament(pars: { tournamentid: string, metaGame: string }) {
       })
     ));
     const data = await Promise.all(work);
-    console.log("Got tournament data: " + JSON.stringify(data));
     if (pars.metaGame === 'undefined') {
       return {
         statusCode: 200,
@@ -4129,10 +4121,8 @@ async function startTournaments() {
       }));
     const tournaments = tournamentsData.Items as Tournament[];
     const now = Date.now();
-    // const oneWeek = 1000 * 60 * 60 * 24 * 7;
-    // const twoWeeks = oneWeek * 2;
-    const twoWeeks = 1000 * 60 * 5; // really 5 minutes. Just for testing!
-    const oneWeek = 1000 * 60 * 5; // really 5 minutes. Just for testing!
+    const oneWeek = 1000 * 60 * 60 * 24 * 7;
+    const twoWeeks = oneWeek * 2;
     for (const tournament of tournaments) {
       if (
         !tournament.started && now > tournament.dateCreated + twoWeeks
@@ -4175,12 +4165,10 @@ async function startTournament(tournament: Tournament) {
     logGetItemError(error);
     return formatReturnError(`Unable to get players for tournament ${tournament.id} from table ${process.env.ABSTRACT_PLAY_TABLE}. Error: ${error}`);
   }
-  console.log(playersData.Items);
   const players = playersData.Items as TournamentPlayer[];
   // Get players
   const playersFull = await getPlayers(players.map(p => p.playerid));
-  console.log(playersFull);
-  if (players.length < 3) {
+  if (players.length < 10) {
     // Cancel tournament
     // Delete tournament and tournament players
     const work: Promise<any>[] = [];
@@ -4260,13 +4248,10 @@ async function startTournament(tournament: Tournament) {
     const playersFull2: FullUser[] = [];
     for (let player of players)
       playersFull2.push(playersFull.find(p => p.id === player.playerid)!);
-    console.log("allGamePlayers");
-    console.log(allGamePlayers);
     // Create divisions
-    const numDivisions = Math.ceil(players.length / 3.0); // at most 10 players per division
+    const numDivisions = Math.ceil(players.length / 10.0); // at most 10 players per division
     const divisionSizeSmall = Math.floor(players.length / numDivisions);
     const numBigDivisions = players.length - divisionSizeSmall * numDivisions; // big divisions have one more player than small divisions!
-    console.log(`numDivisions: ${numDivisions}, divisionSizeSmall: ${divisionSizeSmall}, numBigDivisions: ${numBigDivisions}`);
     // Sort players into divisions by rating
     players.sort((a, b) => b.rating! - a.rating!);
     let division = 1;
@@ -4299,7 +4284,6 @@ async function startTournament(tournament: Tournament) {
           return formatReturnError(`Unable to delete player ${player.playerid} from tournament ${tournament.id} with division 1. Error ${error}`);
         }
       }
-      console.log(`Player ${player.playername} in division ${division}`);
       count++;
       if ((division > numBigDivisions && count === divisionSizeSmall) || (division <= numBigDivisions && count === divisionSizeSmall + 1)) {
         division++;
@@ -4399,7 +4383,6 @@ async function startTournament(tournament: Tournament) {
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Item: tournamentGame
           })));
-          console.log(`Game ${gameId} created between ${gamePlayers[0].name} and ${gamePlayers[1].name}`);
           // Update players
           playersFull2[player1].games.push(game);
           updatedGameIDs[player1].push(game.id);
@@ -4453,7 +4436,6 @@ async function startTournament(tournament: Tournament) {
       logGetItemError(error);
       return formatReturnError(`Unable to insert new tournament ${newTournamentid}. Error: ${error}`);
     }
-    console.log(`Next tournament ${tournament.id} openened for sign-up`);
     // Send e-mails to participants
     await initi18n('en');
     const metaGameName = gameinfo.get(tournament.metaGame)?.name;
@@ -4478,7 +4460,6 @@ async function startTournament(tournament: Tournament) {
       }));
     }
     await Promise.all(work);
-    console.log("Tournament started");
     return true;
   }
 }
@@ -4513,11 +4494,7 @@ async function endTournament(tournament: Tournament) {
             })));
           const [gamesData, playersData] = await Promise.all(work2);
           const gamelist = gamesData.Items as TournamentGame[];
-          console.log("Got games:");
-          console.log(gamelist);
           const players = playersData.Items as TournamentPlayer[];
-          console.log("Got players:");
-          console.log(players);
           var tournamentPlayers: Map<string, TournamentPlayer> = new Map();
           for (let i = 0; i < players.length; i++) {
             players[i].tiebreak = 0;
@@ -4567,7 +4544,6 @@ async function endTournament(tournament: Tournament) {
           let bestPlayer = '';
           let bestPlayerName = '';
           for (const player of players) {
-            console.log(`Player ${player.playername} score ${player.score} tiebreak ${player.tiebreak} rating ${player.rating}`)
             if (player.score! > bestScore) {
               bestScore = player.score!;
               bestTiebreak = player.tiebreak!;
