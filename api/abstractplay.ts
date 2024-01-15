@@ -3945,6 +3945,7 @@ async function getTournaments() {
 }
 
 async function getOldTournaments(pars: { metaGame: string }) {
+  console.log(pars.metaGame);
   try {
     const tournamentsData = await ddbDocClient.send(
       new QueryCommand({
@@ -4060,38 +4061,58 @@ async function archiveTournament(tournament: Tournament) {
   }
 }
 
-async function getTournament(pars: { tournamentid: string }) {
+async function getTournament(pars: { tournamentid: string, old: boolean }) {
   try {
-    const tournamentsDataPromise = ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        ExpressionAttributeValues: { ":pk": "TOURNAMENT", ":sk": pars.tournamentid },
-        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        KeyConditionExpression: "#pk = :pk and #sk = :sk",
-      })
-    );
-    const tournamentPlayersDataPromise = ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": pars.tournamentid + '#' },
-        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-      })
-    );
-    const tournamentGamessDataPromise = ddbDocClient.send(
+    let work: Promise<any>[] = [];
+    if (!pars.old) {
+      work.push(ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          ExpressionAttributeValues: { ":pk": "TOURNAMENT", ":sk": pars.tournamentid },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+          KeyConditionExpression: "#pk = :pk and #sk = :sk",
+        })
+      ));
+      work.push(ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": pars.tournamentid + '#' },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+          KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        })
+      ));
+    } else {
+      work.push(ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          ExpressionAttributeValues: { ":pk": "COMPLETEDTOURNAMENT", ":sk": pars.tournamentid },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+          KeyConditionExpression: "#pk = :pk and #sk = :sk",
+        })
+      ));
+    }
+    work.push(ddbDocClient.send(
       new QueryCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": pars.tournamentid + '#' },
         ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
         KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
       })
-    );
-    const [tournamentsData, tournamentPlayersData, tournamentGamesData] = await Promise.all([tournamentsDataPromise, tournamentPlayersDataPromise, tournamentGamessDataPromise]);
-    return {
-      statusCode: 200,
-      body: JSON.stringify({tournament: tournamentsData.Items, tournamentPlayers: tournamentPlayersData.Items, tournamentGames: tournamentGamesData.Items}),
-      headers
-    };
+    ));
+    const data = await Promise.all(work);
+    if (!pars.old) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({tournament: data[0].Items, tournamentPlayers: data[1].Items, tournamentGames: data[2].Items}),
+        headers
+      };
+    } else {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({tournament: data[0].Items, tournamentPlayers: [], tournamentGames: data[1].Items}),
+        headers
+      };
+    }
   }
   catch (error) {
     logGetItemError(error);
