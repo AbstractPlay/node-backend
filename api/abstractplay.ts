@@ -1966,7 +1966,7 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
     if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
         await changeLanguageForPlayer(player);
         if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { "challenger": challengerName, metaGame, "interpolation": {"escapeValue": false} }));
+            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { "challenger": challengerName, metaGame }));
             work.push(sesClient.send(comm));
         } else {
             console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
@@ -1976,7 +1976,7 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.challenged"),
-            body: i18n.t("ChallengeBody", { "challenger": challengerName, metaGame, "interpolation": {"escapeValue": false} }),
+            body: i18n.t("ChallengeBody", { "challenger": challengerName, metaGame }),
             url: "/",
         }));
     } else {
@@ -2009,7 +2009,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
         await changeLanguageForPlayer(player);
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}));
                 work.push(sesClient.send(comm));
             } else {
                 console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
@@ -2022,7 +2022,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.revoked"),
-            body: i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}),
+            body: i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}),
             url: "/",
         }));
       }
@@ -2034,7 +2034,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
         await changeLanguageForPlayer(player);
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}));
                 work.push(sesClient.send(comm));
                     } else {
                 console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
@@ -2047,7 +2047,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.revoked"),
-            body: i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}),
+            body: i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}),
             url: "/",
         }));
       }
@@ -2098,7 +2098,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
                 if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameStart) ) {
                     console.log(player);
-                    let body = i18n.t("GameStartedBody", { metaGame: email.metaGame, "interpolation": {"escapeValue": false} });
+                    let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
                     if (ind === 0 || email.simultaneous) {
                       body += " " + i18n.t("YourMove");
                     }
@@ -2111,7 +2111,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
                 console.log(`No verified email address found for ${player.name} (${player.id})`);
             }
             // push notifications are sent no matter what
-            let body = i18n.t("GameStartedBody", { metaGame: email.metaGame, "interpolation": {"escapeValue": false} });
+            let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
             if (ind === 0 || email.simultaneous) {
                 body += " " + i18n.t("YourMove");
               }
@@ -2158,7 +2158,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
         await changeLanguageForPlayer(player);
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame, "interpolation": {"escapeValue": false} }));
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame }));
                 work.push(sesClient.send(comm));
             } else {
                 console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
@@ -2171,7 +2171,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.declined"),
-            body: i18n.t("ChallengeRejectedBody", { quitter, metaGame, "interpolation": {"escapeValue": false} }),
+            body: i18n.t("ChallengeRejectedBody", { quitter, metaGame }),
             url: "/",
         }));
       }
@@ -3005,7 +3005,7 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
           userId: player.id,
           topic: "yourturn",
           title: i18n.t("PUSH.titles.yourturn"),
-          body: i18n.t("YourMoveBody", { metaGame, "interpolation": {"escapeValue": false} }),
+          body: i18n.t("YourMoveBody", { metaGame }),
           url: `/move/${game.metaGame}/0/${game.id}`,
       }));
     }
@@ -3043,7 +3043,7 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
         body.push(i18n.t("GameOverResult", {context: result}));
         //   - Rating, if applicable
         if (newRatings != null) {
-            body.push(i18n.t("GameOverRating", {"rating" : `${Math.round(newRatings[ind][game.metaGame].rating)}`, "interpolation": {"escapeValue": false} }));
+            body.push(i18n.t("GameOverRating", {"rating" : `${Math.round(newRatings[ind][game.metaGame].rating)}` }));
         }
         //   - Final scores, if applicable
         if (scores.length > 0) {
