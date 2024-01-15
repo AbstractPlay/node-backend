@@ -4061,7 +4061,7 @@ async function archiveTournament(tournament: Tournament) {
   }
 }
 
-async function getTournament(pars: { tournamentid: string, old: boolean }) {
+async function getTournament(pars: { tournamentid: string, metaGame: string, old: boolean }) {
   try {
     let work: Promise<any>[] = [];
     if (!pars.old) {
@@ -4085,7 +4085,7 @@ async function getTournament(pars: { tournamentid: string, old: boolean }) {
       work.push(ddbDocClient.send(
         new QueryCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
-          ExpressionAttributeValues: { ":pk": "COMPLETEDTOURNAMENT", ":sk": pars.tournamentid },
+          ExpressionAttributeValues: { ":pk": "COMPLETEDTOURNAMENT", ":sk": pars.metaGame + '#' + pars.tournamentid },
           ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
           KeyConditionExpression: "#pk = :pk and #sk = :sk",
         })
