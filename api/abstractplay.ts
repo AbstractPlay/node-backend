@@ -5359,13 +5359,54 @@ async function botManageChallenges() {
         // accept/reject challenge
         console.log(`About to ${accepted ? "accept" : "deny"} challenge ${challenge.sk}`)
         await respondedChallenge(process.env.SQS_USERID!, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame});
-
-        // if it's your turn, get started
       }
-
     } catch (err) {
       logGetItemError(err);
       return formatReturnError(`Unable to manage bot challenges: ${err}`);
+    }
+
+    // now get list of games where it's your turn and make moves
+    // have to refetch, sadly!
+    // but check for bot's turn early to avoid unnecessary refetches
+    try {
+        console.log(`Getting USER record`);
+        const userData = await ddbDocClient.send(
+          new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "USER",
+              "sk": userId
+            },
+          }));
+        if (userData.Item === undefined) {
+          throw new Error("Could not find a USER record for the AiAi bot");
+        }
+        const user = userData.Item as FullUser;
+        let games: Game[] = user.games;
+        if (games === undefined)
+          games= [];
+
+        for (const game of games) {
+            const info = gameinfo.get(game.metaGame);
+            if (game.toMove !== null && game.toMove !== "") {
+                const ids: string[] = [];
+                if (info.flags.includes("simultaneous")) {
+                    for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
+                        if (game.toMove[i]) {
+                            ids.push(game.players[i].id);
+                        }
+                    }
+                } else {
+                    ids.push(game.players[parseInt(game.toMove as string, 10)].id);
+                }
+                if (ids.includes(process.env.SQS_USERID!)) {
+                    await realPingBot(game.metaGame, game.id);
+                }
+            }
+        }
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to manage bot challenges: ${err}`);
     }
 }
 
