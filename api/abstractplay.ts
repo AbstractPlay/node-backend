@@ -4059,6 +4059,7 @@ async function getTournament(pars: { tournamentid: string, metaGame: string, old
   try {
     let work: Promise<any>[] = [];
     if (!pars.old) {
+      console.log("Getting tournament: " + pars.tournamentid);
       work.push(ddbDocClient.send(
         new QueryCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4094,6 +4095,7 @@ async function getTournament(pars: { tournamentid: string, metaGame: string, old
       })
     ));
     const data = await Promise.all(work);
+    console.log("Got tournament data: " + JSON.stringify(data));
     if (!pars.old) {
       return {
         statusCode: 200,
