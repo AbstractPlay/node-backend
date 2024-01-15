@@ -4058,8 +4058,7 @@ async function archiveTournament(tournament: Tournament) {
 async function getTournament(pars: { tournamentid: string, metaGame: string }) {
   try {
     let work: Promise<any>[] = [];
-    console.log("pars: ", pars);
-    if (pars.metaGame === undefined) {
+    if (pars.metaGame === 'undefined') {
       console.log("Getting tournament: " + pars.tournamentid);
       work.push(ddbDocClient.send(
         new QueryCommand({
@@ -4097,7 +4096,7 @@ async function getTournament(pars: { tournamentid: string, metaGame: string }) {
     ));
     const data = await Promise.all(work);
     console.log("Got tournament data: " + JSON.stringify(data));
-    if (pars.metaGame === undefined) {
+    if (pars.metaGame === 'undefined') {
       return {
         statusCode: 200,
         body: JSON.stringify({tournament: data[0].Items, tournamentPlayers: data[1].Items, tournamentGames: data[2].Items}),
