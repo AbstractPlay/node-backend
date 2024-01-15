@@ -3,11 +3,13 @@
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
+import { SQSClient, SendMessageCommand, SendMessageRequest } from "@aws-sdk/client-sqs";
 // import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush, { RequestOptions } from "web-push";
+import { validateToken } from '@sunknudsen/totp';
 import i18n from 'i18next';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
@@ -15,6 +17,7 @@ import it from '../locales/it/apback.json';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
+const sqsClient = new SQSClient({ region: REGION });
 const clnt = new DynamoDBClient({ region: REGION });
 const marshallOptions = {
   // Whether to automatically convert empty strings, blobs, and sets to `null`.
@@ -228,6 +231,14 @@ type Exploration = {
   outcome?: number; // Optional. 0 for player1 win, 1 for player2 win, -1 for undecided.
 };
 
+type Division = {
+  numGames: number;
+  numCompleted: number;
+  processed: boolean;
+  winnerid?: string;
+  winner?: string;
+};
+
 type Tournament = {
   pk: string;
   sk: string;
@@ -242,8 +253,9 @@ type Tournament = {
   dateStarted?: number;
   dateEnded?: number;
   divisions?: {
-    [division: number]: {numGames: number, numCompleted: number, processed: boolean, winnerid?: string, winner?: string}
+    [division: number]: Division;
   };
+  players?: TournamentPlayer[]; // only on archived tournaments
 };
 
 type TournamentPlayer = {
@@ -263,7 +275,7 @@ type TournamentGame = {
   gameid: string;
   player1: string;
   player2: string;
-  winner?: number[];
+  winner?: string[];
 };
 
 type TagList = {
@@ -309,14 +321,18 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return await game("", pars);
     case "get_public_exploration":
       return await getPublicExploration(pars);
+    case "bot_move":
+      return await botMove(pars);
     case "get_tournaments":
       return await getTournaments();
+    case "get_old_tournaments":
+      return await getOldTournaments(pars);
     case "get_tournament":
       return await getTournament(pars);
     case "start_tournaments":
       return await startTournaments();
-    case "end_tournament":
-      return await endTournament(pars);
+    case "archive_tournaments":
+      return await archiveTournaments();
     default:
       return {
         statusCode: 500,
@@ -403,6 +419,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await joinTournament(event.cognitoPoolClaims.sub, pars);
     case "withdraw_tournament":
       return await withdrawTournament(event.cognitoPoolClaims.sub, pars);
+    case "ping_bot":
+      return await pingBot(event.cognitoPoolClaims.sub, pars);
     case "onetime_fix":
       return await onetimeFix(event.cognitoPoolClaims.sub);
     case "test_push":
@@ -441,6 +459,13 @@ async function userNames() {
     if (users == undefined) {
       throw new Error("Found no users?");
     }
+
+    // tweak bot info
+    const idx = users.findIndex(u => u.sk === process.env.SQS_USERID);
+    if (idx !== -1) {
+        users[idx].lastSeen = Date.now();
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify(users.map(u => ({"id": u.sk, "name": u.name, "country": u.country, "stars": u.stars, "lastSeen": u.lastSeen}))),
@@ -1858,6 +1883,16 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
   try {
     await Promise.all(list);
     console.log("Successfully added challenge" + challengeId);
+
+    // If the bot is challenged, trigger its challenge mgmt code here
+    if (challenge.challengees !== undefined) {
+        const idx = challenge.challengees.findIndex(u => u.id === process.env.SQS_USERID);
+        if (idx !== -1) {
+            console.log("Triggering bot management code");
+            await botManageChallenges();
+        }
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -2713,6 +2748,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     }
     const list: Promise<any>[] = [];
     let newRatings: {[metaGame: string] : Rating}[] | null = null;
+    let tournamentWork;
     if ((game.toMove === "" || game.toMove === null)) {
       newRatings = updateRatings(game, players);
       myGame.seen = Date.now();
@@ -2758,7 +2794,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         return formatReturnError('Unable to process submit move');
       }
       if (game.tournament !== undefined) {
-        list.push(tournamentUpdates(game, players));
+        tournamentWork = tournamentUpdates(game, players);
       }
     }
     game.lastMoveTime = timestamp;
@@ -2823,6 +2859,26 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
 
     list.push(sendSubmittedMoveEmails(game, players, simultaneous, newRatings));
     console.log("Scheduled emails");
+
+    await realPingBot(game.metaGame, game.id, game);
+
+    if (tournamentWork !== undefined) {
+      const tournamentData = await tournamentWork;
+      console.log("tournamentData:", tournamentWork);
+      const tournament = tournamentData[tournamentData.length - 1].Attributes as Tournament;
+      console.log("tournament:", tournament);
+      let divisionCompleted = false;
+      for (const division of Object.values(tournament.divisions!)) {
+        if (division.numCompleted === division.numGames && !division.processed) {
+          divisionCompleted = true;
+          break;
+        }
+      }
+      if (divisionCompleted) {
+        console.log("division completed, processing tournament");
+        list.push(endTournament(tournament))
+      }
+    }
     await Promise.all(list);
     console.log("All updates complete");
     return {
@@ -2846,6 +2902,7 @@ async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
     } else if (game.winner?.length === 2) {
       score = 0.5;
     }
+    console.log(`player ${player.name} score ${score} in game ${game.id} from tournament ${game.tournament}`);
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTPLAYER", "sk": game.tournament + '#' + game.division!.toString() + '#' + player.id },
@@ -2867,7 +2924,8 @@ async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
     Key: { "pk": "TOURNAMENT", "sk": game.tournament },
     ExpressionAttributeNames: { "#d": "divisions", "#n": game.division!.toString() },
     ExpressionAttributeValues: { ":inc": 1 },
-    UpdateExpression: "add #d.#n.numCompleted :inc"
+    UpdateExpression: "add #d.#n.numCompleted :inc",
+    ReturnValues: "ALL_NEW"
   })));
   return Promise.all(work);
 }
@@ -3644,6 +3702,52 @@ async function getPublicExploration(pars: { game: string }) {
   };
 }
 
+async function botMove(pars: {uid: string, token: string, metaGame: string, gameid: string, move: string}) {
+    // validate token
+    try {
+        if (! validateToken(process.env.TOTP_KEY as string, pars.token, 1)) {
+            return formatReturnError(`Invalid token provided: ${JSON.stringify(pars)}`);
+        }
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Something went wrong while validating the token: ${JSON.stringify(pars)}`);
+    }
+
+    // fetch game record and state
+    let game: FullGame|undefined;
+    try {
+        const data = await ddbDocClient.send(
+          new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "GAME",
+              "sk": pars.metaGame + "#0#" + pars.gameid
+            },
+          }));
+        if (!data.Item)
+          throw new Error(`No game ${pars.metaGame + "#0#" + pars.gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+        game = data.Item as FullGame;
+    }
+    catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to load game ${pars.gameid} to make a bot move`);
+    }
+
+    // instantiate game object
+    if (game === undefined) {
+        throw new Error("Unable to load game object");
+    }
+    const engine = GameFactory(pars.metaGame, game.state);
+    if (!engine)
+      throw new Error(`Unknown metaGame ${pars.metaGame}`);
+
+    // translate move
+    const realmove = engine.translateAiai(pars.move);
+
+    // apply move
+    return await submitMove(pars.uid, {id: pars.gameid, move: realmove, metaGame: pars.metaGame, cbit: 0, draw: ""});
+}
+
 async function newTournament(userid: string, pars: { metaGame: string, variants: string[] }) {
   const variantsKey = pars.variants.sort().join("|");
   const sk = pars.metaGame + "#" + variantsKey;
@@ -3840,6 +3944,122 @@ async function getTournaments() {
   }
 }
 
+async function getOldTournaments(pars: { metaGame: string }) {
+  try {
+    const tournamentsData = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        ExpressionAttributeValues: { ":pk": "COMPLETEDTOURNAMENT", ":sk": pars.metaGame + '#' },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+      }));
+    return {
+      statusCode: 200,
+      body: JSON.stringify({tournaments: tournamentsData.Items}),
+      headers
+    };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get tournaments from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+}
+
+async function archiveTournaments() {
+  try {
+    const tournamentsData = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "TOURNAMENT" },
+        ExpressionAttributeNames: { "#pk": "pk" }
+      }));
+    // Check for "old" tournaments and "archive" them. Old = the next one already ended or ended more than 6 months ago.
+    let latestCompleted: Map<string, number> = new Map();
+    for (const tournament of tournamentsData.Items as Tournament[]) {
+      if (tournament.dateEnded !== undefined) {
+        const key = tournament.metaGame + "#" + tournament.variants.sort().join("|");
+        let latest = latestCompleted.get(key);
+        if (latest === undefined || tournament.dateEnded > latest) {
+          latestCompleted.set(key, tournament.dateEnded);
+        }
+      }
+    }
+    const now = Date.now();
+    const work: Promise<any>[] = [];
+    let list: string[] = [];
+    for (const tournament of tournamentsData.Items as Tournament[]) {
+      if (tournament.dateEnded !== undefined) {
+        const key = tournament.metaGame + "#" + tournament.variants.sort().join("|");
+        if (tournament.dateEnded < latestCompleted.get(key)! || tournament.dateEnded < now - 1000 * 60 * 60 * 24 * 30 * 60) {
+          work.push(archiveTournament(tournament));
+          list.push(tournament.id);
+        }
+      }
+    };
+    await Promise.all(work);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({message: "Archived old tournaments: " + list.join(", ")}),
+      headers
+    };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get tournaments from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+}
+
+async function archiveTournament(tournament: Tournament) {
+  try {
+    // Now that player won't change anymore, just add them to the tournament record and (more importantly) get them out of the TOURNAMENTPLAYER list
+    const tournamentPlayersData = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournament.id + '#' },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+      })
+    );
+    const players = tournamentPlayersData.Items as TournamentPlayer[];
+    // add archive (by metaGame)
+    tournament.pk = "COMPLETEDTOURNAMENT";
+    tournament.sk = tournament.metaGame + "#" + tournament.id;
+    tournament.players = players;
+    const work: Promise<any>[] = [];
+    work.push(ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: tournament
+      })));
+    // delete tournament
+    work.push(ddbDocClient.send(
+      new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "TOURNAMENT",
+          "sk": tournament.id
+        },
+      })
+    ));
+    // and tournament players
+    for (const player of players) {
+      work.push(ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "TOURNAMENTPLAYER",
+            "sk": player.sk
+          },
+        })
+      ));
+    }
+    return Promise.all(work);
+  }
+  catch (error) {
+    logGetItemError(error);
+  }
+}
+
 async function getTournament(pars: { tournamentid: string }) {
   try {
     const tournamentsDataPromise = ddbDocClient.send(
@@ -3892,9 +4112,10 @@ async function startTournaments() {
       }));
     const tournaments = tournamentsData.Items as Tournament[];
     const now = Date.now();
-    const oneWeek = 1000 * 60 * 60 * 24 * 7;
+    // const oneWeek = 1000 * 60 * 60 * 24 * 7;
     // const twoWeeks = oneWeek * 2;
     const twoWeeks = 1000 * 60 * 5; // really 5 minutes. Just for testing!
+    const oneWeek = 1000 * 60 * 5; // really 5 minutes. Just for testing!
     for (const tournament of tournaments) {
       if (
         !tournament.started && now > tournament.dateCreated + twoWeeks
@@ -3942,7 +4163,7 @@ async function startTournament(tournament: Tournament) {
   // Get players
   const playersFull = await getPlayers(players.map(p => p.playerid));
   console.log(playersFull);
-  if (players.length < 5) {
+  if (players.length < 3) {
     // Cancel tournament
     // Delete tournament and tournament players
     const work: Promise<any>[] = [];
@@ -4025,7 +4246,7 @@ async function startTournament(tournament: Tournament) {
     console.log("allGamePlayers");
     console.log(allGamePlayers);
     // Create divisions
-    const numDivisions = Math.ceil(players.length / 10.0); // at most 10 players per division
+    const numDivisions = Math.ceil(players.length / 3.0); // at most 10 players per division
     const divisionSizeSmall = Math.floor(players.length / numDivisions);
     const numBigDivisions = players.length - divisionSizeSmall * numDivisions; // big divisions have one more player than small divisions!
     console.log(`numDivisions: ${numDivisions}, divisionSizeSmall: ${divisionSizeSmall}, numBigDivisions: ${numBigDivisions}`);
@@ -4245,8 +4466,8 @@ async function startTournament(tournament: Tournament) {
   }
 }
 
-async function endTournament(tournamentid: string) {
-  try {
+async function endTournament(tournament: Tournament) {
+  /*
     const data = await ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4259,6 +4480,8 @@ async function endTournament(tournamentid: string) {
     if (!data.Item)
       throw new Error(`No tournament ${tournamentid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
     const tournament = data.Item as Tournament;
+  */
+  try {
     if (tournament.divisions) {
       const work: Promise<any>[] = [];
       let alldone = true;
@@ -4274,20 +4497,24 @@ async function endTournament(tournamentid: string) {
             new QueryCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-              ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": tournamentid + '#' + division + '#' },
+              ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": tournament.id + '#' + divisionNumber + '#' },
               ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
             })));
           // And players (we need the ratings at the start of the tournament)
           work2.push(ddbDocClient.send(
             new QueryCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
-              ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournamentid + '#' + division + '#' },
+              ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournament.id + '#' + divisionNumber + '#' },
               ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
               KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
             })));
           const [gamesData, playersData] = await Promise.all(work2);
           const gamelist = gamesData.Items as TournamentGame[];
+          console.log("Got games:");
+          console.log(gamelist);
           const players = playersData.Items as TournamentPlayer[];
+          console.log("Got players:");
+          console.log(players);
           var tournamentPlayers: Map<string, TournamentPlayer> = new Map();
           for (let i = 0; i < players.length; i++) {
             players[i].tiebreak = 0;
@@ -4298,10 +4525,8 @@ async function endTournament(tournamentid: string) {
             if (game.winner?.length === 2) {
               tournamentPlayers.get(game.player1)!.score! += 0.5;
               tournamentPlayers.get(game.player2)!.score! += 0.5;
-            } else if (game.winner![0] === 1) {
-              tournamentPlayers.get(game.player1)!.score! += 1;
             } else {
-              tournamentPlayers.get(game.player2)!.score! += 1;
+              tournamentPlayers.get(game.winner![0])!.score! += 1;
             }
           }
           const n = tournamentPlayers.size;
@@ -4324,7 +4549,7 @@ async function endTournament(tournamentid: string) {
             if (game.winner?.length === 2) {
               tournamentPlayers.get(game.player1)!.tiebreak! += (tournamentPlayers.get(game.player2)!.score! - 1) / 2;
               tournamentPlayers.get(game.player2)!.tiebreak! += (tournamentPlayers.get(game.player1)!.score! - 1) / 2;
-            } else if (game.winner![0] === 1) {
+            } else if (game.winner![0] === game.player1) {
               tournamentPlayers.get(game.player1)!.tiebreak! += n / 2 - 1;
               tournamentPlayers.get(game.player2)!.tiebreak! += tournamentPlayers.get(game.player1)!.score! - n / 2;
             } else {
@@ -4339,6 +4564,7 @@ async function endTournament(tournamentid: string) {
           let bestPlayer = '';
           let bestPlayerName = '';
           for (const player of players) {
+            console.log(`Player ${player.playername} score ${player.score} tiebreak ${player.tiebreak} rating ${player.rating}`)
             if (player.score! > bestScore) {
               bestScore = player.score!;
               bestTiebreak = player.tiebreak!;
@@ -4364,7 +4590,15 @@ async function endTournament(tournamentid: string) {
           division.winnerid = bestPlayer;
           division.winner = bestPlayerName;
           // Update tournament players
-
+          for (const player of players) {
+            work.push(ddbDocClient.send(new UpdateCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Key: { "pk": "TOURNAMENTPLAYER", "sk": `${tournament.id}#${divisionNumber}#${player.playerid}` },
+              ExpressionAttributeNames: { "#t": "tiebreak" },
+              ExpressionAttributeValues: { ":t": player.tiebreak },
+              UpdateExpression: "set #t = :t"
+            })));
+          }
           tournamentUpdated = true;
         }
       }
@@ -4405,15 +4639,16 @@ async function endTournament(tournamentid: string) {
           // And, in fact, full players (just for e-mail!? and language... Don't want to put these in the tournament player because then those will have to be maintained if e-mail or language changes)
           const playersFull = await getPlayers(players.map(p => p.playerid));
           await initi18n('en');
+          const metaGameName = gameinfo.get(tournament.metaGame)?.name;
           for (const player of playersFull) {
             await changeLanguageForPlayer(player);
             let body = '';
             if (tournament.variants.length === 0)
-              body = i18n.t("TournamentEndBody", { "metaGame": tournament.metaGame, "number": tournament.number });
+              body = i18n.t("TournamentEndBody", { "metaGame": metaGameName, "number": tournament.number });
             else
-              body = i18n.t("TournamentEndBodyVariants", { "metaGame": tournament.metaGame, "number": tournament.number, "variants": tournament.variants.join(", ") });
+              body = i18n.t("TournamentEndBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-              const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject"), body);
+              const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName }), body);
               work.push(sesClient.send(comm));
             }
           }
@@ -4423,7 +4658,7 @@ async function endTournament(tournamentid: string) {
   }
   catch (error) {
     logGetItemError(error);
-    return formatReturnError(`Error during update tournament ${tournamentid}: {error}`);
+    return formatReturnError(`Error during update tournament ${tournament.id}: {error}`);
   }
   return {
     statusCode: 200,
@@ -5085,6 +5320,96 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
     };
 }
 
+async function botManageChallenges() {
+    const userId = process.env.SQS_USERID;
+    try {
+      console.log(`Getting USER record`);
+      const userData = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "USER",
+            "sk": userId
+          },
+        }));
+      if (userData.Item === undefined) {
+        throw new Error("Could not find a USER record for the AiAi bot");
+      }
+      const user = userData.Item as FullUser;
+      let games = user.games;
+      if (games === undefined)
+        games= [];
+
+      console.log(`Fetching challenges`);
+      const challengesReceivedIDs: string[] = user?.challenges?.received ?? [];
+      const data = await getChallenges(challengesReceivedIDs);
+      const challengesReceived = data.map(r => r.Item as FullChallenge);
+      console.log(`Got the following challenges:\n${JSON.stringify(challengesReceived, null, 2)}`);
+
+      // process each challenge and accept/reject as appropriate
+      for (const challenge of challengesReceived) {
+        let accepted = false;
+        // the overall meta must be supported
+        const info = gameinfo.get(challenge.metaGame);
+        if (info?.flags.includes("aiai")) {
+            accepted = true;
+        }
+        // add any variant exceptions here too
+
+        // accept/reject challenge
+        console.log(`About to ${accepted ? "accept" : "deny"} challenge ${challenge.sk}`)
+        await respondedChallenge(process.env.SQS_USERID!, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame});
+      }
+    } catch (err) {
+      logGetItemError(err);
+      return formatReturnError(`Unable to manage bot challenges: ${err}`);
+    }
+
+    // now get list of games where it's your turn and make moves
+    // have to refetch, sadly!
+    // but check for bot's turn early to avoid unnecessary refetches
+    try {
+        console.log(`Getting USER record`);
+        const userData = await ddbDocClient.send(
+          new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "USER",
+              "sk": userId
+            },
+          }));
+        if (userData.Item === undefined) {
+          throw new Error("Could not find a USER record for the AiAi bot");
+        }
+        const user = userData.Item as FullUser;
+        let games: Game[] = user.games;
+        if (games === undefined)
+          games= [];
+
+        for (const game of games) {
+            const info = gameinfo.get(game.metaGame);
+            if (game.toMove !== null && game.toMove !== "") {
+                const ids: string[] = [];
+                if (info.flags.includes("simultaneous")) {
+                    for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
+                        if (game.toMove[i]) {
+                            ids.push(game.players[i].id);
+                        }
+                    }
+                } else {
+                    ids.push(game.players[parseInt(game.toMove as string, 10)].id);
+                }
+                if (ids.includes(process.env.SQS_USERID!)) {
+                    await realPingBot(game.metaGame, game.id);
+                }
+            }
+        }
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to manage bot challenges: ${err}`);
+    }
+}
+
 async function onetimeFix(userId: string) {
   // Make sure people aren't getting clever
   try {
@@ -5329,6 +5654,99 @@ async function testAsync(userId: string, pars: { N: number; }) {
     logGetItemError(err);
     return formatReturnError(`Unable to test_async ${userId}`);
   }
+}
+
+async function pingBot(userId: string, pars: {metaGame: string, gameid: string}) {
+    // Make sure people aren't getting clever
+    try {
+      const user = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "USER",
+            "sk": userId
+          },
+        })
+      );
+      if (user.Item === undefined || user.Item.admin !== true) {
+        return {
+          statusCode: 200,
+          body: JSON.stringify({}),
+          headers
+        };
+      }
+    } catch (err) {
+          logGetItemError(err);
+          return formatReturnError(`Unable to testPush ${userId}`);
+    }
+
+    await realPingBot(pars.metaGame, pars.gameid);
+
+    return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+    };
+}
+
+async function realPingBot(metaGame: string, gameid: string, game?: FullGame) {
+    // fetch game record and state
+    if (game === undefined) {
+        try {
+            const data = await ddbDocClient.send(
+              new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                  "pk": "GAME",
+                  "sk": metaGame + "#0#" + gameid
+                },
+              }));
+            if (!data.Item)
+              throw new Error(`No game ${metaGame + "#0#" + gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+            game = data.Item as FullGame;
+        }
+        catch (error) {
+            logGetItemError(error);
+            return formatReturnError(`Unable to load game ${gameid} to make a bot move`);
+        }
+    }
+
+    // instantiate game object
+    if (game === undefined) {
+        throw new Error("Unable to load game object");
+    }
+    const engine = GameFactory(metaGame, game.state);
+    if (!engine)
+      throw new Error(`Unknown metaGame ${metaGame}`);
+    const info = gameinfo.get(metaGame);
+
+    // notify AiAi bot, if necessary
+    // get list of userIDs whose turn it is
+    if (! engine.gameover) {
+        const ids: string[] = [];
+        if (info.flags.includes("simultaneous")) {
+            for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
+                if (game.toMove[i]) {
+                    ids.push(game.players[i].id);
+                }
+            }
+        } else {
+            ids.push(game.players[parseInt(game.toMove as string, 10)].id);
+        }
+        if (ids.includes(process.env.SQS_USERID!)) {
+            const body = {
+                mgl: metaGame,
+                gameid: gameid,
+                history: engine.state2aiai(),
+            }
+            const input: SendMessageRequest = {
+                QueueUrl: process.env.SQS_URL,
+                MessageBody: JSON.stringify(body),
+            }
+            const cmd = new SendMessageCommand(input);
+            await sqsClient.send(cmd);
+        }
+    }
 }
 
 function makeWork() {

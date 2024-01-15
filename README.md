@@ -88,7 +88,7 @@ All data is in a single table. The primary key (or the first part of the primary
 
 - **Completed Tournaments** List of completed tournaments.
   * pk: COMPLETEDTOURNAMENT
-  * sk: \<tournamentid\>
+  * sk: \<metaGame\>#\<tournamentid\>
 
 - **Tournament count** Counter for tournaments. Each metaGame + variants combination gets a count. Variants is a pipe delimited concatenation of (sorted) variations.
   * pk: TOURNAMENTSCOUNTER
