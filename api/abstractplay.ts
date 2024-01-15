@@ -1884,7 +1884,7 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
     await Promise.all(list);
     console.log("Successfully added challenge" + challengeId);
 
-    // TODO: If the bot is challenged, trigger its challenge mgmt code here
+    // If the bot is challenged, trigger its challenge mgmt code here
     if (challenge.challengees !== undefined) {
         const idx = challenge.challengees.findIndex(u => u.id === process.env.SQS_USERID);
         if (idx !== -1) {
@@ -2860,33 +2860,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     list.push(sendSubmittedMoveEmails(game, players, simultaneous, newRatings));
     console.log("Scheduled emails");
 
-    // notify AiAi bot, if necessary
-    // get list of userIDs whose turn it is
-    if (! engine.gameover) {
-        const ids: string[] = [];
-        if (simultaneous) {
-            for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
-                if (game.toMove[i]) {
-                    ids.push(players[i].id);
-                }
-            }
-        } else {
-            ids.push(players[parseInt(game.toMove as string, 10)].id);
-        }
-        if (ids.includes(process.env.SQS_USERID!)) {
-            const body = {
-                mgl: pars.metaGame,
-                gameid: pars.id,
-                history: engine.state2aiai(),
-            }
-            const input: SendMessageRequest = {
-                QueueUrl: process.env.SQS_URL,
-                MessageBody: JSON.stringify(body),
-            }
-            const cmd = new SendMessageCommand(input);
-            list.push(sqsClient.send(cmd));
-        }
-    }
+    await realPingBot(game.metaGame, game.id, game);
 
     if (tournamentWork !== undefined) {
       const tournamentData = await tournamentWork;
@@ -5385,6 +5359,8 @@ async function botManageChallenges() {
         // accept/reject challenge
         console.log(`About to ${accepted ? "accept" : "deny"} challenge ${challenge.sk}`)
         await respondedChallenge(process.env.SQS_USERID!, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame});
+
+        // if it's your turn, get started
       }
 
     } catch (err) {
@@ -5663,34 +5639,45 @@ async function pingBot(userId: string, pars: {metaGame: string, gameid: string})
           return formatReturnError(`Unable to testPush ${userId}`);
     }
 
+    await realPingBot(pars.metaGame, pars.gameid);
+
+    return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+    };
+}
+
+async function realPingBot(metaGame: string, gameid: string, game?: FullGame) {
     // fetch game record and state
-    let game: FullGame|undefined;
-    try {
-        const data = await ddbDocClient.send(
-          new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": "GAME",
-              "sk": pars.metaGame + "#0#" + pars.gameid
-            },
-          }));
-        if (!data.Item)
-          throw new Error(`No game ${pars.metaGame + "#0#" + pars.gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
-        game = data.Item as FullGame;
-    }
-    catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to load game ${pars.gameid} to make a bot move`);
+    if (game === undefined) {
+        try {
+            const data = await ddbDocClient.send(
+              new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                  "pk": "GAME",
+                  "sk": metaGame + "#0#" + gameid
+                },
+              }));
+            if (!data.Item)
+              throw new Error(`No game ${metaGame + "#0#" + gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+            game = data.Item as FullGame;
+        }
+        catch (error) {
+            logGetItemError(error);
+            return formatReturnError(`Unable to load game ${gameid} to make a bot move`);
+        }
     }
 
     // instantiate game object
     if (game === undefined) {
         throw new Error("Unable to load game object");
     }
-    const engine = GameFactory(pars.metaGame, game.state);
+    const engine = GameFactory(metaGame, game.state);
     if (!engine)
-      throw new Error(`Unknown metaGame ${pars.metaGame}`);
-    const info = gameinfo.get(pars.metaGame);
+      throw new Error(`Unknown metaGame ${metaGame}`);
+    const info = gameinfo.get(metaGame);
 
     // notify AiAi bot, if necessary
     // get list of userIDs whose turn it is
@@ -5707,8 +5694,8 @@ async function pingBot(userId: string, pars: {metaGame: string, gameid: string})
         }
         if (ids.includes(process.env.SQS_USERID!)) {
             const body = {
-                mgl: pars.metaGame,
-                gameid: pars.gameid,
+                mgl: metaGame,
+                gameid: gameid,
                 history: engine.state2aiai(),
             }
             const input: SendMessageRequest = {
@@ -5719,11 +5706,6 @@ async function pingBot(userId: string, pars: {metaGame: string, gameid: string})
             await sqsClient.send(cmd);
         }
     }
-    return {
-        statusCode: 200,
-        body: JSON.stringify({}),
-        headers
-    };
 }
 
 function makeWork() {
