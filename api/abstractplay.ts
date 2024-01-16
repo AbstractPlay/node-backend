@@ -5717,23 +5717,10 @@ async function realPingBot(metaGame: string, gameid: string, game?: FullGame) {
             ids.push(game.players[parseInt(game.toMove as string, 10)].id);
         }
         if (ids.includes(process.env.AIAI_USERID!)) {
-            // determine correct MGL file
-            let mgl = metaGame;
-            if (metaGame === "dagnacht") {
-                if (engine.variants.includes("11x11")) {
-                    mgl = "dagnacht-11";
-                } else if (engine.variants.includes("13x13")) {
-                    mgl = "dagnacht-13";
-                } else if (engine.variants.includes("17x17")) {
-                    mgl = "dagnacht-17";
-                } else if (engine.variants.includes("19x19")) {
-                    mgl = "dagnacht-19";
-                }
-            }
             // construct message
             const body = {
                 meta: metaGame,
-                mgl,
+                mgl: engine.aiaiMgl(),
                 gameid: gameid,
                 history: engine.state2aiai(),
             }
