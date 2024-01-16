@@ -206,3 +206,13 @@ functions:
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # 6am UTC every sunday (giving plenty of time for the record generation to complete)
           schedule: cron(0 6 ? * 1 *)
+  starttournaments:
+    handler: utils/starttournaments.handler
+    description: Checks if any tournaments are ready to start (and starts or cancels them)
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-starttournaments
+          description: Checks if any tournaments are ready to start (and starts or cancels them)
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 10am UTC every morning
+          schedule: cron(0 10 * * ? *)
