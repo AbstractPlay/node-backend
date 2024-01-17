@@ -34,13 +34,13 @@
     "YourMoveBatchedBody_other": "It's your turn in {{ count }} games. Visit https://play.abstractplay.com to take your turns.",
     "YourMoveBody": "It is now your move in a game of {{- metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
     "YourMoveSubject": "AbstractPlay: your move",
-    "TournamentStartBody": "Tournament {{number}} of the {{- metaGame}} series has started. See https://play.abstractplay.com/ . The next tournament in the series is open for registration. It will start one week after this tournament ends.",
-    "TournamentStartBodyVariants": "Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series has started. See https://play.abstractplay.com/ . The next tournament in the series is open for registration. It will start one week after this tournament ends.",
+    "TournamentStartBody": "Tournament {{number}} of the {{- metaGame}} series has started. See https://play.abstractplay.com/tournaments. You are also registered for the next tournament in the series. It will start one week after this tournament ends.",
+    "TournamentStartBodyVariants": "Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series has started. See https://play.abstractplay.com/tournaments. You are also registered for the next tournament in the series. It will start one week after this tournament ends.",
     "TournamentStartSubject": "Your {{- metaGame}} tournament has started",
     "TournamentCancelBody": "Not enough players signed up for Tournament {{number}} of the {{- metaGame}} series and the tournament had to be cancelled.",
     "TournamentCancelBodyVariants": "Not enough players signed up for Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series and the tournament had to be cancelled.",
     "TournamentCancelSubject": "Your {{- metaGame}} tournament was cancelled",
-    "TournamentEndBody": "Tournament {{number}} of the {{- metaGame}} series has ended. See https://play.abstractplay.com/ . The next tournament in the series will start in one week, remember to sign up if you would like to participate.",
-    "TournamentEndBodyVariants": "Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series has ended. See https://play.abstractplay.com/ . The next tournament in the series will start in one week, remember to sign up if you would like to participate.",
+    "TournamentEndBody": "Tournament {{number}} of the {{- metaGame}} series has ended. See https://play.abstractplay.com/tournaments. The next tournament in the series will start in one week.",
+    "TournamentEndBodyVariants": "Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series has ended. See https://play.abstractplay.com/tournaments. The next tournament in the series will start in one week.",
     "TournamentEndSubject": "Your {{- metaGame}} tournament has ended"
 }

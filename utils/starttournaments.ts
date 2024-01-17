@@ -574,6 +574,26 @@ async function startTournament(tournament: Tournament) {
       console.log(`Unable to insert new tournament ${newTournamentid}. Error: ${error}`);
       return;
     }
+    // ... and register all current players for it
+    for (const player of players) {
+      const sk = `${newTournamentid}#1#${player.playerid}`;
+      const playerdata: TournamentPlayer = {
+        "pk": "TOURNAMENTPLAYER",
+        "sk": sk,
+        "playername": player.playername,
+        "playerid": player.playerid,
+      };
+      try {
+        work.push(ddbDocClient.send(new PutCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: playerdata
+        })));
+      } catch (err) {
+        logGetItemError(err);
+        console.log(`Unable to add player ${player.playerid} to tournament ${newTournamentid}`);
+        return;
+      }
+    }    
     // Send e-mails to participants
     await initi18n('en');
     const metaGameName = gameinfo.get(tournament.metaGame)?.name;
