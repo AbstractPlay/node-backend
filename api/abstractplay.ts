@@ -1966,7 +1966,7 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
     if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
         await changeLanguageForPlayer(player);
         if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { "challenger": challengerName, metaGame, "interpolation": {"escapeValue": false} }));
+            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { "challenger": challengerName, metaGame }));
             work.push(sesClient.send(comm));
         } else {
             console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
@@ -1976,7 +1976,7 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.challenged"),
-            body: i18n.t("ChallengeBody", { "challenger": challengerName, metaGame, "interpolation": {"escapeValue": false} }),
+            body: i18n.t("ChallengeBody", { "challenger": challengerName, metaGame }),
             url: "/",
         }));
     } else {
@@ -2009,7 +2009,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
         await changeLanguageForPlayer(player);
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}));
                 work.push(sesClient.send(comm));
             } else {
                 console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
@@ -2022,7 +2022,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.revoked"),
-            body: i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}),
+            body: i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}),
             url: "/",
         }));
       }
@@ -2034,7 +2034,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
         await changeLanguageForPlayer(player);
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}));
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}));
                 work.push(sesClient.send(comm));
                     } else {
                 console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
@@ -2047,7 +2047,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.revoked"),
-            body: i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame, "interpolation": {"escapeValue": false}}),
+            body: i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}),
             url: "/",
         }));
       }
@@ -2098,7 +2098,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
                 if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameStart) ) {
                     console.log(player);
-                    let body = i18n.t("GameStartedBody", { metaGame: email.metaGame, "interpolation": {"escapeValue": false} });
+                    let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
                     if (ind === 0 || email.simultaneous) {
                       body += " " + i18n.t("YourMove");
                     }
@@ -2111,7 +2111,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
                 console.log(`No verified email address found for ${player.name} (${player.id})`);
             }
             // push notifications are sent no matter what
-            let body = i18n.t("GameStartedBody", { metaGame: email.metaGame, "interpolation": {"escapeValue": false} });
+            let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
             if (ind === 0 || email.simultaneous) {
                 body += " " + i18n.t("YourMove");
               }
@@ -2158,7 +2158,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
         await changeLanguageForPlayer(player);
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame, "interpolation": {"escapeValue": false} }));
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame }));
                 work.push(sesClient.send(comm));
             } else {
                 console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
@@ -2171,7 +2171,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.declined"),
-            body: i18n.t("ChallengeRejectedBody", { quitter, metaGame, "interpolation": {"escapeValue": false} }),
+            body: i18n.t("ChallengeRejectedBody", { quitter, metaGame }),
             url: "/",
         }));
       }
@@ -2794,7 +2794,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         return formatReturnError('Unable to process submit move');
       }
       if (game.tournament !== undefined) {
-        tournamentWork = tournamentUpdates(game, players);
+        list.push(tournamentUpdates(game, players));
       }
     }
     game.lastMoveTime = timestamp;
@@ -2902,7 +2902,7 @@ async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
     } else if (game.winner?.length === 2) {
       score = 0.5;
     }
-    console.log(`player ${player.name} score ${score} in game ${game.id} from tournament ${game.tournament}`);
+    console.log(`player ${player.name} now has score ${score} in game ${game.id} from tournament ${game.tournament}`);
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTPLAYER", "sk": game.tournament + '#' + game.division!.toString() + '#' + player.id },
@@ -2919,14 +2919,26 @@ async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
     ExpressionAttributeValues: { ":w": winner },
     UpdateExpression: "set #w = :w"
   })));
-  work.push(ddbDocClient.send(new UpdateCommand({
+  const tournamentData = await ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "TOURNAMENT", "sk": game.tournament },
     ExpressionAttributeNames: { "#d": "divisions", "#n": game.division!.toString() },
     ExpressionAttributeValues: { ":inc": 1 },
     UpdateExpression: "add #d.#n.numCompleted :inc",
     ReturnValues: "ALL_NEW"
-  })));
+  }));
+  const tournament = tournamentData.Attributes as Tournament;
+  let divisionCompleted = false;
+  for (const division of Object.values(tournament.divisions!)) {
+    if (division.numCompleted === division.numGames && !division.processed) {
+      divisionCompleted = true;
+      break;
+    }
+  }
+  if (divisionCompleted) {
+    console.log("division completed, processing tournament");
+    work.push(endTournament(tournament))
+  }
   return Promise.all(work);
 }
 
@@ -3011,7 +3023,7 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
           userId: player.id,
           topic: "yourturn",
           title: i18n.t("PUSH.titles.yourturn"),
-          body: i18n.t("YourMoveBody", { metaGame, "interpolation": {"escapeValue": false} }),
+          body: i18n.t("YourMoveBody", { metaGame }),
           url: `/move/${game.metaGame}/0/${game.id}`,
       }));
     }
@@ -3049,7 +3061,7 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
         body.push(i18n.t("GameOverResult", {context: result}));
         //   - Rating, if applicable
         if (newRatings != null) {
-            body.push(i18n.t("GameOverRating", {"rating" : `${Math.round(newRatings[ind][game.metaGame].rating)}`, "interpolation": {"escapeValue": false} }));
+            body.push(i18n.t("GameOverRating", {"rating" : `${Math.round(newRatings[ind][game.metaGame].rating)}` }));
         }
         //   - Final scores, if applicable
         if (scores.length > 0) {
@@ -3741,11 +3753,19 @@ async function botMove(pars: {uid: string, token: string, metaGame: string, game
     if (!engine)
       throw new Error(`Unknown metaGame ${pars.metaGame}`);
 
-    // translate move
-    const realmove = engine.translateAiai(pars.move);
+    // check for pie
+    if (pars.move === "Swap") {
+        return await invokePie(pars.uid, {id: pars.gameid, metaGame: pars.metaGame, cbit: 0});
+    }
+    // all other moves
+    else {
+        // translate move
+        const realmove = engine.translateAiai(pars.move);
 
-    // apply move
-    return await submitMove(pars.uid, {id: pars.gameid, move: realmove, metaGame: pars.metaGame, cbit: 0, draw: ""});
+        // apply move
+        return await submitMove(pars.uid, {id: pars.gameid, move: realmove, metaGame: pars.metaGame, cbit: 0, draw: ""});
+    }
+
 }
 
 async function newTournament(userid: string, pars: { metaGame: string, variants: string[] }) {
@@ -3766,9 +3786,7 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
     if (tournamentNumber.Item !== undefined) {
       tournamentN = tournamentNumber.Item.count;
       available = tournamentNumber.Item.over;
-      console.log(`Found tournament ${sk} with count ${tournamentN} and over ${available}`);
-    } else {
-      console.log(`No tournament ${sk} found`);
+      // console.log(`Found tournament ${sk} with count ${tournamentN} and over ${available}`);
     }
   } catch (err) {
     logGetItemError(err);
@@ -4060,38 +4078,58 @@ async function archiveTournament(tournament: Tournament) {
   }
 }
 
-async function getTournament(pars: { tournamentid: string }) {
+async function getTournament(pars: { tournamentid: string, metaGame: string }) {
   try {
-    const tournamentsDataPromise = ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        ExpressionAttributeValues: { ":pk": "TOURNAMENT", ":sk": pars.tournamentid },
-        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        KeyConditionExpression: "#pk = :pk and #sk = :sk",
-      })
-    );
-    const tournamentPlayersDataPromise = ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": pars.tournamentid + '#' },
-        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-      })
-    );
-    const tournamentGamessDataPromise = ddbDocClient.send(
+    let work: Promise<any>[] = [];
+    if (pars.metaGame === 'undefined') {
+      work.push(ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          ExpressionAttributeValues: { ":pk": "TOURNAMENT", ":sk": pars.tournamentid },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+          KeyConditionExpression: "#pk = :pk and #sk = :sk",
+        })
+      ));
+      work.push(ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": pars.tournamentid + '#' },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+          KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        })
+      ));
+    } else {
+      work.push(ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          ExpressionAttributeValues: { ":pk": "COMPLETEDTOURNAMENT", ":sk": pars.metaGame + '#' + pars.tournamentid },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+          KeyConditionExpression: "#pk = :pk and #sk = :sk",
+        })
+      ));
+    }
+    work.push(ddbDocClient.send(
       new QueryCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": pars.tournamentid + '#' },
         ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
         KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
       })
-    );
-    const [tournamentsData, tournamentPlayersData, tournamentGamesData] = await Promise.all([tournamentsDataPromise, tournamentPlayersDataPromise, tournamentGamessDataPromise]);
-    return {
-      statusCode: 200,
-      body: JSON.stringify({tournament: tournamentsData.Items, tournamentPlayers: tournamentPlayersData.Items, tournamentGames: tournamentGamesData.Items}),
-      headers
-    };
+    ));
+    const data = await Promise.all(work);
+    if (pars.metaGame === 'undefined') {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({tournament: data[0].Items, tournamentPlayers: data[1].Items, tournamentGames: data[2].Items}),
+        headers
+      };
+    } else {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({tournament: data[0].Items, tournamentPlayers: [], tournamentGames: data[1].Items}),
+        headers
+      };
+    }
   }
   catch (error) {
     logGetItemError(error);
@@ -4112,10 +4150,8 @@ async function startTournaments() {
       }));
     const tournaments = tournamentsData.Items as Tournament[];
     const now = Date.now();
-    // const oneWeek = 1000 * 60 * 60 * 24 * 7;
-    // const twoWeeks = oneWeek * 2;
-    const twoWeeks = 1000 * 60 * 5; // really 5 minutes. Just for testing!
-    const oneWeek = 1000 * 60 * 5; // really 5 minutes. Just for testing!
+    const oneWeek = 1000 * 60 * 60 * 24 * 7;
+    const twoWeeks = oneWeek * 2;
     for (const tournament of tournaments) {
       if (
         !tournament.started && now > tournament.dateCreated + twoWeeks
@@ -4162,8 +4198,7 @@ async function startTournament(tournament: Tournament) {
   const players = playersData.Items as TournamentPlayer[];
   // Get players
   const playersFull = await getPlayers(players.map(p => p.playerid));
-  console.log(playersFull);
-  if (players.length < 3) {
+  if (players.length < 10) {
     // Cancel tournament
     // Delete tournament and tournament players
     const work: Promise<any>[] = [];
@@ -4243,10 +4278,8 @@ async function startTournament(tournament: Tournament) {
     const playersFull2: FullUser[] = [];
     for (let player of players)
       playersFull2.push(playersFull.find(p => p.id === player.playerid)!);
-    console.log("allGamePlayers");
-    console.log(allGamePlayers);
     // Create divisions
-    const numDivisions = Math.ceil(players.length / 3.0); // at most 10 players per division
+    const numDivisions = Math.ceil(players.length / 10.0); // at most 10 players per division
     const divisionSizeSmall = Math.floor(players.length / numDivisions);
     const numBigDivisions = players.length - divisionSizeSmall * numDivisions; // big divisions have one more player than small divisions!
     console.log(`numDivisions: ${numDivisions}, divisionSizeSmall: ${divisionSizeSmall}, numBigDivisions: ${numBigDivisions}`);
@@ -4436,7 +4469,25 @@ async function startTournament(tournament: Tournament) {
       logGetItemError(error);
       return formatReturnError(`Unable to insert new tournament ${newTournamentid}. Error: ${error}`);
     }
-    console.log(`Next tournament ${tournament.id} openened for sign-up`);
+    // ... and register all current players for it
+    for (const player of players) {
+      const sk = `${newTournamentid}#1#${player.playerid}`;
+      const playerdata: TournamentPlayer = {
+        "pk": "TOURNAMENTPLAYER",
+        "sk": sk,
+        "playername": player.playername,
+        "playerid": player.playerid,
+      };
+      try {
+        work.push(ddbDocClient.send(new PutCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: playerdata
+        })));
+      } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to add player ${player.playerid} to tournament ${newTournamentid}`);
+      }
+    }
     // Send e-mails to participants
     await initi18n('en');
     const metaGameName = gameinfo.get(tournament.metaGame)?.name;
@@ -5738,8 +5789,10 @@ async function realPingBot(metaGame: string, gameid: string, game?: FullGame) {
             ids.push(game.players[parseInt(game.toMove as string, 10)].id);
         }
         if (ids.includes(process.env.AIAI_USERID!)) {
+            // construct message
             const body = {
-                mgl: metaGame,
+                meta: metaGame,
+                mgl: engine.aiaiMgl(),
                 gameid: gameid,
                 history: engine.state2aiai(),
             }
