@@ -3734,11 +3734,19 @@ async function botMove(pars: {uid: string, token: string, metaGame: string, game
     if (!engine)
       throw new Error(`Unknown metaGame ${pars.metaGame}`);
 
-    // translate move
-    const realmove = engine.translateAiai(pars.move);
+    // check for pie
+    if (pars.move === "Swap") {
+        return await invokePie(pars.uid, {id: pars.gameid, metaGame: pars.metaGame, cbit: 0});
+    }
+    // all other moves
+    else {
+        // translate move
+        const realmove = engine.translateAiai(pars.move);
 
-    // apply move
-    return await submitMove(pars.uid, {id: pars.gameid, move: realmove, metaGame: pars.metaGame, cbit: 0, draw: ""});
+        // apply move
+        return await submitMove(pars.uid, {id: pars.gameid, move: realmove, metaGame: pars.metaGame, cbit: 0, draw: ""});
+    }
+
 }
 
 async function newTournament(userid: string, pars: { metaGame: string, variants: string[] }) {
