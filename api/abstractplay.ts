@@ -4129,8 +4129,10 @@ async function startTournaments() {
       }));
     const tournaments = tournamentsData.Items as Tournament[];
     const now = Date.now();
-    const oneWeek = 1000 * 60 * 60 * 24 * 7;
-    const twoWeeks = oneWeek * 2;
+    // const oneWeek = 1000 * 60 * 60 * 24 * 7;
+    // const twoWeeks = oneWeek * 2;
+    const oneWeek = 0; // just for testing
+    const twoWeeks = 0;
     for (const tournament of tournaments) {
       if (
         !tournament.started && now > tournament.dateCreated + twoWeeks
@@ -4176,7 +4178,7 @@ async function startTournament(tournament: Tournament) {
   const players = playersData.Items as TournamentPlayer[];
   // Get players
   const playersFull = await getPlayers(players.map(p => p.playerid));
-  if (players.length < 10) {
+  if (players.length < 3) {
     // Cancel tournament
     // Delete tournament and tournament players
     const work: Promise<any>[] = [];
@@ -4257,7 +4259,7 @@ async function startTournament(tournament: Tournament) {
     for (let player of players)
       playersFull2.push(playersFull.find(p => p.id === player.playerid)!);
     // Create divisions
-    const numDivisions = Math.ceil(players.length / 10.0); // at most 10 players per division
+    const numDivisions = Math.ceil(players.length / 3.0); // at most 10 players per division
     const divisionSizeSmall = Math.floor(players.length / numDivisions);
     const numBigDivisions = players.length - divisionSizeSmall * numDivisions; // big divisions have one more player than small divisions!
     // Sort players into divisions by rating
