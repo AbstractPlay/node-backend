@@ -3738,6 +3738,10 @@ async function botMove(pars: {uid: string, token: string, metaGame: string, game
     if (pars.move === "Swap") {
         return await invokePie(pars.uid, {id: pars.gameid, metaGame: pars.metaGame, cbit: 0});
     }
+    // check for triggered resignations (to clean up bot games)
+    else if (pars.move === "resign") {
+        return await submitMove(pars.uid, {id: pars.gameid, move: pars.move, metaGame: pars.metaGame, cbit: 0, draw: ""});
+    }
     // all other moves
     else {
         // translate move
