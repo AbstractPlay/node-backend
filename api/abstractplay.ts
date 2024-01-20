@@ -4180,7 +4180,7 @@ async function startTournament(tournament: Tournament) {
   const players = playersData.Items as TournamentPlayer[];
   // Get players
   const playersFull = await getPlayers(players.map(p => p.playerid));
-  if (players.length < 10) {
+  if (players.length < 4) {
     // Cancel tournament
     // Delete tournament and tournament players
     const work: Promise<any>[] = [];

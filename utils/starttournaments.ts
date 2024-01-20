@@ -162,6 +162,7 @@ type Palette = {
 }
 
 export const handler: Handler = async (event: any, context?: any) => {
+  let count = 0;
   let newcount = 0;
   let cancelledcount = 0;
   try {
@@ -188,19 +189,14 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
       }
     }
+    count = tournaments.length;
   }
   catch (error) {
     logGetItemError(error);
     console.log(`Unable to get tournaments from table ${process.env.ABSTRACT_PLAY_TABLE}`);
     return;
   }
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      message: `Started ${newcount} new tournaments and cancelled ${cancelledcount} tournaments`
-    }),
-    headers
-  };
+  console.log(`Checked ${count} tournaments, started ${newcount} new tournaments and cancelled ${cancelledcount} tournaments`);
 }
 
 async function getPlayers(playerIDs: string[]) {
@@ -299,7 +295,7 @@ async function startTournament(tournament: Tournament) {
   const players = playersData.Items as TournamentPlayer[];
   // Get players
   const playersFull = await getPlayers(players.map(p => p.playerid));
-  if (players.length < 10) {
+  if (players.length < 4) {
     // Cancel tournament
     // Delete tournament and tournament players
     const work: Promise<any>[] = [];
