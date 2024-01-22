@@ -3747,6 +3747,10 @@ async function botMove(pars: {uid: string, token: string, metaGame: string, game
         // translate move
         const realmove = engine.translateAiai(pars.move);
 
+        if (realmove === "Swap") {
+            return await invokePie(pars.uid, {id: pars.gameid, metaGame: pars.metaGame, cbit: 0});
+        }
+
         // apply move
         return await submitMove(pars.uid, {id: pars.gameid, move: realmove, metaGame: pars.metaGame, cbit: 0, draw: ""});
     }
