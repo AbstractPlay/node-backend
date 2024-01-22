@@ -1229,12 +1229,12 @@ async function me(claim: PartialClaims, pars: { size: string }) {
     // Check for "recently completed games"
     console.log(`Checking for recently completed games`);
     // As soon as a game is over move it to archive status (game.type = 0).
-    // Remove the game from user's games list 48 hours after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
+    // Remove the game from user's games list one week after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
     const removedGameIDs: string[] = [];
     for (let i = games.length - 1; i >= 0; i-- ) {
       const game = games[i];
       if (game.toMove === "" || game.toMove === null ) {
-        if ( (game.seen !== undefined) && (Date.now() - (game.seen || 0) > 48 * 3600000) && ((game.lastChat || 0) <= (game.seen || 0)) ) {
+        if ( (game.seen !== undefined) && (Date.now() - (game.seen || 0) > 7 * 24 * 3600000) && ((game.lastChat || 0) <= (game.seen || 0)) ) {
           games.splice(i, 1);
           removedGameIDs.push(game.id);
         }
