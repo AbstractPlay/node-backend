@@ -3698,7 +3698,7 @@ async function getPublicExploration(pars: { game: string }) {
 async function botMove(pars: {uid: string, token: string, metaGame: string, gameid: string, move: string}) {
     // validate token
     try {
-        if (! validateToken(process.env.TOTP_KEY as string, pars.token, 1)) {
+        if (! validateToken(process.env.TOTP_KEY as string, pars.token, 2)) {
             return formatReturnError(`Invalid token provided: ${JSON.stringify(pars)}`);
         }
     } catch (error) {
