@@ -75,6 +75,7 @@ type FullChallenge = {
   clockMax: number;
   clockHard: boolean;
   rated: boolean;
+  noExplore?: boolean;
 }
 
 export type UserSettings = {
@@ -155,6 +156,7 @@ type Game = {
   players: User[];
   lastMoveTime: number;
   clockHard: boolean;
+  noExplore?: boolean;
   toMove: string | boolean[];
   note?: string;
   seen?: number;
@@ -192,6 +194,7 @@ type FullGame = {
   published?: string[];
   tournament?: string;
   division?: number;
+  noExplore?: boolean;
 }
 
 type Playground = {
@@ -1848,7 +1851,8 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
         "clockInc": challenge.clockInc,
         "clockMax": challenge.clockMax,
         "clockHard": challenge.clockHard,
-        "rated": challenge.rated
+        "rated": challenge.rated,
+        "noExplore": challenge.noExplore || false,
       }
     }));
 
@@ -1926,7 +1930,8 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
         "clockInc": challenge.clockInc,
         "clockMax": challenge.clockMax,
         "clockHard": challenge.clockHard,
-        "rated": challenge.rated
+        "rated": challenge.rated,
+        "noExplore": challenge.noExplore || false,
       }
     }));
 
