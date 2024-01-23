@@ -5308,7 +5308,7 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
         const game = user.games.find(g => g.id === pars.gameId);
         if (game !== undefined) {
             // set lastSeen to "now" + interval
-            let interval = 3;
+            let interval = 8;
             if (pars.interval !== undefined) {
                 interval = pars.interval;
             }
