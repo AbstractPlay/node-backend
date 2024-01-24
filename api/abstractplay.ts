@@ -75,6 +75,7 @@ type FullChallenge = {
   clockMax: number;
   clockHard: boolean;
   rated: boolean;
+  noExplore?: boolean;
 }
 
 export type UserSettings = {
@@ -155,6 +156,7 @@ type Game = {
   players: User[];
   lastMoveTime: number;
   clockHard: boolean;
+  noExplore?: boolean;
   toMove: string | boolean[];
   note?: string;
   seen?: number;
@@ -192,6 +194,7 @@ type FullGame = {
   published?: string[];
   tournament?: string;
   division?: number;
+  noExplore?: boolean;
 }
 
 type Playground = {
@@ -1566,7 +1569,7 @@ async function getGamesForUser(userId: any) {
         KeyConditionExpression: "#pk = :pk",
         ExpressionAttributeValues: { ":pk": "CURRENTGAMES#" + game.uid },
         ExpressionAttributeNames: { "#pk": "pk" },
-        ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime",
+        ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
         Limit: 2   // For testing!
         }));
     console.log("result", result);
@@ -1580,7 +1583,7 @@ async function getGamesForUser(userId: any) {
           KeyConditionExpression: "#pk = :pk",
           ExpressionAttributeValues: { ":pk": "CURRENTGAMES#" + game.uid },
           ExpressionAttributeNames: { "#pk": "pk" },
-          ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime",
+          ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
           Limit: 2,   // For testing!
           ExclusiveStartKey: last
         }));
@@ -1596,9 +1599,9 @@ function processGames(userid: any, result: QueryCommandOutput, games: Game[]) {
   if (result.Items === undefined)
     throw new Error("processGames: no games found!?");
   const fullGames = result.Items as FullGame[];
-  fullGames.forEach((game: { players: any[]; id: any; metaGame: any; clockHard: any; toMove: any; lastMoveTime: any; }) => {
+  fullGames.forEach((game: { players: any[]; id: any; metaGame: any; clockHard: any; toMove: any; lastMoveTime: any; noExplore?: any; }) => {
     if (game.players.some((p: { id: any; }) => p.id === userid)) {
-      games.push({"id": game.id, "metaGame": game.metaGame, "players": game.players, "clockHard": game.clockHard, "toMove": game.toMove, "lastMoveTime": game.lastMoveTime});
+      games.push({"id": game.id, "metaGame": game.metaGame, "players": game.players, "clockHard": game.clockHard, "toMove": game.toMove, "lastMoveTime": game.lastMoveTime, "noExplore": game.noExplore || false});
     }
   });
 }
@@ -1848,7 +1851,8 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
         "clockInc": challenge.clockInc,
         "clockMax": challenge.clockMax,
         "clockHard": challenge.clockHard,
-        "rated": challenge.rated
+        "rated": challenge.rated,
+        "noExplore": challenge.noExplore || false,
       }
     }));
 
@@ -1926,7 +1930,8 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
         "clockInc": challenge.clockInc,
         "clockMax": challenge.clockMax,
         "clockHard": challenge.clockHard,
-        "rated": challenge.rated
+        "rated": challenge.rated,
+        "noExplore": challenge.noExplore || false,
       }
     }));
 
@@ -2408,6 +2413,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
           "clockInc": challenge.clockInc,
           "clockMax": challenge.clockMax,
           "clockHard": challenge.clockHard,
+          "noExplore": challenge.noExplore || false,
           "state": state,
           "toMove": whoseTurn,
           "lastMoveTime": now,
@@ -2421,6 +2427,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       "metaGame": challenge.metaGame,
       "players": playersFull.map(p => {return {"id": p.id, "name": p.name, "time": challenge.clockStart * 3600000}}),
       "clockHard": challenge.clockHard,
+      "noExplore": challenge.noExplore || false,
       "toMove": whoseTurn,
       "lastMoveTime": now,
       "variants": engine.variants,
@@ -2508,6 +2515,7 @@ async function duplicateStandingChallenge(challenge: { [x: string]: any; metaGam
         "clockInc": challenge.clockInc,
         "clockMax": challenge.clockMax,
         "clockHard": challenge.clockHard,
+        "noExplore": challenge.noExplore || false,
         "rated": challenge.rated
       }
     }));
@@ -2723,6 +2731,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "metaGame": game.metaGame,
       "players": game.players,
       "clockHard": game.clockHard,
+      "noExplore": game.noExplore || false,
       "toMove": game.toMove,
       "lastMoveTime": timestamp,
       "numMoves": engine.stack.length - 1,
@@ -2734,6 +2743,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "metaGame": game.metaGame,
       "players": game.players,
       "clockHard": game.clockHard,
+      "noExplore": game.noExplore || false,
       "toMove": game.toMove,
       "lastMoveTime": timestamp,
       "numMoves": engine.stack.length - 1,
@@ -3173,6 +3183,7 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
     "metaGame": game.metaGame,
     "players": game.players,
     "clockHard": game.clockHard,
+    "noExplore": game.noExplore || false,
     "winner": game.winner,
     "toMove": game.toMove,
     "lastMoveTime": game.lastMoveTime,
@@ -5182,6 +5193,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
         // reverse the list of players
         "players": [...reversed],
         "clockHard": game.clockHard,
+        "noExplore": game.noExplore || false,
         "toMove": game.toMove,
         "lastMoveTime": timestamp
       } as Game;
@@ -5191,6 +5203,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
         // reverse the list of players
         "players": [...reversed],
         "clockHard": game.clockHard,
+        "noExplore": game.noExplore || false,
         "toMove": game.toMove,
         "lastMoveTime": timestamp
       } as Game;
