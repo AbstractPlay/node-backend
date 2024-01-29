@@ -204,7 +204,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 const wins = fpWins / n;
                 const sum = lengths.reduce((prev, curr) => prev + curr, 0);
                 const avg = sum / lengths.length;
-                lengths.sort();
+                lengths.sort((a,b) => a - b);
                 let median: number;
                 if (lengths.length % 2 === 0) {
                     const rightIdx = lengths.length / 2;
