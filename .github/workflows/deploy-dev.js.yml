@@ -57,6 +57,9 @@ jobs:
     - name: Install NPM dependencies
       run: npm i
 
+    - name: Install development gameslib
+      run: npm remove @abstractplay/gameslib && npm i @abstractplay/gameslib@development
+
     - name: Dump package-lock.json
       run: cat package-lock.json
 
