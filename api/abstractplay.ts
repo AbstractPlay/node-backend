@@ -5141,113 +5141,122 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
       const game = data.Item as FullGame;
       console.log("got game in invokePie:");
       console.log(game);
-      const engine = GameFactory(game.metaGame, game.state);
-      if (!engine)
-        throw new Error(`Unknown metaGame ${game.metaGame}`);
-      const flags = gameinfo.get(game.metaGame).flags;
-      if ( (flags === undefined) || ( (! flags.includes("pie")) && (! flags.includes("pie-even")) ) ) {
-        throw new Error(`Metagame ${pars.metaGame} does not have the "pie" flag. Aborting.`);
-      }
-      const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
-
-      const player = game.players.find(p => p.id === userid);
-      if (!player)
-        throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
-
-      const timestamp = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
-      const timeUsed = timestamp - lastMoveTime;
-      // console.log("timeUsed", timeUsed);
-      // console.log("player", player);
-      if (player.time! - timeUsed < 0)
-        player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
-      else
-        player.time = player.time! - timeUsed + game.clockInc * 3600000;
-      if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
-      // console.log("players", game.players);
-      const playerIDs = game.players.map((p: { id: any; }) => p.id);
-      // TODO: We are updating players and their games. This should be put in some kind of critical section!
-      const players = await getPlayers(playerIDs);
-      console.log(`Current player list: ${JSON.stringify(game.players)}`);
-      const reversed = [...game.players].reverse();
-      console.log(`Reversed: ${JSON.stringify(reversed)}`);
-      game.players = [...reversed];
-      game.pieInvoked = true;
-
-      // if flag is `pie-even`, issue a "pass" command
-      if (flags.includes("pie-even")) {
-        try {
-            engine.move("pass")
-            game.state = engine.serialize();
-            game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
-            game.toMove = `${engine.currplayer! - 1}`;
-        } catch (err) {
-            logGetItemError(err);
-            return formatReturnError('Error passing while invoking "pie-even"');
+      if ( ("pieInvoked" in game) && (game.pieInvoked === true) ) {
+        console.log("Double pie detected! Aborting!");
+        return {
+            statusCode: 200,
+            body: JSON.stringify(game),
+            headers
+        };
+      } else {
+        const engine = GameFactory(game.metaGame, game.state);
+        if (!engine)
+          throw new Error(`Unknown metaGame ${game.metaGame}`);
+        const flags = gameinfo.get(game.metaGame).flags;
+        if ( (flags === undefined) || ( (! flags.includes("pie")) && (! flags.includes("pie-even")) ) ) {
+          throw new Error(`Metagame ${pars.metaGame} does not have the "pie" flag. Aborting.`);
         }
-      }
+        const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
 
-      // this should be all the info we want to show on the "my games" summary page.
-      const playerGame = {
-        "id": game.id,
-        "metaGame": game.metaGame,
-        // reverse the list of players
-        "players": [...reversed],
-        "clockHard": game.clockHard,
-        "noExplore": game.noExplore || false,
-        "toMove": game.toMove,
-        "lastMoveTime": timestamp
-      } as Game;
-      const myGame = {
-        "id": game.id,
-        "metaGame": game.metaGame,
-        // reverse the list of players
-        "players": [...reversed],
-        "clockHard": game.clockHard,
-        "noExplore": game.noExplore || false,
-        "toMove": game.toMove,
-        "lastMoveTime": timestamp
-      } as Game;
-      const list: Promise<any>[] = [];
-      game.lastMoveTime = timestamp;
-      const updateGame = ddbDocClient.send(new PutCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Item: game
-        }));
-      list.push(updateGame);
-      console.log("Scheduled update to game");
-      // Update players
-      players.forEach((player) => {
-        const games: Game[] = [];
-        player.games.forEach(g => {
-          if (g.id === playerGame.id) {
-            if (player.id === userid)
-              games.push(myGame);
-            else
-              games.push(playerGame);
+        const player = game.players.find(p => p.id === userid);
+        if (!player)
+          throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
+
+        const timestamp = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+        const timeUsed = timestamp - lastMoveTime;
+        // console.log("timeUsed", timeUsed);
+        // console.log("player", player);
+        if (player.time! - timeUsed < 0)
+          player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
+        else
+          player.time = player.time! - timeUsed + game.clockInc * 3600000;
+        if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
+        // console.log("players", game.players);
+        const playerIDs = game.players.map((p: { id: any; }) => p.id);
+        // TODO: We are updating players and their games. This should be put in some kind of critical section!
+        const players = await getPlayers(playerIDs);
+        console.log(`Current player list: ${JSON.stringify(game.players)}`);
+        const reversed = [...game.players].reverse();
+        console.log(`Reversed: ${JSON.stringify(reversed)}`);
+        game.players = [...reversed];
+        game.pieInvoked = true;
+
+        // if flag is `pie-even`, issue a "pass" command
+        if (flags.includes("pie-even")) {
+          try {
+              engine.move("pass")
+              game.state = engine.serialize();
+              game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+              game.toMove = `${engine.currplayer! - 1}`;
+          } catch (err) {
+              logGetItemError(err);
+              return formatReturnError('Error passing while invoking "pie-even"');
           }
-          else
-            games.push(g)
+        }
+
+        // this should be all the info we want to show on the "my games" summary page.
+        const playerGame = {
+          "id": game.id,
+          "metaGame": game.metaGame,
+          // reverse the list of players
+          "players": [...reversed],
+          "clockHard": game.clockHard,
+          "noExplore": game.noExplore || false,
+          "toMove": game.toMove,
+          "lastMoveTime": timestamp
+        } as Game;
+        const myGame = {
+          "id": game.id,
+          "metaGame": game.metaGame,
+          // reverse the list of players
+          "players": [...reversed],
+          "clockHard": game.clockHard,
+          "noExplore": game.noExplore || false,
+          "toMove": game.toMove,
+          "lastMoveTime": timestamp
+        } as Game;
+        const list: Promise<any>[] = [];
+        game.lastMoveTime = timestamp;
+        const updateGame = ddbDocClient.send(new PutCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Item: game
+          }));
+        list.push(updateGame);
+        console.log("Scheduled update to game");
+        // Update players
+        players.forEach((player) => {
+          const games: Game[] = [];
+          player.games.forEach(g => {
+            if (g.id === playerGame.id) {
+              if (player.id === userid)
+                games.push(myGame);
+              else
+                games.push(playerGame);
+            }
+            else
+              games.push(g)
+          });
+          list.push(updateUserGames(player.id, player.gamesUpdate, [playerGame.id], games));
+          console.log(`Scheduled update to player ${player.id}, ${player.name}, with games`, games);
         });
-        list.push(updateUserGames(player.id, player.gamesUpdate, [playerGame.id], games));
-        console.log(`Scheduled update to player ${player.id}, ${player.name}, with games`, games);
-      });
 
-      // insert a comment into the game log
-      list.push(submitComment("", {id: game.id, comment: "Pie invoked.", moveNumber: 2}));
+        // insert a comment into the game log
+        list.push(submitComment("", {id: game.id, comment: "Pie invoked.", moveNumber: 2}));
 
-      list.push(sendSubmittedMoveEmails(game, players, false, []));
-      console.log("Scheduled emails");
-      await Promise.all(list);
-      console.log("All updates complete");
-      // if bot is involved, trigger ping
-      if (players.map(p => p.id).includes(process.env.AIAI_USERID!)) {
-        await realPingBot(pars.metaGame, pars.id);
+        list.push(sendSubmittedMoveEmails(game, players, false, []));
+        console.log("Scheduled emails");
+        await Promise.all(list);
+        console.log("All updates complete");
+        // if bot is involved, trigger ping
+        if (players.map(p => p.id).includes(process.env.AIAI_USERID!)) {
+          await realPingBot(pars.metaGame, pars.id);
+        }
+        return {
+          statusCode: 200,
+          body: JSON.stringify(game),
+          headers
+        };
       }
-      return {
-        statusCode: 200,
-        body: JSON.stringify(game),
-        headers
-      };
     }
     catch (error) {
       logGetItemError(error);
