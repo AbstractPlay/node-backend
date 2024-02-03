@@ -472,7 +472,7 @@ async function startTournament(tournament: Tournament) {
                 "numPlayers": 2,
                 "rated": true,
                 "players": info.flags !== undefined && info.flags.includes('perspective') ?
-                  gamePlayers.map((p, ind) => {return {...p, settings: {"rotate": (ind + 1) * 180}}})
+                  gamePlayers.map((p, ind) => {return (ind === 0 ? p : {...p, settings: {"rotate": 180}})})
                   : gamePlayers,
                 "clockStart": clockStart,
                 "clockInc": clockInc,
