@@ -1229,53 +1229,58 @@ async function me(claim: PartialClaims, pars: { size: string }) {
         })
     );
 
-    // Check for "recently completed games"
-    console.log(`Checking for recently completed games`);
-    // As soon as a game is over move it to archive status (game.type = 0).
-    // Remove the game from user's games list one week after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
     const removedGameIDs: string[] = [];
-    for (let i = games.length - 1; i >= 0; i-- ) {
-      const game = games[i];
-      if (game.toMove === "" || game.toMove === null ) {
-        if ( (game.seen !== undefined) && (Date.now() - (game.seen || 0) > 7 * 24 * 3600000) && ((game.lastChat || 0) <= (game.seen || 0)) ) {
-          games.splice(i, 1);
-          removedGameIDs.push(game.id);
-        }
-      }
-    }
-    // Check for out-of-time games
-    console.log(`Checking for out-of-time games`);
-    for(const game of games) {
-      if (game.clockHard && game.toMove !== '') {
-        if (Array.isArray(game.toMove)) {
-          let minTime = 0;
-          let minIndex = -1;
-          const elapsed = Date.now() - game.lastMoveTime;
-          game.toMove.forEach((p: any, i: number) => {
-            if (p && game.players[i].time! - elapsed < minTime) {
-              minTime = game.players[i].time! - elapsed;
-              minIndex = i;
-            }});
-          if (minIndex !== -1) {
-            await updateUserGames(userId, user.gamesUpdate, removedGameIDs, games);
-            game.toMove = '';
-            game.lastMoveTime = game.lastMoveTime + game.players[minIndex].time!;
-            await timeloss(minIndex, game.id, game.metaGame, game.lastMoveTime);
-          }
-        } else {
-          const toMove = parseInt(game.toMove);
-          if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
-            // To make sure games are up to date before we update further. Note this is a noop if removedGameIDs === [].
-            await updateUserGames(userId, user.gamesUpdate, removedGameIDs, games);
-            game.lastMoveTime = game.lastMoveTime + game.players[toMove].time!;
-            game.toMove = '';
-            // DON'T parallelize this!
-            await timeloss(toMove, game.id, game.metaGame, game.lastMoveTime);
+    if (!pars || !pars.size || pars.size !== "small") {
+      // LogInOutButton calls "me" with "small". If we do the below from the dashboard (and then at the same time from LogInOutButton) we run into
+      // all kinds of race conditions. So we only do the below if we are not in "small" mode.
+      
+      // Check for "recently completed games"
+      console.log(`Checking for recently completed games`);
+      // As soon as a game is over move it to archive status (game.type = 0).
+      // Remove the game from user's games list one week after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
+      for (let i = games.length - 1; i >= 0; i-- ) {
+        const game = games[i];
+        if (game.toMove === "" || game.toMove === null ) {
+          if ( (game.seen !== undefined) && (Date.now() - (game.seen || 0) > 7 * 24 * 3600000) && ((game.lastChat || 0) <= (game.seen || 0)) ) {
+            games.splice(i, 1);
+            removedGameIDs.push(game.id);
           }
         }
       }
+      // Check for out-of-time games
+      
+      console.log(`Checking for out-of-time games`);
+      for(const game of games) {
+        if (game.clockHard && game.toMove !== '') {
+          if (Array.isArray(game.toMove)) {
+            let minTime = 0;
+            let minIndex = -1;
+            const elapsed = Date.now() - game.lastMoveTime;
+            game.toMove.forEach((p: any, i: number) => {
+              if (p && game.players[i].time! - elapsed < minTime) {
+                minTime = game.players[i].time! - elapsed;
+                minIndex = i;
+              }});
+            if (minIndex !== -1) {
+              await updateUserGames(userId, user.gamesUpdate, removedGameIDs, games);
+              game.toMove = '';
+              game.lastMoveTime = game.lastMoveTime + game.players[minIndex].time!;
+              await timeloss(minIndex, game.id, game.metaGame, game.lastMoveTime);
+            }
+          } else {
+            const toMove = parseInt(game.toMove);
+            if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
+              // To make sure games are up to date before we update further. Note this is a noop if removedGameIDs === [].
+              await updateUserGames(userId, user.gamesUpdate, removedGameIDs, games);
+              game.lastMoveTime = game.lastMoveTime + game.players[toMove].time!;
+              game.toMove = '';
+              // DON'T parallelize this!
+              await timeloss(toMove, game.id, game.metaGame, game.lastMoveTime);
+            }
+          }
+        }
+      }
     }
-
     // Update last seen date for user
     console.log(`Updating last seen date for USER and USERS`);
     const lastSeenUserWork = ddbDocClient.send(new UpdateCommand({
