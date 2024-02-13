@@ -336,6 +336,8 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return await startTournaments();
     case "archive_tournaments":
       return await archiveTournaments();
+    case "report_problem":
+      return await reportProblem(pars);
     default:
       return {
         statusCode: 500,
@@ -4846,6 +4848,59 @@ async function deleteGames(userId: string, pars: { metaGame: string, cbit: numbe
     return formatReturnError(`Unable to delete games ${pars.gameids}. Error: ${error}`);
   }
 }
+
+async function reportProblem(pars: { error: string })
+{
+  console.log("Reported problem", pars.error);
+  const data = await ddbDocClient.send(
+    new QueryCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      KeyConditionExpression: "#pk = :pk",
+      ExpressionAttributeValues: { ":pk": "USERS" },
+      ExpressionAttributeNames: { "#pk": "pk", "#name": "name"},
+      ProjectionExpression: "sk, #name, lastSeen, country, stars",
+      ReturnConsumedCapacity: "INDEXES"
+    }));
+  const users = data.Items;
+  const playerIDs = [];
+  for (const user of users!)
+    if (user.name === 'fritzd' || user.name === 'Perlkönig')
+      playerIDs.push(user.id);
+  console.log("playerIDs", playerIDs);
+  const errorAdmins = await getPlayers(playerIDs);
+  console.log("errorAdmins", errorAdmins);
+  let addresses = [];
+  for (const admin of errorAdmins) {
+    if (admin.email !== undefined && admin.email !== null && admin.email !== "")
+      addresses.push(admin.email);
+  }
+  console.log("addresses", addresses);
+  const email = new SendEmailCommand({
+    Destination: {
+      ToAddresses: addresses
+    },
+    Message: {
+      Body: {
+        Text: {
+          Charset: "UTF-8",
+          Data: pars.error
+        },
+      },
+      Subject: {
+        Charset: "UTF-8",
+        Data: "AbstractPlay front end error report"
+      },
+    },
+    Source: "abstractplay@mail.abstractplay.com"
+  });
+  try {
+    await sesClient.send(email);
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to send e-mail to error admins. Error: ${error}`);
+  }
+} 
 
 async function sendPush(opts: PushOptions) {
     console.log(`Sending push: ${JSON.stringify(opts)}`);
