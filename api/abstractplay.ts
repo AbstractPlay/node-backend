@@ -4865,7 +4865,7 @@ async function reportProblem(pars: { error: string })
   const playerIDs = [];
   for (const user of users!)
     if (user.name === 'fritzd' || user.name === 'Perlkönig')
-      playerIDs.push(user.id);
+      playerIDs.push(user.sk);
   console.log("playerIDs", playerIDs);
   const errorAdmins = await getPlayers(playerIDs);
   console.log("errorAdmins", errorAdmins);
