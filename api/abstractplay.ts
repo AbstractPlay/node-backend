@@ -4897,6 +4897,13 @@ async function reportProblem(pars: { error: string })
     logGetItemError(error);
     return formatReturnError(`Unable to send e-mail to error admins. Error: ${error}`);
   }
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: "Reported"
+    }),
+    headers
+  };
 } 
 
 async function sendPush(opts: PushOptions) {
