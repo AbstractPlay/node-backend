@@ -4851,7 +4851,7 @@ async function deleteGames(userId: string, pars: { metaGame: string, cbit: numbe
 
 async function reportProblem(pars: { error: string })
 {
-  console.log("Reported problem", pars.error);
+  console.log("Reported problem:", pars.error);
   const data = await ddbDocClient.send(
     new QueryCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4864,17 +4864,14 @@ async function reportProblem(pars: { error: string })
   const users = data.Items;
   const playerIDs = [];
   for (const user of users!)
-    if (user.name === 'fritzd' || user.name === 'Fritz Deelman' || user.name === 'Perlkönig')
+    if (user.name === 'fritzd' || user.name === 'Fritz Deelman' || user.name === 'Perlkönigg')
       playerIDs.push(user.sk);
-  console.log("playerIDs", playerIDs);
   const errorAdmins = await getPlayers(playerIDs);
-  console.log("errorAdmins", errorAdmins);
   let addresses = [];
   for (const admin of errorAdmins) {
     if (admin.email !== undefined && admin.email !== null && admin.email !== "")
       addresses.push(admin.email);
   }
-  console.log("addresses", addresses);
   const email = new SendEmailCommand({
     Destination: {
       ToAddresses: addresses
