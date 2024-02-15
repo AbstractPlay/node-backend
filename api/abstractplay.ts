@@ -1235,7 +1235,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
     if (!pars || !pars.size || pars.size !== "small") {
       // LogInOutButton calls "me" with "small". If we do the below from the dashboard (and then at the same time from LogInOutButton) we run into
       // all kinds of race conditions. So we only do the below if we are not in "small" mode.
-      
+
       // Check for "recently completed games"
       console.log(`Checking for recently completed games`);
       // As soon as a game is over move it to archive status (game.type = 0).
@@ -1250,7 +1250,7 @@ async function me(claim: PartialClaims, pars: { size: string }) {
         }
       }
       // Check for out-of-time games
-      
+
       console.log(`Checking for out-of-time games`);
       for(const game of games) {
         if (game.clockHard && game.toMove !== '') {
@@ -2781,34 +2781,42 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       ));
       console.log("Scheduled delete and updates to game lists");
       game.sk = game.metaGame + "#1#" + game.id;
+
+      /*
+            As originally conceived, notes were part of the PLAYER record and were thus retained
+            until the game was cleared from the record. But when moving them to a separate record,
+            now they're being deleted immediately. So for now, let's not delete the notes until
+            I can find a way to schedule deletions.
+       */
+      // TODO: Find a way to schedule deletions
       // delete associated notes
-      try {
-        const notesData = await ddbDocClient.send(
-            new QueryCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-              KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-              ExpressionAttributeValues: { ":pk": "NOTE", ":sk": game.id },
-              ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-              ProjectionExpression: "#pk, #sk"
-        }));
-        if ( (notesData.Items) && (notesData.Items.length > 0) ) {
-            const notesList = notesData.Items as Note[];
-            for (const note of notesList) {
-                list.push(ddbDocClient.send(
-                    new DeleteCommand({
-                      TableName: process.env.ABSTRACT_PLAY_TABLE,
-                      Key: {
-                        "pk": note.pk,
-                        "sk": note.sk
-                      }
-                    })
-                ));
-            }
-        }
-      } catch (err) {
-        logGetItemError(err);
-        return formatReturnError('Unable to process submit move');
-      }
+    //   try {
+    //     const notesData = await ddbDocClient.send(
+    //         new QueryCommand({
+    //           TableName: process.env.ABSTRACT_PLAY_TABLE,
+    //           KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+    //           ExpressionAttributeValues: { ":pk": "NOTE", ":sk": game.id },
+    //           ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+    //           ProjectionExpression: "#pk, #sk"
+    //     }));
+    //     if ( (notesData.Items) && (notesData.Items.length > 0) ) {
+    //         const notesList = notesData.Items as Note[];
+    //         for (const note of notesList) {
+    //             list.push(ddbDocClient.send(
+    //                 new DeleteCommand({
+    //                   TableName: process.env.ABSTRACT_PLAY_TABLE,
+    //                   Key: {
+    //                     "pk": note.pk,
+    //                     "sk": note.sk
+    //                   }
+    //                 })
+    //             ));
+    //         }
+    //     }
+    //   } catch (err) {
+    //     logGetItemError(err);
+    //     return formatReturnError('Unable to process submit move');
+    //   }
       if (game.tournament !== undefined) {
         list.push(tournamentUpdates(game, players));
       }
@@ -4904,7 +4912,7 @@ async function reportProblem(pars: { error: string })
     }),
     headers
   };
-} 
+}
 
 async function sendPush(opts: PushOptions) {
     console.log(`Sending push: ${JSON.stringify(opts)}`);
