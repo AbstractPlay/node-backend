@@ -1177,7 +1177,10 @@ async function me(claim: PartialClaims, pars: { size: string }) {
   if (!claim.email || claim.email.trim().length === 0) {
     console.log(`How!?: claim.email is ${claim.email}`);
   }
-  console.log(`ME: Attempting to find data for user id ${userId}`);
+  if (!pars || !pars.size || pars.size !== "small")
+    console.log(`ME: Attempting to find data for user id ${userId}`);
+  else
+    console.log(`ME (small): Attempting to find data for user id ${userId}`);
 
   const fixGames = false;
   try {
