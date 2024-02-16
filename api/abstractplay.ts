@@ -1171,16 +1171,16 @@ async function updateUserSettings(userid: string, pars: { settings: any; }) {
   }
 }
 
-async function me(claim: PartialClaims, pars: { size: string }) {
+async function me(claim: PartialClaims, pars: { size: string, vars: string, update: string }) {
   const userId = claim.sub;
   const email = claim.email;
   if (!claim.email || claim.email.trim().length === 0) {
     console.log(`How!?: claim.email is ${claim.email}`);
   }
   if (!pars || !pars.size || pars.size !== "small")
-    console.log(`ME: Attempting to find data for user id ${userId}`);
+    console.log(`ME: Attempting to find data for user id ${userId}, vars ${pars?.vars}, update ${pars?.update}`);
   else
-    console.log(`ME (small): Attempting to find data for user id ${userId}`);
+    console.log(`ME (small): Attempting to find data for user id ${userId}, vars ${pars.vars}, update ${pars.update}`);
 
   const fixGames = false;
   try {
