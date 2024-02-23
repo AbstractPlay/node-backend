@@ -4577,14 +4577,12 @@ async function endTournament(tournament: Tournament) {
           }
           for (const game of gamelist) {
             if (game.winner?.length === 2) {
-              tournamentPlayers.get(game.player1)!.tiebreak! += (tournamentPlayers.get(game.player2)!.score! - 1) / 2;
-              tournamentPlayers.get(game.player2)!.tiebreak! += (tournamentPlayers.get(game.player1)!.score! - 1) / 2;
+              tournamentPlayers.get(game.player1)!.tiebreak! += tournamentPlayers.get(game.player2)!.score! / 2;
+              tournamentPlayers.get(game.player2)!.tiebreak! += tournamentPlayers.get(game.player1)!.score! / 2;
             } else if (game.winner![0] === game.player1) {
-              tournamentPlayers.get(game.player1)!.tiebreak! += n / 2 - 1;
-              tournamentPlayers.get(game.player2)!.tiebreak! += tournamentPlayers.get(game.player1)!.score! - n / 2;
+              tournamentPlayers.get(game.player1)!.tiebreak! += tournamentPlayers.get(game.player2)!.score!;
             } else {
-              tournamentPlayers.get(game.player2)!.tiebreak! += n / 2 - 1;
-              tournamentPlayers.get(game.player1)!.tiebreak! += tournamentPlayers.get(game.player2)!.score! - n / 2;
+              tournamentPlayers.get(game.player2)!.tiebreak! += tournamentPlayers.get(game.player1)!.score!;
             }
           }
           // Find winner
