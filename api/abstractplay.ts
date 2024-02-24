@@ -434,6 +434,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await testAsync(event.cognitoPoolClaims.sub, pars);
     case "delete_games":
       return await deleteGames(event.cognitoPoolClaims.sub, pars);
+    case "end_tournament":
+      return await endATournament(event.cognitoPoolClaims.sub, pars);  
     default:
       return {
         statusCode: 500,
@@ -4528,6 +4530,49 @@ async function startTournament(tournament: Tournament) {
     await Promise.all(work);
     return true;
   }
+}
+
+async function endATournament(userId: string, pars: { tournamentid: string }) {
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get user ${userId}. Error: ${error}`);
+  }
+  let tournament: Tournament;
+  try {
+    const tournamentData = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "TOURNAMENT",
+          "sk": pars.tournamentid
+        },
+      }));
+    if (!tournamentData.Item)
+      throw new Error(`No tournament ${pars.tournamentid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    tournament = tournamentData.Item as Tournament;
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get tournament ${pars.tournamentid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+  return endTournament(tournament);
 }
 
 async function endTournament(tournament: Tournament) {
