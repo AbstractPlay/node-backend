@@ -434,6 +434,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await testAsync(event.cognitoPoolClaims.sub, pars);
     case "delete_games":
       return await deleteGames(event.cognitoPoolClaims.sub, pars);
+    case "end_tournament":
+      return await endATournament(event.cognitoPoolClaims.sub, pars);  
     default:
       return {
         statusCode: 500,
@@ -2903,7 +2905,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
 }
 
 async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
-  const work: Promise<any>[] = [];
+  let work: Promise<any>[] = [];
   for (const player of players) {
     let score = 0;
     if (game.winner?.length === 1 && game.players[game.winner[0] - 1].id === player.id) {
@@ -2946,6 +2948,8 @@ async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
   }
   if (divisionCompleted) {
     console.log("division completed, processing tournament");
+    await Promise.all(work);
+    work = []; 
     work.push(endTournament(tournament))
   }
   return Promise.all(work);
@@ -4528,6 +4532,49 @@ async function startTournament(tournament: Tournament) {
   }
 }
 
+async function endATournament(userId: string, pars: { tournamentid: string }) {
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get user ${userId}. Error: ${error}`);
+  }
+  let tournament: Tournament;
+  try {
+    const tournamentData = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "TOURNAMENT",
+          "sk": pars.tournamentid
+        },
+      }));
+    if (!tournamentData.Item)
+      throw new Error(`No tournament ${pars.tournamentid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    tournament = tournamentData.Item as Tournament;
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get tournament ${pars.tournamentid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+  return endTournament(tournament);
+}
+
 async function endTournament(tournament: Tournament) {
   try {
     if (tournament.divisions) {
@@ -4573,32 +4620,14 @@ async function endTournament(tournament: Tournament) {
               tournamentPlayers.get(game.winner![0])!.score! += 1;
             }
           }
-          const n = tournamentPlayers.size;
-          /*
-            In SON tiebreak your tiebreak is the sum of the scores of the players you beat.
-            In RSON tiebreak you get "full" credit for each win, but you get penalized for each loss, with the penalty being higher for losing against lower scoring opponents.
-            RSON tiebreak:
-              For every win you get n/2 - 1 points.
-              For every loss you get (opponent's score) - n/2.
-              For every draw you get (n/2 - 1 + (opponent's score) - n/2) / 2 = (opponent's score - 1) / 2.
-            Note that at the end of the tournament
-              - RSON = SON for a player that wins all his games.
-              - RSON = SON for a player that loses all his games.
-              - RSON can't be negative.
-              - If no draws, RSON is an integer.
-
-            During the tournament, let n = 1 + number of games you have finished (so that when you are done with all your games, it's n)
-          */
           for (const game of gamelist) {
             if (game.winner?.length === 2) {
-              tournamentPlayers.get(game.player1)!.tiebreak! += (tournamentPlayers.get(game.player2)!.score! - 1) / 2;
-              tournamentPlayers.get(game.player2)!.tiebreak! += (tournamentPlayers.get(game.player1)!.score! - 1) / 2;
+              tournamentPlayers.get(game.player1)!.tiebreak! += tournamentPlayers.get(game.player2)!.score! / 2;
+              tournamentPlayers.get(game.player2)!.tiebreak! += tournamentPlayers.get(game.player1)!.score! / 2;
             } else if (game.winner![0] === game.player1) {
-              tournamentPlayers.get(game.player1)!.tiebreak! += n / 2 - 1;
-              tournamentPlayers.get(game.player2)!.tiebreak! += tournamentPlayers.get(game.player1)!.score! - n / 2;
+              tournamentPlayers.get(game.player1)!.tiebreak! += tournamentPlayers.get(game.player2)!.score!;
             } else {
-              tournamentPlayers.get(game.player2)!.tiebreak! += n / 2 - 1;
-              tournamentPlayers.get(game.player1)!.tiebreak! += tournamentPlayers.get(game.player2)!.score! - n / 2;
+              tournamentPlayers.get(game.player2)!.tiebreak! += tournamentPlayers.get(game.player1)!.score!;
             }
           }
           // Find winner
