@@ -382,6 +382,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await respondedChallenge(event.cognitoPoolClaims.sub, pars);
     case "submit_move":
       return await submitMove(event.cognitoPoolClaims.sub, pars);
+    case "timeloss":
+      return await checkForTimeloss(event.cognitoPoolClaims.sub, pars);
     case "invoke_pie":
       return await invokePie(event.cognitoPoolClaims.sub, pars);
     case "update_note":
@@ -1272,7 +1274,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
               await updateUserGames(userId, user.gamesUpdate, removedGameIDs, games);
               game.toMove = '';
               game.lastMoveTime = game.lastMoveTime + game.players[minIndex].time!;
-              await timeloss(minIndex, game.id, game.metaGame, game.lastMoveTime);
+              await timeloss(false, minIndex, game.id, game.metaGame, game.lastMoveTime);
             }
           } else {
             const toMove = parseInt(game.toMove);
@@ -1282,7 +1284,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
               game.lastMoveTime = game.lastMoveTime + game.players[toMove].time!;
               game.toMove = '';
               // DON'T parallelize this!
-              await timeloss(toMove, game.id, game.metaGame, game.lastMoveTime);
+              await timeloss(false, toMove, game.id, game.metaGame, game.lastMoveTime);
             }
           }
         }
@@ -3167,7 +3169,7 @@ function drawaccepted(userid: string, engine: GameBase, game: FullGame, simultan
   }
 }
 
-async function timeloss(player: number, gameid: string, metaGame: string, timestamp: number) {
+async function timeloss(check: boolean, player: number, gameid: string, metaGame: string, timestamp: number) {
   let data: any;
   try {
     data = await ddbDocClient.send(
@@ -3187,6 +3189,31 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
     throw new Error(`No game ${metaGame}, ${gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
 
   const game = data.Item as FullGame;
+  if (check) {
+    console.log("game.toMove", game.toMove);
+    if (Array.isArray(game.toMove)) {
+      let minTime = 0;
+      let minIndex = -1;
+      const elapsed = Date.now() - game.lastMoveTime;
+      game.toMove.forEach((p: any, i: number) => {
+        if (p && game.players[i].time! - elapsed < minTime) {
+          minTime = game.players[i].time! - elapsed;
+          minIndex = i;
+        }});
+      if (minIndex !== -1) {
+        player = minIndex;
+      } else {
+        throw "Nobody's time is up!";
+      }
+    } else {
+      const toMove = parseInt(game.toMove);
+      if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
+        player = toMove;
+      } else {
+        throw "Opponent's time isn't up!";
+      }
+    }
+  }
   const engine = GameFactory(game.metaGame, game.state);
   if (!engine)
     throw new Error(`Unknown metaGame ${game.metaGame}`);
@@ -3279,8 +3306,30 @@ async function timeloss(player: number, gameid: string, metaGame: string, timest
   if (game.tournament !== undefined) {
     work.push(tournamentUpdates(game, players));
   }
+  await Promise.all(work);
+  return game;
+}
 
-  return Promise.all(work);
+async function checkForTimeloss(userid: string, pars: { id: string, metaGame: string}) {
+  try {
+    let game = await timeloss(true, -1, pars.id, pars.metaGame, Date.now());
+    return {
+      statusCode: 200,
+      body: JSON.stringify(game),
+      headers
+    };
+  }
+  catch (error) {
+    if (error === "Nobody's time is up!" || error === "Opponent's time isn't up!") {
+      return {
+        statusCode: 200,
+        body: "not_a_timeloss",
+        headers
+      };
+    }
+    logGetItemError(error);
+    return formatReturnError('Unable to process check for timeloss');
+  }
 }
 
 function applySimultaneousMove(userid: string, move: string, engine: GameBaseSimultaneous, game: FullGame) {
