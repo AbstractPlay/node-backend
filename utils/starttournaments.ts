@@ -292,9 +292,25 @@ async function startTournament(tournament: Tournament) {
     console.log(`Unable to get players for tournament ${tournament.id} from table ${process.env.ABSTRACT_PLAY_TABLE}. Error: ${error}`);
     return;
   }
-  const players = playersData.Items as TournamentPlayer[];
+  let players0 = playersData.Items as TournamentPlayer[];
   // Get players
-  const playersFull = await getPlayers(players.map(p => p.playerid));
+  const playersFull = await getPlayers(players0.map(p => p.playerid));
+  for (let i = 0; i < playersFull.length; i++) {
+    players0[i].rating = playersFull[i]?.ratings?.[tournament.metaGame]?.rating;
+    if (players0[i].rating === undefined)
+      players0[i].rating = 0;
+    players0[i].score = 0;
+  }
+  let remove: TournamentPlayer[] = [];
+  const players = players0.filter((player, i) => {
+    // If the player timed out in their last tournament game, and they haven't been seen in 30 days, remove them from the tournament
+    if (player.timeout === true && playersFull[i].lastSeen! < Date.now() - 1000 * 60 * 60 * 24 * 30) {
+      remove.push(player);
+      console.log(`Removing player ${player.playerid} from tournament ${tournament.id} because of timeout`);
+      return false;
+    } else 
+      return true;
+  });
   if (players.length < 4) {
     // Cancel tournament
     // Delete tournament and tournament players
@@ -326,7 +342,7 @@ async function startTournament(tournament: Tournament) {
       return;
     }
     try {
-      for (let player of players) {
+      for (let player of players0) {
         work.push(ddbDocClient.send(
           new DeleteCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -364,16 +380,10 @@ async function startTournament(tournament: Tournament) {
     const clockStart = 72;
     const clockInc = 36;
     const clockMax = 120;
-    for (let i = 0; i < playersFull.length; i++) {
-      players[i].rating = playersFull[i]?.ratings?.[tournament.metaGame]?.rating;
-      if (players[i].rating === undefined)
-        players[i].rating = 0;
-      players[i].score = 0;
-    }
     // Sort players into divisions by rating
     players.sort((a, b) => b.rating! - a.rating!);
     const allGamePlayers = players.map(p => {return {id: p.playerid, name: p.playername, time: clockStart * 3600000} as User});
-    // Sort playersFull in the same order as players
+    // Sort playersFull in the same order as players (and skip removed players)
     const playersFull2: FullUser[] = [];
     for (let player of players)
       playersFull2.push(playersFull.find(p => p.id === player.playerid)!);
@@ -589,6 +599,17 @@ async function startTournament(tournament: Tournament) {
         console.log(`Unable to add player ${player.playerid} to tournament ${newTournamentid}`);
         return;
       }
+    }
+    // ... and delete mia players
+    for (const player of remove) {
+      work.push(ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "TOURNAMENTPLAYER", "sk": player.sk
+          },
+        })
+      ));
     }    
     // Send e-mails to participants
     await initi18n('en');
