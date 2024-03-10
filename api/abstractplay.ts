@@ -457,8 +457,6 @@ async function userNames() {
         ReturnConsumedCapacity: "INDEXES"
       }));
 
-    console.log("Query succeeded. Got:");
-    console.log(data);
     const users = data.Items;
     if (users == undefined) {
       throw new Error("Found no users?");
@@ -4271,8 +4269,9 @@ async function startTournament(tournament: Tournament) {
   let remove: TournamentPlayer[] = [];
   const players = players0.filter((player, i) => {
     // If the player timed out in their last tournament game, and they haven't been seen in 30 days, remove them from the tournament
-    if (player.timeout === true || playersFull[i].lastSeen! < Date.now() - 1000 * 60 * 60 * 24 * 30) {
+    if (player.timeout === true && playersFull[i].lastSeen! < Date.now() - 1000 * 60 * 60 * 24 * 30) {
       remove.push(player);
+      console.log(`Removing player ${player.playerid} from tournament ${tournament.id} because of timeout`);
       return false;
     } else 
       return true;
