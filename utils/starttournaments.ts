@@ -149,6 +149,7 @@ type TournamentPlayer = {
   score?: number;
   tiebreak?: number;
   rating?: number;
+  timeout?: boolean;
 };
 
 type TagList = {
