@@ -136,12 +136,6 @@ type Rating = {
   draws: number;
 }
 
-type PlayerRating = {
-  id: string;
-  name: string;
-  rating: number;
-}
-
 type Note = {
     pk: string;
     sk: string;
@@ -270,6 +264,7 @@ type TournamentPlayer = {
   score?: number;
   tiebreak?: number;
   rating?: number;
+  timeout?: boolean;
 };
 
 type TournamentGame = {
@@ -2825,7 +2820,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     //     return formatReturnError('Unable to process submit move');
     //   }
       if (game.tournament !== undefined) {
-        list.push(tournamentUpdates(game, players));
+        list.push(tournamentUpdates(game, players, pars.move === "timeout" ? parseInt(game.toMove) : undefined));
       }
     }
     game.lastMoveTime = timestamp;
@@ -2906,23 +2901,24 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
   }
 }
 
-async function tournamentUpdates(game: FullGame, players: FullUser[] ) {
+async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: number | undefined ) {
   let work: Promise<any>[] = [];
-  for (const player of players) {
+  for (let i = 0; i < 2; i++) {
+    const player = players[i];
     let score = 0;
     if (game.winner?.length === 1 && game.players[game.winner[0] - 1].id === player.id) {
       score = 1;
     } else if (game.winner?.length === 2) {
       score = 0.5;
     }
-    console.log(`player ${player.name} now has score ${score} in game ${game.id} from tournament ${game.tournament}`);
+    console.log(`player ${player.name} now has score ${score} in game ${game.id} from tournament ${game.tournament}`); 
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTPLAYER", "sk": game.tournament + '#' + game.division!.toString() + '#' + player.id },
-      ExpressionAttributeNames: { "#s": "score" },
-      ExpressionAttributeValues: { ":inc": score },
-      UpdateExpression: "add #s :inc"
-    })));
+      ExpressionAttributeNames: { "#s": "score", "#t": "timeout" },
+      ExpressionAttributeValues: { ":inc": score, ":t": i === timeout },
+      UpdateExpression: "add #s :inc set #t = :t"
+    })));    
   }
   const winner = game.winner?.map((w: number) => game.players[w - 1].id);
   work.push(ddbDocClient.send(new UpdateCommand({
@@ -3304,7 +3300,7 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
     }
   });
   if (game.tournament !== undefined) {
-    work.push(tournamentUpdates(game, players));
+    work.push(tournamentUpdates(game, players, player));
   }
   await Promise.all(work);
   return game;
@@ -4263,9 +4259,24 @@ async function startTournament(tournament: Tournament) {
     logGetItemError(error);
     return formatReturnError(`Unable to get players for tournament ${tournament.id} from table ${process.env.ABSTRACT_PLAY_TABLE}. Error: ${error}`);
   }
-  const players = playersData.Items as TournamentPlayer[];
+  let players0 = playersData.Items as TournamentPlayer[];
   // Get players
-  const playersFull = await getPlayers(players.map(p => p.playerid));
+  const playersFull = await getPlayers(players0.map(p => p.playerid));
+  for (let i = 0; i < playersFull.length; i++) {
+    players0[i].rating = playersFull[i]?.ratings?.[tournament.metaGame]?.rating;
+    if (players0[i].rating === undefined)
+      players0[i].rating = 0;
+    players0[i].score = 0;
+  }
+  let remove: TournamentPlayer[] = [];
+  const players = players0.filter((player, i) => {
+    // If the player timed out in their last tournament game, and they haven't been seen in 30 days, remove them from the tournament
+    if (player.timeout === true || playersFull[i].lastSeen! < Date.now() - 1000 * 60 * 60 * 24 * 30) {
+      remove.push(player);
+      return false;
+    } else 
+      return true;
+  });
   if (players.length < 4) {
     // Cancel tournament
     // Delete tournament and tournament players
@@ -4296,7 +4307,7 @@ async function startTournament(tournament: Tournament) {
       return formatReturnError(`Unable to delete tournament ${tournament.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
     }
     try {
-      for (let player of players) {
+      for (let player of players0) {
         work.push(ddbDocClient.send(
           new DeleteCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4333,16 +4344,10 @@ async function startTournament(tournament: Tournament) {
     const clockStart = 72;
     const clockInc = 36;
     const clockMax = 120;
-    for (let i = 0; i < playersFull.length; i++) {
-      players[i].rating = playersFull[i]?.ratings?.[tournament.metaGame]?.rating;
-      if (players[i].rating === undefined)
-        players[i].rating = 0;
-      players[i].score = 0;
-    }
     // Sort players into divisions by rating
     players.sort((a, b) => b.rating! - a.rating!);
     const allGamePlayers = players.map(p => {return {id: p.playerid, name: p.playername, time: clockStart * 3600000} as User});
-    // Sort playersFull in the same order as players
+    // Sort playersFull in the same order as players (and skip removed players)
     const playersFull2: FullUser[] = [];
     for (let player of players)
       playersFull2.push(playersFull.find(p => p.id === player.playerid)!);
@@ -4553,6 +4558,17 @@ async function startTournament(tournament: Tournament) {
         return formatReturnError(`Unable to add player ${player.playerid} to tournament ${newTournamentid}`);
       }
     }
+    // ... and delete mia players
+    for (const player of remove) {
+      work.push(ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "TOURNAMENTPLAYER", "sk": player.sk
+          },
+        })
+      ));
+    }
     // Send e-mails to participants
     await initi18n('en');
     const metaGameName = gameinfo.get(tournament.metaGame)?.name;
@@ -4719,6 +4735,15 @@ async function endTournament(tournament: Tournament) {
               ExpressionAttributeValues: { ":t": player.tiebreak },
               UpdateExpression: "set #t = :t"
             })));
+            if (player.timeout) {
+              work.push(ddbDocClient.send(new UpdateCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: { "pk": "TOURNAMENTPLAYER", "sk": `${tournament.nextid}#1#${player.playerid}` },
+                ExpressionAttributeNames: { "#t": "timeout" },
+                ExpressionAttributeValues: { ":t": true },
+                UpdateExpression: "set #t = :t"
+              })));
+            }
           }
           tournamentUpdated = true;
         }
