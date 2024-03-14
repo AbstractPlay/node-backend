@@ -379,6 +379,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await submitMove(event.cognitoPoolClaims.sub, pars);
     case "timeloss":
       return await checkForTimeloss(event.cognitoPoolClaims.sub, pars);
+    case "abandoned":
+      return await checkForAbandonedGame(event.cognitoPoolClaims.sub, pars);
     case "invoke_pie":
       return await invokePie(event.cognitoPoolClaims.sub, pars);
     case "update_note":
@@ -3200,6 +3202,8 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
         throw "Nobody's time is up!";
       }
     } else {
+      if (game.toMove === "") 
+        throw "Game is already over!";
       const toMove = parseInt(game.toMove);
       if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
         player = toMove;
@@ -3304,6 +3308,113 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
   return game;
 }
 
+async function checkForAbandonedGame(userid: string, pars: { id: string, metaGame: string}) {
+  let data: any;
+  try {
+    data = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "GAME",
+          "sk": pars.metaGame + "#0#" + pars.id
+        },
+      }));
+  }
+  catch (error) {
+    logGetItemError(error);
+    throw new Error(`Unable to get game ${pars.metaGame}, ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+  if (!data.Item)
+    throw new Error(`No game ${pars.metaGame}, ${pars.id} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+
+  try {
+    const game = data.Item as FullGame;
+    const playerIDs = game.players.map((p: { id: any; }) => p.id);
+    const players = await getPlayers(playerIDs);
+    const now = Date.now();
+    if (
+      game.toMove == "" 
+      || game.clockHard
+      || players.some(p => p.lastSeen !== undefined && p.lastSeen > now - 30 * 24 * 60 * 60 * 1000)
+      || game.lastMoveTime > now - 30 * 24 * 60 * 60 * 1000
+    ) {
+      return {
+        statusCode: 200,
+        body: "not_abandoned",
+        headers
+      };
+    }
+    const engine = GameFactory(game.metaGame, game.state);
+    if (!engine)
+      throw new Error(`Unknown metaGame ${game.metaGame}`);
+    engine.abandoned();
+    game.state = engine.serialize();
+    game.toMove = "";
+    game.winner = engine.winner;
+    game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+    game.lastMoveTime = now;
+
+    // this should be all the info we want to show on the "my games" summary page.
+    const playerGame = {
+      "id": game.id,
+      "metaGame": game.metaGame,
+      "players": game.players,
+      "clockHard": game.clockHard,
+      "noExplore": game.noExplore || false,
+      "winner": game.winner,
+      "toMove": game.toMove,
+      "lastMoveTime": game.lastMoveTime,
+      "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
+      "gameEnded": new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime(),
+      "numMoves": engine.stack.length - 1,
+      "variants": engine.variants,
+    } as Game;
+    const work: Promise<any>[] = [];
+    work.push(addToGameLists("COMPLETEDGAMES", playerGame, game.lastMoveTime, game.numMoves !== undefined && game.numMoves > game.numPlayers));
+
+    // delete at old sk
+    work.push(ddbDocClient.send(
+      new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk":"GAME",
+          "sk": game.sk
+        }
+      })
+    ));
+    console.log("Scheduled delete and updates to game lists");
+    game.sk = game.metaGame + "#1#" + game.id;
+
+    work.push(ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: game
+      })));
+
+    // Update players
+    players.forEach((player, ind) => {
+      const games: Game[] = [];
+      player.games.forEach(g => {
+        if (g.id === playerGame.id)
+          games.push(playerGame);
+        else
+          games.push(g)
+      });
+      const updatedGameIds = [playerGame.id];
+      work.push(updateUserGames(player.id, player.gamesUpdate, updatedGameIds, games));
+    });
+    await Promise.all(work);
+    return {
+      statusCode: 200,
+      body: JSON.stringify(game),
+      headers
+    };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError('Error in checking for abandoned game');
+  }
+}
+
 async function checkForTimeloss(userid: string, pars: { id: string, metaGame: string}) {
   try {
     let game = await timeloss(true, -1, pars.id, pars.metaGame, Date.now());
@@ -3314,7 +3425,7 @@ async function checkForTimeloss(userid: string, pars: { id: string, metaGame: st
     };
   }
   catch (error) {
-    if (error === "Nobody's time is up!" || error === "Opponent's time isn't up!") {
+    if (error === "Nobody's time is up!" || error === "Opponent's time isn't up!" || "Game is already over!") {
       return {
         statusCode: 200,
         body: "not_a_timeloss",
