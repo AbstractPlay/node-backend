@@ -103,6 +103,7 @@ type GameSummary = {
     };
     histograms: {
         all: number[];
+        allPlayers: number[];
         meta: GameNumList[];
         players: UserNumList[];
         firstTimers: number[];
@@ -498,9 +499,15 @@ export const handler: Handler = async (event: any, context?: any) => {
 
         // all games
         const histAll: number[] = [];
+        const histAllPlayers: number[] = [];
         let maxBucket = Math.max(...histList.map(x => x.bucket));
         for (let i = 0; i <= maxBucket; i++) {
             histAll.push(histList.filter(x => x.bucket === i).length);
+            const users = new Set<string>();
+            for (const rec of histListPlayers.filter(x => x.bucket === i)) {
+                users.add(rec.user);
+            }
+            histAllPlayers.push(users.size);
         }
         const histMeta: GameNumList[] = [];
         const recent: GameNumber[] = [];
@@ -547,9 +554,9 @@ export const handler: Handler = async (event: any, context?: any) => {
         console.log("Calculating hours per move");
         const hoursPer: number[] = [];
         for (const rec of recs) {
-            // omit "timeout" records
+            // omit "timeout" and "abandoned" records
             const moveStr = JSON.stringify(rec.moves);
-            if ( (moveStr.includes("timeout")) || (rec.moves.length < 2) ) {
+            if ( (moveStr.includes("timeout")) || (moveStr.includes("abandoned")) || (rec.moves.length < 2) ) {
                 // console.log(`Skipping record ${rec.header.site.gameid} because it contains a timeout move`)
                 continue;
             }
@@ -630,6 +637,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             },
             histograms: {
                 all: histAll,
+                allPlayers: histAllPlayers,
                 meta: histMeta,
                 players: histPlayers,
                 firstTimers,
