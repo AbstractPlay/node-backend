@@ -2228,6 +2228,7 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
         if (challenge.duration === 1) {
             expired = true;
         } else {
+            console.log(`decrementing standing challenge ${challenge.metaGame + '#' + challenge.id} duration from ${challenge.duration} to ${challenge.duration - 1}`);
             list.push(
                 ddbDocClient.send(
                     new UpdateCommand({
@@ -2318,6 +2319,7 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
     || challenge.numPlayers > 2 // Had to duplicate the standing challenge when someone accepted but there were still spots left. Remove the duplicated standing challenge
     || expired
   ) {
+    console.log(`removing challenge ${challenge.metaGame + '#' + challenge.id}`);
     list.push(
       ddbDocClient.send(
         new DeleteCommand({
