@@ -2223,24 +2223,24 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
 
   // determine if a standing challenge has expired
   let expired = false;
-  if (standing) {
+  if (standing && !revoked) {
     if ( ("duration" in challenge) && (typeof challenge.duration === "number") && (challenge.duration > 0) ) {
-        if (challenge.duration === 1) {
-            expired = true;
-        } else {
-            console.log(`decrementing standing challenge ${challenge.metaGame + '#' + challenge.id} duration from ${challenge.duration} to ${challenge.duration - 1}`);
-            list.push(
-                ddbDocClient.send(
-                    new UpdateCommand({
-                        TableName: process.env.ABSTRACT_PLAY_TABLE,
-                        Key: {"pk": "STANDINGCHALLENGE#" + challenge.metaGame, "sk": challenge.id},
-                        ExpressionAttributeValues: {":d": challenge.duration - 1},
-                        ExpressionAttributeNames: {"#d": "duration"},
-                        UpdateExpression: "set #d = :d"
-                    })
-                )
-            );
-        }
+      if (challenge.duration === 1) {
+        expired = true;
+      } else {
+        console.log(`decrementing standing challenge ${challenge.metaGame + '#' + challenge.id} duration from ${challenge.duration} to ${challenge.duration - 1}`);
+        list.push(
+          ddbDocClient.send(
+            new UpdateCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Key: {"pk": "STANDINGCHALLENGE#" + challenge.metaGame, "sk": challenge.id},
+              ExpressionAttributeValues: {":d": challenge.duration - 1},
+              ExpressionAttributeNames: {"#d": "duration"},
+              UpdateExpression: "set #d = :d"
+            })
+          )
+        );
+      }
     }
   }
 
