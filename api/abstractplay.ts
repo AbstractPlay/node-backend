@@ -1985,7 +1985,7 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
     if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
         await changeLanguageForPlayer(player);
         var body;
-        if (comment === "") {
+        if (comment === ".") {
           body = i18n.t("ChallengeBody", { "challenger": challengerName, metaGame });
         } else {
           body = i18n.t("ChallengeBodyComment", { "challenger": challengerName, metaGame, comment });
@@ -2037,7 +2037,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
       for (const player of players) {
         await changeLanguageForPlayer(player);
         var body;
-        if (comment === "") {
+        if (comment === ".") {
           body = i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame});
         } else {
           body = i18n.t("ChallengeRevokedBodyComment", { name: challenge.challenger.name, metaGame, comment});
@@ -2068,7 +2068,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
       for (const player of players) {
         await changeLanguageForPlayer(player);
         var body;
-        if (comment === "") {
+        if (comment === ".") {
           body = i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame});
         } else {
           body = i18n.t("ChallengeRevokedBodyComment", { name: challenge.challenger.name, metaGame, comment});
