@@ -1,5 +1,6 @@
 {
     "ChallengeBody": "{{challenger}} has challenged you to a game of {{- metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
+    "ChallengeBodyComment": "{{challenger}} has challenged you to a game of {{- metaGame}} with note: {{comment}}. Please visit https://play.abstractplay.com/ for more details.",
     "ChallengeRejectedBody": "{{quitter}} has declined the {{- metaGame}} challenge. The challenge has been removed.",
     "ChallengeRejectedSubject": "AbstractPlay: challenge rejected",
     "ChallengeResponseComment": "Your opponent commented: \"{{comment}}\"",

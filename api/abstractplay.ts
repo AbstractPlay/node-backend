@@ -1889,7 +1889,7 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
       );
     })
     try {
-      list.push(sendChallengedEmail(challenge.challenger.name, challenge.challengees, challenge.metaGame));
+      list.push(sendChallengedEmail(challenge.challenger.name, challenge.challengees, challenge.metaGame, challenge.comment));
     } catch (error) {
       logGetItemError(error);
       throw new Error("newChallenge: Failed to send emails");
@@ -1972,31 +1972,41 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
   }
 }
 
-async function sendChallengedEmail(challengerName: string, opponents: User[], metaGame: string) {
+async function sendChallengedEmail(challengerName: string, opponents: User[], metaGame: string, comment: string | undefined) {
   const players: FullUser[] = await getPlayers(opponents.map((o: { id: any; }) => o.id));
   console.log(players);
   metaGame = gameinfo.get(metaGame).name;
   await initi18n('en');
   const work: Promise<any>[] = [];
+  comment = comment ? comment.trim() : "";
+  if (!comment.endsWith(".") && !comment.endsWith("!") && !comment.endsWith("?"))
+    comment += ".";
   for (const player of players) {
     if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
         await changeLanguageForPlayer(player);
+        var body;
+        if (comment === "") {
+          body = i18n.t("ChallengeBody", { "challenger": challengerName, metaGame });
+        } else {
+          body = i18n.t("ChallengeBodyComment", { "challenger": challengerName, metaGame, comment });
+        }
         if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { "challenger": challengerName, metaGame }));
-            work.push(sesClient.send(comm));
+          console.log(`Sending email to ${player.name} with body: ${body}`);
+          const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), body);
+          work.push(sesClient.send(comm));
         } else {
             console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
         }
         // push notifications are sent no matter what
         work.push(sendPush({
-            userId: player.id,
-            topic: "challenges",
-            title: i18n.t("PUSH.titles.challenged"),
-            body: i18n.t("ChallengeBody", { "challenger": challengerName, metaGame }),
-            url: "/",
+          userId: player.id,
+          topic: "challenges",
+          title: i18n.t("PUSH.titles.challenged"),
+          body: body,
+          url: "/",
         }));
     } else {
-        console.log(`No verified email address found for ${player.name} (${player.id})`);
+      console.log(`No verified email address found for ${player.name} (${player.id})`);
     }
   }
   return Promise.all(work);
@@ -2138,8 +2148,8 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
             }
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
                 if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameStart) ) {
-                    console.log(player);
                     const ebody = body + " " + i18n.t("GameLink", { metaGame: email.metaGame, gameId: email.gameId});
+                    console.log(`e-mailing ${player.name}, ${ebody}`);
                     const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), ebody);
                     work.push(sesClient.send(comm));
                 } else {
@@ -2196,6 +2206,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
         }
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
           if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
+            console.log(`e-mailing ${player.name}, ${body}`);
             const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), body);
             work.push(sesClient.send(comm));
           } else {
