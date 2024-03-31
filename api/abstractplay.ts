@@ -2144,7 +2144,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
             if (ind === 0 || email.simultaneous) {
               body += " " + i18n.t("YourMove");
             }
-            if (comment !== ".") {
+            if (comment !== "." && player.id !== userid) {
               body += " " + i18n.t("ChallengeResponseComment", { comment });
             }
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
