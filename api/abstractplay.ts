@@ -2113,7 +2113,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
   const metaGame = pars.metaGame;
   var comment = pars.comment ? pars.comment.trim() : "";
   if (!comment.endsWith(".") && !comment.endsWith("!") && !comment.endsWith("?"))
-  comment += ".";
+    comment += ".";
   let ret: any;
   const work: Promise<any>[] = [];
   if (response) {
@@ -2143,7 +2143,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
             if (ind === 0 || email.simultaneous) {
               body += " " + i18n.t("YourMove");
             }
-            if (comment !== "") {
+            if (comment !== ".") {
               body += " " + i18n.t("ChallengeResponseComment", { comment });
             }
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
@@ -2201,7 +2201,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       for (const player of players) {
         await changeLanguageForPlayer(player);
         var body = i18n.t("ChallengeRejectedBody", { quitter, metaGame });
-        if (comment !== "") {
+        if (comment !== ".") {
           body += " " + i18n.t("ChallengeResponseComment", { comment });
         }
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
