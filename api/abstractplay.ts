@@ -2149,7 +2149,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
             }
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
                 if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameStart) ) {
-                    const ebody = body + " " + i18n.t("GameLink", { metaGame: email.metaGame, gameId: email.gameId});
+                    const ebody = body + " " + i18n.t("GameLink", { metaGame: metaGame, gameId: email.gameId});
                     console.log(`e-mailing ${player.name}, ${ebody}`);
                     const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), ebody);
                     work.push(sesClient.send(comm));
