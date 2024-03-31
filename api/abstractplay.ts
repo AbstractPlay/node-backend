@@ -1975,7 +1975,6 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
 
 async function sendChallengedEmail(challengerName: string, opponents: User[], metaGame: string, comment: string | undefined) {
   const players: FullUser[] = await getPlayers(opponents.map((o: { id: any; }) => o.id));
-  console.log(players);
   metaGame = gameinfo.get(metaGame).name;
   await initi18n('en');
   const work: Promise<any>[] = [];
@@ -1992,7 +1991,6 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
           body = i18n.t("ChallengeBodyComment", { "challenger": challengerName, metaGame, comment });
         }
         if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-          console.log(`Sending email to ${player.name} with body: ${body}`);
           const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), body);
           work.push(sesClient.send(comm));
         } else {
@@ -2150,7 +2148,6 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
                 if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameStart) ) {
                     const ebody = body + " " + i18n.t("GameLink", { metaGame: metaGame, gameId: email.gameId});
-                    console.log(`e-mailing ${player.name}, ${ebody}`);
                     const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), ebody);
                     work.push(sesClient.send(comm));
                 } else {
@@ -2192,7 +2189,6 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       return formatReturnError("Failed to remove challenge");
     }
     // send e-mails
-    console.log(challenge);
     if (challenge !== undefined) {
       await initi18n('en');
       // Inform everyone (except the decliner, he knows).
@@ -2207,7 +2203,6 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
         }
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
           if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-            console.log(`e-mailing ${player.name}, ${body}`);
             const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), body);
             work.push(sesClient.send(comm));
           } else {
