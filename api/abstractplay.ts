@@ -1943,6 +1943,7 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
         "clockHard": challenge.clockHard,
         "rated": challenge.rated,
         "noExplore": challenge.noExplore || false,
+        "comment": challenge.comment || ""
       }
     }));
 
