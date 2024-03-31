@@ -76,6 +76,7 @@ type FullChallenge = {
   clockHard: boolean;
   rated: boolean;
   noExplore?: boolean;
+  comment?: string;
 }
 
 export type UserSettings = {
@@ -1862,6 +1863,7 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
         "clockHard": challenge.clockHard,
         "rated": challenge.rated,
         "noExplore": challenge.noExplore || false,
+        "comment": challenge.comment || ""
       }
     }));
 
@@ -1887,7 +1889,7 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
       );
     })
     try {
-      list.push(sendChallengedEmail(challenge.challenger.name, challenge.challengees, challenge.metaGame));
+      list.push(sendChallengedEmail(challenge.challenger.name, challenge.challengees, challenge.metaGame, challenge.comment));
     } catch (error) {
       logGetItemError(error);
       throw new Error("newChallenge: Failed to send emails");
@@ -1941,6 +1943,7 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
         "clockHard": challenge.clockHard,
         "rated": challenge.rated,
         "noExplore": challenge.noExplore || false,
+        "comment": challenge.comment || ""
       }
     }));
 
@@ -1970,37 +1973,45 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
   }
 }
 
-async function sendChallengedEmail(challengerName: string, opponents: User[], metaGame: string) {
+async function sendChallengedEmail(challengerName: string, opponents: User[], metaGame: string, comment: string | undefined) {
   const players: FullUser[] = await getPlayers(opponents.map((o: { id: any; }) => o.id));
-  console.log(players);
   metaGame = gameinfo.get(metaGame).name;
   await initi18n('en');
   const work: Promise<any>[] = [];
+  comment = comment ? comment.trim() : "";
+  if (!comment.endsWith(".") && !comment.endsWith("!") && !comment.endsWith("?"))
+    comment += ".";
   for (const player of players) {
     if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
         await changeLanguageForPlayer(player);
+        var body;
+        if (comment === ".") {
+          body = i18n.t("ChallengeBody", { "challenger": challengerName, metaGame });
+        } else {
+          body = i18n.t("ChallengeBodyComment", { "challenger": challengerName, metaGame, comment });
+        }
         if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), i18n.t("ChallengeBody", { "challenger": challengerName, metaGame }));
-            work.push(sesClient.send(comm));
+          const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), body);
+          work.push(sesClient.send(comm));
         } else {
             console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
         }
         // push notifications are sent no matter what
         work.push(sendPush({
-            userId: player.id,
-            topic: "challenges",
-            title: i18n.t("PUSH.titles.challenged"),
-            body: i18n.t("ChallengeBody", { "challenger": challengerName, metaGame }),
-            url: "/",
+          userId: player.id,
+          topic: "challenges",
+          title: i18n.t("PUSH.titles.challenged"),
+          body: body,
+          url: "/",
         }));
     } else {
-        console.log(`No verified email address found for ${player.name} (${player.id})`);
+      console.log(`No verified email address found for ${player.name} (${player.id})`);
     }
   }
   return Promise.all(work);
 }
 
-async function revokeChallenge(userid: any, pars: { id: string; metaGame: string; standing: boolean; }) {
+async function revokeChallenge(userid: any, pars: { id: string; metaGame: string; standing: boolean; comment:string; }) {
   let challenge: Challenge | undefined;
   const work: Promise<any>[] = [];
   let work1 : Promise<any> | undefined;
@@ -2014,6 +2025,9 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
     work.push(work1);
   // send e-mails
   if (challenge) {
+    var comment = pars.comment ? pars.comment.trim() : "";
+    if (!comment.endsWith(".") && !comment.endsWith("!") && !comment.endsWith("?"))
+      comment += ".";
     const metaGame = gameinfo.get(challenge.metaGame).name;
     await initi18n('en');
     // Inform challenged
@@ -2021,9 +2035,15 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
       const players: FullUser[] = await getPlayers(challenge.challengees.map((c: { id: any; }) => c.id));
       for (const player of players) {
         await changeLanguageForPlayer(player);
+        var body;
+        if (comment === ".") {
+          body = i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame});
+        } else {
+          body = i18n.t("ChallengeRevokedBodyComment", { name: challenge.challenger.name, metaGame, comment});
+        }
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}));
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), body);
                 work.push(sesClient.send(comm));
             } else {
                 console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
@@ -2036,7 +2056,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.revoked"),
-            body: i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}),
+            body: body,
             url: "/",
         }));
       }
@@ -2046,9 +2066,15 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
       const players = await getPlayers(challenge.players.map((c: { id: any; }) => c.id).filter((id: any) => id !== challenge!.challenger.id));
       for (const player of players) {
         await changeLanguageForPlayer(player);
+        var body;
+        if (comment === ".") {
+          body = i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame});
+        } else {
+          body = i18n.t("ChallengeRevokedBodyComment", { name: challenge.challenger.name, metaGame, comment});
+        }
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
             if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}));
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), body);
                 work.push(sesClient.send(comm));
                     } else {
                 console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
@@ -2061,7 +2087,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.revoked"),
-            body: i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame}),
+            body: body,
             url: "/",
         }));
       }
@@ -2079,11 +2105,14 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
   };
 }
 
-async function respondedChallenge(userid: string, pars: { response: boolean; id: string; standing?: boolean; metaGame: string; }) {
+async function respondedChallenge(userid: string, pars: { response: boolean; id: string; standing?: boolean; metaGame: string; comment: string;}) {
   const response = pars.response;
   const challengeId = pars.id;
   const standing = pars.standing === true;
   const metaGame = pars.metaGame;
+  var comment = pars.comment ? pars.comment.trim() : "";
+  if (!comment.endsWith(".") && !comment.endsWith("!") && !comment.endsWith("?"))
+    comment += ".";
   let ret: any;
   const work: Promise<any>[] = [];
   if (response) {
@@ -2109,14 +2138,17 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       try {
         for (const [ind, player] of email.players.entries()) {
             await changeLanguageForPlayer(player);
+            let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
+            if (ind === 0 || email.simultaneous) {
+              body += " " + i18n.t("YourMove");
+            }
+            if (comment !== "." && player.id !== userid) {
+              body += " " + i18n.t("ChallengeResponseComment", { comment });
+            }
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
                 if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameStart) ) {
-                    console.log(player);
-                    let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
-                    if (ind === 0 || email.simultaneous) {
-                      body += " " + i18n.t("YourMove");
-                    }
-                    const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), body);
+                    const ebody = body + " " + i18n.t("GameLink", { metaGame: metaGame, gameId: email.gameId});
+                    const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), ebody);
                     work.push(sesClient.send(comm));
                 } else {
                     console.log(`Player ${player.name} (${player.id}) has elected to not receive game start notifications.`);
@@ -2125,10 +2157,6 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
                 console.log(`No verified email address found for ${player.name} (${player.id})`);
             }
             // push notifications are sent no matter what
-            let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
-            if (ind === 0 || email.simultaneous) {
-                body += " " + i18n.t("YourMove");
-              }
             work.push(sendPush({
                 userId: player.id,
                 topic: "started",
@@ -2161,7 +2189,6 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       return formatReturnError("Failed to remove challenge");
     }
     // send e-mails
-    console.log(challenge);
     if (challenge !== undefined) {
       await initi18n('en');
       // Inform everyone (except the decliner, he knows).
@@ -2170,13 +2197,17 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       const metaGame = gameinfo.get(challenge.metaGame).name;
       for (const player of players) {
         await changeLanguageForPlayer(player);
+        var body = i18n.t("ChallengeRejectedBody", { quitter, metaGame });
+        if (comment !== ".") {
+          body += " " + i18n.t("ChallengeResponseComment", { comment });
+        }
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-            if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), i18n.t("ChallengeRejectedBody", { quitter, metaGame }));
-                work.push(sesClient.send(comm));
-            } else {
-                console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
-            }
+          if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
+            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), body);
+            work.push(sesClient.send(comm));
+          } else {
+              console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
+          }
         } else {
             console.log(`No verified email address found for ${player.name} (${player.id})`);
         }
@@ -2185,7 +2216,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.declined"),
-            body: i18n.t("ChallengeRejectedBody", { quitter, metaGame }),
+            body: body,
             url: "/",
         }));
       }
@@ -2223,23 +2254,24 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
 
   // determine if a standing challenge has expired
   let expired = false;
-  if (standing) {
+  if (standing && !revoked) {
     if ( ("duration" in challenge) && (typeof challenge.duration === "number") && (challenge.duration > 0) ) {
-        if (challenge.duration === 1) {
-            expired = true;
-        } else {
-            list.push(
-                ddbDocClient.send(
-                    new UpdateCommand({
-                        TableName: process.env.ABSTRACT_PLAY_TABLE,
-                        Key: {"pk": "STANDINGCHALLENGE#" + challenge.metaGame, "sk": challenge.id},
-                        ExpressionAttributeValues: {":d": challenge.duration - 1},
-                        ExpressionAttributeNames: {"#d": "duration"},
-                        UpdateExpression: "set #d = :d"
-                    })
-                )
-            );
-        }
+      if (challenge.duration === 1) {
+        expired = true;
+      } else {
+        console.log(`decrementing standing challenge ${challenge.metaGame + '#' + challenge.id} duration from ${challenge.duration} to ${challenge.duration - 1}`);
+        list.push(
+          ddbDocClient.send(
+            new UpdateCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Key: {"pk": "STANDINGCHALLENGE#" + challenge.metaGame, "sk": challenge.id},
+              ExpressionAttributeValues: {":d": challenge.duration - 1},
+              ExpressionAttributeNames: {"#d": "duration"},
+              UpdateExpression: "set #d = :d"
+            })
+          )
+        );
+      }
     }
   }
 
@@ -2318,6 +2350,7 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
     || challenge.numPlayers > 2 // Had to duplicate the standing challenge when someone accepted but there were still spots left. Remove the duplicated standing challenge
     || expired
   ) {
+    console.log(`removing challenge ${challenge.metaGame + '#' + challenge.id}`);
     list.push(
       ddbDocClient.send(
         new DeleteCommand({
@@ -2459,7 +2492,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     });
     try {
       await Promise.all(list);
-      return { metaGame: info.name, players: playersFull, simultaneous: info.flags !== undefined && info.flags.includes('simultaneous') };
+      return { metaGame: info.name, players: playersFull, simultaneous: info.flags !== undefined && info.flags.includes('simultaneous'), gameId };
     }
     catch (error) {
       logGetItemError(error);
@@ -5686,7 +5719,7 @@ async function botManageChallenges() {
 
         // accept/reject challenge
         console.log(`About to ${accepted ? "accept" : "deny"} challenge ${challenge.sk}`)
-        await respondedChallenge(process.env.AIAI_USERID!, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame});
+        await respondedChallenge(process.env.AIAI_USERID!, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame, comment: "Let's play!"});
       }
     } catch (err) {
       logGetItemError(err);
