@@ -4991,8 +4991,15 @@ async function endTournament(tournament: Tournament) {
                 Key: { "pk": "TOURNAMENTPLAYER", "sk": `${tournament.nextid}#1#${player.playerid}` },
                 ExpressionAttributeNames: { "#t": "timeout" },
                 ExpressionAttributeValues: { ":t": true },
-                UpdateExpression: "set #t = :t"
-              })));
+                UpdateExpression: "set #t = :t",
+                ConditionExpression: "attribute_exists(pk) AND attribute_exists(sk)"
+              })).catch(error => {
+                if (error.name === 'ConditionalCheckFailedException') {
+                  console.log(`Player ${player.playerid} already left the next tournament, so no need to record timeout.`);
+                } else {
+                  throw error;
+                }
+              }));
             }
           }
           tournamentUpdated = true;
