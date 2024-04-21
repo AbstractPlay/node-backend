@@ -4454,7 +4454,12 @@ async function startATournament(userId: string, pars: { tournamentid: string }) 
     logGetItemError(error);
     return formatReturnError(`Unable to get tournament ${pars.tournamentid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
-  return startTournament(tournament);
+  startTournament(tournament);
+  return {
+    statusCode: 200,
+    body: "Done",
+    headers
+  };
 }
 
 async function startTournament(tournament: Tournament) {
