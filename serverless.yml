@@ -209,6 +209,7 @@ functions:
   starttournaments:
     handler: utils/starttournaments.handler
     description: Checks if any tournaments are ready to start (and starts or cancels them)
+    timeout: 600
     events:
       - eventBridge:
           name: abstractplay-${self:provider.stage}-starttournaments
