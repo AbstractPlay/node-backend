@@ -436,6 +436,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await deleteGames(event.cognitoPoolClaims.sub, pars);
     case "end_tournament":
       return await endATournament(event.cognitoPoolClaims.sub, pars);  
+    case "start_tournament":
+        return await startATournament(event.cognitoPoolClaims.sub, pars);  
     default:
       return {
         statusCode: 500,
@@ -4407,6 +4409,81 @@ async function startTournaments() {
     statusCode: 200,
     body: JSON.stringify({
       message: `Checked ${count} tournaments, started ${newcount} new tournaments and cancelled ${cancelledcount} tournaments`
+    }),
+    headers
+  };
+}
+
+async function startATournament(userId: string, pars: { tournamentid: string }) {
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get user ${userId}. Error: ${error}`);
+  }
+  let tournament: Tournament;
+  try {
+    const tournamentData = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "TOURNAMENT",
+          "sk": pars.tournamentid
+        },
+      }));
+    if (!tournamentData.Item)
+      throw new Error(`No tournament ${pars.tournamentid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    tournament = tournamentData.Item as Tournament;
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get tournament ${pars.tournamentid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+  const now = Date.now();
+  const oneWeek = 1000 * 60 * 60 * 24 * 7;
+  const twoWeeks = oneWeek * 2;
+  if (
+    !tournament.started && now > tournament.dateCreated + twoWeeks
+    && (tournament.datePreviousEnded === 0 || now > tournament.datePreviousEnded + oneWeek )
+  ) {
+    console.log(`Starting tournament ${tournament.id}`);
+    if(await startTournament(tournament)) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          message: "Started"
+        }),
+        headers
+      };
+    } else {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          message: "Failed to start"
+        }),
+        headers
+      };
+    }
+  }
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: `Tournament ${tournament.id} either already started, or not ready to start.`
     }),
     headers
   };
