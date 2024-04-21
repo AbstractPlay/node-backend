@@ -4454,10 +4454,31 @@ async function startATournament(userId: string, pars: { tournamentid: string }) 
     logGetItemError(error);
     return formatReturnError(`Unable to get tournament ${pars.tournamentid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
-  startTournament(tournament);
+  const now = Date.now();
+  const oneWeek = 1000 * 60 * 60 * 24 * 7;
+  const twoWeeks = oneWeek * 2;
+  if (
+    !tournament.started && now > tournament.dateCreated + twoWeeks
+    && (tournament.datePreviousEnded === 0 || now > tournament.datePreviousEnded + oneWeek )
+  ) {
+    console.log(`Starting tournament ${tournament.id}`);
+    if(await startTournament(tournament)) {
+      return {
+        statusCode: 200,
+        body: "Started",
+        headers
+      };
+    } else {
+      return {
+        statusCode: 200,
+        body: "Failed to start",
+        headers
+      };
+    }
+  }
   return {
     statusCode: 200,
-    body: "Done",
+    body: `Tournament ${tournament.id} either already started, or not ready to start.`,
     headers
   };
 }
