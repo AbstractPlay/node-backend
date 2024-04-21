@@ -4070,11 +4070,16 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
     handleCommonErrors(err as {code: any; message: any});
     return formatReturnError(`Unable to insert tournament for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   }
-  return {
-    statusCode: 200,
-    body: "New tournament created",
-    headers
-  };
+  const ret = await joinTournament(userid, {tournamentid: tournamentid});
+  if (ret === undefined) {
+    return {
+      statusCode: 200,
+      body: "New tournament created",
+      headers
+    };
+  } else {
+    return ret;
+  }
 }
 
 async function joinTournament(userid: string, pars: { tournamentid: string }) {
