@@ -4465,20 +4465,26 @@ async function startATournament(userId: string, pars: { tournamentid: string }) 
     if(await startTournament(tournament)) {
       return {
         statusCode: 200,
-        body: "Started",
+        body: JSON.stringify({
+          message: "Started"
+        }),
         headers
       };
     } else {
       return {
         statusCode: 200,
-        body: "Failed to start",
+        body: JSON.stringify({
+          message: "Failed to start"
+        }),
         headers
       };
     }
   }
   return {
     statusCode: 200,
-    body: `Tournament ${tournament.id} either already started, or not ready to start.`,
+    body: JSON.stringify({
+      message: `Tournament ${tournament.id} either already started, or not ready to start.`
+    }),
     headers
   };
 }
