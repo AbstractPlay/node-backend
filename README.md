@@ -33,7 +33,7 @@ All data is in a single table. The primary key (or the first part of the primary
   * pk: PUSH
   * sk: \<userid\>
 
-- **User list** List of users (for use when challenging someone). Just name, and userid
+- **User list** List of users (for use when challenging someone). Fields: name, country, lastSeen, stars   
   * pk: USERS
   * sk: \<userid\>
 
