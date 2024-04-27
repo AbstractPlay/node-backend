@@ -51,6 +51,12 @@ export type UserSettings = {
     }
 };
 
+export type UserLastSeen = {
+  id: string;
+  name: string;
+  lastSeen?: number;
+};
+
 export type User = {
   id: string;
   name: string;
@@ -138,6 +144,7 @@ type Tournament = {
     [division: number]: Division;
   };
   players?: TournamentPlayer[]; // only on archived tournaments
+  waiting?: boolean; // tournament does not yet have 4 players
 };
 
 type TournamentPlayer = {
@@ -166,6 +173,7 @@ export const handler: Handler = async (event: any, context?: any) => {
   let count = 0;
   let newcount = 0;
   let cancelledcount = 0;
+  let waitingcount = 0;
   try {
     console.log("Getting TOURNAMENTs");
     const tournamentsData = await ddbDocClient.send(
@@ -176,6 +184,19 @@ export const handler: Handler = async (event: any, context?: any) => {
         ExpressionAttributeNames: { "#pk": "pk" }
       }));
     const tournaments = tournamentsData.Items as Tournament[];
+    console.log("Getting USERS");
+    const data = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "USERS" },
+        ExpressionAttributeNames: { "#pk": "pk", "#name": "name"},
+        ProjectionExpression: "sk, #name, lastSeen"
+      }));
+
+    let users: UserLastSeen[] = [];
+    if (data.Items)
+      users = data.Items?.map(u => ({"id": u.sk, "name": u.name, "lastSeen": u.lastSeen}));
     const now = Date.now();
     const oneWeek = 1000 * 60 * 60 * 24 * 7;
     const twoWeeks = oneWeek * 2;
@@ -186,10 +207,13 @@ export const handler: Handler = async (event: any, context?: any) => {
         && (tournament.datePreviousEnded === 0 || now > tournament.datePreviousEnded + oneWeek )
       ) {
         console.log(`Starting tournament ${tournament.id}`);
-        if(await startTournament(tournament)) {
-          newcount++;
-        } else {
+        const status = await startTournament(users, tournament);
+        if (status === -1) {
           cancelledcount++;
+        } else if (status === 0) {
+          waitingcount++;
+        } else if (status === 1) {
+          newcount++;
         }
       }
     }
@@ -200,7 +224,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     console.log(`Unable to get tournaments from table ${process.env.ABSTRACT_PLAY_TABLE}`);
     return;
   }
-  console.log(`Checked ${count} tournaments, started ${newcount} new tournaments and cancelled ${cancelledcount} tournaments`);
+  console.log(`Checked ${count} tournaments, started ${newcount} new tournaments, waiting for ${waitingcount} tournaments and cancelled ${cancelledcount} tournaments`);
 }
 
 async function getPlayersSlowly(playerIDs: string[]) {
@@ -285,7 +309,7 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
   return Promise.all(work);
 }
 
-async function startTournament(tournament: Tournament) {
+async function startTournament(users: UserLastSeen[], tournament: Tournament) {
   // First, get the players
   let playersData;
   try {
@@ -303,56 +327,52 @@ async function startTournament(tournament: Tournament) {
     return;
   }
   let players0 = playersData.Items as TournamentPlayer[];
-  // Get players
-  console.log(`About to getPlayers for ${players0.length} players.`);
-  const playersFull = await getPlayersSlowly(players0.map(p => p.playerid));
-  for (let i = 0; i < playersFull.length; i++) {
-    players0[i].rating = playersFull[i]?.ratings?.[tournament.metaGame]?.rating;
-    if (players0[i].rating === undefined)
-      players0[i].rating = 0;
-    players0[i].score = 0;
-  }
   let remove: TournamentPlayer[] = [];
   const players = players0.filter((player, i) => {
-    // If the player timed out in their last tournament game, and they haven't been seen in 30 days, remove them from the tournament
-    if (player.timeout === true && playersFull[i].lastSeen! < Date.now() - 1000 * 60 * 60 * 24 * 30) {
+    // If the player timed out in their last tournament game, and they haven't been seen in 30 days, remove them from the tournament.
+    // Unless the tournament is in waiting status, then not seen in 30 days is enough to be removed.
+    if (
+        users?.find(u => u.id === player.playerid)?.lastSeen! < Date.now() - 1000 * 60 * 60 * 24 * 30
+        && (tournament.waiting === true || player.timeout === true)
+      ) {
       remove.push(player);
-      console.log(`Removing player ${player.playerid} from tournament ${tournament.id} because of timeout`);
+      if (player.timeout === true)
+        console.log(`Removing player ${player.playerid} from tournament ${tournament.id} because of timeout`);
+      else
+        console.log(`Removing player ${player.playerid} from tournament ${tournament.id} because they haven't been seen in 30 days`);
       return false;
     } else 
       return true;
   });
-  if (players.length < 4) {
-    // Cancel tournament
-    // Delete tournament and tournament players
-    const work: Promise<any>[] = [];
+  let returnvalue = 0;
+  if (players.length == 0) {
+    // Cancel tournament. Everyone is gone.
     try {
       console.log(`Deleting tournament ${tournament.id}`);
-      work.push(ddbDocClient.send(
+      await ddbDocClient.send(
         new DeleteCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
             "pk": "TOURNAMENT",
             "sk": tournament.id
           },
-        }))
-      );
+        }));
       const sk = tournament.metaGame + "#" + tournament.variants.sort().join("|");
-      work.push(ddbDocClient.send(
+      await ddbDocClient.send(
         new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {"pk": "TOURNAMENTSCOUNTER", "sk": sk},
           ExpressionAttributeValues: { ":t": true },
           ExpressionAttributeNames: {"#o": "over"},
           UpdateExpression: "set #o = :t"
-        }))
-      );
+        }));
     }
     catch (error) {
       logGetItemError(error);
       console.log(`Unable to delete tournament ${tournament.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
       return;
     }
+    /*
     try {
       for (let player of players0) {
         work.push(ddbDocClient.send(
@@ -387,15 +407,43 @@ async function startTournament(tournament: Tournament) {
     }
     await Promise.all(work);
     console.log("Tournament cancelled");
-    return false;
+    */
+    returnvalue = -1;
+  } else if (players.length < 4) {
+    // Not enough players yet
+    if (tournament.waiting !== true) {
+      try {
+        console.log(`Updating tournament ${tournament.id} to waiting`);
+        await ddbDocClient.send(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { "pk": "TOURNAMENT", "sk": tournament.id },
+          ExpressionAttributeValues: { ":t": true },
+          UpdateExpression: "set waiting = :t"
+        }));
+      }
+      catch (error) {
+        logGetItemError(error);
+        console.log(`Unable to update tournament ${tournament.id} to waiting`);
+        return;
+      }
+    }
+    returnvalue = 0;
   } else {
+    // enough players, start the tournament!
     const clockStart = 72;
     const clockInc = 36;
     const clockMax = 120;
     // Sort players into divisions by rating
+    const playersFull = await getPlayersSlowly(players.map(p => p.playerid));
+    for (let i = 0; i < playersFull.length; i++) {
+      players[i].rating = playersFull[i]?.ratings?.[tournament.metaGame]?.rating;
+      if (players[i].rating === undefined)
+        players[i].rating = 0;
+      players[i].score = 0;
+    }
     players.sort((a, b) => b.rating! - a.rating!);
     const allGamePlayers = players.map(p => {return {id: p.playerid, name: p.playername, time: clockStart * 3600000} as User});
-    // Sort playersFull in the same order as players (and skip removed players)
+    // Sort playersFull in the same order as players
     const playersFull2: FullUser[] = [];
     for (let player of players)
       playersFull2.push(playersFull.find(p => p.id === player.playerid)!);
@@ -621,18 +669,6 @@ async function startTournament(tournament: Tournament) {
         return;
       }
     }
-    // ... and delete mia players
-    for (const player of remove) {
-      console.log(`Deleting tournament player record for ${player.playerid} from tournament ${tournament.id}`);
-      await ddbDocClient.send(
-        new DeleteCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "TOURNAMENTPLAYER", "sk": player.sk
-          },
-        })
-      );
-    }    
     // Send e-mails to participants
     await initi18n('en');
     const metaGameName = gameinfo.get(tournament.metaGame)?.name;
@@ -648,8 +684,51 @@ async function startTournament(tournament: Tournament) {
         await sesClient.send(comm);
       }
     }
-    return true;
+    returnvalue = 1;
   }
+  // Delete mia players
+  if (remove.length > 0) {
+    for (const player of remove) {
+      console.log(`Deleting tournament player record for ${player.playerid} from tournament ${tournament.id}`);
+      await ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "TOURNAMENTPLAYER", "sk": player.sk
+          },
+        })
+      );
+    }
+    // Let them know they've been removed
+    let playersFull: FullUser[] = [];
+    try {
+      playersFull = await getPlayersSlowly(remove.map(p => p.playerid));
+    } catch (error) {
+      logGetItemError(error);
+      console.log(`Unable to get removed players for tournament ${tournament.id} from table ${process.env.ABSTRACT_PLAY_TABLE}. Error: ${error}`);
+      return;
+    }
+    await initi18n('en');
+    const metaGameName = gameinfo.get(tournament.metaGame)?.name;
+    for (let player of playersFull) {
+      try {
+        await changeLanguageForPlayer(player);
+        let body = '';
+        if (tournament.variants.length === 0)
+          body = i18n.t("TournamentRemoveBody", { "metaGame": metaGameName, "number": tournament.number });
+        else
+          body = i18n.t("TournamentRemoveBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
+        if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
+          const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentRemoveSubject", { "metaGame": metaGameName }), body);
+          await sesClient.send(comm);
+        }
+      } catch (error) {
+        logGetItemError(error);
+        console.log(`Failed to send email to player ${player.name}, ${player.email}. Error: ${error}`);
+      }
+    }
+  }
+  return returnvalue;  
 }
 
 // Make sure we "lock" games while updating. We are often updating multiple games at once.

@@ -46,5 +46,8 @@
     "TournamentCancelSubject": "Your {{- metaGame}} tournament was cancelled",
     "TournamentEndBody": "Tournament {{number}} of the {{- metaGame}} series has ended. See https://play.abstractplay.com/tournaments. The next tournament in the series will start in one week.",
     "TournamentEndBodyVariants": "Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series has ended. See https://play.abstractplay.com/tournaments. The next tournament in the series will start in one week.",
-    "TournamentEndSubject": "Your {{- metaGame}} tournament has ended"
+    "TournamentEndSubject": "Your {{- metaGame}} tournament has ended",
+    "TournamentRemoveBody": "You were removed from the {{- metaGame}} tournament you were signed up for, because it is unclear whether you are still interested. If you would still like to participate, please sign up again at https://play.abstractplay.com/tournaments.",
+    "TournamentRemoveBodyVariants": "You were removed from the {{- metaGame}}, variants: {{variants}} tournament you were signed up for, because it is unclear whether you are still interested. If you would still like to participate, please sign up again at https://play.abstractplay.com/tournaments.",
+    "TournamentRemoveSubject": "You were removed from a tournament"
 }
