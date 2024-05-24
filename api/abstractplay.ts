@@ -5331,7 +5331,7 @@ async function reportProblem(pars: { error: string })
   const users = data.Items;
   const playerIDs = [];
   for (const user of users!)
-    if (user.name === 'fritzd' || user.name === 'Fritz Deelman' || user.name === 'Perlkönigg')
+    if (user.name === 'fritzd' || user.name === 'Fritz Deelman' || user.name === 'Perlkönig')
       playerIDs.push(user.sk);
   const errorAdmins = await getPlayers(playerIDs);
   let addresses = [];
