@@ -3553,18 +3553,15 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
   if (game.players[parseInt(game.toMove as string)].id !== userid) {
     throw new Error('It is not your turn!');
   }
-  console.log("applyMove", move);
   engine.move(move);
   if (flags !== undefined && flags.includes("automove")) {
-    console.log("Automove detected");
     // @ts-ignore
     while (engine.moves().length === 1) {
-        console.log("Single move detected");
+        if (flags.includes("pie-even") && engine.state().stack.length === 2) break;
         // @ts-ignore
         engine.move(engine.moves()[0]);
     }
   }
-  console.log("applied");
   game.state = engine.serialize();
   if (engine.gameover) {
     game.toMove = "";
@@ -3576,7 +3573,6 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
     }
     game.toMove = `${engine.currplayer - 1}`;
   }
-  console.log("done");
 }
 
 async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; metaGame?: string, comment: string; moveNumber: number; }) {
