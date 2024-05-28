@@ -722,7 +722,7 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
     let game = gameData.Item as FullGame;
     if (game === undefined) {
       // Maybe the game has ended and we need to look for the completed game.
-      if (pars.cbit === 0) {
+      if (pars.cbit === 0 || pars.cbit === "0") {
         const completedGameData = await ddbDocClient.send(
           new GetCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -764,7 +764,7 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
   }
   catch (error) {
     logGetItemError(error);
-    return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    return formatReturnError(`Unable to get ${pars.metaGame} game ${pars.id}, completed bit ${pars.cbit} from DB`);
   }
 }
 
