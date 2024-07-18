@@ -442,9 +442,9 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
     case "delete_games":
       return await deleteGames(event.cognitoPoolClaims.sub, pars);
     case "end_tournament":
-      return await endATournament(event.cognitoPoolClaims.sub, pars);  
+      return await endATournament(event.cognitoPoolClaims.sub, pars);
     case "start_tournament":
-        return await startATournament(event.cognitoPoolClaims.sub, pars);  
+        return await startATournament(event.cognitoPoolClaims.sub, pars);
     default:
       return {
         statusCode: 500,
@@ -1993,7 +1993,7 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
   for (const player of players) {
     if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
         await changeLanguageForPlayer(player);
-        var body;
+        let body;
         if (comment === ".") {
           body = i18n.t("ChallengeBody", { "challenger": challengerName, metaGame });
         } else {
@@ -2034,7 +2034,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
     work.push(work1);
   // send e-mails
   if (challenge) {
-    var comment = pars.comment ? pars.comment.trim() : "";
+    let comment = pars.comment ? pars.comment.trim() : "";
     if (!comment.endsWith(".") && !comment.endsWith("!") && !comment.endsWith("?"))
       comment += ".";
     const metaGame = gameinfo.get(challenge.metaGame).name;
@@ -2044,7 +2044,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
       const players: FullUser[] = await getPlayers(challenge.challengees.map((c: { id: any; }) => c.id));
       for (const player of players) {
         await changeLanguageForPlayer(player);
-        var body;
+        let body;
         if (comment === ".") {
           body = i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame});
         } else {
@@ -2075,7 +2075,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
       const players = await getPlayers(challenge.players.map((c: { id: any; }) => c.id).filter((id: any) => id !== challenge!.challenger.id));
       for (const player of players) {
         await changeLanguageForPlayer(player);
-        var body;
+        let body;
         if (comment === ".") {
           body = i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame});
         } else {
@@ -2119,7 +2119,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
   const challengeId = pars.id;
   const standing = pars.standing === true;
   const metaGame = pars.metaGame;
-  var comment = pars.comment ? pars.comment.trim() : "";
+  let comment = pars.comment ? pars.comment.trim() : "";
   if (!comment.endsWith(".") && !comment.endsWith("!") && !comment.endsWith("?"))
     comment += ".";
   let ret: any;
@@ -2206,7 +2206,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       const metaGame = gameinfo.get(challenge.metaGame).name;
       for (const player of players) {
         await changeLanguageForPlayer(player);
-        var body = i18n.t("ChallengeRejectedBody", { quitter, metaGame });
+        let body = i18n.t("ChallengeRejectedBody", { quitter, metaGame });
         if (comment !== ".") {
           body += " " + i18n.t("ChallengeResponseComment", { comment });
         }
@@ -2975,14 +2975,14 @@ async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: n
     } else if (game.winner?.length === 2) {
       score = 0.5;
     }
-    console.log(`player ${player.name} now has score ${score} in game ${game.id} from tournament ${game.tournament}`); 
+    console.log(`player ${player.name} now has score ${score} in game ${game.id} from tournament ${game.tournament}`);
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTPLAYER", "sk": game.tournament + '#' + game.division!.toString() + '#' + player.id },
       ExpressionAttributeNames: { "#s": "score", "#t": "timeout" },
       ExpressionAttributeValues: { ":inc": score, ":t": i === timeout },
       UpdateExpression: "add #s :inc set #t = :t"
-    })));    
+    })));
   }
   const winner = game.winner?.map((w: number) => game.players[w - 1].id);
   work.push(ddbDocClient.send(new UpdateCommand({
@@ -3011,7 +3011,7 @@ async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: n
   if (divisionCompleted) {
     console.log("division completed, processing tournament");
     await Promise.all(work);
-    work = []; 
+    work = [];
     work.push(endTournament(tournament))
   }
   return Promise.all(work);
@@ -3266,7 +3266,7 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
         throw "Nobody's time is up!";
       }
     } else {
-      if (game.toMove === "") 
+      if (game.toMove === "")
         throw "Game is already over!";
       const toMove = parseInt(game.toMove);
       if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
@@ -3397,7 +3397,7 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
     const players = await getPlayers(playerIDs);
     const now = Date.now();
     if (
-      game.toMove == "" 
+      game.toMove == ""
       || game.clockHard
       || players.some(p => p.lastSeen !== undefined && p.lastSeen > now - 30 * 24 * 60 * 60 * 1000)
       || game.lastMoveTime > now - 30 * 24 * 60 * 60 * 1000
@@ -3481,7 +3481,7 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
 
 async function checkForTimeloss(userid: string, pars: { id: string, metaGame: string}) {
   try {
-    let game = await timeloss(true, -1, pars.id, pars.metaGame, Date.now());
+    const game = await timeloss(true, -1, pars.id, pars.metaGame, Date.now());
     return {
       statusCode: 200,
       body: JSON.stringify(game),
@@ -3489,6 +3489,7 @@ async function checkForTimeloss(userid: string, pars: { id: string, metaGame: st
     };
   }
   catch (error) {
+    // eslint-disable-next-line no-constant-condition
     if (error === "Nobody's time is up!" || error === "Opponent's time isn't up!" || "Game is already over!") {
       return {
         statusCode: 200,
@@ -4232,11 +4233,11 @@ async function archiveTournaments() {
         ExpressionAttributeNames: { "#pk": "pk" }
       }));
     // Check for "old" tournaments and "archive" them. Old = the next one already ended or ended more than 6 months ago.
-    let latestCompleted: Map<string, number> = new Map();
+    const latestCompleted: Map<string, number> = new Map();
     for (const tournament of tournamentsData.Items as Tournament[]) {
       if (tournament.dateEnded !== undefined) {
         const key = tournament.metaGame + "#" + tournament.variants.sort().join("|");
-        let latest = latestCompleted.get(key);
+        const latest = latestCompleted.get(key);
         if (latest === undefined || tournament.dateEnded > latest) {
           latestCompleted.set(key, tournament.dateEnded);
         }
@@ -4244,7 +4245,7 @@ async function archiveTournaments() {
     }
     const now = Date.now();
     const work: Promise<any>[] = [];
-    let list: string[] = [];
+    const list: string[] = [];
     for (const tournament of tournamentsData.Items as Tournament[]) {
       if (tournament.dateEnded !== undefined) {
         const key = tournament.metaGame + "#" + tournament.variants.sort().join("|");
@@ -4253,7 +4254,7 @@ async function archiveTournaments() {
           list.push(tournament.id);
         }
       }
-    };
+    }
     await Promise.all(work);
     return {
       statusCode: 200,
@@ -4319,7 +4320,7 @@ async function archiveTournament(tournament: Tournament) {
 
 async function getTournament(pars: { tournamentid: string, metaGame: string }) {
   try {
-    let work: Promise<any>[] = [];
+    const work: Promise<any>[] = [];
     if (pars.metaGame === 'undefined') {
       work.push(ddbDocClient.send(
         new QueryCommand({
@@ -4543,8 +4544,8 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     logGetItemError(error);
     return formatReturnError(`Unable to get players for tournament ${tournament.id} from table ${process.env.ABSTRACT_PLAY_TABLE}. Error: ${error}`);
   }
-  let players0 = playersData.Items as TournamentPlayer[];
-  let remove: TournamentPlayer[] = [];
+  const players0 = playersData.Items as TournamentPlayer[];
+  const remove: TournamentPlayer[] = [];
   const players = players0.filter((player, i) => {
     // If the player timed out in their last tournament game, and they haven't been seen in 30 days, remove them from the tournament.
     // Unless the tournament is in waiting status, then not seen in 30 days is enough to be removed.
@@ -4558,7 +4559,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
       else
         console.log(`Removing player ${player.playerid} from tournament ${tournament.id} because they haven't been seen in 30 days`);
       return false;
-    } else 
+    } else
       return true;
   });
   let returnvalue = 0;
@@ -4659,7 +4660,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     const allGamePlayers = players.map(p => {return {id: p.playerid, name: p.playername, time: clockStart * 3600000} as User});
     // Sort playersFull in the same order as players
     const playersFull2: FullUser[] = [];
-    for (let player of players)
+    for (const player of players)
       playersFull2.push(playersFull.find(p => p.id === player.playerid)!);
     // Create divisions
     const numDivisions = Math.ceil(players.length / 10.0); // at most 10 players per division
@@ -4669,7 +4670,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     players.sort((a, b) => b.rating! - a.rating!);
     let division = 1;
     let count = 0;
-    for (let player of players) {
+    for (const player of players) {
       player.division = division;
       player.sk = tournament.id + "#" + division.toString() + '#' + player.playerid;
       try {
@@ -4707,22 +4708,22 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     // Create games
     const now = Date.now();
     let player0 = 0;
-    let updatedGameIDs: string[][] = [];
+    const updatedGameIDs: string[][] = [];
     for (let i = 0; i < players.length; i++) {
       updatedGameIDs.push([]);
       if (playersFull2[i].games === undefined)
         playersFull2[i].games = [];
     }
-    let divisions: { [division: number]: {numGames: number, numCompleted: number, processed: boolean} } = {};
+    const divisions: { [division: number]: {numGames: number, numCompleted: number, processed: boolean} } = {};
     for (let division = 1; division <= numDivisions; division++) {
       divisions[division] = {numGames: 0, numCompleted: 0, processed: false};
       for (let i = 0; i < (division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall); i++) {
         for (let j = i + 1; j < (division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall); j++) {
           divisions[division].numGames += 1;
-          let player1 = player0 + i;
-          let player2 = player0 + j;
+          const player1 = player0 + i;
+          const player2 = player0 + j;
           const gameId = uuid();
-          let gamePlayers: User[] = [];
+          const gamePlayers: User[] = [];
           if ((i + j) % 2 === 1) {
             gamePlayers.push(allGamePlayers[player1]);
             gamePlayers.push(allGamePlayers[player2]);
@@ -4880,7 +4881,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     // Send e-mails to participants
     await initi18n('en');
     const metaGameName = gameinfo.get(tournament.metaGame)?.name;
-    for (let player of playersFull2) {
+    for (const player of playersFull2) {
       await changeLanguageForPlayer(player);
       let body = '';
       if (tournament.variants.length === 0)
@@ -4917,7 +4918,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     }
     await initi18n('en');
     const metaGameName = gameinfo.get(tournament.metaGame)?.name;
-    for (let player of playersFull) {
+    for (const player of playersFull) {
       try {
         await changeLanguageForPlayer(player);
         let body = '';
@@ -4935,7 +4936,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
       }
     }
   }
-  return returnvalue;  
+  return returnvalue;
 }
 
 
@@ -5013,7 +5014,7 @@ async function endTournament(tournament: Tournament) {
           const [gamesData, playersData] = await Promise.all(work2);
           const gamelist = gamesData.Items as TournamentGame[];
           const players = playersData.Items as TournamentPlayer[];
-          var tournamentPlayers: Map<string, TournamentPlayer> = new Map();
+          const tournamentPlayers: Map<string, TournamentPlayer> = new Map();
           for (let i = 0; i < players.length; i++) {
             players[i].tiebreak = 0;
             players[i].score = 0;
@@ -5330,7 +5331,7 @@ async function reportProblem(pars: { error: string })
     if (user.name === 'fritzd' || user.name === 'Fritz Deelman' || user.name === 'Perlkönig')
       playerIDs.push(user.sk);
   const errorAdmins = await getPlayers(playerIDs);
-  let addresses = [];
+  const addresses = [];
   for (const admin of errorAdmins) {
     if (admin.email !== undefined && admin.email !== null && admin.email !== "")
       addresses.push(admin.email);
