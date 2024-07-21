@@ -1,1 +1,4 @@
-{}
+{
+    "ChallengeBodyComment": "{{Challenger}}带有注意：“ {{ - comment}}}的游戏，请访问{{ - metagame}}的游戏。",
+    "ChallengeBody": "{{challenger}} 向您挑战{{- metaGame}}的游戏。请访问https://play.abstractplay.com/有关更多详细信息。"
+}
