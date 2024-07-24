@@ -4,7 +4,6 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand, SendMessageRequest } from "@aws-sdk/client-sqs";
-// import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
@@ -193,7 +192,10 @@ type FullGame = {
   pieInvoked?: boolean;
   variants?: string[];
   published?: string[];
+  smevent?: string;
+  smeventRound?: number;
   tournament?: string;
+  event?: string;
   division?: number;
   noExplore?: boolean;
 }
@@ -284,6 +286,38 @@ type TournamentGame = {
   winner?: string[];
 };
 
+type OrgEvent = {
+    pk: "ORGEVENT";
+    sk: string;             // <eventid>
+    name: string;
+    description: string;
+    organizer: string;
+    dateStart: number;
+    dateEnd?: number;
+    winner?: string[];
+    visible: boolean;
+}
+
+type OrgEventGame = {
+    pk: "ORGEVENTGAME";
+    sk: string;             // <eventid>#<gameid>
+    metaGame: string;
+    variants?: string[];
+    round: number;
+    gameid: string;
+    player1: string;
+    player2: string;
+    winner?: number[];
+    arbitrated?: boolean;
+};
+
+type OrgEventPlayer = {
+    pk: "ORGEVENTPLAYER";
+    sk: string;             // <eventid>#<playerid>
+    playerid: string;
+    seed?: number;
+};
+
 type TagList = {
     meta: string;
     tags: string[];
@@ -339,6 +373,10 @@ module.exports.query = async (event: { queryStringParameters: any; }) => {
       return await startTournaments();
     case "archive_tournaments":
       return await archiveTournaments();
+    case "get_event":
+      return await eventGetEvent(pars);
+    case "get_events":
+      return await eventGetEvents();
     case "report_problem":
       return await reportProblem(pars);
     default:
@@ -431,6 +469,28 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await joinTournament(event.cognitoPoolClaims.sub, pars);
     case "withdraw_tournament":
       return await withdrawTournament(event.cognitoPoolClaims.sub, pars);
+    case "event_create":
+      return await eventCreate(event.cognitoPoolClaims.sub, pars);
+    case "event_delete":
+      return await eventDelete(event.cognitoPoolClaims.sub, pars);
+    case "event_publish":
+        return await eventPublish(event.cognitoPoolClaims.sub, pars);
+    case "event_register":
+        return await eventRegister(event.cognitoPoolClaims.sub, pars);
+    case "event_withdraw":
+        return await eventWithdraw(event.cognitoPoolClaims.sub, pars);
+    case "event_update_start":
+      return await eventUpdateStart(event.cognitoPoolClaims.sub, pars);
+    case "event_update_name":
+      return await eventUpdateName(event.cognitoPoolClaims.sub, pars);
+    case "event_update_desc":
+      return await eventUpdateDesc(event.cognitoPoolClaims.sub, pars);
+    case "event_update_result":
+      return await eventUpdateResult(event.cognitoPoolClaims.sub, pars);
+    case "event_create_games":
+      return await eventCreateGames(event.cognitoPoolClaims.sub, pars);
+    case "event_close":
+      return await eventClose(event.cognitoPoolClaims.sub, pars);
     case "ping_bot":
       return await pingBot(event.cognitoPoolClaims.sub, pars);
     case "onetime_fix":
@@ -2886,6 +2946,9 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       if (game.tournament !== undefined) {
         list.push(tournamentUpdates(game, players, pars.move === "timeout" ? parseInt(game.toMove) : undefined));
       }
+      if (game.event !== undefined) {
+        list.push(eventUpdates({eventid: game.event, gameid: pars.id, winner: engine.winner}))
+      }
     }
     game.lastMoveTime = timestamp;
     const updateGame = ddbDocClient.send(new PutCommand({
@@ -4939,7 +5002,6 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
   return returnvalue;
 }
 
-
 async function endATournament(userId: string, pars: { tournamentid: string }) {
   try {
     const user = await ddbDocClient.send(
@@ -5161,6 +5223,1045 @@ async function endTournament(tournament: Tournament) {
     body: "Done",
     headers
   };
+}
+
+// ORGANIZED EVENTS
+async function eventGetEvent(pars: {eventid: string}) {
+    try {
+        const event = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (event.Item === undefined) {
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+
+        const players = await ddbDocClient.send(
+            new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+                ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
+                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        }));
+        const games = await ddbDocClient.send(
+            new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+                ExpressionAttributeValues: { ":pk": "ORGEVENTGAME", ":sk": pars.eventid },
+                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        }));
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify({event: event.Item, players: players.Items, games: games.Items}),
+            headers
+        };
+      }
+      catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to get organized event ${pars.eventid}. Error: ${error}`);
+      }
+}
+
+async function eventGetEvents() {
+    try {
+        const work: Promise<any>[] = [];
+        work.push(ddbDocClient.send(
+            new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk",
+                ExpressionAttributeValues: { ":pk": "ORGEVENT" },
+                ExpressionAttributeNames: { "#pk": "pk"},
+        })));
+        work.push(ddbDocClient.send(
+            new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk",
+                ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER" },
+                ExpressionAttributeNames: { "#pk": "pk"},
+        })));
+        work.push(ddbDocClient.send(
+            new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk",
+                ExpressionAttributeValues: { ":pk": "ORGEVENTGAME" },
+                ExpressionAttributeNames: { "#pk": "pk"},
+        })));
+        const data = await Promise.all(work);
+        return {
+            statusCode: 200,
+            body: JSON.stringify({events: data[0].Items, players: data[1].Items, games: data[2].Items}),
+            headers
+        };
+      }
+      catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to get organized events. Error: ${error}`);
+      }
+}
+
+async function eventCreate(userid: string, pars: {name: string, date: number, description: string}) {
+    // authorize first
+    try {
+        const user = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "USER",
+            "sk": userid
+            },
+        }));
+        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+            return {
+                statusCode: 200,
+                body: JSON.stringify({}),
+                headers
+            };
+        }
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+    }
+    try {
+        const eventid = uuid();
+        const eventRec: OrgEvent = {
+            pk: "ORGEVENT",
+            sk: eventid,
+            name: pars.name,
+            description: pars.description,
+            organizer: userid,
+            dateStart: pars.date,
+            visible: false,
+        };
+        await ddbDocClient.send(
+            new PutCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Item: eventRec,
+              })
+          );
+          return {
+            statusCode: 200,
+            body: JSON.stringify({eventid}),
+            headers
+        };
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to create event. Error: ${error}`);
+    }
+}
+
+async function eventPublish(userid: string, pars: {eventid: string}) {
+    // authorize first
+    let userRec: FullUser|undefined;
+    try {
+        const user = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "USER",
+            "sk": userid
+            },
+        }));
+        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        userRec = user.Item as FullUser;
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+    }
+    try {
+        const event = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (event.Item === undefined) {
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+        const eventRec = event.Item as OrgEvent;
+        if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        // must be in the future and have nonempty description
+        if (eventRec.dateStart <= Date.now() || /^\s*$/.test(eventRec.description)) {
+            return {
+                statusCode: 400,
+                body: "The start date must be in the future and the description may not be empty.",
+                headers,
+            };
+        }
+        eventRec.visible = true;
+        await ddbDocClient.send(
+            new PutCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Item: eventRec,
+              })
+          );
+        return {
+            statusCode: 200,
+            body: JSON.stringify(eventRec),
+            headers
+        };
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to publish event ${pars.eventid}. Error: ${error}`);
+    }
+}
+
+async function eventDelete(userid: string, pars: {eventid: string}) {
+    // authorize first
+    let userRec: FullUser|undefined;
+    try {
+        const user = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "USER",
+            "sk": userid
+            },
+        }));
+        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        userRec = user.Item as FullUser;
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+    }
+    try {
+        const event = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (event.Item === undefined) {
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+        const eventRec = event.Item as OrgEvent;
+        if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        // get associated players and games
+        const players = await ddbDocClient.send(
+            new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+                ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
+                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        }));
+        const games = await ddbDocClient.send(
+            new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+                ExpressionAttributeValues: { ":pk": "ORGEVENTGAME", ":sk": pars.eventid },
+                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        }));
+
+        // the event must not be over and there must not be any associated games
+        if (eventRec.dateEnd !== undefined || (games.Items !== undefined && games.Items.length > 0)) {
+            return {
+                statusCode: 400,
+                body: "You cannot delete events that are over or that have associated games.",
+                headers,
+            };
+        }
+
+        // delete associated player records
+        if (players.Items !== undefined && players.Items.length > 0) {
+            for (const {playerid} of players.Items as OrgEventPlayer[]) {
+                await ddbDocClient.send(
+                    new DeleteCommand({
+                        TableName: process.env.ABSTRACT_PLAY_TABLE,
+                        Key: {
+                          "pk": "ORGEVENTPLAYER",
+                          "sk": `${pars.eventid}#${playerid}`
+                        },
+                    })
+                );
+            }
+        }
+
+        // now delete the event itself
+        await ddbDocClient.send(
+            new DeleteCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                    "pk": "ORGEVENT",
+                    "sk": pars.eventid,
+                },
+            })
+        );
+        return {
+            statusCode: 200,
+            headers
+        };
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to delete event ${pars.eventid}. Error: ${error}`);
+    }
+}
+
+async function eventRegister(userid: string, pars: {eventid: string}) {
+    try {
+        const event = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (event.Item === undefined) {
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+        const eventRec = event.Item as OrgEvent;
+        // must be open for registration
+        if (!eventRec.visible || eventRec.dateStart < Date.now() || eventRec.dateEnd !== undefined) {
+            return {
+                statusCode: 400,
+                body: "You may only register for events that are open for registration.",
+                headers,
+            };
+        }
+        const newRec: OrgEventPlayer = {
+            pk: "ORGEVENTPLAYER",
+            sk: `${pars.eventid}#${userid}`,
+            playerid: userid,
+        }
+        await ddbDocClient.send(
+            new PutCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Item: newRec,
+            })
+          );
+        return {
+            statusCode: 200,
+            body: JSON.stringify(newRec),
+            headers
+        };
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to register for event ${pars.eventid}. Error: ${error}`);
+    }
+}
+
+async function eventWithdraw(userid: string, pars: {eventid: string}) {
+    try {
+        const event = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (event.Item === undefined) {
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+        const eventRec = event.Item as OrgEvent;
+        // must be open for registration
+        if (!eventRec.visible || eventRec.dateStart < Date.now() || eventRec.dateEnd !== undefined) {
+            return {
+                statusCode: 400,
+                body: "You may only withdraw from events that are open for registration.",
+                headers,
+            };
+        }
+        await ddbDocClient.send(
+            new DeleteCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                  "pk": "ORGEVENTPLAYER",
+                  "sk": `${pars.eventid}#${userid}`
+                },
+            })
+        );
+        return {
+            statusCode: 200,
+            headers
+        };
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to withdraw from event ${pars.eventid}. Error: ${error}`);
+    }
+}
+
+async function eventUpdateStart(userid: string, pars: {eventid: string, newDate: number}) {
+    // authorize first
+    let userRec: FullUser|undefined;
+    try {
+        const user = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "USER",
+            "sk": userid
+            },
+        }));
+        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        userRec = user.Item as FullUser;
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+    }
+    try {
+        const event = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (event.Item === undefined) {
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+        const eventRec = event.Item as OrgEvent;
+        if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        eventRec.dateStart = pars.newDate;
+        await ddbDocClient.send(
+            new PutCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Item: eventRec,
+              })
+          );
+        return {
+            statusCode: 200,
+            body: JSON.stringify(eventRec),
+            headers
+        };
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to update event start date. Error: ${error}`);
+    }
+}
+
+async function eventUpdateName(userid: string, pars: {eventid: string, name: string}) {
+    // authorize first
+    let userRec: FullUser|undefined;
+    try {
+        const user = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "USER",
+            "sk": userid
+            },
+        }));
+        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        userRec = user.Item as FullUser;
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+    }
+    try {
+        const event = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (event.Item === undefined) {
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+        const eventRec = event.Item as OrgEvent;
+        if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        eventRec.name = pars.name;
+        await ddbDocClient.send(
+            new PutCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Item: eventRec,
+              })
+          );
+        return {
+            statusCode: 200,
+            body: JSON.stringify(eventRec),
+            headers
+        };
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to update event start date. Error: ${error}`);
+    }
+}
+
+async function eventUpdateDesc(userid: string, pars: {eventid: string, description: string}) {
+    // authorize first
+    let userRec: FullUser|undefined;
+    try {
+        const user = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "USER",
+            "sk": userid
+            },
+        }));
+        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        userRec = user.Item as FullUser;
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+    }
+    try {
+        const event = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (event.Item === undefined) {
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+        const eventRec = event.Item as OrgEvent;
+        if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        eventRec.description = pars.description;
+        await ddbDocClient.send(
+            new PutCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Item: eventRec,
+              })
+          );
+        return {
+            statusCode: 200,
+            body: JSON.stringify(eventRec),
+            headers
+        };
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to update event start date. Error: ${error}`);
+    }
+}
+
+type PairingPlayer = {
+    id: string;
+    name: string;
+    country: string;
+    stars: string[];
+    lastSeen: number;
+};
+type Pairing = {
+    round: number;
+    metagame: string;
+    variants: string[];
+    clockStart: number;
+    clockInc: number;
+    clockMax: number;
+    p1: PairingPlayer;
+    p2: PairingPlayer
+};
+
+async function eventUpdateResult(userid: string, pars: {eventid: string, gameid: string, result: 0|1|2}) {
+    // load event and authorize requester
+    let userRec: FullUser|undefined;
+    try {
+        const user = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "USER",
+            "sk": userid
+            },
+        }));
+        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+            console.log(`Error 401`);
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        userRec = user.Item as FullUser;
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`eventCreateGames: Unable to load user record to authorize ${userid}`);
+    }
+    let event: OrgEvent;
+    try {
+        const eventRec = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (eventRec.Item === undefined) {
+            console.log(`Error 404`);
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+        event = eventRec.Item as OrgEvent;
+        if (userRec === undefined || (userRec.admin !== true && event.organizer !== userid)) {
+            console.log(`Error 401`);
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`eventCreateGames: Unable to load/validate the event record for event ${pars.eventid}. Error: ${error}`);
+    }
+    // update game record
+    try {
+        await ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "ORGEVENTGAME", "sk": `${pars.eventid}#${pars.gameid}` },
+            ExpressionAttributeValues: { ":win": pars.result === 0 ? [1,2] : [pars.result], ":arb": true},
+            UpdateExpression: "set winner = :win, arbitrated = :arb",
+        }));
+        return {
+            statusCode: 200,
+            headers
+        };
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`eventUpdateResult: Unable to set result ${pars.result} for ${pars.eventid}#${pars.gameid}`);
+    }
+}
+
+async function eventCreateGames(userid: string, pars: {eventid: string; pairs: Pairing[]}) {
+    // (Do as much validation as possible before creating games and abort if anything's wrong.)
+    console.log(`About to try creating the following pairings for event ${pars.eventid}:\n${JSON.stringify(pars.pairs, null, 2)}`);
+    // load event and authorize requester
+    let userRec: FullUser|undefined;
+    try {
+        const user = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "USER",
+            "sk": userid
+            },
+        }));
+        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+            console.log(`Error 401`);
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        userRec = user.Item as FullUser;
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`eventCreateGames: Unable to load user record to authorize ${userid}`);
+    }
+    let event: OrgEvent;
+    try {
+        const eventRec = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (eventRec.Item === undefined) {
+            console.log(`Error 404`);
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+        event = eventRec.Item as OrgEvent;
+        if (userRec === undefined || (userRec.admin !== true && event.organizer !== userid)) {
+            console.log(`Error 401`);
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`eventCreateGames: Unable to load/validate the event record for event ${pars.eventid}. Error: ${error}`);
+    }
+    // get list of registered players
+    let eventPlayers: OrgEventPlayer[];
+    try {
+        const pRecs = await ddbDocClient.send(
+            new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+                ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
+                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        }));
+        if (pRecs.Items === undefined || pRecs.Items.length === 0) {
+            console.log(`Error 400: No players`);
+            return {
+                statusCode: 400,
+                body: "This event has no registered players!",
+                headers
+            };
+        }
+        eventPlayers = pRecs.Items as OrgEventPlayer[];
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`eventCreateGames: Unable to load registered players for event ${pars.eventid}. Error: ${error}`);
+    }
+    // ensure that all paired players are registered or abort
+    const idsRegistered = eventPlayers.map(p => p.playerid);
+    for (const pair of pars.pairs) {
+        if (!idsRegistered.includes(pair.p1.id) || !idsRegistered.includes(pair.p2.id)) {
+            console.log(`Error 400: Unregistered player`);
+            return {
+                statusCode: 400,
+                body: `You may not create games for players not registered for this event.`,
+                headers
+            };
+        }
+    }
+    // load all player records to be paired
+    const idsPaired = new Set<string>();
+    for (const pair of pars.pairs) {
+        idsPaired.add(pair.p1.id);
+        idsPaired.add(pair.p2.id);
+    }
+    let players: FullUser[];
+    try {
+        players = await getPlayers([...idsPaired.values()]);
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`eventCreateGames: Unable to load full player records for registered players for event ${pars.eventid}. Error: ${error}`);
+    }
+    // try to initialize all requested metagame/variant combos to make sure they're valid
+    try {
+        const tried = new Set<string>();
+        for (const pair of pars.pairs) {
+            const id = [pair.metagame, ...pair.variants].join("|");
+            if (tried.has(id)) {
+                continue;
+            } else {
+                tried.add(id);
+            }
+            const info = gameinfo.get(pair.metagame);
+            let engine;
+            if (info.playercounts.length > 1)
+              engine = GameFactory(pair.metagame, 2, pair.variants);
+            else
+              engine = GameFactory(pair.metagame, undefined, pair.variants);
+            if (!engine) {
+                console.log(`Error 400: No engine`);
+                return {
+                    statusCode: 400,
+                    body: `The game engine could not be initialized for the game ${pair.metagame} and the variants "${pair.variants.join(", ")}".`,
+                    headers
+                };
+            }
+            const varsReqd = [...pair.variants];
+            varsReqd.sort((a,b) => a.localeCompare(b));
+            const varsEngine = [...engine.variants];
+            varsEngine.sort((a,b) => a.localeCompare(b));
+            if (varsReqd.join("|") !== varsEngine.join("|")) {
+                console.log(`Error 400: Missing variants`);
+                return {
+                    statusCode: 400,
+                    body: `The variants requested (${JSON.stringify(varsReqd)}) do not match the variants asserted by the game engine (${JSON.stringify(varsEngine)}).`,
+                    headers
+                };
+            }
+        }
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`eventCreateGames: Unable to validate metagame/variant combos for event ${pars.eventid}. Error: ${error}`);
+    }
+
+    const list: Promise<any>[] = [];
+    try {
+        // for each pairing
+        const updatedGames = new Map<string, Game[]>();
+        for (const pair of pars.pairs) {
+            // create game record
+            const gameId = uuid();
+            const playerIDs = [pair.p1.id, pair.p2.id];
+            let whoseTurn: string | boolean[] = "0";
+            const info = gameinfo.get(pair.metagame);
+            if (info.flags !== undefined && info.flags.includes('simultaneous')) {
+              whoseTurn = playerIDs.map(() => true);
+            }
+            let engine: GameBase|GameBaseSimultaneous;
+            if (info.playercounts.length > 1) {
+                engine = GameFactory(pair.metagame, 2, pair.variants)!;
+            } else {
+                engine = GameFactory(pair.metagame, undefined, pair.variants)!;
+            }
+            const state = engine.serialize();
+            const now = Date.now();
+            const pInvolved = players.filter(p => p.id === pair.p1.id || p.id === pair.p2.id);
+            const gamePlayers = pInvolved.map(p => { return {"id": p.id, "name": p.name, "time": pair.clockStart * 3600000 }}) as User[];
+            if (info.flags !== undefined && info.flags.includes('perspective')) {
+                let rot = 180;
+                if (playerIDs.length > 2 && info.flags !== undefined && info.flags.includes('rotate90')) {
+                  rot = -90;
+                }
+                for (let i = 1; i < playerIDs.length; i++) {
+                  gamePlayers[i].settings = {"rotate": i * rot};
+                }
+            }
+            // queue for update
+            const addGame = ddbDocClient.send(new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Item: {
+                    "pk": "GAME",
+                    "sk": pair.metagame + "#0#" + gameId,
+                    "id": gameId,
+                    "metaGame": pair.metagame,
+                    "numPlayers": 2,
+                    "rated": true,
+                    "players": gamePlayers,
+                    "clockStart": pair.clockStart,
+                    "clockInc": pair.clockInc,
+                    "clockMax": pair.clockMax,
+                    "clockHard": true,
+                    "noExplore": false,
+                    "state": state,
+                    "toMove": whoseTurn,
+                    "lastMoveTime": now,
+                    "gameStarted": now,
+                    "variants": engine.variants,
+                    "event": pars.eventid,
+                  } as FullGame
+            }));
+            list.push(addGame);
+            // this should be all the info we want to show on the "my games" summary page.
+            const game = {
+                "id": gameId,
+                "metaGame": pair.metagame,
+                "players": pInvolved.map(p => {return {"id": p.id, "name": p.name, "time": pair.clockStart * 3600000}}),
+                "clockHard": true,
+                "noExplore": false,
+                "toMove": whoseTurn,
+                "lastMoveTime": now,
+                "variants": engine.variants,
+            } as Game;
+            list.push(addToGameLists("CURRENTGAMES", game, now, false));
+            // prepare to update player records and queue updates after the loop
+            pInvolved.forEach(player => {
+                let lst: Game[] = [];
+                if (updatedGames.has(player.id)) {
+                    lst = updatedGames.get(player.id)!;
+                }
+                lst.push(game);
+                updatedGames.set(player.id, lst);
+            });
+            // Create an OrgEventGame record to link this game to the event
+            const eventGame: OrgEventGame = {
+                pk: "ORGEVENTGAME",
+                sk: [pars.eventid, gameId].join("#"),
+                metaGame: pair.metagame,
+                variants: engine.variants,
+                round: pair.round,
+                gameid: gameId,
+                player1: pair.p1.id,
+                player2: pair.p2.id,
+            };
+            list.push(
+                ddbDocClient.send(new PutCommand({
+                    TableName: process.env.ABSTRACT_PLAY_TABLE,
+                      Item: eventGame,
+                }))
+            );
+        }
+        // queue all player updates one time
+        players.forEach(player => {
+            let games = player.games;
+            if (games === undefined) {
+                games = [];
+            }
+            const updated = updatedGames.get(player.id);
+            if (updated !== undefined) {
+                const updatedGameIDs: string[] = [];
+                for (const game of updated) {
+                    games.push(game);
+                    updatedGameIDs.push(game.id);
+
+                }
+                list.push(updateUserGames(player.id, player.gamesUpdate, updatedGameIDs, games));
+            }
+        });
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`eventCreateGames: Something went wrong generating pairings for event ${pars.eventid}. Error: ${error}`);
+    }
+    // execute all updates
+    try {
+        await Promise.all(list);
+        return {
+            statusCode: 200,
+            headers
+        };
+    } catch (error) {
+        logGetItemError(error);
+        throw new Error(`Something terrible happened while trying to create paired games for event ${pars.eventid}`);
+    }
+}
+
+async function eventClose(userid: string, pars: {eventid: string, winner: string[]}) {
+    // load event and authorize requester
+    let userRec: FullUser|undefined;
+    try {
+        const user = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "USER",
+            "sk": userid
+            },
+        }));
+        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+            console.log(`Error 401`);
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        userRec = user.Item as FullUser;
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`eventClose: Unable to load user record to authorize ${userid}`);
+    }
+    let event: OrgEvent;
+    try {
+        const eventRec = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (eventRec.Item === undefined) {
+            console.log(`Error 404`);
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+        event = eventRec.Item as OrgEvent;
+        if (userRec === undefined || (userRec.admin !== true && event.organizer !== userid)) {
+            console.log(`Error 401`);
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`eventClose: Unable to load/validate the event record for event ${pars.eventid}. Error: ${error}`);
+    }
+    // update event record
+    try {
+        if (event.dateEnd === undefined) {
+            event.dateEnd = Date.now();
+        }
+        event.winner = pars.winner;
+        await ddbDocClient.send(new PutCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Item: event
+            })
+        );
+        return {
+            statusCode: 200,
+            headers
+        };
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`eventClose: Unable to close event ${pars.eventid}`);
+    }
+}
+
+async function eventUpdates(pars: {eventid: string, gameid: string, winner: number[]}): Promise<any[]> {
+    const work: Promise<any>[] = [];
+    work.push(
+        ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "ORGEVENTGAME", "sk": `${pars.eventid}#${pars.gameid}` },
+            ExpressionAttributeValues: { ":win": pars.winner, ":arb": false},
+            UpdateExpression: "set winner = :win, arbitrated = :arb",
+        }))
+    );
+    return Promise.all(work);
 }
 
 // Delete every trace of a list of games. Only for admins and probably only for dev!
