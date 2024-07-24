@@ -33,7 +33,7 @@ All data is in a single table. The primary key (or the first part of the primary
   * pk: PUSH
   * sk: \<userid\>
 
-- **User list** List of users (for use when challenging someone). Fields: name, country, lastSeen, stars   
+- **User list** List of users (for use when challenging someone). Fields: name, country, lastSeen, stars
   * pk: USERS
   * sk: \<userid\>
 
@@ -74,23 +74,34 @@ All data is in a single table. The primary key (or the first part of the primary
 	* pk: METAGAMES
   * sk: COUNTS
 
-- **Tournaments** List of tournaments that are not completed yet. Either waiting for players to sign up, or ongoing.
-  * pk: TOURNAMENT
-  * sk: \<tournamentid\>
+- **Automated tournaments**
+  - **Tournaments** List of tournaments that are not completed yet. Either waiting for players to sign up, or ongoing.
+    * pk: TOURNAMENT
+    * sk: \<tournamentid\>
 
-- **Tournament Player** Just a reference to the player
-  * pk: TOURNAMENTPLAYER
-  * sk: \<tournamentid\>#\<division\>#\<playerid\>
+  - **Tournament Player** Just a reference to the player
+    * pk: TOURNAMENTPLAYER
+    * sk: \<tournamentid\>#\<division\>#\<playerid\>
 
-- **Tournament Game** Just a reference to the game
-  * pk: TOURNAMENTGAME
-  * sk: \<tournamentid\>#\<division\>#\<gameid\>
+  - **Tournament Game** Just a reference to the game
+    * pk: TOURNAMENTGAME
+    * sk: \<tournamentid\>#\<division\>#\<gameid\>
 
-- **Completed Tournaments** List of completed tournaments.
-  * pk: COMPLETEDTOURNAMENT
-  * sk: \<metaGame\>#\<tournamentid\>
+  - **Completed Tournaments** List of completed tournaments.
+    * pk: COMPLETEDTOURNAMENT
+    * sk: \<metaGame\>#\<tournamentid\>
 
-- **Tournament count** Counter for tournaments. Each metaGame + variants combination gets a count. Variants is a pipe delimited concatenation of (sorted) variations.
-  * pk: TOURNAMENTSCOUNTER
-  * sk: \<metaGame\>#<\variants\>
-{ counter, over }
+  - **Tournament count** Counter for tournaments. Each metaGame + variants combination gets a count. Variants is a pipe delimited concatenation of (sorted) variations.
+    * pk: TOURNAMENTSCOUNTER
+    * sk: \<metaGame\>#<\variants\> { counter, over }
+
+- **Organized events**
+  - **Events** The overarching event details
+    - pk: ORGEVENT
+    - sk: \<eventid\>
+  - **Players** Entries linking players to the event.
+    - pk: ORGEVENTPLAYER
+    - sk: \<eventid\>#\<playerid\>
+  - **Games** Entries linking specific games to the event.
+    - pk: ORGEVENTGAME
+    - sk: \<eventid\>#\<gameid\>
