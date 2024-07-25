@@ -122,6 +122,7 @@ type FullUser = {
     standing: string[];
   }
   admin: boolean | undefined;
+  organizer: boolean|undefined;
   language: string;
   country: string;
   lastSeen?: number;
@@ -1412,6 +1413,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "id": user.id,
           "name": user.name,
           "admin": (user.admin === true),
+          "organizer": (user.organizer === true),
           "language": user.language,
           "country": user.country,
           "games": games,
@@ -1434,6 +1436,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "id": user.id,
           "name": user.name,
           "admin": (user.admin === true),
+          "organizer": (user.organizer === true),
           "language": user.language,
           "country": user.country,
           "games": games,
