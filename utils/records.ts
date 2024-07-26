@@ -23,6 +23,7 @@ type BasicRec = {
 type GameRec = {
     pk: string;
     sk: string;
+    id: string;
     metaGame: string;
     state: string;
     pieInvoked?: boolean;
@@ -31,8 +32,48 @@ type GameRec = {
         id: string;
         time: number;
     }[];
+    tournament?: string;
+    event?: string;
     [key: string]: any;
 }
+
+type Tournament = {
+    pk: string;
+    sk: string;
+    id: string;
+    metaGame: string;
+    variants: string[];
+    number: number;
+    started: boolean;
+    dateCreated: number;
+    datePreviousEnded: number; // 0 means either the first tournament or a restart of the series (after it stopped because not enough participants), 3000000000000 means previous tournament still running.
+    [key: string]: any;
+};
+
+type OrgEvent = {
+    pk: "ORGEVENT";
+    sk: string;             // <eventid>
+    name: string;
+    description: string;
+    organizer: string;
+    dateStart: number;
+    dateEnd?: number;
+    winner?: string[];
+    visible: boolean;
+}
+
+type OrgEventGame = {
+    pk: "ORGEVENTGAME";
+    sk: string;             // <eventid>#<gameid>
+    metaGame: string;
+    variants?: string[];
+    round: number;
+    gameid: string;
+    player1: string;
+    player2: string;
+    winner?: number[];
+    arbitrated?: boolean;
+};
 
 export const handler: Handler = async (event: any, context?: any) => {
     // scan bucket for data folder
@@ -73,6 +114,9 @@ export const handler: Handler = async (event: any, context?: any) => {
 
     // load the data from each data file, but only keep the GAME records
     const justGames: GameRec[] = [];
+    const tournaments: Tournament[] = [];
+    const events: OrgEvent[] = [];
+    const eventGames: OrgEventGame[] = [];
     for (const file of dataFiles) {
         const command = new GetObjectCommand({
             Bucket: DUMP_BUCKET,
@@ -91,6 +135,12 @@ export const handler: Handler = async (event: any, context?: any) => {
                     const rec = json.Item;
                     if ( (rec.pk === "GAME") && (rec.sk.includes("#1#")) ) {
                         justGames.push(rec as GameRec);
+                    } else if (rec.pk === "TOURNAMENT" || rec.pk === "COMPLETEDTOURNAMENT") {
+                        tournaments.push(rec as Tournament);
+                    } else if (rec.pk === "ORGEVENT") {
+                        events.push(rec as OrgEvent);
+                    } else if (rec.pk === "ORGEVENTGAME") {
+                        eventGames.push(rec as OrgEventGame);
                     }
                 }
             }
@@ -112,14 +162,37 @@ export const handler: Handler = async (event: any, context?: any) => {
     const allRecs: APGameRecord[] = [];
     const metaRecs = new Map<string, APGameRecord[]>();
     const userRecs = new Map<string, APGameRecord[]>();
+    const eventRecs = new Map<string, APGameRecord[]>();
     for (const gdata of justGames) {
         const g = GameFactory(gdata.metaGame, gdata.state);
         if (g === undefined) {
             throw new Error(`Unable to instantiate ${gdata.metaGame} game ${gdata.id}:\n${JSON.stringify(gdata.state)}`);
         }
+        let event: string|null = null;
+        let round: string|null = null;
+        if (gdata.tournament !== undefined) {
+            const trec = tournaments.find(t => t.id === gdata.tournament);
+            if (trec !== undefined) {
+                event = `Automated Tournament #${trec.number} (${trec.sk})`
+                round = "1";
+            } else {
+                console.log(`Could not find a matching tournament record for game record "${gdata.sk}".`);
+            }
+        } else if (gdata.event !== undefined) {
+            const erec = events.find(e => e.sk === gdata.event);
+            const egrec = eventGames.find(eg => eg.sk === [gdata.event, gdata.id].join("#"));
+            if (erec !== undefined && egrec !== undefined) {
+                event = erec.name;
+                round = egrec.round.toString();
+            } else {
+                console.log(`Could not find a matching event records for game record "${gdata.sk}".`)
+            }
+        }
         const rec = g.genRecord({
             uid: gdata.id,
             players: gdata.players.map(p => { return {uid: p.id, name: p.name}; }),
+            event: event !== null ? event : undefined,
+            round: round !== null ? round : undefined,
         });
         if (rec === undefined) {
             throw new Error(`Unable to create a game report for ${gdata.metaGame} game ${gdata.id}:\n${JSON.stringify(gdata.state)}`);
@@ -133,8 +206,19 @@ export const handler: Handler = async (event: any, context?: any) => {
         for (const p of gdata.players) {
             pushToMap(userRecs, p.id, rec);
         }
+        if (event !== null) {
+            let id: string|undefined;
+            if (gdata.tournament !== undefined) {
+                id = gdata.tournament;
+            } else if (gdata.event !== undefined) {
+                id = gdata.event;
+            }
+            if (id !== undefined) {
+                pushToMap(eventRecs, id, rec);
+            }
+        }
     }
-    console.log(`allRecs: ${allRecs.length}, metaRecs: ${[...metaRecs.keys()].length}, userRecs: ${[...userRecs.keys()].length}`);
+    console.log(`allRecs: ${allRecs.length}, metaRecs: ${[...metaRecs.keys()].length}, userRecs: ${[...userRecs.keys()].length}, eventRecs: ${[...eventRecs.keys()].length}`);
 
     // write files to S3
     const bodyAll = JSON.stringify(allRecs);
@@ -174,6 +258,19 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
     }
     console.log("Player recs done");
+    // events
+    for (const [eventid, recs] of eventRecs.entries()) {
+        cmd = new PutObjectCommand({
+            Bucket: REC_BUCKET,
+            Key: `event/${eventid}.json`,
+            Body: JSON.stringify(recs),
+        });
+        response = await s3.send(cmd);
+        if (response["$metadata"].httpStatusCode !== 200) {
+            console.log(response);
+        }
+    }
+    console.log("Event recs done");
 
     // generate file listing
     const recListCmd = new ListObjectsV2Command({
