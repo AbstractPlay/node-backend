@@ -171,7 +171,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         let event: string|null = null;
         let round: string|null = null;
         if (gdata.tournament !== undefined) {
-            const trec = tournaments.find(t => t.sk === gdata.tournament);
+            const trec = tournaments.find(t => t.id === gdata.tournament);
             if (trec !== undefined) {
                 event = `Automated Tournament #${trec.number} (${trec.sk})`
                 round = "1";
