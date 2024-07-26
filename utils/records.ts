@@ -135,7 +135,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                     const rec = json.Item;
                     if ( (rec.pk === "GAME") && (rec.sk.includes("#1#")) ) {
                         justGames.push(rec as GameRec);
-                    } else if (rec.pk === "TOURNAMENT") {
+                    } else if (rec.pk === "TOURNAMENT" || rec.pk === "COMPLETEDTOURNAMENT") {
                         tournaments.push(rec as Tournament);
                     } else if (rec.pk === "ORGEVENT") {
                         events.push(rec as OrgEvent);
@@ -270,6 +270,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             console.log(response);
         }
     }
+    console.log("Event recs done");
 
     // generate file listing
     const recListCmd = new ListObjectsV2Command({
