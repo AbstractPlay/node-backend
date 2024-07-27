@@ -308,7 +308,7 @@ type OrgEventGame = {
     gameid: string;
     player1: string;
     player2: string;
-    winner?: number[];
+    winner?: string[];
     arbitrated?: boolean;
 };
 
@@ -2950,7 +2950,8 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         list.push(tournamentUpdates(game, players, pars.move === "timeout" ? parseInt(game.toMove) : undefined));
       }
       if (game.event !== undefined) {
-        list.push(eventUpdates({eventid: game.event, gameid: pars.id, winner: engine.winner}))
+        const winners = engine.winner.map(n => players[n-1]).map (p => p.id);
+        list.push(eventUpdates({eventid: game.event, gameid: pars.id, winner: winners}))
       }
     }
     game.lastMoveTime = timestamp;
@@ -6258,7 +6259,7 @@ async function eventClose(userid: string, pars: {eventid: string, winner: string
     }
 }
 
-async function eventUpdates(pars: {eventid: string, gameid: string, winner: number[]}): Promise<any[]> {
+async function eventUpdates(pars: {eventid: string, gameid: string, winner: string[]}): Promise<any[]> {
     const work: Promise<any>[] = [];
     work.push(
         ddbDocClient.send(new UpdateCommand({
