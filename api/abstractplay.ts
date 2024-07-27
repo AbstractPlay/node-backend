@@ -6071,7 +6071,11 @@ async function eventCreateGames(userid: string, pars: {eventid: string; pairs: P
             }
             const state = engine.serialize();
             const now = Date.now();
-            const pInvolved = players.filter(p => p.id === pair.p1.id || p.id === pair.p2.id);
+            const pInvolved = [players.find(p => p.id === pair.p1.id)!, players.find(p => p.id === pair.p2.id)!];
+            // @ts-ignore
+            if (pInvolved.includes(undefined)) {
+                throw new Error("Could not find one of the players! This should never happen!");
+            }
             const gamePlayers = pInvolved.map(p => { return {"id": p.id, "name": p.name, "time": pair.clockStart * 3600000 }}) as User[];
             if (info.flags !== undefined && info.flags.includes('perspective')) {
                 let rot = 180;
