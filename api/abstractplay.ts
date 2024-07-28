@@ -402,6 +402,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
   switch (query) {
     case "me":
       return await me(event.cognitoPoolClaims, pars);
+    case "next_game":
+      return await nextGame(event.cognitoPoolClaims.sub);
     case "my_settings":
       return await mySettings(event.cognitoPoolClaims);
     case "new_setting":
@@ -1452,6 +1454,54 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
     logGetItemError(err);
     return formatReturnError(`Unable to get user data for ${userId}`);
   }
+}
+
+async function nextGame(userid: string) {
+    try {
+      console.log(`Getting USER record`);
+      const userData = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "USER",
+            "sk": userid
+          },
+        }));
+      if (userData.Item === undefined) {
+        return {
+          statusCode: 400,
+          headers
+        };
+      }
+      const userRec = userData.Item as FullUser;
+
+      // get list of all games where it is your turn
+      type GameWithTime = {
+        game: Game;
+        remaining: number;
+      };
+      const yourturn: GameWithTime[] = [];
+      for (const game of userRec.games) {
+        const thisPlayerIdx = game.players.findIndex(p => p.id === userid);
+        // explicitly this player's turn
+        if ((Array.isArray(game.toMove) && game.toMove.length > thisPlayerIdx + 1 && game.toMove[thisPlayerIdx]) || (game.toMove === thisPlayerIdx.toString())) {
+            const remaining = (game.players[thisPlayerIdx].time || 0) - (Date.now() - game.lastMoveTime);
+            yourturn.push({game, remaining});
+        }
+      }
+      // sort by time remaining
+      yourturn.sort((a,b) => a.remaining - b.remaining);
+      console.log(`It is your turn in ${yourturn.length} games.`)
+      console.log(`Yourturn results: ${JSON.stringify(yourturn, null, 2)}`)
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify(yourturn.map(x => x.game)),
+      }
+    } catch (err) {
+      logGetItemError(err);
+      return formatReturnError(`Unable to get next game for ${userid}`);
+    }
 }
 
 async function updateUserEMail(claim: PartialClaims) {
