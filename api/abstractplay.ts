@@ -5835,7 +5835,7 @@ type Pairing = {
     p2: PairingPlayer
 };
 
-async function eventUpdateResult(userid: string, pars: {eventid: string, gameid: string, result: 0|1|2}) {
+async function eventUpdateResult(userid: string, pars: {eventid: string, gameid: string, result: string[]}) {
     // load event and authorize requester
     let userRec: FullUser|undefined;
     try {
@@ -5893,7 +5893,7 @@ async function eventUpdateResult(userid: string, pars: {eventid: string, gameid:
         await ddbDocClient.send(new UpdateCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: { "pk": "ORGEVENTGAME", "sk": `${pars.eventid}#${pars.gameid}` },
-            ExpressionAttributeValues: { ":win": pars.result === 0 ? [1,2] : [pars.result], ":arb": true},
+            ExpressionAttributeValues: { ":win": pars.result, ":arb": true},
             UpdateExpression: "set winner = :win, arbitrated = :arb",
         }));
         return {
