@@ -2869,6 +2869,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     const flags = gameinfo.get(game.metaGame).flags;
     const simultaneous = flags !== undefined && flags.includes('simultaneous');
     const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+    let moveForced = false;
     try {
       if (pars.move === "resign") {
         resign(userid, engine, game);
@@ -2879,7 +2880,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       } else if (simultaneous) {
         applySimultaneousMove(userid, pars.move, engine as GameBaseSimultaneous, game);
       } else {
-        applyMove(userid, pars.move, engine, game, flags);
+        moveForced = applyMove(userid, pars.move, engine, game, flags);
       }
     }
     catch (error) {
@@ -2891,7 +2892,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     if (!player)
       throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
     // deal with draw offers
-    if (pars.draw === "drawoffer") {
+    if (pars.draw === "drawoffer" && !moveForced) {
       player.draw = "offered";
     } else {
       // if a player just moved, other draw offers are declined
@@ -3666,11 +3667,12 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBaseSim
   }
 }
 
-function applyMove(userid: string, move: string, engine: GameBase, game: FullGame, flags: string[]) {
+function applyMove(userid: string, move: string, engine: GameBase, game: FullGame, flags: string[]): boolean {
   // non simultaneous move game.
   if (game.players[parseInt(game.toMove as string)].id !== userid) {
     throw new Error('It is not your turn!');
   }
+  let moveForced = false;
   engine.move(move);
   if (flags !== undefined && flags.includes("automove")) {
     // @ts-ignore
@@ -3678,6 +3680,7 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
         if (flags.includes("pie-even") && engine.state().stack.length === 2) break;
         // @ts-ignore
         engine.move(engine.moves()[0]);
+        moveForced = true;
     }
   }
   game.state = engine.serialize();
@@ -3691,6 +3694,7 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
     }
     game.toMove = `${engine.currplayer - 1}`;
   }
+  return moveForced;
 }
 
 async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; metaGame?: string, comment: string; moveNumber: number; }) {
