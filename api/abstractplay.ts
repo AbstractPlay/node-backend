@@ -6853,7 +6853,7 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
         if (!player)
           throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
 
-        const timestamp = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+        const timestamp = Date.now();
         const timeUsed = timestamp - lastMoveTime;
         // console.log("timeUsed", timeUsed);
         // console.log("player", player);
@@ -6862,7 +6862,6 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
         else
           player.time = player.time! - timeUsed + game.clockInc * 3600000;
         if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
-        // console.log("players", game.players);
         const playerIDs = game.players.map((p: { id: any; }) => p.id);
         // TODO: We are updating players and their games. This should be put in some kind of critical section!
         const players = await getPlayers(playerIDs);
@@ -6883,6 +6882,12 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
               logGetItemError(err);
               return formatReturnError('Error passing while invoking "pie-even"');
           }
+        } else {
+            // the other player needs to be given `timeUsed` back on their clock to account
+            // for the fact that the game state is not changing (`lastMoveTime` isn't going
+            // to change)
+            const otherPlayer = game.players.find(p => p.id !== userid)!;
+            otherPlayer.time = otherPlayer.time! + timeUsed;
         }
 
         // this should be all the info we want to show on the "my games" summary page.
