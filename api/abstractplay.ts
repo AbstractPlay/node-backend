@@ -136,6 +136,25 @@ type FullUser = {
   mayPush?: boolean;
 }
 
+type MeData = {
+    id: string;
+    name: string;
+    admin: boolean;
+    organizer: boolean;
+    language: string;
+    country: string;
+    games: Game[];
+    settings: UserSettings;
+    stars: string[];
+    tags?: TagList[];
+    palettes?: Palette[];
+    mayPush: boolean;
+    challengesIssued?: FullChallenge[];
+    challengesReceived?: FullChallenge[];
+    challengesAccepted?: FullChallenge[];
+    standingChallenges?: FullChallenge[];
+}
+
 type Rating = {
   rating: number;
   N: number;
@@ -1428,7 +1447,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "challengesReceived": (data[1] as any[]).map(d => d.Item),
           "challengesAccepted": (data[2] as any[]).map(d => d.Item),
           "standingChallenges": (data[3] as any[]).map(d => d.Item)
-        }, Set_toJSON),
+        } as MeData, Set_toJSON),
         headers
       };
     } else {
@@ -1446,7 +1465,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "stars": user.stars,
           tags,
           palettes,
-        }, Set_toJSON),
+        } as MeData, Set_toJSON),
         headers
       }
     }
