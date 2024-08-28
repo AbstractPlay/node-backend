@@ -335,6 +335,7 @@ type OrgEventPlayer = {
     pk: "ORGEVENTPLAYER";
     sk: string;             // <eventid>#<playerid>
     playerid: string;
+    division?: number;
     seed?: number;
 };
 
@@ -509,6 +510,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await eventUpdateDesc(event.cognitoPoolClaims.sub, pars);
     case "event_update_result":
       return await eventUpdateResult(event.cognitoPoolClaims.sub, pars);
+    case "event_update_divisions":
+      return await eventUpdateDivisions(event.cognitoPoolClaims.sub, pars);
     case "event_create_games":
       return await eventCreateGames(event.cognitoPoolClaims.sub, pars);
     case "event_close":
@@ -5976,6 +5979,176 @@ async function eventUpdateResult(userid: string, pars: {eventid: string, gameid:
     } catch (err) {
         logGetItemError(err);
         return formatReturnError(`eventUpdateResult: Unable to set result ${pars.result} for ${pars.eventid}#${pars.gameid}`);
+    }
+}
+
+type DivisionTable = string[][];
+async function eventUpdateDivisions(userid: string, pars: {eventid: string; divisions: DivisionTable}) {
+    // (Do as much validation as possible before creating games and abort if anything's wrong.)
+    console.log(`About to try updating division assignments for event ${pars.eventid}:\n${JSON.stringify(pars.divisions, null, 2)}`);
+    // load event and authorize requester
+    let userRec: FullUser|undefined;
+    try {
+        const user = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "USER",
+            "sk": userid
+            },
+        }));
+        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+            console.log(`Error 401`);
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        userRec = user.Item as FullUser;
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`eventCreateGames: Unable to load user record to authorize ${userid}`);
+    }
+    let event: OrgEvent;
+    try {
+        const eventRec = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (eventRec.Item === undefined) {
+            console.log(`Error 404`);
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+        event = eventRec.Item as OrgEvent;
+        if (userRec === undefined || (userRec.admin !== true && event.organizer !== userid)) {
+            console.log(`Error 401`);
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`eventCreateGames: Unable to load/validate the event record for event ${pars.eventid}. Error: ${error}`);
+    }
+    // get list of registered players
+    let eventPlayers: OrgEventPlayer[];
+    try {
+        const pRecs = await ddbDocClient.send(
+            new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+                ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
+                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        }));
+        if (pRecs.Items === undefined || pRecs.Items.length === 0) {
+            console.log(`Error 400: No players`);
+            return {
+                statusCode: 400,
+                body: "This event has no registered players!",
+                headers
+            };
+        }
+        eventPlayers = pRecs.Items as OrgEventPlayer[];
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`eventCreateGames: Unable to load registered players for event ${pars.eventid}. Error: ${error}`);
+    }
+
+    // ensure there are at least 2 divisions
+    if (pars.divisions.length < 2) {
+        console.log(`Error 400: Too few divisions`);
+        return {
+            statusCode: 400,
+            body: `There must be at least two divisions.`,
+            headers
+        };
+    }
+
+    // ensure that each division has at least 2 players assigned
+    if (Math.min(...pars.divisions.map(d => d.length)) < 2) {
+        console.log(`Error 400: Too-small division`);
+        return {
+            statusCode: 400,
+            body: `Each division must have at least two players assigned.`,
+            headers
+        };
+    }
+
+    // ensure that all assigned players are registered or abort
+    const idsRegistered = eventPlayers.map(p => p.playerid);
+    for (const uid of pars.divisions.flat()) {
+        if (!idsRegistered.includes(uid)) {
+            console.log(`Error 400: Unregistered player`);
+            return {
+                statusCode: 400,
+                body: `You may not assign divisions to players not registered for this event.`,
+                headers
+            };
+        }
+    }
+
+    // ensure that all participating players have been assigned or abort
+    const setRegistrants = new Set<string>(idsRegistered);
+    for (const uid of pars.divisions.flat()) {
+        setRegistrants.delete(uid);
+    }
+    if (setRegistrants.size > 0) {
+        console.log(`Error 400: Not all players assigned`);
+        return {
+            statusCode: 400,
+            body: `All registered players must be assigned to a division.`,
+            headers
+        };
+    }
+
+    // ensure there are no duplicates anywhere
+    const seen = new Set<string>(pars.divisions.flat());
+    if (seen.size < pars.divisions.flat().length) {
+        console.log(`Error 400: Duplicates`);
+        return {
+            statusCode: 400,
+            body: `Players must only be assigned to one division. No duplicates allowed.`,
+            headers
+        };
+    }
+
+    const list: Promise<any>[] = [];
+    try {
+        // for each division
+        for (let d = 0; d < pars.divisions.length; d++) {
+            const division = pars.divisions[d];
+            for (const pid of division) {
+                const cmd = ddbDocClient.send(new UpdateCommand({
+                    TableName: process.env.ABSTRACT_PLAY_TABLE,
+                    Key: { "pk": "ORGEVENTPLAYER", "sk": `${pars.eventid}#${pid}` },
+                    ExpressionAttributeValues: { ":div": d+1 },
+                    UpdateExpression: "set division = :div",
+                }));
+                list.push(cmd);
+            }
+        }
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`eventUpdateDivisions: Something went wrong assigning divisions for event ${pars.eventid}. Error: ${error}`);
+    }
+    // execute all updates
+    try {
+        await Promise.all(list);
+        return {
+            statusCode: 200,
+            headers
+        };
+    } catch (error) {
+        logGetItemError(error);
+        throw new Error(`Something terrible happened while trying to assign divisions for event ${pars.eventid}`);
     }
 }
 
