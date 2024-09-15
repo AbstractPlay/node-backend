@@ -134,7 +134,20 @@ type FullUser = {
   tags?: TagList[];
   palettes?: Palette[];
   mayPush?: boolean;
+  bggid?: string;
+  about?: string;
 }
+
+export type UsersData = {
+    id: string;
+    name: string;
+    country: string;
+    lastSeen: number;
+    stars: string[];
+    bggid?: string;
+    about?: string;
+};
+
 
 type MeData = {
     id: string;
@@ -550,7 +563,7 @@ async function userNames() {
         KeyConditionExpression: "#pk = :pk",
         ExpressionAttributeValues: { ":pk": "USERS" },
         ExpressionAttributeNames: { "#pk": "pk", "#name": "name"},
-        ProjectionExpression: "sk, #name, lastSeen, country, stars",
+        ProjectionExpression: "sk, #name, lastSeen, country, stars, bggid, about",
         ReturnConsumedCapacity: "INDEXES"
       }));
 
@@ -567,7 +580,7 @@ async function userNames() {
 
     return {
       statusCode: 200,
-      body: JSON.stringify(users.map(u => ({"id": u.sk, "name": u.name, "country": u.country, "stars": u.stars, "lastSeen": u.lastSeen}))),
+      body: JSON.stringify(users.map(u => ({id: u.sk, name: u.name, country: u.country, stars: u.stars, lastSeen: u.lastSeen, bggid: u.bggid, about: u.about} as UsersData))),
       headers
     };
   }
@@ -1667,6 +1680,14 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
     case "country":
       attr = "country";
       val = pars.value;
+      break;
+    case "bggid":
+      attr = "bggid";
+      val = pars.value;
+      break;
+    case "about":
+      attr = "about";
+      val = pars.value.substring(0, 255);
       break;
     default:
       return;
