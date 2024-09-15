@@ -1724,7 +1724,8 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
         UpdateExpression: "set #country = :newcountry"
     })));
   }
-  if (pars.attribute === "bggid" || pars.attribute === "about") {
+  if (attr === "bggid" || attr === "about") {
+    console.log(`Pushing USERS update: ${userId} -> ${attr} = ${val}`)
     work.push(ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "USERS", "sk": userId },
