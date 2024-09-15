@@ -148,7 +148,6 @@ export type UsersData = {
     about?: string;
 };
 
-
 type MeData = {
     id: string;
     name: string;
@@ -159,6 +158,8 @@ type MeData = {
     games: Game[];
     settings: UserSettings;
     stars: string[];
+    bggid?: string;
+    about?: string;
     tags?: TagList[];
     palettes?: Palette[];
     mayPush: boolean;
@@ -1456,6 +1457,8 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "games": games,
           "settings": user.settings,
           "stars": user.stars,
+          "bggid": user.bggid,
+          "about": user.about,
           tags,
           palettes,
           "mayPush": user.mayPush,
@@ -1479,6 +1482,8 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "games": games,
           "settings": user.settings,
           "stars": user.stars,
+          "bggid": user.bggid,
+          "about": user.about,
           tags,
           palettes,
         } as MeData, Set_toJSON),
@@ -1718,6 +1723,15 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
         ExpressionAttributeNames: { "#country": "country" },
         UpdateExpression: "set #country = :newcountry"
     })));
+  }
+  if (pars.attribute === "bggid" || pars.attribute === "about") {
+    work.push(ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USERS", "sk": userId },
+        ExpressionAttributeValues: { ":v": val },
+        ExpressionAttributeNames: { "#a": attr },
+        UpdateExpression: "set #a = :v"
+      })));
   }
   try {
     await Promise.all(work);
