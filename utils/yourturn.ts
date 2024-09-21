@@ -78,12 +78,13 @@ export const handler: Handler = async (event: any, context?: any) => {
                 });
             }
             gamesCollated.push(...games);
-            console.log(JSON.stringify(games, null, 2));
         } catch (e) {
             logGetItemError(e);
             return formatReturnError(`Unable to get active games from table ${process.env.ABSTRACT_PLAY_TABLE}`);
         }
     }
+    console.log(`Collated games`);
+    console.log(JSON.stringify(gamesCollated, null, 2));
 
     // Map player IDs whose turn it is to the list of games waiting on them
     const p2g = new Map<string, PartialGame[]>();
@@ -109,7 +110,8 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
         }
     }
-    console.log(JSON.stringify(p2g.entries(), null, 2));
+    console.log("Map of player ids to games waiting on them");
+    console.log(JSON.stringify(p2g, replacer, 2));
 
     // Get list of users
     const players: PartialUser[] = [];
@@ -136,6 +138,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 players.push(data.Item as PartialUser);
             }
         }
+        console.log("All players");
         console.log(JSON.stringify(players, null, 2));
 
         // Collate user data with players whose turn it is, but only those electing to receive notifications and who have valid email addresses
@@ -157,6 +160,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                     }
                 }
             }
+            console.log("All notifications");
             console.log(JSON.stringify(notifications, null, 2));
         }
     } catch (error) {
@@ -164,7 +168,6 @@ export const handler: Handler = async (event: any, context?: any) => {
         return formatReturnError(`Unable to get active games and players from table ${process.env.ABSTRACT_PLAY_TABLE}`);
     }
     console.log(`TOTAL UNITS CONSUMED: ${totalUnits}`);
-    console.log(notifications);
 
     // If not in test mode, send notifications
     if ( (notifications.length > 0) && ( (context === undefined) || ( !("key1" in context)) ) ) {
@@ -195,3 +198,19 @@ export const handler: Handler = async (event: any, context?: any) => {
     }
     return;
 };
+
+const replacer = (key: any, value: any) => {
+    if (value instanceof Map) {
+        return {
+            dataType: 'Map',
+            value: Array.from(value.entries()), // or with spread: value: [...value]
+        };
+    } else if (value instanceof Set) {
+        return {
+            dataType: "Set",
+            value: Array.from(value)
+        };
+    } else {
+        return value;
+    }
+}
