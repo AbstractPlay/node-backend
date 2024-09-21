@@ -122,7 +122,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 new GetCommand({
                     TableName: process.env.ABSTRACT_PLAY_TABLE,
                     Key: {
-                      "pk": "CHALLENGE", "sk": pid
+                      "pk": "USER", "sk": pid
                     },
                     ExpressionAttributeNames: { "#id": "id", "#name": "name", "#language": "language", "#settings": "settings" },
                     ProjectionExpression: "#id, #name, email, #language, #settings",
