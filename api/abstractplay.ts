@@ -2,7 +2,7 @@
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, BatchWriteCommand, QueryCommandInput } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand, SendMessageRequest } from "@aws-sdk/client-sqs";
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
@@ -6882,19 +6882,9 @@ async function updateMetaGameCounts(userId: string) {
     console.log("work", work);
 
     // process stars
-    const data = await ddbDocClient.send(
-        new QueryCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            KeyConditionExpression: "#pk = :pk",
-            ExpressionAttributeValues: { ":pk": "USER" },
-            ExpressionAttributeNames: { "#pk": "pk" },
-            ReturnConsumedCapacity: "INDEXES",
-        })
-    );
-    if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
-        console.log(`Units consumed by player read: ${data.ConsumedCapacity.CapacityUnits}`);
-    }
-    const players = data?.Items as FullUser[];
+    const players = await getAllUsers();
+    console.log("All players");
+    console.log(JSON.stringify(players.map(p => p.name)));
     const starCounts = new Map<string, number>();
     for (const p of players) {
         if (p.stars !== undefined) {
@@ -7858,4 +7848,34 @@ export function handleCommonErrors(err: { code: any; message: any; }) {
       console.error(`An exception occurred, investigate and configure retry strategy. Error: ${err.message}`);
       return;
   }
+}
+
+async function *queryItemsGenerator(queryInput: QueryCommandInput): AsyncGenerator<unknown> {
+    let lastEvaluatedKey: Record<string, any> | undefined
+    do {
+      const { Items, LastEvaluatedKey } = await ddbDocClient
+        .send(new QueryCommand({ ...queryInput, ExclusiveStartKey: lastEvaluatedKey }));
+      lastEvaluatedKey = LastEvaluatedKey
+      if (Items !== undefined) {
+        yield Items
+      }
+    } while (lastEvaluatedKey !== undefined)
+}
+
+const getAllUsers = async (): Promise<FullUser[]> => {
+    const result: FullUser[] = []
+    const queryInput: QueryCommandInput = {
+      KeyConditionExpression: '#pk = :pk',
+      ExpressionAttributeNames: {
+        '#pk': 'pk',
+      },
+      ExpressionAttributeValues: {
+        ':pk': 'USER',
+      },
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+    }
+    for await (const page of queryItemsGenerator(queryInput)) {
+      result.push(...page as FullUser[]);
+    }
+    return result
 }
