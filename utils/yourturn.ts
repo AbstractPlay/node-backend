@@ -109,7 +109,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
         }
     }
-    console.log(JSON.stringify(p2g, null, 2));
+    console.log(JSON.stringify([...p2g.entries()], null, 2));
 
     // Get list of users
     const notifications: [PartialUser, number][] = [];
@@ -165,7 +165,13 @@ export const handler: Handler = async (event: any, context?: any) => {
         const work: Promise<any>[] =  [];
 
         // Sort by language to minimize locale changes
-        notifications.sort((a, b) => a[0].language.localeCompare(b[0].language));
+        notifications.sort((a, b) => {
+            if (a[0].language === b[0].language) {
+                return a[0].name.localeCompare(b[0].name);
+            } else {
+                return a[0].language.localeCompare(b[0].language)
+            }
+        });
         let lastlang: string|undefined = undefined;
         for (const [p, n] of notifications) {
             if (p.language !== lastlang) {
