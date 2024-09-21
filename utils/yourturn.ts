@@ -122,6 +122,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                     Key: {
                       "pk": "CHALLENGE", "sk": pid
                     },
+                    ExpressionAttributeNames: { "#id": "id", "#name": "name", "#language": "language", "#settings": "settings" },
                     ProjectionExpression: "#id, #name, email, #language, #settings",
                     ReturnConsumedCapacity: "INDEXES",
                 })
