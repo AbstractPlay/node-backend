@@ -1,7 +1,7 @@
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommand,  } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, QueryCommand,  } from '@aws-sdk/lib-dynamodb';
 import { SESClient } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
 import { Handler } from "aws-lambda";
@@ -109,27 +109,32 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
         }
     }
-    console.log(JSON.stringify([...p2g.entries()], null, 2));
+    console.log(JSON.stringify(p2g.entries(), null, 2));
 
     // Get list of users
+    const players: PartialUser[] = [];
     const notifications: [PartialUser, number][] = [];
     try {
-        const data = await ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk",
-                ExpressionAttributeValues: { ":pk": "USER" },
-                ExpressionAttributeNames: { "#pk": "pk", "#id": "id", "#name": "name", "#language": "language", "#settings": "settings" },
-                ProjectionExpression: "#id, #name, email, #language, #settings",
-                ReturnConsumedCapacity: "INDEXES",
-            })
-        );
-        if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
-            totalUnits += data.ConsumedCapacity.CapacityUnits;
-        } else {
-            console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+        for (const pid of p2g.keys()) {
+            const data = await ddbDocClient.send(
+                new GetCommand({
+                    TableName: process.env.ABSTRACT_PLAY_TABLE,
+                    Key: {
+                      "pk": "CHALLENGE", "sk": pid
+                    },
+                    ProjectionExpression: "#id, #name, email, #language, #settings",
+                    ReturnConsumedCapacity: "INDEXES",
+                })
+            );
+            if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
+                totalUnits += data.ConsumedCapacity.CapacityUnits;
+            } else {
+                console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+            }
+            if (data !== undefined && data.Item !== undefined) {
+                players.push(data.Item as PartialUser);
+            }
         }
-        const players = data?.Items as PartialUser[];
         console.log(JSON.stringify(players, null, 2));
 
         // Collate user data with players whose turn it is, but only those electing to receive notifications and who have valid email addresses
