@@ -164,6 +164,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         return formatReturnError(`Unable to get active games and players from table ${process.env.ABSTRACT_PLAY_TABLE}`);
     }
     console.log(`TOTAL UNITS CONSUMED: ${totalUnits}`);
+    console.log(notifications);
 
     // If not in test mode, send notifications
     if ( (notifications.length > 0) && ( (context === undefined) || ( !("key1" in context)) ) ) {
