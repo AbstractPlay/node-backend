@@ -145,6 +145,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 }
             }
           } catch (err) {
+            console.log(`An error occured while reading data files. The specific file was ${JSON.stringify(file)}`)
             console.error(err);
           }
     }

@@ -173,39 +173,39 @@ functions:
           description: Send out "your turn" notifications
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           schedule: cron(0 14,22 * * ? *)
-  dumpdb:
-    handler: utils/dumpdb.handler
-    description: Triggers a full export of production DB to S3
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-dumpdb
-          description: Triggers a full export of production DB to S3
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # midnight UTC every Sunday
-          schedule: cron(0 0 ? * 1 *)
-  records:
-    handler: utils/records.handler
-    description: Generates static lists of game records
-    timeout: 900
-    memorySize: 10240
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-records
-          description: Generates static lists of game records
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # 3am UTC every sunday (giving the dump plenty of time to complete)
-          schedule: cron(0 3 ? * 1 *)
-  summarize:
-    handler: utils/summarize.handler
-    description: Summarize generated game reports
-    timeout: 60
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-summarize
-          description: Summarize generated game reports
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # 6am UTC every sunday (giving plenty of time for the record generation to complete)
-          schedule: cron(0 6 ? * 1 *)
+  # dumpdb:
+  #   handler: utils/dumpdb.handler
+  #   description: Triggers a full export of production DB to S3
+  #   events:
+  #     - eventBridge:
+  #         name: abstractplay-${self:provider.stage}-dumpdb
+  #         description: Triggers a full export of production DB to S3
+  #         enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+  #         # midnight UTC every Sunday
+  #         schedule: cron(0 0 ? * 1 *)
+  # records:
+  #   handler: utils/records.handler
+  #   description: Generates static lists of game records
+  #   timeout: 900
+  #   memorySize: 10240
+  #   events:
+  #     - eventBridge:
+  #         name: abstractplay-${self:provider.stage}-records
+  #         description: Generates static lists of game records
+  #         enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+  #         # 3am UTC every sunday (giving the dump plenty of time to complete)
+  #         schedule: cron(0 3 ? * 1 *)
+  # summarize:
+  #   handler: utils/summarize.handler
+  #   description: Summarize generated game reports
+  #   timeout: 60
+  #   events:
+  #     - eventBridge:
+  #         name: abstractplay-${self:provider.stage}-summarize
+  #         description: Summarize generated game reports
+  #         enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+  #         # 6am UTC every sunday (giving plenty of time for the record generation to complete)
+  #         schedule: cron(0 6 ? * 1 *)
   starttournaments:
     handler: utils/starttournaments.handler
     description: Checks if any tournaments are ready to start (and starts or cancels them)
