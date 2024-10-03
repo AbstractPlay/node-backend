@@ -5,7 +5,7 @@ import { Handler } from "aws-lambda";
 import { GameFactory } from '@abstractplay/gameslib';
 import { type APGameRecord } from '@abstractplay/recranks';
 import { gunzipSync, strFromU8 } from "fflate";
-import { loadAll } from "ion-js";
+import { load } from "ion-js";
 
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
@@ -129,18 +129,22 @@ export const handler: Handler = async (event: any, context?: any) => {
             const bytes = await response.Body?.transformToByteArray();
             if (bytes !== undefined) {
                 const ion = strFromU8(gunzipSync(bytes));
-                const parsed = loadAll(ion);
-                for (const outerRec of parsed) {
-                    const json = JSON.parse(JSON.stringify(outerRec)) as BasicRec;
-                    const rec = json.Item;
-                    if ( (rec.pk === "GAME") && (rec.sk.includes("#1#")) ) {
-                        justGames.push(rec as GameRec);
-                    } else if (rec.pk === "TOURNAMENT" || rec.pk === "COMPLETEDTOURNAMENT") {
-                        tournaments.push(rec as Tournament);
-                    } else if (rec.pk === "ORGEVENT") {
-                        events.push(rec as OrgEvent);
-                    } else if (rec.pk === "ORGEVENTGAME") {
-                        eventGames.push(rec as OrgEventGame);
+                for (const line of ion.split("\n")) {
+                    const outerRec = load(line);
+                    if (outerRec === null) {
+                        console.log(`Could not load ION record, usually because of an empty line.\nOffending line: "${line}"`)
+                    } else {
+                        const json = JSON.parse(JSON.stringify(outerRec)) as BasicRec;
+                        const rec = json.Item;
+                        if ( (rec.pk === "GAME") && (rec.sk.includes("#1#")) ) {
+                            justGames.push(rec as GameRec);
+                        } else if (rec.pk === "TOURNAMENT" || rec.pk === "COMPLETEDTOURNAMENT") {
+                            tournaments.push(rec as Tournament);
+                        } else if (rec.pk === "ORGEVENT") {
+                            events.push(rec as OrgEvent);
+                        } else if (rec.pk === "ORGEVENTGAME") {
+                            eventGames.push(rec as OrgEventGame);
+                        }
                     }
                 }
             }
