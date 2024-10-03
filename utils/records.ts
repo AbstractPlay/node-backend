@@ -108,7 +108,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     }
     // from there, extract the UID and list of associated data files
     const uid = match[1];
-    const dataFiles = allContents.filter(c => c.Key?.includes(`${uid}/data/`) && c.Key?.endsWith(".json.gz"));
+    const dataFiles = allContents.filter(c => c.Key?.includes(`${uid}/data/`) && c.Key?.endsWith(".ion.gz"));
     console.log(`Found the following matching data files:\n${JSON.stringify(dataFiles, null, 2)}`);
 
     // load the data from each data file, but only keep the GAME records
