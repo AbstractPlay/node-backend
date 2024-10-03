@@ -39,5 +39,14 @@
     "ChallengeResponseComment": "Votre adversaire a commenté : \"{{- comment}}\"",
     "ChallengeRevokedBodyComment": "{{name}} a annulé son défi sur {{- metaGame}} et a commenté : \"{{- comment}}\"",
     "GameLink": "Vous pouvez voir la partie sur https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}}.",
-    "GameOverResult_lose": "Vous avez perdu."
+    "GameOverResult_lose": "Vous avez perdu.",
+    "TournamentCancelBody": "Pas assez de joueurs se sont inscrits pour le tournoi {{number}} de la série {{- metaGame}} et le tournoi a dû être annulé.",
+    "TournamentCancelBodyVariants": "Pas assez de joueurs se sont inscrits pour le tournoi {{number}} de la série {{- metaGame}}, variantes : {{variants}} et le tournoi a dû être annulé.",
+    "TournamentCancelSubject": "Votre tournoi de {{- metaGame}} a été annulé",
+    "TournamentEndBody": "Le tournoi {{number}} de la série {{- metaGame}} a été annulé. Voir https://play.abstractplay.com/tournaments. Le prochain tournoi de cette série va démarrer dans une semaine.",
+    "TournamentEndBodyVariants": "Le tournoi {{number}} de la série {{- metaGame}}, variantes : {{variants}} est terminé. Voir https://play.abstractplay.com/tournaments. Le prochain tournoi de cette série va démarrer dans une semaine.",
+    "TournamentEndSubject": "Votre tournoi de {{- metaGame}} est terminé",
+    "TournamentRemoveBody": "Votre inscription au tournoi de {{- metaGame}} a été annulée, car ce n'était pas clair si vous êtiez toujours interessé. Si vous voulez tout de même participer, merci de vous ré-inscrire ici : https://play.abstractplay.com/tournaments.",
+    "TournamentRemoveBodyVariants": "Votre inscription au tournoi de {{- metaGame}}, variantes : {{variants}} a été annulée, car ce n'était pas clair si vous êtiez toujours interessé. Si vous voulez tout de même participer, merci de vous ré-inscrire ici : https://play.abstractplay.com/tournaments.",
+    "TournamentRemoveSubject": "Vous avez été retiré d'un tournoi"
 }
