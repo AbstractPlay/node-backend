@@ -5,6 +5,7 @@ import { Handler } from "aws-lambda";
 import { GameFactory } from '@abstractplay/gameslib';
 import { type APGameRecord } from '@abstractplay/recranks';
 import { gunzipSync, strFromU8 } from "fflate";
+import { unmarshall } from '@aws-sdk/util-dynamodb';
 
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
@@ -128,7 +129,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             const bytes = await response.Body?.transformToByteArray();
             if (bytes !== undefined) {
                 const fileJson = strFromU8(gunzipSync(bytes));
-                const parsed = JSON.parse(fileJson) as BasicRec[];
+                const parsed = (JSON.parse(fileJson) as {[k: string]: any}[]).map(rec => unmarshall(rec)) as BasicRec[];
                 for (const outerRec of parsed) {
                     const json = JSON.parse(JSON.stringify(outerRec)) as BasicRec;
                     const rec = json.Item;
