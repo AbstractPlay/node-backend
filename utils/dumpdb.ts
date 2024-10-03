@@ -11,7 +11,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     const input: ExportTableToPointInTimeInput = {
         S3Bucket: DUMP_BUCKET,
         TableArn: "arn:aws:dynamodb:us-east-1:153672715141:table/abstract-play-prod",
-        ExportFormat: "ION",
+        ExportFormat: "DYNAMODB_JSON",
     }
     const cmd = new ExportTableToPointInTimeCommand(input);
 
