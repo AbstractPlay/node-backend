@@ -818,6 +818,7 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
       }));
 
     const gameData = await getGame;
+    // console.log(`Game data fetched:\n${JSON.stringify(gameData)}`);
     let game = gameData.Item as FullGame;
     if (game === undefined) {
       // Maybe the game has ended and we need to look for the completed game.
@@ -847,14 +848,18 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
       game.partialMove = game.partialMove.split(',').map((m: string, i: number) => (game.players[i].id === userid ? m : '')).join(',');
     }
     const noteData = await getNote;
+    console.log(`Fetched notes:\n${JSON.stringify(noteData)}`);
     if (noteData.Item !== undefined && noteData.Item.note) {
         game.note = noteData.Item.note;
     }
     let comments = [];
     const commentData = await getComments;
+    // console.log(`Fetched comments:\n${JSON.stringify(commentData)}`);
     if (commentData.Item !== undefined && commentData.Item.comments)
       comments = commentData.Item.comments;
+    console.log(`About to execute anciliary queries`);
     await work;
+    console.log(`Anciliary queries complete. Returning 200.`);
     return {
       statusCode: 200,
       body: JSON.stringify({"game": game, "comments": comments}),
@@ -1559,7 +1564,7 @@ async function updateUserEMail(claim: PartialClaims) {
 }
 
 // Make sure we "lock" games while updating. We are often updating multiple games at once.
-async function updateUserGames(userId: string, gamesUpdate: undefined | number, gameIDsChanged: string[], games: Game[]) {
+async function updateUserGames(userId: string, gamesUpdate: undefined | number, gameIDsChanged: string[], games: Game[] = []) {
   if (gameIDsChanged.length === 0) {
     return;
   }
