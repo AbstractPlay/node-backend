@@ -2,7 +2,7 @@
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand,  } from '@aws-sdk/lib-dynamodb';
-import { SESClient } from '@aws-sdk/client-ses';
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
 import { Handler } from "aws-lambda";
 import { createSendEmailCommand, logGetItemError, formatReturnError, initi18n, UserSettings } from '../api/abstractplay';
@@ -29,6 +29,7 @@ const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
 type PartialGame = {
     id: string;
     metaGame: string;
+    lastMoveTime: number;
     players: {
         id: string;
         name: string;
@@ -59,7 +60,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                     KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
                     ExpressionAttributeValues: { ":pk": "GAME", ":sk": `${metaGame}#0#` },
                     ExpressionAttributeNames: { "#pk": "pk", "#id": "id", "#sk": "sk"},
-                    ProjectionExpression: "#id, metaGame, players, toMove",
+                    ProjectionExpression: "#id, metaGame, players, toMove, lastMoveTime",
                     ReturnConsumedCapacity: "INDEXES",
                 })
             );
@@ -115,7 +116,7 @@ export const handler: Handler = async (event: any, context?: any) => {
 
     // Get list of users
     const players: PartialUser[] = [];
-    const notifications: [PartialUser, number][] = [];
+    const notifications: {user: PartialUser, total: number, urgent: number}[] = [];
     try {
         for (const pid of p2g.keys()) {
             const data = await ddbDocClient.send(
@@ -151,7 +152,17 @@ export const handler: Handler = async (event: any, context?: any) => {
                     }
                     if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
                         if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.yourturn) ) {
-                            notifications.push([player, gs.length]);
+                            let urgent = 0;
+                            for (const game of gs) {
+                                const playerEntry = game.players.find(x => x.id === p);
+                                if (playerEntry !== undefined) {
+                                    const remaining = (playerEntry.time || 0) - (Date.now() - game.lastMoveTime);
+                                    if (remaining < 24 * 60 * 60 * 1000) {
+                                        urgent++;
+                                    }
+                                }
+                            }
+                            notifications.push({user: player, total: gs.length, urgent});
                         } else {
                             console.log(`Player ${player.name} (${player.id}) has elected to not receive YourTurn notifications.`);
                         }
@@ -176,19 +187,24 @@ export const handler: Handler = async (event: any, context?: any) => {
 
         // Sort by language to minimize locale changes
         notifications.sort((a, b) => {
-            if (a[0].language === b[0].language) {
-                return a[0].name.localeCompare(b[0].name);
+            if (a.user.language === b.user.language) {
+                return a.user.name.localeCompare(b.user.name);
             } else {
-                return a[0].language.localeCompare(b[0].language)
+                return a.user.language.localeCompare(b.user.language)
             }
         });
         let lastlang: string|undefined = undefined;
-        for (const [p, n] of notifications) {
+        for (const {user: p, total: n, urgent} of notifications) {
             if (p.language !== lastlang) {
                 lastlang = p.language;
                 await i18n.changeLanguage(p.language);
             }
-            const comm = createSendEmailCommand(p.email, p.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBatchedBody", { count: n }));
+            let comm: SendEmailCommand;
+            if (urgent > 0) {
+                comm = createSendEmailCommand(p.email, p.name, i18n.t("YourMoveSubjectUrgent"), i18n.t("YourMoveBatchedBodyUrgent", { count: n, urgent }));
+            } else {
+                comm = createSendEmailCommand(p.email, p.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBatchedBody", { count: n }));
+            }
             work.push(sesClient.send(comm));
         }
         await Promise.all(work);
