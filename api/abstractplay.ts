@@ -193,7 +193,6 @@ type Game = {
   noExplore?: boolean;
   toMove: string | boolean[];
   note?: string;
-  prevSeen?: number;
   seen?: number;
   winner?: number[];
   numMoves?: number;
@@ -7255,7 +7254,6 @@ async function setLastSeen(userId: string, pars: {gameId: string; interval?: num
             const now = new Date();
             const then = new Date();
             then.setDate(now.getDate() - interval);
-            game.prevSeen = game.seen;
             game.seen = then.getTime();
             console.log(`Setting lastSeen for ${game.id} to ${then.getTime()} (${then.toUTCString()}). It is currently ${new Date().toUTCString()}`);
             // you need to set `lastChat` as well or chats near the end of the game will be flagged
