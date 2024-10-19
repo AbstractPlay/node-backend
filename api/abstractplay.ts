@@ -837,11 +837,9 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
         throw new Error(`Game ${pars.id}, metaGame ${pars.metaGame}, completed bit ${pars.cbit} not found`);
       }
     }
-    // If the game is over update user to indicate they have seen the game end.
-    let work;
-    if ((game.toMove === "" || game.toMove === null) && userid !== "") {
-      work = setSeenTime(userid, pars.id);
-    }
+    // Always set seen time, not just when the game is over
+    const work = setSeenTime(userid, pars.id);
+
     // hide other player's simulataneous moves
     const flags = gameinfo.get(game.metaGame).flags;
     if (flags !== undefined && flags.includes('simultaneous') && game.partialMove !== undefined) {
