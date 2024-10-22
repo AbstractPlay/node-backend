@@ -839,8 +839,9 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
       }
     }
     // Always set seen time, not just when the game is over
-    const work = setSeenTime(userid, pars.id);
-
+    if (userid !== undefined && userid !== null && userid !== "") {
+        await setSeenTime(userid, pars.id);
+    }
     // hide other player's simulataneous moves
     const flags = gameinfo.get(game.metaGame).flags;
     if (flags !== undefined && flags.includes('simultaneous') && game.partialMove !== undefined) {
@@ -856,9 +857,7 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
     // console.log(`Fetched comments:\n${JSON.stringify(commentData)}`);
     if (commentData.Item !== undefined && commentData.Item.comments)
       comments = commentData.Item.comments;
-    console.log(`About to execute anciliary queries`);
-    await work;
-    console.log(`Anciliary queries complete. Returning 200.`);
+    console.log(`Returning 200.`);
     return {
       statusCode: 200,
       body: JSON.stringify({"game": game, "comments": comments}),
