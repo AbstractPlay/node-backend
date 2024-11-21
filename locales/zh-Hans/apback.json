@@ -33,5 +33,7 @@
     "YourMove": "轮到你来行动了。",
     "ChallengeBodyComment": "{{challenger}}在{{- metaGame}}向你发起游戏挑战并留言：“{{- comment}}”请访问：https://play.abstractplay.com了解更多。",
     "ChallengeRejectedBody": "{{- metaGame}}拒绝了在{{- metaGame}}游戏的挑战。此挑战已被删除。",
-    "ChallengeSubject": "AbstractPlay：新挑战"
+    "ChallengeSubject": "AbstractPlay：新挑战",
+    "YourMoveBatchedBody_other": "您参加了{{ count }}比赛。 访 问 https://play.abstractplay.com,以接手.",
+    "YourMoveBody": "我们现在是在一场{{- metaGame}}的游戏中进行的。 请访问https://play.abstractplay.com/了解更多详情."
 }
