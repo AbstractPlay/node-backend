@@ -35,5 +35,6 @@
     "ChallengeRejectedBody": "{{- metaGame}}拒绝了在{{- metaGame}}游戏的挑战。此挑战已被删除。",
     "ChallengeSubject": "AbstractPlay：新挑战",
     "YourMoveBatchedBody_other": "您参加了{{ count }}比赛。 访 问 https://play.abstractplay.com,以接手.",
-    "YourMoveBody": "我们现在是在一场{{- metaGame}}的游戏中进行的。 请访问https://play.abstractplay.com/了解更多详情."
+    "YourMoveBody": "我们现在是在一场{{- metaGame}}的游戏中进行的。 请访问https://play.abstractplay.com/了解更多详情.",
+    "TournamentStartBody": "比赛{{number}} 的 {{- metaGame}}系列已经开始 . 详情请见https://play.abstractplay.com/tournaments 你也将报名参加下一场系列赛。比赛将在比赛结束后一周开始。"
 }
