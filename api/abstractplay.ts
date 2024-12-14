@@ -864,12 +864,14 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
         if (engine === undefined) {
             throw new Error(`Could not rehydrate the state for id "${pars.id}", cbit "${pars.cbit}", meta "${pars.metaGame}".`);
         }
-        let player: number|undefined;
-        const pidx = game.players.findIndex(p => p.id === userid);
-        if (pidx >= 0) {
-            player = pidx + 1;
+        if (!engine.gameover) {
+            let player: number|undefined;
+            const pidx = game.players.findIndex(p => p.id === userid);
+            if (pidx >= 0) {
+                player = pidx + 1;
+            }
+            game.state = engine.serialize({strip: true, player});
         }
-        game.state = engine.serialize({strip: true, player});
     }
 
     console.log(`Returning 200.`);
