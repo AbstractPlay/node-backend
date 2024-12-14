@@ -842,7 +842,7 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
     if (userid !== undefined && userid !== null && userid !== "") {
         await setSeenTime(userid, pars.id);
     }
-    // hide other player's simulataneous moves
+    // hide other player's simultaneous moves
     const flags = gameinfo.get(game.metaGame).flags;
     if (flags !== undefined && flags.includes('simultaneous') && game.partialMove !== undefined) {
       game.partialMove = game.partialMove.split(',').map((m: string, i: number) => (game.players[i].id === userid ? m : '')).join(',');
@@ -857,6 +857,21 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
     // console.log(`Fetched comments:\n${JSON.stringify(commentData)}`);
     if (commentData.Item !== undefined && commentData.Item.comments)
       comments = commentData.Item.comments;
+
+    // TODO: Rehydrate state, run it through the stripper if game is not over, and then replace with the new, stripped state
+    if (game.gameEnded === undefined) {
+        const engine = GameFactory(game.metaGame, game.state);
+        if (engine === undefined) {
+            throw new Error(`Could not rehydrate the state for id "${pars.id}", cbit "${pars.cbit}", meta "${pars.metaGame}".`);
+        }
+        let player: number|undefined;
+        const pidx = game.players.findIndex(p => p.id === userid);
+        if (pidx >= 0) {
+            player = pidx + 1;
+        }
+        game.state = engine.serialize({strip: true, player});
+    }
+
     console.log(`Returning 200.`);
     return {
       statusCode: 200,
@@ -1123,6 +1138,7 @@ async function toggleStar(userid: string, pars: {metaGame: string}) {
     }
 }
 
+// NOTE: This function will blow up hidden-information games
 async function injectState(userid: string, pars: { id: string; newState: string; metaGame: string;}) {
   // Make sure people aren't getting clever
   try {
@@ -3131,6 +3147,23 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
 
     await realPingBot(game.metaGame, game.id, game);
     await Promise.all(list);
+
+    // TODO: Rehydrate state, run it through the stripper, and then replace with the new, stripped state
+    if (game.gameEnded === undefined) {
+        const engine = GameFactory(game.metaGame, game.state);
+        if (engine === undefined) {
+            throw new Error(`Could not rehydrate the state for id "${pars.id}", meta "${pars.metaGame}".`);
+        }
+        if (!engine.gameover) {
+            let player: number|undefined;
+            const pidx = game.players.findIndex(p => p.id === userid);
+            if (pidx >= 0) {
+                player = pidx + 1;
+            }
+            game.state = engine.serialize({strip: true, player});
+        }
+    }
+
     console.log("All updates complete");
     return {
       statusCode: 200,

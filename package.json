@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/AbstractPlay/node-backend#readme",
   "dependencies": {
-    "@abstractplay/gameslib": "latest",
+    "@abstractplay/gameslib": "^1.0.0-ci-12333004916.0",
     "@abstractplay/recranks": "latest",
     "@aws-sdk/client-cloudfront": "^3.445.0",
     "@aws-sdk/client-dynamodb": "^3.321.1",
