@@ -108,6 +108,7 @@ type StatSummary = {
         allPlayers: number[];
         meta: GameNumList[];
         players: UserNumList[];
+        playerTimeouts: UserNumList[];
         firstTimers: number[];
         timeouts: number[];
     };
@@ -583,6 +584,24 @@ export const handler: Handler = async (event: any, context?: any) => {
             histPlayers.push({user: userid, value: [...lst]});
         }
 
+        // individual player timeouts
+        const histPlayerTimeouts: UserNumList[] = [];
+        for (const userid of (new Set<string>(histListPlayers.map(x => x.user)))) {
+            const toSubset = timeouts.filter(x => x.user === userid);
+            const subset: {bucket: number}[] = [];
+            for (const {value} of toSubset) {
+                const daysAgo = (baseline - value) / (24 * 60 * 60 * 1000);
+                const bucket = Math.floor(daysAgo / 7);
+                subset.push({bucket});
+            }
+            const maxBucket = Math.max(...subset.map(x => x.bucket));
+            const lst: number[] = [];
+            for (let i = 0; i <= maxBucket; i++) {
+                lst.push(subset.filter(x => x.bucket === i).length);
+            }
+            histPlayerTimeouts.push({user: userid, value: [...lst]});
+        }
+
         // first timers
         const buckets: number[] = [];
         for (const userid of (new Set<string>(completedList.map(x => x.user)))) {
@@ -687,6 +706,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             histograms: {
                 all: histAll,
                 allPlayers: histAllPlayers,
+                playerTimeouts: histPlayerTimeouts,
                 meta: histMeta,
                 players: histPlayers,
                 firstTimers,
