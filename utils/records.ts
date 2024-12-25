@@ -168,6 +168,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     const metaRecs = new Map<string, APGameRecord[]>();
     const userRecs = new Map<string, APGameRecord[]>();
     const eventRecs = new Map<string, APGameRecord[]>();
+    const ttm = new Map<string, number[]>();
     for (const gdata of justGames) {
         const g = GameFactory(gdata.metaGame, gdata.state);
         if (g === undefined) {
@@ -222,6 +223,14 @@ export const handler: Handler = async (event: any, context?: any) => {
                 pushToMap(eventRecs, id, rec);
             }
         }
+        // calculate response rates
+        const times: number[] = [];
+        for (let i = 0; i < g.stack.length - 1; i++) {
+            const t1 = new Date(g.stack[i]._timestamp).getTime();
+            const t2 = new Date(g.stack[i+1]._timestamp).getTime();
+            times.push(t2 - t1);
+        }
+        times.forEach((t, i) => pushToMap(ttm, gdata.players[i % g.numplayers].id, t));
     }
     console.log(`allRecs: ${allRecs.length}, metaRecs: ${[...metaRecs.keys()].length}, userRecs: ${[...userRecs.keys()].length}, eventRecs: ${[...eventRecs.keys()].length}`);
 
@@ -263,6 +272,19 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
     }
     console.log("Player recs done");
+    // response times
+    for (const [player, lst] of ttm.entries()) {
+        cmd = new PutObjectCommand({
+            Bucket: REC_BUCKET,
+            Key: `ttm/${player}.json`,
+            Body: JSON.stringify(lst),
+        });
+        response = await s3.send(cmd);
+        if (response["$metadata"].httpStatusCode !== 200) {
+            console.log(response);
+        }
+    }
+    console.log("Response times done");
     // events
     for (const [eventid, recs] of eventRecs.entries()) {
         cmd = new PutObjectCommand({
