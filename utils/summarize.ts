@@ -85,6 +85,7 @@ type StatSummary = {
     numPlayers: number;
     oldestRec?: string;
     newestRec?: string;
+    timeoutRate: number;
     ratings: {
         highest: UserGameRating[];
         avg: UserRating[];
@@ -108,6 +109,7 @@ type StatSummary = {
         meta: GameNumList[];
         players: UserNumList[];
         firstTimers: number[];
+        timeouts: number[];
     };
     recent: GameNumber[];
     hoursPer: number[];
@@ -157,6 +159,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         let oldest: string|undefined;
         let newest: string|undefined;
         const timeouts: UserNumber[] = [];
+        const siteTimeouts: number[] = [];
 
         console.log("Segmenting records by meta and player");
         for (const rec of recs) {
@@ -187,17 +190,30 @@ export const handler: Handler = async (event: any, context?: any) => {
             const moveStr = JSON.stringify(rec.moves);
             // if abandoned, assign timeout to all players
             if (moveStr.includes("abandoned")) {
+                const datems = new Date(rec.header["date-end"]).getTime();
+                siteTimeouts.push(datems);
                 for (const p of rec.header.players) {
-                    const datems = new Date(rec.header["date-end"]).getTime();
                     timeouts.push({user: p.userid!, value: datems});
                 }
             }
             // if timeout, assign timeout to player who timed out
             else if (moveStr.includes("timeout")) {
+                const datems = new Date(rec.header["date-end"]).getTime();
+                siteTimeouts.push(datems);
                 // find the specific move
+                const fidx = rec.moves.findIndex(mvs => mvs.find(m => m !== null && (typeof m === "object" ? m.move === "timeout" : m === "timeout")));
+                if (fidx !== -1) {
+                    const mvs = rec.moves[fidx];
+                    const midx = mvs.findIndex(m => m !== null && (typeof m === "object" ? m.move === "timeout" : m === "timeout"));
+                    if (midx !== -1) {
+                        const p = rec.header.players[midx];
+                        timeouts.push({user: p.userid!, value: datems});
+                    }
+                }
             }
         }
         const numPlayers = playerIDs.size;
+        const timeoutRate = siteTimeouts.length / recs.length;
 
         // META STATS
         console.log("Calculating meta stats");
@@ -499,6 +515,8 @@ export const handler: Handler = async (event: any, context?: any) => {
         const histList: {game: string; bucket: number}[] = [];
         const histListPlayers: {user: string; bucket: number}[] = [];
         const completedList: {user: string; time: number}[] = [];
+        const histTimeoutBuckets: number[] = [];
+        const histTimeouts: number[] = [];
         const baseline = Date.now();
         // all first
         for (const rec of recs) {
@@ -510,6 +528,16 @@ export const handler: Handler = async (event: any, context?: any) => {
                 histListPlayers.push({user: player.userid!, bucket});
                 completedList.push({user: player.userid!, time: completed})
             }
+        }
+
+        // timeouts
+        for (const t of siteTimeouts) {
+            const daysAgo = (baseline - t) / (24 * 60 * 60 * 1000);
+            const bucket = Math.floor(daysAgo / 7);
+            histTimeoutBuckets.push(bucket);
+        }
+        for (let i = 0; i <= Math.max(...histTimeoutBuckets); i++) {
+            histTimeouts.push(histTimeoutBuckets.filter(x => x === i).length);
         }
 
         // all games
@@ -628,12 +656,12 @@ export const handler: Handler = async (event: any, context?: any) => {
             geoStats.push({code: alpha2, n: count, name: name || alpha2});
         }
 
-
         const summary: StatSummary = {
             numGames,
             numPlayers,
             oldestRec: oldest,
             newestRec: newest,
+            timeoutRate,
             ratings: {
                 highest: rawList,
                 avg: avgRatings,
@@ -657,6 +685,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 meta: histMeta,
                 players: histPlayers,
                 firstTimers,
+                timeouts: histTimeouts,
             },
             hoursPer,
             recent,
