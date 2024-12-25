@@ -5,7 +5,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { isoToCountryCode } from "../lib/isoToCountryCode";
 import { Handler } from "aws-lambda";
-import { type IRating, type IGlickoRating, type APGameRecord, ELOBasic, Glicko2, type ITrueskillRating, Trueskill } from "@abstractplay/recranks";
+import { type IRating, type IGlickoRating, APGameRecord, ELOBasic, Glicko2, type ITrueskillRating, Trueskill } from "@abstractplay/recranks";
 import { replacer } from "@abstractplay/gameslib/build/src/common";
 // import { nanoid } from "nanoid";
 
@@ -80,7 +80,7 @@ interface GeoStats {
     n: number;
 }
 
-type GameSummary = {
+type StatSummary = {
     numGames: number;
     numPlayers: number;
     oldestRec?: string;
@@ -100,6 +100,7 @@ type GameSummary = {
         eclectic: UserNumber[];
         allPlays: UserNumber[];
         h: UserNumber[];
+        timeouts: UserNumber[];
     };
     histograms: {
         all: number[];
@@ -155,6 +156,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         const ratingList: RatingList = [];
         let oldest: string|undefined;
         let newest: string|undefined;
+        const timeouts: UserNumber[] = [];
 
         console.log("Segmenting records by meta and player");
         for (const rec of recs) {
@@ -180,6 +182,19 @@ export const handler: Handler = async (event: any, context?: any) => {
             } else {
                 const sorted = [newest, rec.header["date-end"]].sort((a, b) => b.localeCompare(a));
                 newest = sorted[0];
+            }
+            // find timeouts
+            const moveStr = JSON.stringify(rec.moves);
+            // if abandoned, assign timeout to all players
+            if (moveStr.includes("abandoned")) {
+                for (const p of rec.header.players) {
+                    const datems = new Date(rec.header["date-end"]).getTime();
+                    timeouts.push({user: p.userid!, value: datems});
+                }
+            }
+            // if timeout, assign timeout to player who timed out
+            else if (moveStr.includes("timeout")) {
+                // find the specific move
             }
         }
         const numPlayers = playerIDs.size;
@@ -459,14 +474,14 @@ export const handler: Handler = async (event: any, context?: any) => {
         // h-index
         const h: UserNumber[] = [];
         for (const [user, recs] of player2recs.entries()) {
-            console.log(`Calculating h-index for user ${user}`);
+            // console.log(`Calculating h-index for user ${user}`);
             const gameNames = new Set<string>(recs.map(r => r.header.game.name));
-            console.log(JSON.stringify([...gameNames.values()]));
+            // console.log(JSON.stringify([...gameNames.values()]));
             const counts = new Map<string, number>();
             for (const name of gameNames) {
                 counts.set(name, recs.filter(r => r.header.game.name === name).length);
             }
-            console.log(JSON.stringify([...counts.entries()]));
+            // console.log(JSON.stringify([...counts.entries()]));
             const sorted = [...counts.values()].sort((a, b) => b - a);
             let index = sorted.length;
             for (let i = 0; i < sorted.length; i++) {
@@ -475,7 +490,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                     break;
                 }
             }
-            console.log(`h-index is ${index}`);
+            // console.log(`h-index is ${index}`);
             h.push({user, value: index});
         }
 
@@ -492,8 +507,8 @@ export const handler: Handler = async (event: any, context?: any) => {
             const bucket = Math.floor(daysAgo / 7);
             histList.push({game: rec.header.game.name, bucket});
             for (const player of rec.header.players) {
-                histListPlayers.push({user: player.userid, bucket});
-                completedList.push({user: player.userid, time: completed})
+                histListPlayers.push({user: player.userid!, bucket});
+                completedList.push({user: player.userid!, time: completed})
             }
         }
 
@@ -614,7 +629,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
 
 
-        const summary: GameSummary = {
+        const summary: StatSummary = {
             numGames,
             numPlayers,
             oldestRec: oldest,
@@ -634,6 +649,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 eclectic,
                 social,
                 h,
+                timeouts,
             },
             histograms: {
                 all: histAll,
