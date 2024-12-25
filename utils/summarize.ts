@@ -530,16 +530,6 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
         }
 
-        // timeouts
-        for (const t of siteTimeouts) {
-            const daysAgo = (baseline - t) / (24 * 60 * 60 * 1000);
-            const bucket = Math.floor(daysAgo / 7);
-            histTimeoutBuckets.push(bucket);
-        }
-        for (let i = 0; i <= Math.max(...histTimeoutBuckets); i++) {
-            histTimeouts.push(histTimeoutBuckets.filter(x => x === i).length);
-        }
-
         // all games
         const histAll: number[] = [];
         const histAllPlayers: number[] = [];
@@ -552,6 +542,21 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
             histAllPlayers.push(users.size);
         }
+
+        // timeouts
+        for (const t of siteTimeouts) {
+            const daysAgo = (baseline - t) / (24 * 60 * 60 * 1000);
+            const bucket = Math.floor(daysAgo / 7);
+            histTimeoutBuckets.push(bucket);
+        }
+        for (let i = 0; i <= Math.max(...histTimeoutBuckets); i++) {
+            histTimeouts.push(histTimeoutBuckets.filter(x => x === i).length);
+        }
+        // convert to rate
+        for (let i = 0; i < histTimeouts.length; i++) {
+            histTimeouts[i] = histTimeouts[i] / histAll[i];
+        }
+
         const histMeta: GameNumList[] = [];
         const recent: GameNumber[] = [];
         for (const meta of meta2recs.keys()) {
