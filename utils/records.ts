@@ -277,38 +277,5 @@ export const handler: Handler = async (event: any, context?: any) => {
     }
     console.log("Event recs done");
 
-    // generate file listing
-    const recListCmd = new ListObjectsV2Command({
-        Bucket: REC_BUCKET,
-    });
-
-    const recList: _Object[] = [];
-    try {
-        let isTruncatedOuter = true;
-
-        while (isTruncatedOuter) {
-            const { Contents, IsTruncated: IsTruncatedInner, NextContinuationToken } =
-            await s3.send(recListCmd);
-            if (Contents === undefined) {
-                throw new Error(`Could not list the bucket contents`);
-            }
-            recList.push(...Contents);
-            isTruncatedOuter = IsTruncatedInner || false;
-            command.input.ContinuationToken = NextContinuationToken;
-        }
-    } catch (err) {
-        console.error(err);
-    }
-    cmd = new PutObjectCommand({
-        Bucket: REC_BUCKET,
-        Key: `_manifest.json`,
-        Body: JSON.stringify(recList),
-    });
-    response = await s3.send(cmd);
-    if (response["$metadata"].httpStatusCode !== 200) {
-        console.log(response);
-    }
-    console.log("Manifest generated");
-
     console.log("ALL DONE");
 };
