@@ -98,6 +98,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     } catch (err) {
         console.error(err);
     }
+    console.log(JSON.stringify(recList));
     const cmd = new PutObjectCommand({
         Bucket: REC_BUCKET,
         Key: `_manifest.json`,
