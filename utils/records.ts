@@ -230,7 +230,14 @@ export const handler: Handler = async (event: any, context?: any) => {
             const t2 = new Date(g.stack[i+1]._timestamp).getTime();
             times.push(t2 - t1);
         }
-        times.forEach((t, i) => pushToMap(ttm, gdata.players[i % g.numplayers].id, t));
+        const interim = new Map<string, number[]>();
+        times.forEach((t, i) => pushToMap(interim, gdata.players[i % g.numplayers].id, t));
+        for (const [player, lst] of interim.entries()) {
+            if (lst.length > 0) {
+                const avg = lst.reduce((a, b) => a + b, 0) / lst.length;
+                pushToMap(ttm, player, avg);
+            }
+        }
     }
     console.log(`allRecs: ${allRecs.length}, metaRecs: ${[...metaRecs.keys()].length}, userRecs: ${[...userRecs.keys()].length}, eventRecs: ${[...eventRecs.keys()].length}`);
 
