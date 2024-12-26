@@ -197,13 +197,13 @@ functions:
           schedule: cron(0 3 ? * 1 *)
   records-ttm:
     handler: utils/records-ttm.handler
-    description: Generates static lists of game records
+    description: Generates static time-to-move results of each game
     timeout: 900
     memorySize: 10240
     events:
       - eventBridge:
-          name: abstractplay-${self:provider.stage}-records
-          description: Generates static lists of game records
+          name: abstractplay-${self:provider.stage}-records-ttm
+          description: Generates static time-to-move results of each game
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # 3am UTC every sunday (giving the dump plenty of time to complete)
           schedule: cron(0 3 ? * 1 *)
