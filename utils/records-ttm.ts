@@ -3,7 +3,6 @@
 import { S3Client, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, type _Object } from "@aws-sdk/client-s3";
 import { Handler } from "aws-lambda";
 import { GameFactory } from '@abstractplay/gameslib';
-import { type APGameRecord } from '@abstractplay/recranks';
 import { gunzipSync, strFromU8 } from "fflate";
 import { load } from "ion-js";
 
@@ -114,9 +113,6 @@ export const handler: Handler = async (event: any, context?: any) => {
 
     // load the data from each data file, but only keep the GAME records
     const justGames: GameRec[] = [];
-    const tournaments: Tournament[] = [];
-    const events: OrgEvent[] = [];
-    const eventGames: OrgEventGame[] = [];
     for (const file of dataFiles) {
         const command = new GetObjectCommand({
             Bucket: DUMP_BUCKET,
@@ -138,12 +134,6 @@ export const handler: Handler = async (event: any, context?: any) => {
                         const rec = json.Item;
                         if ( (rec.pk === "GAME") && (rec.sk.includes("#1#")) ) {
                             justGames.push(rec as GameRec);
-                        } else if (rec.pk === "TOURNAMENT" || rec.pk === "COMPLETEDTOURNAMENT") {
-                            tournaments.push(rec as Tournament);
-                        } else if (rec.pk === "ORGEVENT") {
-                            events.push(rec as OrgEvent);
-                        } else if (rec.pk === "ORGEVENTGAME") {
-                            eventGames.push(rec as OrgEventGame);
                         }
                     }
                 }
@@ -164,151 +154,37 @@ export const handler: Handler = async (event: any, context?: any) => {
             m.set(key, [value]);
         }
     }
-    const allRecs: APGameRecord[] = [];
-    const metaRecs = new Map<string, APGameRecord[]>();
-    const userRecs = new Map<string, APGameRecord[]>();
-    const eventRecs = new Map<string, APGameRecord[]>();
+    const ttm = new Map<string, number[]>();
     for (const gdata of justGames) {
         const g = GameFactory(gdata.metaGame, gdata.state);
         if (g === undefined) {
             throw new Error(`Unable to instantiate ${gdata.metaGame} game ${gdata.id}:\n${JSON.stringify(gdata.state)}`);
         }
-        let event: string|null = null;
-        let round: string|null = null;
-        if (gdata.tournament !== undefined) {
-            const trec = tournaments.find(t => t.id === gdata.tournament);
-            if (trec !== undefined) {
-                event = `Automated Tournament #${trec.number} (${trec.sk})`
-                round = "1";
-            } else {
-                console.log(`Could not find a matching tournament record for game record "${gdata.sk}".`);
-            }
-        } else if (gdata.event !== undefined) {
-            const erec = events.find(e => e.sk === gdata.event);
-            const egrec = eventGames.find(eg => eg.sk === [gdata.event, gdata.id].join("#"));
-            if (erec !== undefined && egrec !== undefined) {
-                event = erec.name;
-                round = egrec.round.toString();
-            } else {
-                console.log(`Could not find a matching event records for game record "${gdata.sk}".`)
-            }
+        // calculate response rates
+        const times: number[] = [];
+        for (let i = 0; i < g.stack.length - 1; i++) {
+            const t1 = new Date(g.stack[i]._timestamp).getTime();
+            const t2 = new Date(g.stack[i+1]._timestamp).getTime();
+            times.push(t2 - t1);
         }
-        const rec = g.genRecord({
-            uid: gdata.id,
-            players: gdata.players.map(p => { return {uid: p.id, name: p.name}; }),
-            event: event !== null ? event : undefined,
-            round: round !== null ? round : undefined,
-        });
-        if (rec === undefined) {
-            throw new Error(`Unable to create a game report for ${gdata.metaGame} game ${gdata.id}:\n${JSON.stringify(gdata.state)}`);
-        }
-        // check for pie
-        if ( (gdata.pieInvoked !== undefined) && (gdata.pieInvoked) ) {
-            rec.header.pied = true;
-        }
-        allRecs.push(rec);
-        pushToMap(metaRecs, gdata.metaGame, rec);
-        for (const p of gdata.players) {
-            pushToMap(userRecs, p.id, rec);
-        }
-        if (event !== null) {
-            let id: string|undefined;
-            if (gdata.tournament !== undefined) {
-                id = gdata.tournament;
-            } else if (gdata.event !== undefined) {
-                id = gdata.event;
-            }
-            if (id !== undefined) {
-                pushToMap(eventRecs, id, rec);
-            }
-        }
+        times.forEach((t, i) => pushToMap(ttm, gdata.players[i % g.numplayers].id, t));
     }
-    console.log(`allRecs: ${allRecs.length}, metaRecs: ${[...metaRecs.keys()].length}, userRecs: ${[...userRecs.keys()].length}, eventRecs: ${[...eventRecs.keys()].length}`);
+    console.log(`ttm: ${ttm.size}`);
 
     // write files to S3
-    const bodyAll = JSON.stringify(allRecs);
-    let cmd = new PutObjectCommand({
-        Bucket: REC_BUCKET,
-        Key: "ALL.json",
-        Body: bodyAll,
-    });
-    let response = await s3.send(cmd);
-    if (response["$metadata"].httpStatusCode !== 200) {
-        console.log(response);
-    }
-    console.log("All records done");
-    // meta games
-    for (const [meta, recs] of metaRecs.entries()) {
-        cmd = new PutObjectCommand({
+    // response times
+    for (const [player, lst] of ttm.entries()) {
+        const cmd = new PutObjectCommand({
             Bucket: REC_BUCKET,
-            Key: `meta/${meta}.json`,
-            Body: JSON.stringify(recs),
+            Key: `ttm/${player}.json`,
+            Body: JSON.stringify(lst),
         });
-        response = await s3.send(cmd);
+        const response = await s3.send(cmd);
         if (response["$metadata"].httpStatusCode !== 200) {
             console.log(response);
         }
     }
-    console.log("Meta games done");
-    // players
-    for (const [player, recs] of userRecs.entries()) {
-        cmd = new PutObjectCommand({
-            Bucket: REC_BUCKET,
-            Key: `player/${player}.json`,
-            Body: JSON.stringify(recs),
-        });
-        response = await s3.send(cmd);
-        if (response["$metadata"].httpStatusCode !== 200) {
-            console.log(response);
-        }
-    }
-    console.log("Player recs done");
-    // events
-    for (const [eventid, recs] of eventRecs.entries()) {
-        cmd = new PutObjectCommand({
-            Bucket: REC_BUCKET,
-            Key: `event/${eventid}.json`,
-            Body: JSON.stringify(recs),
-        });
-        response = await s3.send(cmd);
-        if (response["$metadata"].httpStatusCode !== 200) {
-            console.log(response);
-        }
-    }
-    console.log("Event recs done");
-
-    // generate file listing
-    const recListCmd = new ListObjectsV2Command({
-        Bucket: REC_BUCKET,
-    });
-
-    const recList: _Object[] = [];
-    try {
-        let isTruncatedOuter = true;
-
-        while (isTruncatedOuter) {
-            const { Contents, IsTruncated: IsTruncatedInner, NextContinuationToken } =
-            await s3.send(recListCmd);
-            if (Contents === undefined) {
-                throw new Error(`Could not list the bucket contents`);
-            }
-            recList.push(...Contents);
-            isTruncatedOuter = IsTruncatedInner || false;
-            command.input.ContinuationToken = NextContinuationToken;
-        }
-    } catch (err) {
-        console.error(err);
-    }
-    cmd = new PutObjectCommand({
-        Bucket: REC_BUCKET,
-        Key: `_manifest.json`,
-        Body: JSON.stringify(recList),
-    });
-    response = await s3.send(cmd);
-    if (response["$metadata"].httpStatusCode !== 200) {
-        console.log(response);
-    }
-    console.log("Manifest generated");
+    console.log("Response times done");
 
     console.log("ALL DONE");
 };
