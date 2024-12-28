@@ -3388,12 +3388,26 @@ function resign(userid: any, engine: GameBase, game: FullGame) {
     throw new Error(`${userid} isn't playing in this game!`);
   engine.resign(player + 1);
   game.state = engine.serialize();
-  game.toMove = "";
-  game.winner = engine.winner;
-  game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+  game.state = engine.serialize();
+  if (engine.gameover) {
+    game.toMove = "";
+    game.winner = engine.winner;
+    game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+  } else {
+    const flags = gameinfo.get(game.metaGame).flags;
+    const simultaneous = flags !== undefined && flags.includes('simultaneous');
+    if (simultaneous) {
+        game.toMove = game.players.map((p, i) => ! (engine as GameBaseSimultaneous).isEliminated(i + 1));
+    } else {
+        if ( (! ("currplayer" in engine)) || (engine.currplayer === undefined) || (engine.currplayer === null) || (typeof engine.currplayer !== "number") ) {
+            throw new Error("The engine must provide a current player for `applyMove()` to be able to function.");
+        }
+        game.toMove = `${engine.currplayer - 1}`;
+    }
+  }
 }
 
-function timeout(userid: string, engine: GameBase, game: FullGame) {
+function timeout(userid: string, engine: GameBase|GameBaseSimultaneous, game: FullGame) {
   if (game.toMove === '')
     throw new Error("Can't timeout a game that has already ended");
   // Find player that timed out
@@ -3421,9 +3435,22 @@ function timeout(userid: string, engine: GameBase, game: FullGame) {
   }
   engine.timeout(loser + 1);
   game.state = engine.serialize();
-  game.toMove = "";
-  game.winner = engine.winner;
-  game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+  if (engine.gameover) {
+    game.toMove = "";
+    game.winner = engine.winner;
+    game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+  } else {
+    const flags = gameinfo.get(game.metaGame).flags;
+    const simultaneous = flags !== undefined && flags.includes('simultaneous');
+    if (simultaneous) {
+        game.toMove = game.players.map((p, i) => ! (engine as GameBaseSimultaneous).isEliminated(i + 1));
+    } else {
+        if ( (! ("currplayer" in engine)) || (engine.currplayer === undefined) || (engine.currplayer === null) || (typeof engine.currplayer !== "number") ) {
+            throw new Error("The engine must provide a current player for `applyMove()` to be able to function.");
+        }
+        game.toMove = `${engine.currplayer - 1}`;
+    }
+  }
 }
 
 function drawaccepted(userid: string, engine: GameBase, game: FullGame, simultaneous: boolean) {
