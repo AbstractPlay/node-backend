@@ -240,4 +240,4 @@ functions:
           description: Checks if any tournaments are ready to start (and starts or cancels them)
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # 10am UTC every morning
-          schedule: cron(0 10 * * ? *)
+          schedule: cron(0 10,22 * * ? *)
