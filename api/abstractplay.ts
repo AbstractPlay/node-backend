@@ -3388,12 +3388,23 @@ function resign(userid: any, engine: GameBase, game: FullGame) {
     throw new Error(`${userid} isn't playing in this game!`);
   engine.resign(player + 1);
   game.state = engine.serialize();
-  game.toMove = "";
-  game.winner = engine.winner;
-  game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+  game.state = engine.serialize();
+  if (engine.gameover) {
+    game.toMove = "";
+    game.winner = engine.winner;
+    game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+  } else {
+    const flags = gameinfo.get(game.metaGame).flags;
+    const simultaneous = flags !== undefined && flags.includes('simultaneous');
+    if (simultaneous) {
+        applySimultaneousMove(userid, "resign", engine as GameBaseSimultaneous, game);
+    } else {
+        applyMove(userid, "resign", engine, game, flags);
+    }
+  }
 }
 
-function timeout(userid: string, engine: GameBase, game: FullGame) {
+function timeout(userid: string, engine: GameBase|GameBaseSimultaneous, game: FullGame) {
   if (game.toMove === '')
     throw new Error("Can't timeout a game that has already ended");
   // Find player that timed out
@@ -3421,9 +3432,20 @@ function timeout(userid: string, engine: GameBase, game: FullGame) {
   }
   engine.timeout(loser + 1);
   game.state = engine.serialize();
-  game.toMove = "";
-  game.winner = engine.winner;
-  game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+  if (engine.gameover) {
+    game.toMove = "";
+    game.winner = engine.winner;
+    game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+  } else {
+    const loserid = game.players[loser].id;
+    const flags = gameinfo.get(game.metaGame).flags;
+    const simultaneous = flags !== undefined && flags.includes('simultaneous');
+    if (simultaneous) {
+        applySimultaneousMove(loserid, "timeout", engine as GameBaseSimultaneous, game);
+    } else {
+        applyMove(loserid, "timeout", engine, game, flags);
+    }
+  }
 }
 
 function drawaccepted(userid: string, engine: GameBase, game: FullGame, simultaneous: boolean) {
