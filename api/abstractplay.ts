@@ -3397,12 +3397,9 @@ function resign(userid: any, engine: GameBase, game: FullGame) {
     const flags = gameinfo.get(game.metaGame).flags;
     const simultaneous = flags !== undefined && flags.includes('simultaneous');
     if (simultaneous) {
-        game.toMove = game.players.map((p, i) => ! (engine as GameBaseSimultaneous).isEliminated(i + 1));
+        applySimultaneousMove(userid, "resign", engine as GameBaseSimultaneous, game);
     } else {
-        if ( (! ("currplayer" in engine)) || (engine.currplayer === undefined) || (engine.currplayer === null) || (typeof engine.currplayer !== "number") ) {
-            throw new Error("The engine must provide a current player for `applyMove()` to be able to function.");
-        }
-        game.toMove = `${engine.currplayer - 1}`;
+        applyMove(userid, "resign", engine, game, flags);
     }
   }
 }
@@ -3443,12 +3440,9 @@ function timeout(userid: string, engine: GameBase|GameBaseSimultaneous, game: Fu
     const flags = gameinfo.get(game.metaGame).flags;
     const simultaneous = flags !== undefined && flags.includes('simultaneous');
     if (simultaneous) {
-        game.toMove = game.players.map((p, i) => ! (engine as GameBaseSimultaneous).isEliminated(i + 1));
+        applySimultaneousMove(userid, "timeout", engine as GameBaseSimultaneous, game);
     } else {
-        if ( (! ("currplayer" in engine)) || (engine.currplayer === undefined) || (engine.currplayer === null) || (typeof engine.currplayer !== "number") ) {
-            throw new Error("The engine must provide a current player for `applyMove()` to be able to function.");
-        }
-        game.toMove = `${engine.currplayer - 1}`;
+        applyMove(userid, "timeout", engine, game, flags);
     }
   }
 }

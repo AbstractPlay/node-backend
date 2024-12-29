@@ -36,44 +36,6 @@ type GameRec = {
     [key: string]: any;
 }
 
-type Tournament = {
-    pk: string;
-    sk: string;
-    id: string;
-    metaGame: string;
-    variants: string[];
-    number: number;
-    started: boolean;
-    dateCreated: number;
-    datePreviousEnded: number; // 0 means either the first tournament or a restart of the series (after it stopped because not enough participants), 3000000000000 means previous tournament still running.
-    [key: string]: any;
-};
-
-type OrgEvent = {
-    pk: "ORGEVENT";
-    sk: string;             // <eventid>
-    name: string;
-    description: string;
-    organizer: string;
-    dateStart: number;
-    dateEnd?: number;
-    winner?: string[];
-    visible: boolean;
-}
-
-type OrgEventGame = {
-    pk: "ORGEVENTGAME";
-    sk: string;             // <eventid>#<gameid>
-    metaGame: string;
-    variants?: string[];
-    round: number;
-    gameid: string;
-    player1: string;
-    player2: string;
-    winner?: number[];
-    arbitrated?: boolean;
-};
-
 export const handler: Handler = async (event: any, context?: any) => {
     // scan bucket for data folder
     const command = new ListObjectsV2Command({
