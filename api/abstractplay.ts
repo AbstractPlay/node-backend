@@ -3437,12 +3437,13 @@ function timeout(userid: string, engine: GameBase|GameBaseSimultaneous, game: Fu
     game.winner = engine.winner;
     game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   } else {
+    const loserid = game.players[loser].id;
     const flags = gameinfo.get(game.metaGame).flags;
     const simultaneous = flags !== undefined && flags.includes('simultaneous');
     if (simultaneous) {
-        applySimultaneousMove(userid, "timeout", engine as GameBaseSimultaneous, game);
+        applySimultaneousMove(loserid, "timeout", engine as GameBaseSimultaneous, game);
     } else {
-        applyMove(userid, "timeout", engine, game, flags);
+        applyMove(loserid, "timeout", engine, game, flags);
     }
   }
 }
