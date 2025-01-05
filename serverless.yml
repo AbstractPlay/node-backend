@@ -218,7 +218,8 @@ functions:
           description: Generates static time-to-move results of each game
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # 4am UTC every sunday (giving the various records scripts time to complete)
-          schedule: cron(0 4 ? * 1 *)
+          # then run again after summarize
+          schedule: cron(0 4,7 ? * 1 *)
   summarize:
     handler: utils/summarize.handler
     description: Summarize generated game reports
