@@ -36,7 +36,7 @@
     },
     "TournamentStartSubject": "Votre tournoi de {{- metaGame}} a commencé",
     "ChallengeBodyComment": "{{challenger}} vous défie sur le jeu {{- metaGame}} avec le commentaire : \"{{- comment}}\" Veuillez visiter https://play.abstractplay.com/ pour plus de détails.",
-    "ChallengeResponseComment": "Votre adversaire a commenté : \"{{- comment}}\"",
+    "ChallengeResponseComment": "Votre adversaire a commenté: \"{{- comment}}\"",
     "ChallengeRevokedBodyComment": "{{name}} a annulé son défi sur {{- metaGame}} et a commenté : \"{{- comment}}\"",
     "GameLink": "Vous pouvez voir la partie sur https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}}.",
     "GameOverResult_lose": "Vous avez perdu.",
