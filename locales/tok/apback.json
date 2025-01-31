@@ -42,11 +42,12 @@
     "GameLink": "sina ken lukin e musi lon https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}}.",
     "YourMoveSubject": "ma AbstractPlay la, sina ken luka",
     "YourMoveBatchedBody_one": "musi {{ count }} la, tenpo ni la, sina ken luka. o tawa e https://play.abstractplay.com tawa ni: sina luka.",
-    "TournamentStartBodyVariants": "musi pi musi mute pi musi {{- metaGame}} pi ante musi {{variants}} pi {{number}} li open la, o tawa e https://play.abstractplay.com/tournaments. sina kama lon e musi pi musi mute pi kama. musi pi musi mute pi tenpo ni li pini la, tenpo esun li pini la, musi pi musi mute pi sin li open.",
-    "TournamentCancelBodyVariants": "musi pi musi mute pi {{- metaGame}} pi ante musi {{variants}} pi nanpa {{number}} la, jan musi nanpa li lili la, musi li weka.",
+    "YourMoveBatchedBody_other": "",
+    "TournamentStartBodyVariants": "musi pi musi mute pi musi {{- metaGame}} pi nasin ante {{variants}} pi {{number}} li open la, o tawa e https://play.abstractplay.com/tournaments. sina kama lon e musi pi musi mute pi kama. musi pi musi mute pi tenpo ni li pini la, tenpo esun li pini la, musi pi musi mute pi sin li open.",
+    "TournamentCancelBodyVariants": "musi pi musi mute pi {{- metaGame}} pi nasin ante {{variants}} pi nanpa {{number}} la, jan musi nanpa li lili la, musi li weka.",
     "GameOverResult_lose": "sina nampa wan ala.",
-    "TournamentRemoveBodyVariants": "musi pi musi mute pi {{- metaGame}} pi ante musi {{variants}} la, sina lon e ona la, ona li sona ala e ni: sina wile musi la, ona li weka tan musi e sina. sina wile musi la, o kama lon sin lon https://play.abstractplay.com/tournaments.",
+    "TournamentRemoveBodyVariants": "musi pi musi mute pi {{- metaGame}} pi nasin ante {{variants}} la, sina lon e ona la, ona li sona ala e ni: sina wile musi la, ona li weka tan musi e sina. sina wile musi la, o kama lon sin lon https://play.abstractplay.com/tournaments.",
     "TournamentRemoveBody": "musi pi musi mute pi {{- metaGame}} la, sina lon e ona la, ona li sona ala e ni: sina wile musi la, ona li weka tan musi e sina. sina wile musi la, o kama lon sin lon https://play.abstractplay.com/tournaments.",
     "TournamentStartBody": "musi pi musi mute pi musi {{- metaGame}} pi {{number}} li open la, o tawa e https://play.abstractplay.com/tournaments. sina kama lon e musi pi musi mute pi kama. musi pi musi mute pi tenpo ni li pini la, tenpo esun li pini la, musi pi musi mute pi sin li open.",
-    "TournamentEndBodyVariants": "musi pi musi mute pi {{- metaGame}} pi ante musi {{variants}} pi {{number}} li pini la, o tawa e https://play.abstractplay.com/tournaments. tenpo esun li pini la, musi pi musi mute pi kama li open."
+    "TournamentEndBodyVariants": "musi pi musi mute pi {{- metaGame}} pi nasin ante {{variants}} pi {{number}} li pini la, o tawa e https://play.abstractplay.com/tournaments. tenpo esun li pini la, musi pi musi mute pi kama li open."
 }
