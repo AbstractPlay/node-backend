@@ -629,7 +629,10 @@ async function games(pars: { metaGame: string, type: string; }) {
         }));
       const gamelist = gamesData.Items as FullGame[];
       const returnlist = gamelist.map(g => {
-        const state = JSON.parse(g.state);
+        const state = GameFactory(g.metaGame, g.state); // JSON.parse(g.state);
+        if (state === undefined) {
+            throw new Error(`Could not parse game state for ${g.metaGame}:\n${g.state}`);
+        }
         return { "id": g.id, "metaGame": g.metaGame, "players": g.players, "toMove": g.toMove, "gameStarted": g.gameStarted,
           "numMoves": state.stack.length - 1, "variants": state.variants } });
       return {
