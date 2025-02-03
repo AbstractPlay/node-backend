@@ -50,5 +50,9 @@
     "TournamentCancelBody": "Недостатньо гравців зареєструвалося на турнір {{number}} із серії {{- metaGame}}, і турнір довелося скасувати.",
     "TournamentCancelBodyVariants": "Недостатньо гравців зареєструвалося на турнір {{number}} із серії {{- metaGame}}, варіанти: {{variants}}, і турнір довелося скасувати.",
     "TournamentEndBody": "Турнір {{number}} серії {{- metaGame}} завершився. Перегляньте https://play.abstractplay.com/tournaments. Наступний турнір серії розпочнеться через тиждень.",
-    "TournamentRemoveBody": "Вас вилучили з турніру {{- metaGame}}, на який ви були зареєстровані, оскільки незрозуміло, чи ви все ще зацікавлені. Якщо ви все ще хочете взяти участь, зареєструйтеся ще раз на сторінці https://play.abstractplay.com/tournaments."
+    "TournamentRemoveBody": "Вас вилучили з турніру {{- metaGame}}, на який ви були зареєстровані, оскільки незрозуміло, чи ви все ще зацікавлені. Якщо ви все ще хочете взяти участь, зареєструйтеся ще раз на сторінці https://play.abstractplay.com/tournaments.",
+    "YourMoveSubjectUrgent": "AbstractPlay: ваш хід (urgent)",
+    "YourMoveBatchedBodyUrgent_one": "Настала ваша черга в грі {{ count }}. Принаймні до однієї гри залишилося менше 24 годин на годиннику. Відвідайте https://play.abstractplay.com, щоб грати по черзі.",
+    "YourMoveBatchedBodyUrgent_few": "Настала ваша черга в {{ count }} ігор. Принаймні до однієї гри залишилося менше 24 годин на годиннику. Відвідайте https://play.abstractplay.com, щоб грати по черзі.",
+    "YourMoveBatchedBodyUrgent_many": "Настала ваша черга в {{ count }} ігор. Принаймні до однієї гри залишилося менше 24 годин на годиннику. Відвідайте https://play.abstractplay.com, щоб грати по черзі."
 }
