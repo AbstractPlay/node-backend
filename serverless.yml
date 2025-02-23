@@ -240,5 +240,16 @@ functions:
           name: abstractplay-${self:provider.stage}-starttournaments
           description: Checks if any tournaments are ready to start (and starts or cancels them)
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # 10am and 10pm UTC every morning
+          # 10am and 10pm UTC every day
           schedule: cron(0 10,22 * * ? *)
+  standingchallenges:
+    handler: utils/standingchallenges.handler
+    description: Manages preset standing challenge requests
+    timeout: 600
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-standingchallenges
+          description: Manages preset standing challenge requests
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # Midnight and noon UTC every day
+          schedule: cron(0 0,12 * * ? *)

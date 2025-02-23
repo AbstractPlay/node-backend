@@ -168,6 +168,7 @@ type MeData = {
     challengesReceived?: FullChallenge[];
     challengesAccepted?: FullChallenge[];
     standingChallenges?: FullChallenge[];
+    realStanding?: StandingChallenge[];
 }
 
 type Rating = {
@@ -376,6 +377,28 @@ type PaletteRec = {
     palettes: Palette[];
 }
 
+// SDG-style standing challenges
+type StandingChallenge = {
+    metaGame: string;
+    numPlayers: number;
+    variants?: string[];
+    clockStart: number;
+    clockInc: number;
+    clockMax: number;
+    clockHard: boolean;
+    rated: boolean;
+    noExplore?: boolean
+    limit: number;
+    sensitivity: "meta"|"variants";
+    suspended: boolean;
+};
+
+type StandingChallengeRec = {
+    pk: "REALSTANDING";
+    sk: string; // user's ID
+    standing: StandingChallenge[];
+};
+
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
   const pars = event.queryStringParameters;
@@ -453,6 +476,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await saveTags(event.cognitoPoolClaims.sub, pars);
     case "save_palettes":
       return await savePalettes(event.cognitoPoolClaims.sub, pars);
+    case "update_standing":
+      return await updateStanding(event.cognitoPoolClaims.sub, pars);
     case "new_challenge":
       return await newChallenge(event.cognitoPoolClaims.sub, pars);
     case "challenge_revoke":
@@ -1366,6 +1391,17 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
         })
     );
 
+    // fetch "real" standing challenges
+    const standingWork = ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "REALSTANDING",
+            "sk": userId
+            },
+        })
+    );
+
     const removedGameIDs: string[] = [];
     if (!pars || !pars.size || pars.size !== "small") {
       // LogInOutButton calls "me" with "small". If we do the below from the dashboard (and then at the same time from LogInOutButton) we run into
@@ -1435,7 +1471,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
 
     let data = null;
     console.log(`Fetching challenges`);
-    let tagData, paletteData
+    let tagData, paletteData, standingData;
     if (!pars || !pars.size || pars.size !== "small") {
       const challengesIssuedIDs: string[] = user?.challenges?.issued ?? [];
       const challengesReceivedIDs: string[] = user?.challenges?.received ?? [];
@@ -1446,14 +1482,16 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       const challengesAccepted = getChallenges(challengesAcceptedIDs);
       const standingChallenges = getChallenges(standingChallengeIDs);
       data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges, tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games)]);
+        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork]);
       tagData = data[4];
       paletteData = data[5];
+      standingData = data[9];
     } else {
       data = await Promise.all([tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games)]);
+        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork]);
       tagData = data[0];
       paletteData = data[1];
+      standingData = data[5];
     }
     let tags: TagList[] = [];
     if (tagData.Item !== undefined) {
@@ -1464,6 +1502,11 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
     if (paletteData.Item !== undefined) {
         const paletteRec = paletteData.Item as PaletteRec;
         palettes = paletteRec.palettes;
+    }
+    let realStanding: StandingChallenge[] = [];
+    if (standingData.Item !== undefined) {
+        const standingRec = standingData.Item as StandingChallengeRec;
+        realStanding = standingRec.standing;
     }
 
     if (data && (!pars || !pars.size || pars.size !== "small")) {
@@ -1489,7 +1532,8 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "challengesIssued": (data[0] as any[]).map(d => d.Item),
           "challengesReceived": (data[1] as any[]).map(d => d.Item),
           "challengesAccepted": (data[2] as any[]).map(d => d.Item),
-          "standingChallenges": (data[3] as any[]).map(d => d.Item)
+          "standingChallenges": (data[3] as any[]).map(d => d.Item),
+          "realStanding": realStanding,
         } as MeData, Set_toJSON),
         headers
       };
@@ -1510,6 +1554,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "about": user.about,
           tags,
           palettes,
+          "realStanding": realStanding,
         } as MeData, Set_toJSON),
         headers
       }
@@ -2038,6 +2083,33 @@ async function savePalettes(userid: string, pars: { palettes: Palette[] }) {
         }),
         headers
     };
+}
+
+async function updateStanding(userid: string, pars: {entries: StandingChallenge[]}) {
+    try {
+        // simply replace the existing record
+        const Item: StandingChallengeRec = {
+            pk: "REALSTANDING",
+            sk: userid,
+            standing: pars.entries,
+        };
+        await ddbDocClient.send(
+            new PutCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Item,
+            })
+        );
+        console.log(`Returning ${JSON.stringify(Item)}`);
+        return {
+            statusCode: 200,
+            body: JSON.stringify(Item),
+            headers
+        };
+    }
+    catch (error) {
+        handleCommonErrors(error as {code: any; message: any});
+        return formatReturnError(`Unable to update standing challenges for ${userid}: ${error}`);
+    }
 }
 
 async function newChallenge(userid: string, challenge: FullChallenge) {
