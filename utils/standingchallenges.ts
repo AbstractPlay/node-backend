@@ -134,6 +134,7 @@ type FullChallenge = {
 }
 
 type StandingChallenge = {
+    id: string;
     metaGame: string;
     numPlayers: number;
     variants?: string[];

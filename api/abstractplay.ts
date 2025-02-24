@@ -379,6 +379,7 @@ type PaletteRec = {
 
 // SDG-style standing challenges
 type StandingChallenge = {
+    id: string;
     metaGame: string;
     numPlayers: number;
     variants?: string[];
