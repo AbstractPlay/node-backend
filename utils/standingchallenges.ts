@@ -253,33 +253,31 @@ export const handler: Handler = async (event: any, context?: any) => {
 
           // if count is below limit, issue new challenges
           if (totalExisting < entry.limit) {
-            for (let i = totalExisting; i <= entry.limit; i++) {
-                const challenge: FullChallenge = {
-                    metaGame: entry.metaGame,
-                    numPlayers: entry.numPlayers,
-                    standing: true,
-                    duration: 1,
-                    seating: "random",
-                    variants: entry.variants === undefined ? [] : [...entry.variants],
-                    challenger: {
-                        id: rec.sk,
-                        name: user.name,
-                    },
-                    players: [{
-                        id: rec.sk,
-                        name: user.name,
-                    }],
-                    clockStart: entry.clockStart,
-                    clockInc: entry.clockInc,
-                    clockMax: entry.clockMax,
-                    clockHard: entry.clockHard,
-                    rated: entry.rated,
-                    noExplore: entry.noExplore || false,
-                    comment: "",
-                };
-                await newStandingChallenge(rec.sk, challenge);
-                issued++;
-            }
+            const challenge: FullChallenge = {
+                metaGame: entry.metaGame,
+                numPlayers: entry.numPlayers,
+                standing: true,
+                duration: 1,
+                seating: "random",
+                variants: entry.variants === undefined ? [] : [...entry.variants],
+                challenger: {
+                    id: rec.sk,
+                    name: user.name,
+                },
+                players: [{
+                    id: rec.sk,
+                    name: user.name,
+                }],
+                clockStart: entry.clockStart,
+                clockInc: entry.clockInc,
+                clockMax: entry.clockMax,
+                clockHard: entry.clockHard,
+                rated: entry.rated,
+                noExplore: entry.noExplore || false,
+                comment: "",
+            };
+            await newStandingChallenge(rec.sk, challenge);
+            issued++;
           }
         }
       }
