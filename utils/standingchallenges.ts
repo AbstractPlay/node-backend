@@ -200,7 +200,7 @@ export const handler: Handler = async (event: any, context?: any) => {
           const matchingGames: Game[] = [];
           if (user.games !== undefined && Array.isArray(user.games)) {
             for (const game of user.games) {
-                if (game.metaGame === entry.metaGame) {
+                if (game.metaGame === entry.metaGame && game.gameEnded === undefined) {
                     metaCount++;
                     matchingGames.push(game);
                 }
