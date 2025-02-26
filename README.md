@@ -74,6 +74,10 @@ All data is in a single table. The primary key (or the first part of the primary
 	* pk: METAGAMES
   * sk: COUNTS
 
+- **SDG-style standing challenges** Standing requests for open challenges of specific games with a limit
+  * pk: REALSTANDING
+  * sk: \<userid\>
+
 - **Automated tournaments**
   - **Tournaments** List of tournaments that are not completed yet. Either waiting for players to sign up, or ongoing.
     * pk: TOURNAMENT
