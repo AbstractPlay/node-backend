@@ -246,6 +246,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 }
             }
           }
+          console.log(`user: ${user.name}, entry: ${JSON.stringify(entry)}, totalExisting: ${totalExisting}, hasMatchingChallenges: ${hasMatchingChallenges}`)
 
           // if there are matching open challenges, don't do anything
           if (hasMatchingChallenges) {
@@ -275,7 +276,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 clockHard: entry.clockHard,
                 rated: entry.rated,
                 noExplore: entry.noExplore || false,
-                comment: "",
+                comment: "Standing Challenge",
             };
             await newStandingChallenge(rec.sk, challenge);
             issued++;
