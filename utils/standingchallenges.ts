@@ -189,8 +189,7 @@ export const handler: Handler = async (event: any, context?: any) => {
           // count number of metagame games and challenges
           let metaCount = 0;
           const matchingChallenges: string[] = [];
-          console.log(`User record: ${JSON.stringify(user)}`);
-          if (user.challenges.standing !== undefined && Array.isArray(user.challenges.standing)) {
+          if (user.challenges.standing !== undefined) {
             for (const challenge of user.challenges.standing) {
                 if (challenge.startsWith(entry.metaGame)) {
                     metaCount++;
@@ -207,7 +206,6 @@ export const handler: Handler = async (event: any, context?: any) => {
                 }
               }
           }
-          console.log(`matchingGames: ${JSON.stringify(matchingGames)}, matchingChallenges: ${JSON.stringify(matchingChallenges)}`);
           let hasMatchingChallenges = false;
           // if sensitivity is simply meta, just record the counts
           if (entry.sensitivity === "meta") {
@@ -248,7 +246,6 @@ export const handler: Handler = async (event: any, context?: any) => {
                 }
             }
           }
-          console.log(`user: ${user.name}, entry: ${JSON.stringify(entry)}, totalExisting: ${totalExisting}, hasMatchingChallenges: ${hasMatchingChallenges}`)
 
           // if there are matching open challenges, don't do anything
           if (hasMatchingChallenges) {
