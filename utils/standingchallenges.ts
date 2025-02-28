@@ -189,6 +189,7 @@ export const handler: Handler = async (event: any, context?: any) => {
           // count number of metagame games and challenges
           let metaCount = 0;
           const matchingChallenges: string[] = [];
+          console.log(`User challenges: ${JSON.stringify(user.challenges.standing)}`);
           if (user.challenges.standing !== undefined && Array.isArray(user.challenges.standing)) {
             for (const challenge of user.challenges.standing) {
                 if (challenge.startsWith(entry.metaGame)) {
@@ -206,6 +207,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 }
               }
           }
+          console.log(`matchingGames: ${JSON.stringify(matchingGames)}, matchingChallenges: ${JSON.stringify(matchingChallenges)}`);
           let hasMatchingChallenges = false;
           // if sensitivity is simply meta, just record the counts
           if (entry.sensitivity === "meta") {
