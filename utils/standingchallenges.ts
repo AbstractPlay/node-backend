@@ -189,7 +189,7 @@ export const handler: Handler = async (event: any, context?: any) => {
           // count number of metagame games and challenges
           let metaCount = 0;
           const matchingChallenges: string[] = [];
-          if (user.challenges.standing !== undefined && Array.isArray(user.challenges.standing)) {
+          if (user.challenges.standing !== undefined) {
             for (const challenge of user.challenges.standing) {
                 if (challenge.startsWith(entry.metaGame)) {
                     metaCount++;
@@ -275,7 +275,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 clockHard: entry.clockHard,
                 rated: entry.rated,
                 noExplore: entry.noExplore || false,
-                comment: "",
+                comment: "Standing Challenge",
             };
             await newStandingChallenge(rec.sk, challenge);
             issued++;
