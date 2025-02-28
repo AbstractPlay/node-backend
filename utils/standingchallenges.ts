@@ -189,7 +189,7 @@ export const handler: Handler = async (event: any, context?: any) => {
           // count number of metagame games and challenges
           let metaCount = 0;
           const matchingChallenges: string[] = [];
-          console.log(`User challenges: ${JSON.stringify(user.challenges.standing)}`);
+          console.log(`User record: ${JSON.stringify(user)}`);
           if (user.challenges.standing !== undefined && Array.isArray(user.challenges.standing)) {
             for (const challenge of user.challenges.standing) {
                 if (challenge.startsWith(entry.metaGame)) {
