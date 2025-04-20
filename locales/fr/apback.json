@@ -51,5 +51,9 @@
     "TournamentRemoveSubject": "Vous avez été retiré d'un tournoi",
     "GameOverLink": "Pour plus de détails ou pour récupérer un enregistrement de la partie, merci de visiter https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}.",
     "TournamentStartBody": "Le tournoir {{number}} de la série {{- metaGame}} a commencé. Voir https://play.abstractplay.com/tournaments. Vous vous êtes aussi inscrit pour le prochain tournoi dans les séries. Ca commencera une semaine après la fin de ce tournoi.",
-    "TournamentStartBodyVariants": "La série du tournoi {{number}} de {{- metaGame}}, variantes : {{variants}} a commencé. Voir https://play.abstractplay.com/tournaments. Vous vous êtes aussi inscrit pour le prochain tournoi de la série. Il commencera une semaine après la fin de ce tournoi."
+    "TournamentStartBodyVariants": "La série du tournoi {{number}} de {{- metaGame}}, variantes : {{variants}} a commencé. Voir https://play.abstractplay.com/tournaments. Vous vous êtes aussi inscrit pour le prochain tournoi de la série. Il commencera une semaine après la fin de ce tournoi.",
+    "YourMoveSubjectUrgent": "AbstractPlay : à vous de jouer (urgent)",
+    "YourMoveBatchedBodyUrgent_one": "C'est votre tour dans {{ count }} partie. Il reste au moins 24 heures à jouer pour une partie. Rendez-vous sur https://play.abstractplay.com pour jouer votre tour.",
+    "YourMoveBatchedBodyUrgent_many": "C'est votre tour dans {{ count }} parties. Il reste au moins 24 heures à jouer pour une partie. Rendez-vous sur https://play.abstractplay.com pour jouer votre tour.",
+    "YourMoveBatchedBodyUrgent_other": "C'est votre tour dans {{ count }} parties. Il reste au moins 24 heures à jouer pour une partie. Rendez-vous sur https://play.abstractplay.com pour jouer votre tour."
 }
