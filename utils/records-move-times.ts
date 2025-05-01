@@ -42,6 +42,20 @@ type MoveRec = {
     time: number;
 };
 
+type Entry = {
+    metaGame: string;
+    score: number;
+};
+
+type SummaryRec = {
+    raw30: Entry[];
+    raw60: Entry[];
+    raw90: Entry[];
+    norm30: Entry[];
+    norm60: Entry[];
+    norm90: Entry[];
+};
+
 export const handler: Handler = async (event: any, context?: any) => {
     // scan bucket for data folder
     const command = new ListObjectsV2Command({
@@ -113,10 +127,13 @@ export const handler: Handler = async (event: any, context?: any) => {
     }
     console.log(`Found ${justGames.length} GAME records (active and completed)`);
 
-    // we're going to ignore records older than six months (180 days) to start
-    const cutoff = Date.now() - (6 * 30 * 24 * 60 * 60 * 1000);
+    const cutoff30 = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const cutoff60 = Date.now() - (60 * 24 * 60 * 60 * 1000);
+    const cutoff90 = Date.now() - (90 * 24 * 60 * 60 * 1000);
 
-    const mvTimes: MoveRec[] = [];
+    const mvTimes30: MoveRec[] = [];
+    const mvTimes60: MoveRec[] = [];
+    const mvTimes90: MoveRec[] = [];
     for (const gdata of justGames) {
         const g = GameFactory(gdata.metaGame, gdata.state);
         if (g === undefined) {
@@ -126,26 +143,115 @@ export const handler: Handler = async (event: any, context?: any) => {
         for (let i = 1; i < g.stack.length; i++) {
             const metaGame = gdata.metaGame;
             const time = new Date(g.stack[i]._timestamp).getTime();
-            if (time < cutoff) {
+            if (time < cutoff90) {
                 continue;
             }
             const pidx = (i - 1) % g.numplayers;
             const player = gdata.players[pidx].id;
-            mvTimes.push({
+            const rec = {
                 metaGame,
                 player,
                 time,
-            });
+            };
+            mvTimes90.push(rec);
+            if (time >= cutoff60) {
+                mvTimes60.push(rec);
+            }
+            if (time >= cutoff30) {
+                mvTimes30.push(rec);
+            }
         }
     }
-    console.log(`num mv records: ${mvTimes.length}`);
+    console.log(`num mv records: ${mvTimes90.length}`);
+
+    // assemble raw scores
+    const raw30: Entry[] = [];
+    const raw60: Entry[] = [];
+    const raw90: Entry[] = [];
+
+    for (const num of [30, 60, 90]) {
+        const lst: MoveRec[] = num === 30 ? mvTimes30 : num === 60 ? mvTimes60 : mvTimes90;
+        const metas = new Set<string>(lst.map(({metaGame}) => metaGame));
+        for (const meta of metas) {
+            const score = lst.filter(({metaGame}) => metaGame === meta).length;
+            const rec: Entry = {
+                metaGame: meta,
+                score,
+            };
+            if (num === 30) {
+                raw30.push(rec);
+            } else if (num === 60) {
+                raw60.push(rec);
+            } else {
+                raw90.push(rec);
+            }
+        }
+    }
+
+    // assemble normalized scores
+    const norm30: Entry[] = [];
+    const norm60: Entry[] = [];
+    const norm90: Entry[] = [];
+
+    for (const num of [30, 60, 90]) {
+        const lst: MoveRec[] = num === 30 ? mvTimes30 : num === 60 ? mvTimes60 : mvTimes90;
+        const metas = new Set<string>(lst.map(({metaGame}) => metaGame));
+        for (const meta of metas) {
+            const recs = lst.filter(({metaGame}) => metaGame === meta);
+            const minTime = Math.min(...recs.map(({time}) => time));
+            const bucketed: {rec: MoveRec, bucket: number}[] = [];
+            for (const rec of recs) {
+                const timeSince = (rec.time - minTime);
+                const bucket = Math.floor(timeSince / (24 * 60 * 60 * 1000));
+                bucketed.push({
+                    rec,
+                    bucket,
+                });
+            }
+            const maxBucket = Math.max(...bucketed.map(({bucket}) => bucket));
+            let score = 0;
+            for (let i = 0; i <= maxBucket; i++) {
+                const tranche = bucketed.filter(({bucket}) => bucket === i);
+                const players = new Set<string>(tranche.map(({rec}) => rec.player));
+                for (const player of players) {
+                    const numRecs = tranche.filter(({rec}) => rec.player === player).length;
+                    let inc = 1;
+                    for (let j = 0; j < numRecs; j++) {
+                        score += inc;
+                        inc *= 0.75;
+                    }
+                }
+            }
+
+            const rec: Entry = {
+                metaGame: meta,
+                score,
+            };
+            if (num === 30) {
+                norm30.push(rec);
+            } else if (num === 60) {
+                norm60.push(rec);
+            } else {
+                norm90.push(rec);
+            }
+        }
+    }
+
+    const final: SummaryRec = {
+        raw30,
+        raw60,
+        raw90,
+        norm30,
+        norm60,
+        norm90,
+    };
 
     // write files to S3
     // response times
     const cmd = new PutObjectCommand({
         Bucket: REC_BUCKET,
         Key: `mvtimes.json`,
-        Body: JSON.stringify(mvTimes),
+        Body: JSON.stringify(final),
     });
     const response = await s3.send(cmd);
     if (response["$metadata"].httpStatusCode !== 200) {
