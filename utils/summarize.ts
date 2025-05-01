@@ -516,11 +516,11 @@ export const handler: Handler = async (event: any, context?: any) => {
         const completedList: {user: string; time: number}[] = [];
         const histTimeoutBuckets: number[] = [];
         const histTimeouts: number[] = [];
-        const baseline = Date.now();
+        const earliest = Math.min(...recs.map(rec => new Date(rec.header["date-end"]).getTime()));
         // all first
         for (const rec of recs) {
             const completed = (new Date(rec.header["date-end"])).getTime();
-            const daysAgo = (baseline - completed) / (24 * 60 * 60 * 1000);
+            const daysAgo = (completed - earliest) / (24 * 60 * 60 * 1000);
             const bucket = Math.floor(daysAgo / 7);
             histList.push({game: rec.header.game.name, bucket});
             for (const player of rec.header.players) {
@@ -544,7 +544,7 @@ export const handler: Handler = async (event: any, context?: any) => {
 
         // timeouts
         for (const t of siteTimeouts) {
-            const daysAgo = (baseline - t) / (24 * 60 * 60 * 1000);
+            const daysAgo = (t - earliest) / (24 * 60 * 60 * 1000);
             const bucket = Math.floor(daysAgo / 7);
             histTimeoutBuckets.push(bucket);
         }
@@ -588,7 +588,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             const toSubset = timeouts.filter(x => x.user === userid);
             const subset: {bucket: number}[] = [];
             for (const {value} of toSubset) {
-                const daysAgo = (baseline - value) / (24 * 60 * 60 * 1000);
+                const daysAgo = (value - earliest) / (24 * 60 * 60 * 1000);
                 const bucket = Math.floor(daysAgo / 7);
                 subset.push({bucket});
             }
@@ -604,8 +604,8 @@ export const handler: Handler = async (event: any, context?: any) => {
         const buckets: number[] = [];
         for (const userid of (new Set<string>(completedList.map(x => x.user)))) {
             const times = completedList.filter(x => x.user === userid).map(x => x.time);
-            const earliest = Math.min(...times);
-            const daysAgo = (baseline - earliest) / (24 * 60 * 60 * 1000);
+            const localEarliest = Math.min(...times);
+            const daysAgo = (localEarliest - earliest) / (24 * 60 * 60 * 1000);
             const bucket = Math.floor(daysAgo / 7);
             buckets.push(bucket);
         }
