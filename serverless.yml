@@ -214,8 +214,8 @@ functions:
     memorySize: 10240
     events:
       - eventBridge:
-          name: abstractplay-${self:provider.stage}-records-ttm
-          description: Generates static time-to-move results of each game
+          name: abstractplay-${self:provider.stage}-records-move-times
+          description: Generates list of moves made in past 180 days
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # 3am UTC every sunday (giving the dump plenty of time to complete)
           schedule: cron(0 3 * * ? *)
