@@ -54,6 +54,9 @@ type SummaryRec = {
     norm30: Entry[];
     norm60: Entry[];
     norm90: Entry[];
+    players30: Entry[];
+    players60: Entry[];
+    players90: Entry[];
 };
 
 export const handler: Handler = async (event: any, context?: any) => {
@@ -192,6 +195,9 @@ export const handler: Handler = async (event: any, context?: any) => {
     const norm30: Entry[] = [];
     const norm60: Entry[] = [];
     const norm90: Entry[] = [];
+    const players30: Entry[] = [];
+    const players60: Entry[] = [];
+    const players90: Entry[] = [];
 
     for (const num of [30, 60, 90]) {
         const lst: MoveRec[] = num === 30 ? mvTimes30 : num === 60 ? mvTimes60 : mvTimes90;
@@ -209,6 +215,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 });
             }
             const maxBucket = Math.max(...bucketed.map(({bucket}) => bucket));
+            // normalized
             let score = 0;
             for (let i = 0; i <= maxBucket; i++) {
                 const tranche = bucketed.filter(({bucket}) => bucket === i);
@@ -223,16 +230,36 @@ export const handler: Handler = async (event: any, context?: any) => {
                 }
             }
 
-            const rec: Entry = {
+            const normRec: Entry = {
                 metaGame: meta,
                 score,
             };
             if (num === 30) {
-                norm30.push(rec);
+                norm30.push(normRec);
             } else if (num === 60) {
-                norm60.push(rec);
+                norm60.push(normRec);
             } else {
-                norm90.push(rec);
+                norm90.push(normRec);
+            }
+
+            // players
+            score = 0;
+            for (let i = 0; i <= maxBucket; i++) {
+                const tranche = bucketed.filter(({bucket}) => bucket === i);
+                const players = new Set<string>(tranche.map(({rec}) => rec.player));
+                score += players.size;
+            }
+
+            const playerRec: Entry = {
+                metaGame: meta,
+                score,
+            };
+            if (num === 30) {
+                players30.push(playerRec);
+            } else if (num === 60) {
+                players60.push(playerRec);
+            } else {
+                players90.push(playerRec);
             }
         }
     }
@@ -244,6 +271,9 @@ export const handler: Handler = async (event: any, context?: any) => {
         norm30,
         norm60,
         norm90,
+        players30,
+        players60,
+        players90,
     };
 
     // write files to S3
