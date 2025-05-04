@@ -99,6 +99,7 @@ type StatSummary = {
         eclectic: UserNumber[];
         allPlays: UserNumber[];
         h: UserNumber[];
+        hOpp: UserNumber[];
         timeouts: UserNumber[];
     };
     histograms: {
@@ -509,6 +510,33 @@ export const handler: Handler = async (event: any, context?: any) => {
             h.push({user, value: index});
         }
 
+        // h-index: opponents
+        const hOpp: UserNumber[] = [];
+        for (const [user, recs] of player2recs.entries()) {
+            const counts = new Map<string, number>();
+            recs.forEach(rec => {
+                for (const player of rec.header.players) {
+                    if (player.userid !== undefined && player.userid !== user) {
+                        if (counts.has(player.userid)) {
+                            const n = counts.get(player.userid)!;
+                            counts.set(player.userid, n + 1);
+                        } else {
+                            counts.set(player.userid, 1);
+                        }
+                    }
+                }
+            });
+            const sorted = [...counts.values()].sort((a, b) => b - a);
+            let index = sorted.length;
+            for (let i = 0; i < sorted.length; i++) {
+                if (sorted[i] < i + 1) {
+                    index = i;
+                    break;
+                }
+            }
+            hOpp.push({user, value: index});
+        }
+
         // HISTOGRAMS
         console.log("Calculating histograms");
         const histList: {game: string; bucket: number}[] = [];
@@ -699,6 +727,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 eclectic,
                 social,
                 h,
+                hOpp,
                 timeouts,
             },
             histograms: {
