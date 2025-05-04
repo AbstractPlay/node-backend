@@ -48,15 +48,14 @@ type Entry = {
 };
 
 type SummaryRec = {
-    raw30: Entry[];
-    raw60: Entry[];
-    raw90: Entry[];
-    norm30: Entry[];
-    norm60: Entry[];
-    norm90: Entry[];
-    players30: Entry[];
-    players60: Entry[];
-    players90: Entry[];
+    raw1w: Entry[];
+    raw1m: Entry[];
+    raw6m: Entry[];
+    raw1y: Entry[];
+    players1w: Entry[];
+    players1m: Entry[];
+    players6m: Entry[];
+    players1y: Entry[];
 };
 
 export const handler: Handler = async (event: any, context?: any) => {
@@ -130,13 +129,15 @@ export const handler: Handler = async (event: any, context?: any) => {
     }
     console.log(`Found ${justGames.length} GAME records (active and completed)`);
 
-    const cutoff30 = Date.now() - (30 * 24 * 60 * 60 * 1000);
-    const cutoff60 = Date.now() - (60 * 24 * 60 * 60 * 1000);
-    const cutoff90 = Date.now() - (90 * 24 * 60 * 60 * 1000);
+    const cutoff1w = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const cutoff1m = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const cutoff6m = Date.now() - (180 * 24 * 60 * 60 * 1000);
+    const cutoff1y = Date.now() - (365 * 24 * 60 * 60 * 1000);
 
-    const mvTimes30: MoveRec[] = [];
-    const mvTimes60: MoveRec[] = [];
-    const mvTimes90: MoveRec[] = [];
+    const mvTimes1w: MoveRec[] = [];
+    const mvTimes1m: MoveRec[] = [];
+    const mvTimes6m: MoveRec[] = [];
+    const mvTimes1y: MoveRec[] = [];
     for (const gdata of justGames) {
         const g = GameFactory(gdata.metaGame, gdata.state);
         if (g === undefined) {
@@ -146,7 +147,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         for (let i = 1; i < g.stack.length; i++) {
             const metaGame = gdata.metaGame;
             const time = new Date(g.stack[i]._timestamp).getTime();
-            if (time < cutoff90) {
+            if (time < cutoff1y) {
                 continue;
             }
             const pidx = (i - 1) % g.numplayers;
@@ -156,24 +157,28 @@ export const handler: Handler = async (event: any, context?: any) => {
                 player,
                 time,
             };
-            mvTimes90.push(rec);
-            if (time >= cutoff60) {
-                mvTimes60.push(rec);
+            mvTimes1y.push(rec);
+            if (time >= cutoff6m) {
+                mvTimes6m.push(rec);
             }
-            if (time >= cutoff30) {
-                mvTimes30.push(rec);
+            if (time >= cutoff1m) {
+                mvTimes1m.push(rec);
+            }
+            if (time >= cutoff1w) {
+                mvTimes1w.push(rec);
             }
         }
     }
-    console.log(`num mv records: ${mvTimes90.length}`);
+    console.log(`num mv records: ${mvTimes1y.length}`);
 
     // assemble raw scores
-    const raw30: Entry[] = [];
-    const raw60: Entry[] = [];
-    const raw90: Entry[] = [];
+    const raw1w: Entry[] = [];
+    const raw1m: Entry[] = [];
+    const raw6m: Entry[] = [];
+    const raw1y: Entry[] = [];
 
-    for (const num of [30, 60, 90]) {
-        const lst: MoveRec[] = num === 30 ? mvTimes30 : num === 60 ? mvTimes60 : mvTimes90;
+    for (const num of [7, 30, 180, 365]) {
+        const lst: MoveRec[] = num === 7 ? mvTimes1w : num === 30 ? mvTimes1m : num === 180 ? mvTimes6m : mvTimes1y;
         const metas = new Set<string>(lst.map(({metaGame}) => metaGame));
         for (const meta of metas) {
             const score = lst.filter(({metaGame}) => metaGame === meta).length;
@@ -181,26 +186,26 @@ export const handler: Handler = async (event: any, context?: any) => {
                 metaGame: meta,
                 score,
             };
-            if (num === 30) {
-                raw30.push(rec);
-            } else if (num === 60) {
-                raw60.push(rec);
+            if (num === 7) {
+                raw1w.push(rec);
+            } else if (num === 30) {
+                raw1m.push(rec);
+            } else if (num === 180) {
+                raw6m.push(rec);
             } else {
-                raw90.push(rec);
+                raw1y.push(rec);
             }
         }
     }
 
-    // assemble normalized scores
-    const norm30: Entry[] = [];
-    const norm60: Entry[] = [];
-    const norm90: Entry[] = [];
-    const players30: Entry[] = [];
-    const players60: Entry[] = [];
-    const players90: Entry[] = [];
+    // assemble players scores
+    const players1w: Entry[] = [];
+    const players1m: Entry[] = [];
+    const players6m: Entry[] = [];
+    const players1y: Entry[] = [];
 
-    for (const num of [30, 60, 90]) {
-        const lst: MoveRec[] = num === 30 ? mvTimes30 : num === 60 ? mvTimes60 : mvTimes90;
+    for (const num of [7, 30, 180, 365]) {
+        const lst: MoveRec[] = num === 7 ? mvTimes1w : num === 30 ? mvTimes1m : num === 180 ? mvTimes6m : mvTimes1y;
         const metas = new Set<string>(lst.map(({metaGame}) => metaGame));
         for (const meta of metas) {
             const recs = lst.filter(({metaGame}) => metaGame === meta);
@@ -215,65 +220,39 @@ export const handler: Handler = async (event: any, context?: any) => {
                 });
             }
             const maxBucket = Math.max(...bucketed.map(({bucket}) => bucket));
-            // normalized
-            let score = 0;
-            for (let i = 0; i <= maxBucket; i++) {
-                const tranche = bucketed.filter(({bucket}) => bucket === i);
-                const players = new Set<string>(tranche.map(({rec}) => rec.player));
-                for (const player of players) {
-                    const numRecs = tranche.filter(({rec}) => rec.player === player).length;
-                    let inc = 1;
-                    for (let j = 0; j < numRecs; j++) {
-                        score += inc;
-                        inc *= 0.75;
-                    }
-                }
-            }
-
-            const normRec: Entry = {
-                metaGame: meta,
-                score,
-            };
-            if (num === 30) {
-                norm30.push(normRec);
-            } else if (num === 60) {
-                norm60.push(normRec);
-            } else {
-                norm90.push(normRec);
-            }
-
             // players
-            score = 0;
+            let score = 0;
             for (let i = 0; i <= maxBucket; i++) {
                 const tranche = bucketed.filter(({bucket}) => bucket === i);
                 const players = new Set<string>(tranche.map(({rec}) => rec.player));
                 score += players.size;
             }
 
-            const playerRec: Entry = {
+            const rec: Entry = {
                 metaGame: meta,
                 score,
             };
-            if (num === 30) {
-                players30.push(playerRec);
-            } else if (num === 60) {
-                players60.push(playerRec);
+            if (num === 7) {
+                players1w.push(rec);
+            } else if (num === 30) {
+                players1m.push(rec);
+            } else if (num === 180) {
+                players6m.push(rec);
             } else {
-                players90.push(playerRec);
+                players1y.push(rec);
             }
         }
     }
 
     const final: SummaryRec = {
-        raw30,
-        raw60,
-        raw90,
-        norm30,
-        norm60,
-        norm90,
-        players30,
-        players60,
-        players90,
+        raw1w,
+        raw1m,
+        raw6m,
+        raw1y,
+        players1w,
+        players1m,
+        players6m,
+        players1y,
     };
 
     // write files to S3
