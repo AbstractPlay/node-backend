@@ -3876,6 +3876,14 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
         engine.move(engine.moves()[0]);
         moveForced = true;
     }
+  } else if (flags !== undefined && flags.includes("autopass")) {
+    // @ts-ignore
+    while (engine.moves().length === 1 && engine.moves()[0] === "pass") {
+        if (flags.includes("pie-even") && engine.state().stack.length === 2) break;
+        // @ts-ignore
+        engine.move(engine.moves()[0]);
+        moveForced = true;
+    }
   }
   game.state = engine.serialize();
   if (engine.gameover) {
