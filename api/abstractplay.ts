@@ -7453,6 +7453,11 @@ async function botManageChallenges() {
             accepted = true;
         }
         // add any variant exceptions here too
+        if (challenge.metaGame === "tumbleweed") {
+            if (challenge.variants.includes("free-neutral") || challenge.variants.includes("capture-delay")) {
+                accepted = false;
+            }
+        }
 
         // accept/reject challenge
         console.log(`About to ${accepted ? "accept" : "deny"} challenge ${challenge.sk}`)
