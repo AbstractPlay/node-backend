@@ -76,6 +76,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     // load the data from each data file, but only keep the GAME records
     const justGames: GameRec[] = [];
     for (const file of dataFiles) {
+        console.log(`Loading ${file.Key}`);
         const command = new GetObjectCommand({
             Bucket: DUMP_BUCKET,
             Key: file.Key,
@@ -97,15 +98,20 @@ export const handler: Handler = async (event: any, context?: any) => {
                         const idx = sofar.indexOf("\n");
                         const line = sofar.substring(0, idx);
                         sofar = sofar.substring(idx+1);
-                        const outerRec = loadIon(line);
-                        if (outerRec === null) {
-                            console.log(`Could not load ION record, usually because of an empty line.\nOffending line: "${line}"`)
-                        } else {
-                            const json = JSON.parse(JSON.stringify(outerRec)) as BasicRec;
-                            const rec = json.Item;
-                            if ( (rec.pk === "GAME") && (rec.sk.includes("#1#")) ) {
-                                justGames.push(rec as GameRec);
+                        try {
+                            const outerRec = loadIon(line);
+                            if (outerRec === null) {
+                                console.log(`Could not load ION record, usually because of an empty line.\nOffending line: "${line}"`)
+                            } else {
+                                const json = JSON.parse(JSON.stringify(outerRec)) as BasicRec;
+                                const rec = json.Item;
+                                if ( (rec.pk === "GAME") && (rec.sk.includes("#1#")) ) {
+                                    justGames.push(rec as GameRec);
+                                }
                             }
+                        } catch (err) {
+                            console.log(`An error occurred while loading an ION record: ${line}`);
+                            console.error(err);
                         }
                     }
                 }
