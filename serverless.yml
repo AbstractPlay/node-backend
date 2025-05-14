@@ -48,7 +48,7 @@ plugins:
 
 provider:
   name: aws
-  runtime: nodejs22.x
+  runtime: nodejs20.x
   versionFunctions: false
   stage: ${opt:stage, 'dev'}
   profile: ${param:profile}
