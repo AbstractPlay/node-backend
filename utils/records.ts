@@ -140,21 +140,26 @@ export const handler: Handler = async (event: any, context?: any) => {
                         const idx = sofar.indexOf("\n");
                         const line = sofar.substring(0, idx);
                         sofar = sofar.substring(idx+1);
-                        const outerRec = loadIon(line);
-                        if (outerRec === null) {
-                            console.log(`Could not load ION record, usually because of an empty line.\nOffending line: "${line}"`)
-                        } else {
-                            const json = JSON.parse(JSON.stringify(outerRec)) as BasicRec;
-                            const rec = json.Item;
-                            if ( (rec.pk === "GAME") && (rec.sk.includes("#1#")) ) {
-                                justGames.push(rec as GameRec);
-                            } else if (rec.pk === "TOURNAMENT" || rec.pk === "COMPLETEDTOURNAMENT") {
-                                tournaments.push(rec as Tournament);
-                            } else if (rec.pk === "ORGEVENT") {
-                                events.push(rec as OrgEvent);
-                            } else if (rec.pk === "ORGEVENTGAME") {
-                                eventGames.push(rec as OrgEventGame);
+                        try {
+                            const outerRec = loadIon(line);
+                            if (outerRec === null) {
+                                console.log(`Could not load ION record, usually because of an empty line.\nOffending line: "${line}"`)
+                            } else {
+                                const json = JSON.parse(JSON.stringify(outerRec)) as BasicRec;
+                                const rec = json.Item;
+                                if ( (rec.pk === "GAME") && (rec.sk.includes("#1#")) ) {
+                                    justGames.push(rec as GameRec);
+                                } else if (rec.pk === "TOURNAMENT" || rec.pk === "COMPLETEDTOURNAMENT") {
+                                    tournaments.push(rec as Tournament);
+                                } else if (rec.pk === "ORGEVENT") {
+                                    events.push(rec as OrgEvent);
+                                } else if (rec.pk === "ORGEVENTGAME") {
+                                    eventGames.push(rec as OrgEventGame);
+                                }
                             }
+                        } catch (err) {
+                            console.log(`An error occurred while loading an ION record: ${line}`);
+                            console.error(err);
                         }
                     }
                     ptr += chunk;
