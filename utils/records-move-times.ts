@@ -113,7 +113,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 console.log(`Processing ${ion.length} bytes`);
                 let sofar = "";
                 let ptr = 0;
-                const chunk = 100000;
+                const chunk = 1000000;
                 while (ptr < ion.length) {
                     sofar += strFromU8(ion.slice(ptr, ptr + chunk));
                     while (sofar.includes("\n")) {
