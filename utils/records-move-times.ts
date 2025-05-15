@@ -116,10 +116,10 @@ export const handler: Handler = async (event: any, context?: any) => {
                 const chunk = 1000000;
                 while (ptr < ion.length) {
                     sofar += strFromU8(ion.slice(ptr, ptr + chunk));
-                    while (sofar.includes("\n")) {
-                        const idx = sofar.indexOf("\n");
-                        const line = sofar.substring(0, idx);
-                        sofar = sofar.substring(idx+1);
+                    while (sofar.includes("}}\n")) {
+                        const idx = sofar.indexOf("}}\n");
+                        const line = sofar.substring(0, idx+2);
+                        sofar = sofar.substring(idx+3);
                         try {
                             const outerRec = loadIon(line);
                             if (outerRec === null) {
@@ -136,8 +136,8 @@ export const handler: Handler = async (event: any, context?: any) => {
                             console.error(err);
                         }
                     }
+                    ptr += chunk;
                 }
-                ptr += chunk;
             } else {
                 throw new Error(`Could not load bytes from file ${file.Key}`);
             }

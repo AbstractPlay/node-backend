@@ -133,13 +133,13 @@ export const handler: Handler = async (event: any, context?: any) => {
                 console.log(`Processing ${ion.length} bytes`);
                 let sofar = "";
                 let ptr = 0;
-                const chunk = 100000;
+                const chunk = 1000000;
                 while (ptr < ion.length) {
                     sofar += strFromU8(ion.slice(ptr, ptr + chunk));
-                    while (sofar.includes("\n")) {
-                        const idx = sofar.indexOf("\n");
-                        const line = sofar.substring(0, idx);
-                        sofar = sofar.substring(idx+1);
+                    while (sofar.includes("}}\n")) {
+                        const idx = sofar.indexOf("}}\n");
+                        const line = sofar.substring(0, idx+2);
+                        sofar = sofar.substring(idx+3);
                         try {
                             const outerRec = loadIon(line);
                             if (outerRec === null) {
