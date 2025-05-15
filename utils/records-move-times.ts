@@ -56,6 +56,10 @@ type SummaryRec = {
     players1m: Entry[];
     players6m: Entry[];
     players1y: Entry[];
+    playersSum1w: Entry[];
+    playersSum1m: Entry[];
+    playersSum6m: Entry[];
+    playersSum1y: Entry[];
 };
 
 export const handler: Handler = async (event: any, context?: any) => {
@@ -148,8 +152,8 @@ export const handler: Handler = async (event: any, context?: any) => {
     }
     console.log(`Found ${justGames.length} GAME records (active and completed)`);
 
-    const cutoff1w = Date.now() - (7 * 24 * 60 * 60 * 1000);
-    const cutoff1m = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const cutoff1w = Date.now() - (  7 * 24 * 60 * 60 * 1000);
+    const cutoff1m = Date.now() - ( 30 * 24 * 60 * 60 * 1000);
     const cutoff6m = Date.now() - (180 * 24 * 60 * 60 * 1000);
     const cutoff1y = Date.now() - (365 * 24 * 60 * 60 * 1000);
 
@@ -263,6 +267,38 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
     }
 
+    // assemble raw player counts per period
+    const playersSum1w: Entry[] = [];
+    const playersSum1m: Entry[] = [];
+    const playersSum6m: Entry[] = [];
+    const playersSum1y: Entry[] = [];
+
+    for (const num of [7, 30, 180, 365]) {
+        const lst: MoveRec[] = num === 7 ? mvTimes1w : num === 30 ? mvTimes1m : num === 180 ? mvTimes6m : mvTimes1y;
+        const metas = new Set<string>(lst.map(({metaGame}) => metaGame));
+        for (const meta of metas) {
+            const recs = lst.filter(({metaGame}) => metaGame === meta);
+            const uniques = new Set<string>();
+            for (const rec of recs) {
+                uniques.add(rec.player);
+            }
+
+            const rec: Entry = {
+                metaGame: meta,
+                score: uniques.size,
+            };
+            if (num === 7) {
+                playersSum1w.push(rec);
+            } else if (num === 30) {
+                playersSum1m.push(rec);
+            } else if (num === 180) {
+                playersSum6m.push(rec);
+            } else {
+                playersSum1y.push(rec);
+            }
+        }
+    }
+
     const final: SummaryRec = {
         raw1w,
         raw1m,
@@ -272,6 +308,10 @@ export const handler: Handler = async (event: any, context?: any) => {
         players1m,
         players6m,
         players1y,
+        playersSum1w,
+        playersSum1m,
+        playersSum6m,
+        playersSum1y,
     };
 
     // write files to S3
