@@ -116,6 +116,7 @@ type StatSummary = {
     metaStats: {
         [k: string]: TwoPlayerStats;
     }
+    hMeta: UserNumber[];
     geoStats: GeoStats[];
 };
 
@@ -292,6 +293,33 @@ export const handler: Handler = async (event: any, context?: any) => {
                     }
                 }
             }
+        }
+
+        // tabulate each metaGame's h index
+        console.log("Calculating game h indexes")
+        const hMeta: UserNumber[] = [];
+        for (const [meta, recs] of meta2recs.entries()) {
+            const counts = new Map<string, number>();
+            for (const rec of recs) {
+                for (const prec of rec.header.players) {
+                    if (prec.userid === undefined) { continue; }
+                    if (counts.has(prec.userid)) {
+                        const curr = counts.get(prec.userid)!;
+                        counts.set(prec.userid, curr+1);
+                    } else {
+                        counts.set(prec.userid, 1);
+                    }
+                }
+            }
+            const sorted = [...counts.values()].sort((a, b) => b - a);
+            let index = sorted.length;
+            for (let i = 0; i < sorted.length; i++) {
+                if (sorted[i] < i + 1) {
+                    index = i;
+                    break;
+                }
+            }
+            hMeta.push({user: meta, value: index});
         }
 
         // rate the records for each game (now subdivided by variants)
@@ -739,6 +767,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 firstTimers,
                 timeouts: histTimeouts,
             },
+            hMeta,
             hoursPer,
             recent,
             metaStats,
