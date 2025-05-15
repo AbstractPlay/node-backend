@@ -5,6 +5,7 @@ import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { isoToCountryCode } from "../lib/isoToCountryCode";
 import { Handler } from "aws-lambda";
 import { type IRating, type IGlickoRating, APGameRecord, ELOBasic, Glicko2, type ITrueskillRating, Trueskill } from "@abstractplay/recranks";
+import { gameinfo } from "@abstractplay/gameslib";
 import { replacer } from "@abstractplay/gameslib/build/src/common";
 // import { nanoid } from "nanoid";
 
@@ -298,7 +299,13 @@ export const handler: Handler = async (event: any, context?: any) => {
         // tabulate each metaGame's h index
         console.log("Calculating game h indexes")
         const hMeta: UserNumber[] = [];
-        for (const [meta, recs] of meta2recs.entries()) {
+        for (const [game, recs] of meta2recs.entries()) {
+            const found = [...gameinfo.values()].find(i => i.name === game);
+            if (found === undefined) {
+                console.log(`Could not find the meta name for the game "${game}".`);
+                continue;
+            }
+            const meta = found.uid;
             const counts = new Map<string, number>();
             for (const rec of recs) {
                 for (const prec of rec.header.players) {
