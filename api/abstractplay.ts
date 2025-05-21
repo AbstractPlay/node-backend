@@ -90,6 +90,8 @@ export type UserSettings = {
             gameEnd: boolean;
             challenges: boolean;
             yourturn: boolean;
+            tournamentStart: boolean;
+            tournamentEnd: boolean;
         }
     }
 };
@@ -5205,16 +5207,19 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     await initi18n('en');
     const metaGameName = gameinfo.get(tournament.metaGame)?.name;
     for (const player of playersFull2) {
-      await changeLanguageForPlayer(player);
-      let body = '';
-      if (tournament.variants.length === 0)
-        body = i18n.t("TournamentStartBody", { "metaGame": metaGameName, "number": tournament.number });
-      else
-        body = i18n.t("TournamentStartBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
-      if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-        const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentStartSubject", { "metaGame": metaGameName }), body);
-        await sesClient.send(comm);
-      }
+        // eslint-disable-next-line no-prototype-builtins
+        if ( (player.settings?.all?.notifications === undefined) || (!player.settings.all.notifications.hasOwnProperty("tournamentStart")) || (player.settings.all.notifications.tournamentStart) ) {
+            await changeLanguageForPlayer(player);
+            let body = '';
+            if (tournament.variants.length === 0)
+                body = i18n.t("TournamentStartBody", { "metaGame": metaGameName, "number": tournament.number });
+            else
+                body = i18n.t("TournamentStartBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
+            if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentStartSubject", { "metaGame": metaGameName }), body);
+                await sesClient.send(comm);
+            }
+        }
     }
     returnvalue = 1;
   }
@@ -5459,15 +5464,18 @@ async function endTournament(tournament: Tournament) {
           await initi18n('en');
           const metaGameName = gameinfo.get(tournament.metaGame)?.name;
           for (const player of playersFull) {
-            await changeLanguageForPlayer(player);
-            let body = '';
-            if (tournament.variants.length === 0)
-              body = i18n.t("TournamentEndBody", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id });
-            else
-              body = i18n.t("TournamentEndBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id, "variants": tournament.variants.join(", ") });
-            if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-              const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName, }), body);
-              work.push(sesClient.send(comm));
+            // eslint-disable-next-line no-prototype-builtins
+            if ( (player.settings?.all?.notifications === undefined) || (!player.settings.all.notifications.hasOwnProperty("tournamentEnd")) || (player.settings.all.notifications.tournamentEnd) ) {
+                await changeLanguageForPlayer(player);
+                let body = '';
+                if (tournament.variants.length === 0)
+                    body = i18n.t("TournamentEndBody", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id });
+                else
+                    body = i18n.t("TournamentEndBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id, "variants": tournament.variants.join(", ") });
+                if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
+                    const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName, }), body);
+                    work.push(sesClient.send(comm));
+                }
             }
           }
         }
