@@ -5462,11 +5462,11 @@ async function endTournament(tournament: Tournament) {
             await changeLanguageForPlayer(player);
             let body = '';
             if (tournament.variants.length === 0)
-              body = i18n.t("TournamentEndBody", { "metaGame": metaGameName, "number": tournament.number });
+              body = i18n.t("TournamentEndBody", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id });
             else
-              body = i18n.t("TournamentEndBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
+              body = i18n.t("TournamentEndBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id, "variants": tournament.variants.join(", ") });
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-              const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName }), body);
+              const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName, }), body);
               work.push(sesClient.send(comm));
             }
           }
