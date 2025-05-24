@@ -131,6 +131,7 @@ type FullChallenge = {
     rated: boolean;
     noExplore?: boolean;
     comment?: string;
+    dateIssued?: number;
 }
 
 type StandingChallenge = {
@@ -276,6 +277,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 rated: entry.rated,
                 noExplore: entry.noExplore || false,
                 comment: "Standing Challenge",
+                dateIssued: Date.now(),
             };
             await newStandingChallenge(rec.sk, challenge);
             issued++;
@@ -377,7 +379,8 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
           "clockHard": challenge.clockHard,
           "rated": challenge.rated,
           "noExplore": challenge.noExplore || false,
-          "comment": challenge.comment || ""
+          "comment": challenge.comment || "",
+          "dateIssued": challenge.dateIssued,
         }
       }));
 
