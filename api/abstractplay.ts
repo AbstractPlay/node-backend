@@ -5207,8 +5207,10 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     await initi18n('en');
     const metaGameName = gameinfo.get(tournament.metaGame)?.name;
     for (const player of playersFull2) {
+        console.log(`Determining whether to send tournamentStart email to the following player:`, player);
         // eslint-disable-next-line no-prototype-builtins
         if ( (player.settings?.all?.notifications === undefined) || (!player.settings.all.notifications.hasOwnProperty("tournamentStart")) || (player.settings.all.notifications.tournamentStart) ) {
+            console.log("Sending email");
             await changeLanguageForPlayer(player);
             let body = '';
             if (tournament.variants.length === 0)
@@ -5464,8 +5466,10 @@ async function endTournament(tournament: Tournament) {
           await initi18n('en');
           const metaGameName = gameinfo.get(tournament.metaGame)?.name;
           for (const player of playersFull) {
+            console.log(`Determining whether to send tournamentEnd email to the following player:`, player);
             // eslint-disable-next-line no-prototype-builtins
             if ( (player.settings?.all?.notifications === undefined) || (!player.settings.all.notifications.hasOwnProperty("tournamentEnd")) || (player.settings.all.notifications.tournamentEnd) ) {
+                console.log("Sending email");
                 await changeLanguageForPlayer(player);
                 let body = '';
                 if (tournament.variants.length === 0)
