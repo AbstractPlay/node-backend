@@ -77,6 +77,7 @@ type FullChallenge = {
   rated: boolean;
   noExplore?: boolean;
   comment?: string;
+  dateIssued?: number;
 }
 
 export type UserSettings = {
@@ -2142,7 +2143,8 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
         "clockHard": challenge.clockHard,
         "rated": challenge.rated,
         "noExplore": challenge.noExplore || false,
-        "comment": challenge.comment || ""
+        "comment": challenge.comment || "",
+        "dateIssued": Date.now(),
       }
     }));
 
@@ -2222,7 +2224,8 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
         "clockHard": challenge.clockHard,
         "rated": challenge.rated,
         "noExplore": challenge.noExplore || false,
-        "comment": challenge.comment || ""
+        "comment": challenge.comment || "",
+        "dateIssued": Date.now,
       }
     }));
 
