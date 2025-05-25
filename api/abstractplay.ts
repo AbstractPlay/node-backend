@@ -2225,7 +2225,7 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
         "rated": challenge.rated,
         "noExplore": challenge.noExplore || false,
         "comment": challenge.comment || "",
-        "dateIssued": Date.now,
+        "dateIssued": Date.now(),
       }
     }));
 
