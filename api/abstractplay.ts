@@ -2840,7 +2840,8 @@ async function duplicateStandingChallenge(challenge: { [x: string]: any; metaGam
         "clockMax": challenge.clockMax,
         "clockHard": challenge.clockHard,
         "noExplore": challenge.noExplore || false,
-        "rated": challenge.rated
+        "rated": challenge.rated,
+        "dateIssued": challenge.dateIssued,
       }
     }));
 
