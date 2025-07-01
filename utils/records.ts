@@ -213,7 +213,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
         }
         const rec = g.genRecord({
-            uid: gdata.id,
+            uid: `${g.metaGame}#${gdata.id}`,
             players: gdata.players.map(p => { return {uid: p.id, name: p.name}; }),
             event: event !== null ? event : undefined,
             round: round !== null ? round : undefined,
