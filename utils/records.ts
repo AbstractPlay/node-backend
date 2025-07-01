@@ -4,7 +4,7 @@ import { S3Client, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, typ
 import { Handler } from "aws-lambda";
 import { GameFactory } from '@abstractplay/gameslib';
 import { type APGameRecord } from '@abstractplay/recranks';
-import { gunzipSync, gunzip, strFromU8 } from "fflate";
+import { gunzipSync, strFromU8 } from "fflate";
 import { load as loadIon } from "ion-js";
 
 const REGION = "us-east-1";
@@ -213,7 +213,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
         }
         const rec = g.genRecord({
-            uid: gdata.id,
+            uid: `${g.metaGame}#${gdata.id}`,
             players: gdata.players.map(p => { return {uid: p.id, name: p.name}; }),
             event: event !== null ? event : undefined,
             round: round !== null ? round : undefined,
