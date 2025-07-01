@@ -223,8 +223,8 @@ export const handler: Handler = async (event: any, context?: any) => {
             const num = parseInt(nstr, 10);
             const players = tourney.players!.filter(p => p.division === num);
             players.sort(sortPlayers);
-            if (players[0].playerid !== division.winner) {
-                console.log(`Tournament winners differed for division ${nstr}:\nSorted says ${players[0].playerid}, division says ${division.winner}\n${JSON.stringify(tourney)}`);
+            if (players[0].playerid !== division.winnerid) {
+                console.log(`Tournament winners differed for division ${nstr}:\nSorted says ${players[0].playerid}, division says ${division.winnerid}\n${JSON.stringify(tourney)}`);
             }
             for (let p = 1; p <= players.length; p++) {
                 const player = players[p-1];
