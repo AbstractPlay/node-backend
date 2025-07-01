@@ -195,6 +195,18 @@ functions:
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # 3am UTC every sunday (giving the dump plenty of time to complete)
           schedule: cron(0 3 * * ? *)
+  tournament-data:
+    handler: utils/tournament-data.handler
+    description: Summarizes tournament data
+    timeout: 900
+    memorySize: 10240
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-tournament-data
+          description: Summarizes tournament data
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 3am UTC every sunday (giving the dump plenty of time to complete)
+          schedule: cron(0 3 * * ? *)
   records-ttm:
     handler: utils/records-ttm.handler
     description: Generates static time-to-move results of each game
