@@ -74,6 +74,7 @@ type TournamentNode = {
     pid: string;
     tid: string;
     metaGame: string;
+    variants: string[];
     place: number;
     participants: number;
     score: number;
@@ -249,6 +250,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                     pid: player.playerid,
                     tid: tourney.id,
                     metaGame: tourney.metaGame,
+                    variants: tourney.variants,
                     place: p,
                     participants: players.length,
                     score,
