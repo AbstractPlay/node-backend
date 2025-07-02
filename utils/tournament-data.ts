@@ -76,6 +76,7 @@ type TournamentNode = {
     metaGame: string;
     variants: string[];
     dateEnded: number;
+    archived: boolean;
     place: number;
     participants: number;
     score: number;
@@ -134,6 +135,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     const tourneys: Tournament[] = [];
     let possPlayers: TournamentPlayer[]|undefined = [];
     let possTourneys: Tournament[]|undefined = [];
+    const archivedTourneys = new Set<string>();
     for (const file of dataFiles) {
         console.log(`Loading ${file.Key}`);
         const command = new GetObjectCommand({
@@ -166,6 +168,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                                 const rec = json.Item;
                                 if (rec.pk === "COMPLETEDTOURNAMENT") {
                                     tourneys.push(rec as Tournament);
+                                    archivedTourneys.add((rec as Tournament).id);
                                 } else if (rec.pk === "TOURNAMENT" && (rec as Tournament).dateEnded !== undefined) {
                                     possTourneys.push(rec as Tournament);
                                 } else if (rec.pk === "TOURNAMENTPLAYER") {
@@ -252,6 +255,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                     tid: tourney.id,
                     metaGame: tourney.metaGame,
                     variants: tourney.variants,
+                    archived: archivedTourneys.has(tourney.id),
                     dateEnded: tourney.dateEnded!,
                     place: p,
                     participants: players.length,
