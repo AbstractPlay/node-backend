@@ -35,6 +35,32 @@ const headers = {
   'Access-Control-Allow-Origin': '*'
 };
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function sendCommandWithRetry(command: any, maxRetries = 8, initialDelay = 100, maxDelay = 5000) {
+    let retries = 0;
+    while (retries < maxRetries) {
+        try {
+            // @ts-ignore
+            return await ddbDocClient.send(command);
+        } catch (err: any) {
+            if (['ThrottlingException', 'ProvisionedThroughputExceededException', 'InternalServerError', 'ServiceUnavailable'].includes(err.name)) {
+                retries++;
+                if (retries >= maxRetries) {
+                    console.error(`Command failed after ${maxRetries} retries.`);
+                    throw err;
+                }
+                const delay = Math.min(initialDelay * Math.pow(2, retries - 1), maxDelay);
+                const jitter = delay * 0.1 * Math.random();
+                console.log(`Retryable error (${err.name}) caught. Retrying in ${Math.round(delay + jitter)}ms...`);
+                await sleep(delay + jitter);
+            } else {
+                throw err;
+            }
+        }
+    }
+}
+
 // Types
 export type UserSettings = {
     [k: string]: any;
@@ -233,7 +259,7 @@ async function getPlayersSlowly(playerIDs: string[]) {
   const players: FullUser[] = [];
   for (const id of playerIDs) {
     try {
-      const playerData = await ddbDocClient.send(
+      const playerData = await sendCommandWithRetry(
         new GetCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
@@ -254,14 +280,14 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
   const work: Promise<any>[] = [];
   const sk = now + "#" + game.id;
   if (type === "COMPLETEDGAMES" && keepgame) {
-    work.push(ddbDocClient.send(new PutCommand({
+    work.push(sendCommandWithRetry(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
           "pk": type,
           "sk": sk,
           ...game}
       })));
-    work.push(ddbDocClient.send(new PutCommand({
+    work.push(sendCommandWithRetry(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
           "pk": type + "#" + game.metaGame,
@@ -269,14 +295,14 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
           ...game}
       })));
     game.players.forEach((player: { id: string; }) => {
-      work.push(ddbDocClient.send(new PutCommand({
+      work.push(sendCommandWithRetry(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: {
             "pk": type + "#" + player.id,
             "sk": sk,
             ...game}
         })));
-      work.push(ddbDocClient.send(new PutCommand({
+      work.push(sendCommandWithRetry(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: {
             "pk": type + "#" + game.metaGame + "#" + player.id,
@@ -286,7 +312,7 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
     });
   }
   if (type === "CURRENTGAMES") {
-    work.push(ddbDocClient.send(new UpdateCommand({
+    work.push(sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": game.metaGame },
@@ -300,7 +326,7 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
         update += ", #g.completedgames :n";
         eavObj[":n"] = 1
     }
-    work.push(ddbDocClient.send(new UpdateCommand({
+    work.push(sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": game.metaGame },
@@ -351,7 +377,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     // Cancel tournament. Everyone is gone.
     try {
       console.log(`Deleting tournament ${tournament.id}`);
-      await ddbDocClient.send(
+      await sendCommandWithRetry(
         new DeleteCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
@@ -360,7 +386,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
           },
         }));
       const sk = tournament.metaGame + "#" + tournament.variants.sort().join("|");
-      await ddbDocClient.send(
+      await sendCommandWithRetry(
         new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {"pk": "TOURNAMENTSCOUNTER", "sk": sk},
@@ -416,7 +442,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     if (tournament.waiting !== true) {
       try {
         console.log(`Updating tournament ${tournament.id} to waiting`);
-        await ddbDocClient.send(new UpdateCommand({
+        await sendCommandWithRetry(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: { "pk": "TOURNAMENT", "sk": tournament.id },
           ExpressionAttributeValues: { ":t": true },
@@ -462,7 +488,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
       player.sk = tournament.id + "#" + division.toString() + '#' + player.playerid;
       try {
         console.log(`Adding player ${player.playerid} to tournament ${tournament.id} in division ${division}`);
-        await ddbDocClient.send(new PutCommand({
+        await sendCommandWithRetry(new PutCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: player
         }));
@@ -475,7 +501,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
       if (division > 1) {
         try {
           console.log(`Deleting player ${player.playerid} from tournament ${tournament.id} with division 1 (so they can be put in the right division)`);
-          await ddbDocClient.send(new DeleteCommand({
+          await sendCommandWithRetry(new DeleteCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: {
               "pk": "TOURNAMENTPLAYER", "sk": tournament.id + "#1#" + player.playerid
@@ -536,7 +562,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
           const state = engine.serialize();
           try {
             console.log(`Creating game ${gameId} for tournament ${tournament.id} with division ${division}`);
-            await ddbDocClient.send(new PutCommand({
+            await sendCommandWithRetry(new PutCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
                 Item: {
                   "pk": "GAME",
@@ -587,7 +613,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
             "player2": gamePlayers[1].id
           };
           console.log(`Adding game ${gameId} to TOURNAMENTGAME list`);
-          await ddbDocClient.send(new PutCommand({
+          await sendCommandWithRetry(new PutCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Item: tournamentGame
           }));
@@ -606,7 +632,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     }
     const newTournamentid = uuid();
     console.log(`Updating tournament ${tournament.id} to started`);
-    await ddbDocClient.send(new UpdateCommand({
+    await sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENT", "sk": tournament.id },
       ExpressionAttributeValues: { ":dt": now, ":t": true, ":nextid": newTournamentid, ":ds": divisions },
@@ -615,7 +641,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     // open next tournament for sign-up.
     console.log(`Opening next tournament ${newTournamentid} for sign-up. Update TOURNAMENTSCOUNTER for '${tournament.metaGame}#${tournament.variants.sort().join("|")}'`);
     try {
-      await ddbDocClient.send(new UpdateCommand({
+      await sendCommandWithRetry(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "TOURNAMENTSCOUNTER", "sk": tournament.metaGame + "#" + tournament.variants.sort().join("|") },
         ExpressionAttributeValues: { ":inc": 1, ":f": false },
@@ -640,7 +666,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     };
     console.log(`Creating new tournament ${newTournamentid}`);
     try {
-      await ddbDocClient.send(new PutCommand({
+      await sendCommandWithRetry(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: data
       }));
@@ -661,7 +687,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
       };
       try {
         console.log(`Adding player ${player.playerid} to new tournament ${newTournamentid}`);
-        await ddbDocClient.send(new PutCommand({
+        await sendCommandWithRetry(new PutCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: playerdata
         }));
@@ -697,7 +723,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
   if (remove.length > 0) {
     for (const player of remove) {
       console.log(`Deleting tournament player record for ${player.playerid} from tournament ${tournament.id}`);
-      await ddbDocClient.send(
+      await sendCommandWithRetry(
         new DeleteCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
@@ -747,7 +773,7 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
   gameIDsChanged.length = 0;
   if (gamesUpdate === undefined) {
     // Update "old" users. This is a one-time update.
-    return ddbDocClient.send(new UpdateCommand({
+    return sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userId },
       ExpressionAttributeValues: { ":val": 1, ":gs": games },
@@ -756,7 +782,7 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
   } else {
     console.log(`updateUserGames: optimistically updating games for ${userId}`);
     try {
-      await ddbDocClient.send(new UpdateCommand({
+      await sendCommandWithRetry(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "USER", "sk": userId },
         ExpressionAttributeValues: { ":val": gamesUpdate, ":inc": 1, ":gs": games },
@@ -770,7 +796,7 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
         console.log(`updateUserGames: games has been modified by another process for ${userId}`);
         let count = 0;
         while (count < 3) {
-          const userData = await ddbDocClient.send(
+          const userData = await sendCommandWithRetry(
             new GetCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               Key: {
@@ -794,7 +820,7 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
           }
           try {
             console.log(`updateUserGames: Update ${count} of games for user`, userId, newgames);
-            await ddbDocClient.send(new UpdateCommand({
+            await sendCommandWithRetry(new UpdateCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               Key: { "pk": "USER", "sk": userId },
               ExpressionAttributeValues: { ":val": gamesUpdate, ":inc": 1, ":gs": newgames },
@@ -803,7 +829,11 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
             }));
             return;
           } catch (err: any) {
-            count++;
+            if (err.name === 'ConditionalCheckFailedException') {
+                count++;
+            } else {
+                throw err;
+            }
           }
         }
         new Error(`updateUserGames: Unable to update games for user ${userId} after 3 retries`);
