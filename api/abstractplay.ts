@@ -6956,6 +6956,9 @@ async function sendPush(opts: PushOptions) {
     }
 
     if(subscription !== undefined) {
+      // treat both 410 and 404 as permanent. There are a LOT of 404 web push errors in the logs and apparently these are because since June 2024 the Chrome/FCM push service has changed the way it reports stale or deleted web‑push registrations.
+      const PERMANENT_FAILURES = new Set([404, 410]);
+
       try {
           const options: RequestOptions = {
             vapidDetails: {
@@ -6971,7 +6974,7 @@ async function sendPush(opts: PushOptions) {
           console.log(`Result of webpush:`);
           console.log(result);
       } catch (err: any) {
-          if ( ("statusCode" in err) && (err.statusCode === 410) ) {
+          if ( ("statusCode" in err) && PERMANENT_FAILURES.has(err.statusCode)) {
             await ddbDocClient.send(
                 new DeleteCommand({
                   TableName: process.env.ABSTRACT_PLAY_TABLE,
