@@ -309,6 +309,7 @@ type TournamentPlayer = {
   sk: string;
   playerid: string;
   playername: string;
+  once?: boolean;
   division?: number;
   score?: number;
   tiebreak?: number;
@@ -4415,9 +4416,13 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
   }
 }
 
-async function joinTournament(userid: string, pars: { tournamentid: string }) {
+async function joinTournament(userid: string, pars: { tournamentid: string, once?: boolean }) {
   let tournament: Tournament;
   let playername = '';
+  let once = false;
+  if (pars.once !== undefined && pars.once) {
+    once = true;
+  }
   try {
     const tournamentGet = ddbDocClient.send(
       new GetCommand({
@@ -4453,6 +4458,7 @@ async function joinTournament(userid: string, pars: { tournamentid: string }) {
     "sk": sk,
     "playername": playername,
     "playerid": userid,
+    "once": once,
   };
   try {
     await ddbDocClient.send(new PutCommand({
@@ -5189,22 +5195,28 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     }
     // ... and register all current players for it
     for (const player of players) {
-      const sk = `${newTournamentid}#1#${player.playerid}`;
-      const playerdata: TournamentPlayer = {
-        "pk": "TOURNAMENTPLAYER",
-        "sk": sk,
-        "playername": player.playername,
-        "playerid": player.playerid,
-      };
-      try {
-        console.log(`Adding player ${player.playerid} to new tournament ${newTournamentid}`);
-        await ddbDocClient.send(new PutCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Item: playerdata
-        }));
-      } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`Unable to add player ${player.playerid} to tournament ${newTournamentid}`);
+      let once = false;
+      if (player.once !== undefined && player.once) {
+        once = true;
+      }
+      if (!once) {
+        const sk = `${newTournamentid}#1#${player.playerid}`;
+        const playerdata: TournamentPlayer = {
+            "pk": "TOURNAMENTPLAYER",
+            "sk": sk,
+            "playername": player.playername,
+            "playerid": player.playerid,
+        };
+        try {
+            console.log(`Adding player ${player.playerid} to new tournament ${newTournamentid}`);
+            await ddbDocClient.send(new PutCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Item: playerdata
+            }));
+        } catch (err) {
+            logGetItemError(err);
+            return formatReturnError(`Unable to add player ${player.playerid} to tournament ${newTournamentid}`);
+        }
       }
     }
     // Send e-mails to participants
