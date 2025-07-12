@@ -267,7 +267,7 @@ async function getPlayersSlowly(playerIDs: string[]) {
             "pk": "USER", "sk": id
           },
         })
-      );
+      ) as { Item?: any };
       players.push(playerData.Item as FullUser);
     } catch (error) {
       logGetItemError(error);
@@ -810,7 +810,7 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
                 "pk": "USER",
                 "sk": userId
               },
-            }));
+            })) as { Item?: any };
           const user = userData.Item as FullUser;
           const dbGames = user.games;
           const gamesUpdate = user.gamesUpdate;
