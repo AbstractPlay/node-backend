@@ -2,10 +2,13 @@
 
 import { S3Client, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, type _Object } from "@aws-sdk/client-s3";
 import { Handler } from "aws-lambda";
-import { GameFactory } from '@abstractplay/gameslib';
+import { GameFactory, addResource } from '@abstractplay/gameslib';
 import { type APGameRecord } from '@abstractplay/recranks';
 import { gunzipSync, strFromU8 } from "fflate";
 import { load as loadIon } from "ion-js";
+import i18n from 'i18next';
+import enGames from "../node_modules/@abstractplay/gameslib/locales/en/apgames.json";
+import enBack from "../locales/en/apback.json";
 
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
@@ -76,6 +79,24 @@ type OrgEventGame = {
 };
 
 export const handler: Handler = async (event: any, context?: any) => {
+  await (i18n
+  .init({
+    ns: ["apback"],
+    defaultNS: "apback",
+    lng: "en",
+    fallbackLng: "en",
+    debug: true,
+    resources: {
+        en: {
+            apback: enBack,
+        }
+    }
+  })
+  .then(async function() {
+    if (!i18n.isInitialized) {
+        throw new Error(`i18n is not initialized where it should be!`);
+    }
+    addResource("en");
     // scan bucket for data folder
     const command = new ListObjectsV2Command({
         Bucket: DUMP_BUCKET,
@@ -244,6 +265,12 @@ export const handler: Handler = async (event: any, context?: any) => {
     }
     console.log(`allRecs: ${allRecs.length}, metaRecs: ${[...metaRecs.keys()].length}, userRecs: ${[...userRecs.keys()].length}, eventRecs: ${[...eventRecs.keys()].length}`);
 
+    // // only print the last 10 LoA records to console then quit
+    // const loa = metaRecs.get("loa")!.slice(-10);
+    // for (const rec of loa) {
+    //     console.log(JSON.stringify(rec.header))
+    // }
+
     // write files to S3
     const bodyAll = JSON.stringify(allRecs);
     let cmd = new PutObjectCommand({
@@ -297,4 +324,8 @@ export const handler: Handler = async (event: any, context?: any) => {
     console.log("Event recs done");
 
     console.log("ALL DONE");
+  })
+  .catch(err => {
+    throw new Error(`An error occurred while initializing i18next:\n${err}`);
+  }));
 };
