@@ -404,6 +404,32 @@ type StandingChallengeRec = {
     standing: StandingChallenge[];
 };
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function sendCommandWithRetry(command: any, maxRetries = 8, initialDelay = 100, maxDelay = 5000) {
+    let retries = 0;
+    while (retries < maxRetries) {
+        try {
+            // @ts-ignore
+            return await ddbDocClient.send(command);
+        } catch (err: any) {
+            if (['ThrottlingException', 'ProvisionedThroughputExceededException', 'InternalServerError', 'ServiceUnavailable'].includes(err.name)) {
+                retries++;
+                if (retries >= maxRetries) {
+                    console.error(`Command failed after ${maxRetries} retries.`);
+                    throw err;
+                }
+                const delay = Math.min(initialDelay * Math.pow(2, retries - 1), maxDelay);
+                const jitter = delay * 0.1 * Math.random();
+                console.log(`Retryable error (${err.name}) caught. Retrying in ${Math.round(delay + jitter)}ms...`);
+                await sleep(delay + jitter);
+            } else {
+                throw err;
+            }
+        }
+    }
+}
+
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
   const pars = event.queryStringParameters;
@@ -1641,7 +1667,7 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
   gameIDsChanged.length = 0;
   if (gamesUpdate === undefined) {
     // Update "old" users. This is a one-time update.
-    return ddbDocClient.send(new UpdateCommand({
+    return sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userId },
       ExpressionAttributeValues: { ":val": 1, ":gs": games },
@@ -1650,7 +1676,7 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
   } else {
     console.log(`updateUserGames: optimistically updating games for ${userId}`);
     try {
-      await ddbDocClient.send(new UpdateCommand({
+      await sendCommandWithRetry(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "USER", "sk": userId },
         ExpressionAttributeValues: { ":val": gamesUpdate, ":inc": 1, ":gs": games },
@@ -1688,7 +1714,7 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
           }
           try {
             console.log(`updateUserGames: Update ${count} of games for user`, userId, newgames);
-            await ddbDocClient.send(new UpdateCommand({
+            await sendCommandWithRetry(new UpdateCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               Key: { "pk": "USER", "sk": userId },
               ExpressionAttributeValues: { ":val": gamesUpdate, ":inc": 1, ":gs": newgames },
@@ -1696,13 +1722,17 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
               UpdateExpression: "set gamesUpdate = gamesUpdate + :inc, games = :gs"
             }));
             return;
-          } catch (err: any) {
-            count++;
+          } catch (innerErr: any) {
+            if (innerErr.name === 'ConditionalCheckFailedException') {
+                count++;
+            } else {
+                throw innerErr;
+            }
           }
         }
-        new Error(`updateUserGames: Unable to update games for user ${userId} after 3 retries`);
+        throw new Error(`updateUserGames: Unable to update games for user ${userId} after 3 retries`);
       } else {
-        new Error(err);
+        throw err;
       }
     }
   }
@@ -2900,14 +2930,14 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
   const work: Promise<any>[] = [];
   const sk = now + "#" + game.id;
   if (type === "COMPLETEDGAMES" && keepgame) {
-    work.push(ddbDocClient.send(new PutCommand({
+    work.push(sendCommandWithRetry(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
           "pk": type,
           "sk": sk,
           ...game}
       })));
-    work.push(ddbDocClient.send(new PutCommand({
+    work.push(sendCommandWithRetry(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: {
           "pk": type + "#" + game.metaGame,
@@ -2915,14 +2945,14 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
           ...game}
       })));
     game.players.forEach((player: { id: string; }) => {
-      work.push(ddbDocClient.send(new PutCommand({
+      work.push(sendCommandWithRetry(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: {
             "pk": type + "#" + player.id,
             "sk": sk,
             ...game}
         })));
-      work.push(ddbDocClient.send(new PutCommand({
+      work.push(sendCommandWithRetry(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: {
             "pk": type + "#" + game.metaGame + "#" + player.id,
@@ -2932,7 +2962,7 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
     });
   }
   if (type === "CURRENTGAMES") {
-    work.push(ddbDocClient.send(new UpdateCommand({
+    work.push(sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": game.metaGame },
@@ -2946,7 +2976,7 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
         update += ", #g.completedgames :n";
         eavObj[":n"] = 1
     }
-    work.push(ddbDocClient.send(new UpdateCommand({
+    work.push(sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": game.metaGame },
@@ -6542,7 +6572,7 @@ async function eventCreateGames(userid: string, pars: {eventid: string; pairs: P
                 }
             }
             // queue for update
-            const addGame = ddbDocClient.send(new PutCommand({
+            const addGame = sendCommandWithRetry(new PutCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
                   Item: {
                     "pk": "GAME",
@@ -6599,7 +6629,7 @@ async function eventCreateGames(userid: string, pars: {eventid: string; pairs: P
                 player2: pair.p2.id,
             };
             list.push(
-                ddbDocClient.send(new PutCommand({
+                sendCommandWithRetry(new PutCommand({
                     TableName: process.env.ABSTRACT_PLAY_TABLE,
                       Item: eventGame,
                 }))
