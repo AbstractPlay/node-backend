@@ -531,6 +531,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
         playersFull2[i].games = [];
     }
     const divisions: { [division: number]: {numGames: number, numCompleted: number, processed: boolean} } = {};
+    const randomStart = Math.random() < 0.5 ? 0 : 1;
     for (let division = 1; division <= numDivisions; division++) {
       divisions[division] = {numGames: 0, numCompleted: 0, processed: false};
       for (let i = 0; i < (division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall); i++) {
@@ -540,7 +541,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
           const player2 = player0 + j;
           const gameId = uuid();
           const gamePlayers: User[] = [];
-          if ((i + j) % 2 === 1) {
+          if ((i + j + randomStart) % 2 === 1) {
             gamePlayers.push(allGamePlayers[player1]);
             gamePlayers.push(allGamePlayers[player2]);
           } else {
