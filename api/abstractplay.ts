@@ -845,8 +845,11 @@ async function metaGamesDetails() {
   }
 }
 
-async function game(userid: string, pars: { id: string, cbit: string | number, metaGame: string }) {
+async function game(userid: string, pars: { id: string, cbit: string | number, metaGame: string, retryAttempt?: number }) {
   try {
+    if (pars.retryAttempt && pars.retryAttempt > 0) {
+      console.log(`get_game called with retry attempt ${pars.retryAttempt} for game ${pars.id}, metaGame ${pars.metaGame}`);
+    }
     if (pars.cbit !== 0 && pars.cbit !== 1 && pars.cbit !== "0" && pars.cbit !== "1") {
       return formatReturnError("cbit must be 0 or 1");
     }
