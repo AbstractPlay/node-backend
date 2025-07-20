@@ -317,14 +317,14 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": game.metaGame },
-      ExpressionAttributeValues: {":n": 1},
-      UpdateExpression: "add #g.currentgames :n"
+      ExpressionAttributeValues: {":n": 1, ":zero": 0},
+      UpdateExpression: "set #g.currentgames = if_not_exists(#g.currentgames, :zero) + :n"
     })));
   } else {
-    let update = "add #g.currentgames :nm";
-    const eavObj: {[k: string]: number} = {":nm": -1};
+    let update = "set #g.currentgames = if_not_exists(#g.currentgames, :zero) + :nm";
+    const eavObj: {[k: string]: number} = {":nm": -1, ":zero": 0};
     if (keepgame) {
-        update += ", #g.completedgames :n";
+        update += ", #g.completedgames = if_not_exists(#g.completedgames, :zero) + :n";
         eavObj[":n"] = 1
     }
     work.push(sendCommandWithRetry(new UpdateCommand({
