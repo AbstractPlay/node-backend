@@ -387,9 +387,9 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
     const updateChallenger = ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userid },
-      ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challengeId]), ":empty": new Set() },
+      ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challengeId]) },
       ExpressionAttributeNames: { "#c": "challenges" },
-      UpdateExpression: "set #c.standing = if_not_exists(#c.standing, :empty) ADD :c",
+      UpdateExpression: "add #c.standing :c",
     }));
 
     const updateStandingChallengeCnt = updateStandingChallengeCount(challenge.metaGame, 1);
