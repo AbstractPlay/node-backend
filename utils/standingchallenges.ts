@@ -439,7 +439,7 @@ async function updateStandingChallengeCount(metaGame: any, diff: number) {
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": metaGame },
-      ExpressionAttributeValues: {":n": diff},
-      UpdateExpression: "add #g.standingchallenges :n",
+      ExpressionAttributeValues: {":n": diff, ":zero": 0},
+      UpdateExpression: "set #g.standingchallenges = if_not_exists(#g.standingchallenges, :zero) + :n",
     }));
 }

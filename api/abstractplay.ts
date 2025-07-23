@@ -1182,8 +1182,8 @@ async function toggleStar(userid: string, pars: {metaGame: string}) {
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
                 Key: { "pk": "METAGAMES", "sk": "COUNTS" },
                 ExpressionAttributeNames: { "#g": pars.metaGame },
-                ExpressionAttributeValues: {":n": delta},
-                UpdateExpression: "add #g.stars :n",
+                ExpressionAttributeValues: {":n": delta, ":zero": 0},
+                UpdateExpression: "set #g.stars = if_not_exists(#g.stars, :zero) + :n",
             }))
         );
 
@@ -2687,8 +2687,8 @@ async function updateStandingChallengeCount(metaGame: any, diff: number) {
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "METAGAMES", "sk": "COUNTS" },
     ExpressionAttributeNames: { "#g": metaGame },
-    ExpressionAttributeValues: {":n": diff},
-    UpdateExpression: "add #g.standingchallenges :n",
+    ExpressionAttributeValues: {":n": diff, ":zero": 0},
+    UpdateExpression: "set #g.standingchallenges = if_not_exists(#g.standingchallenges, :zero) + :n",
   }));
 }
 
@@ -2969,14 +2969,14 @@ function addToGameLists(type: string, game: Game, now: number, keepgame: boolean
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": game.metaGame },
-      ExpressionAttributeValues: {":n": 1},
-      UpdateExpression: "add #g.currentgames :n"
+      ExpressionAttributeValues: {":n": 1, ":zero": 0},
+      UpdateExpression: "set #g.currentgames = if_not_exists(#g.currentgames, :zero) + :n"
     })));
   } else {
-    let update = "add #g.currentgames :nm";
-    const eavObj: {[k: string]: number} = {":nm": -1};
+    let update = "set #g.currentgames = if_not_exists(#g.currentgames, :zero) + :nm";
+    const eavObj: {[k: string]: number} = {":nm": -1, ":zero": 0};
     if (keepgame) {
-        update += ", #g.completedgames :n";
+        update += ", #g.completedgames = if_not_exists(#g.completedgames, :zero) + :n";
         eavObj[":n"] = 1
     }
     work.push(sendCommandWithRetry(new UpdateCommand({
@@ -3026,8 +3026,8 @@ function deleteFromGameLists(type: string, game: FullGame) {
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": game.metaGame },
-      ExpressionAttributeValues: {":n": -1},
-      UpdateExpression: "add #g.currentgames :n"
+      ExpressionAttributeValues: {":n": -1, ":zero": 0},
+      UpdateExpression: "set #g.currentgames = if_not_exists(#g.currentgames, :zero) + :n"
     })));
   }
   return Promise.all(work);
@@ -3326,8 +3326,8 @@ async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: n
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "TOURNAMENT", "sk": game.tournament },
     ExpressionAttributeNames: { "#d": "divisions", "#n": game.division!.toString() },
-    ExpressionAttributeValues: { ":inc": 1 },
-    UpdateExpression: "add #d.#n.numCompleted :inc",
+    ExpressionAttributeValues: { ":inc": 1, ":zero": 0 },
+    UpdateExpression: "set #d.#n.numCompleted = if_not_exists(#d.#n.numCompleted, :zero) + :inc",
     ReturnValues: "ALL_NEW"
   }));
   const tournament = tournamentData.Attributes as Tournament;
