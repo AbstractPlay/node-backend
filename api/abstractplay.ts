@@ -125,11 +125,6 @@ type FullUser = {
     accepted: string[];
     standing: string[];
   }
-  // New top-level challenge attributes for migration
-  challenges_issued?: string[];
-  challenges_received?: string[];
-  challenges_accepted?: string[];
-  challenges_standing?: string[];
   admin: boolean | undefined;
   organizer: boolean|undefined;
   language: string;
@@ -836,13 +831,7 @@ async function metaGamesDetails() {
     // Change every "ratings" to the number of elements in the Set.
     const details2 = Object.keys(details)
       .filter(key => key !== "pk" && key !== "sk")
-      .reduce( (a, k) => ({
-        ...a, 
-        [k]: { 
-          ...details[k], 
-          "ratings": ((details as any)[k + "_ratings"]?.size ?? 0) + (details[k]?.ratings?.size ?? 0)
-        }
-      }), {})
+      .reduce( (a, k) => ({...a, [k]: { ...details[k], "ratings" : details[k].ratings?.size ?? 0}}), {})
     // console.log(`Details2:\n${JSON.stringify(details2, undefined, 2)}`);
     return {
       statusCode: 200,
@@ -1518,22 +1507,10 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
     console.log(`Fetching challenges`);
     let tagData, paletteData, standingData;
     if (!pars || !pars.size || pars.size !== "small") {
-      const challengesIssuedIDs: string[] = Array.from(new Set([
-        ...(user?.challenges_issued ?? []),
-        ...(user?.challenges?.issued ?? [])
-      ]));
-      const challengesReceivedIDs: string[] = Array.from(new Set([
-        ...(user?.challenges_received ?? []),
-        ...(user?.challenges?.received ?? [])
-      ]));
-      const challengesAcceptedIDs: string[] = Array.from(new Set([
-        ...(user?.challenges_accepted ?? []),
-        ...(user?.challenges?.accepted ?? [])
-      ]));
-      const standingChallengeIDs: string[] = Array.from(new Set([
-        ...(user?.challenges_standing ?? []),
-        ...(user?.challenges?.standing ?? [])
-      ]));
+      const challengesIssuedIDs: string[] = user?.challenges?.issued ?? [];
+      const challengesReceivedIDs: string[] = user?.challenges?.received ?? [];
+      const challengesAcceptedIDs: string[] = user?.challenges?.accepted ?? [];
+      const standingChallengeIDs: string[] = user?.challenges?.standing ?? [];
       const challengesIssued = getChallenges(challengesIssuedIDs);
       const challengesReceived = getChallenges(challengesReceivedIDs);
       const challengesAccepted = getChallenges(challengesAcceptedIDs);
@@ -2209,8 +2186,8 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "USER", "sk": userid },
     ExpressionAttributeValues: { ":c": new Set([challengeId]) },
-    ExpressionAttributeNames: { "#ci": "challenges_issued" },
-    UpdateExpression: "add #ci :c",
+    ExpressionAttributeNames: { "#c": "challenges" },
+    UpdateExpression: "add #c.issued :c",
   }));
 
   const list: Promise<any>[] = [addChallenge, updateChallenger];
@@ -2221,8 +2198,8 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: { "pk": "USER", "sk": challengee.id },
           ExpressionAttributeValues: { ":c": new Set([challengeId]) },
-          ExpressionAttributeNames: { "#cr": "challenges_received" },
-          UpdateExpression: "add #cr :c",
+          ExpressionAttributeNames: { "#c": "challenges" },
+          UpdateExpression: "add #c.received :c",
         }))
       );
     })
@@ -2290,8 +2267,8 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "USER", "sk": userid },
     ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challengeId]) },
-    ExpressionAttributeNames: { "#cs": "challenges_standing" },
-    UpdateExpression: "add #cs :c",
+    ExpressionAttributeNames: { "#c": "challenges" },
+    UpdateExpression: "add #c.standing :c",
   }));
 
   const updateStandingChallengeCnt = updateStandingChallengeCount(challenge.metaGame, 1);
@@ -2620,8 +2597,8 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": challenge.challenger.id },
       ExpressionAttributeValues: { ":c": new Set([challenge.id]) },
-      ExpressionAttributeNames: { "#c": "challenges", "#ci": "challenges_issued" },
-      UpdateExpression: "delete #c.issued :c, #ci :c",
+      ExpressionAttributeNames: { "#c": "challenges" },
+      UpdateExpression: "delete #c.issued :c",
     }));
     list.push(updateChallenger);
     // Remove from challenged
@@ -2631,8 +2608,8 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: { "pk": "USER", "sk": challengee.id },
           ExpressionAttributeValues: { ":c": new Set([challenge.id]) },
-          ExpressionAttributeNames: { "#c": "challenges", "#cr": "challenges_received" },
-          UpdateExpression: "delete #c.received :c, #cr :c",
+          ExpressionAttributeNames: { "#c": "challenges" },
+          UpdateExpression: "delete #c.received :c",
         }))
       );
     })
@@ -2647,8 +2624,8 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": challenge.challenger.id },
       ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challenge.id]) },
-      ExpressionAttributeNames: { "#c": "challenges", "#cs": "challenges_standing" },
-      UpdateExpression: "delete #c.standing :c, #cs :c",
+      ExpressionAttributeNames: { "#c": "challenges" },
+      UpdateExpression: "delete #c.standing :c",
     }));
     list.push(updateChallenger);
   }
@@ -2667,8 +2644,8 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "USER", "sk": player.id },
         ExpressionAttributeValues: { ":c": new Set([standing ? challenge.metaGame + '#' + challenge.id : challenge.id]) },
-        ExpressionAttributeNames: { "#c": "challenges", "#ca": "challenges_accepted" },
-        UpdateExpression: "delete #c.accepted :c, #ca :c",
+        ExpressionAttributeNames: { "#c": "challenges" },
+        UpdateExpression: "delete #c.accepted :c",
       }))
     );
   });
@@ -2866,8 +2843,8 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userid },
       ExpressionAttributeValues: { ":c": new Set([standing ? challenge.metaGame + '#' + challengeId : challengeId]) },
-      ExpressionAttributeNames: { "#cr": "challenges_received", "#ca": "challenges_accepted", "#c": "challenges" },
-      UpdateExpression: "delete #c.received :c, #cr :c add #ca :c",
+      ExpressionAttributeNames: { "#c": "challenges" },
+      UpdateExpression: "delete #c.received :c add #c.accepted :c",
     }));
 
     await Promise.all([updateChallenge, updateAccepter]);
@@ -2908,8 +2885,8 @@ async function duplicateStandingChallenge(challenge: { [x: string]: any; metaGam
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "USER", "sk": challenge.challenger.id },
     ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challengeId]) },
-    ExpressionAttributeNames: { "#cs": "challenges_standing" },
-    UpdateExpression: "add #cs :c",
+    ExpressionAttributeNames: { "#c": "challenges" },
+    UpdateExpression: "add #c.standing :c",
   }));
 
   return {challengeId, "work": Promise.all([addChallenge, updateStandingChallengeCnt, updateChallenger])};
@@ -3272,10 +3249,9 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         list.push(ddbDocClient.send(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-          ExpressionAttributeNames: { "#gr": game.metaGame + "_ratings", "#g": game.metaGame },
-          ExpressionAttributeValues: {":p": new Set([player.id]), ":user_id": player.id},
-          UpdateExpression: "add #gr :p",
-          ConditionExpression: "NOT contains(#g.ratings, :user_id)",
+          ExpressionAttributeNames: { "#g": game.metaGame },
+          ExpressionAttributeValues: {":p": new Set([player.id])},
+          UpdateExpression: "add #g.ratings :p",
         })));
         console.log(`Scheduled update to metagame ratings counts with player ${player.id}`);
       }
@@ -3735,10 +3711,9 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
       work.push(ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-        ExpressionAttributeNames: { "#gr": game.metaGame + "_ratings", "#g": game.metaGame },
-        ExpressionAttributeValues: {":p": new Set([player.id]), ":user_id": player.id},
-        UpdateExpression: "add #gr :p",
-        ConditionExpression: "NOT contains(#g.ratings, :user_id)",
+        ExpressionAttributeNames: { "#g": game.metaGame },
+        ExpressionAttributeValues: {":p": new Set([player.id])},
+        UpdateExpression: "add #g.ratings :p",
       })));
     }
   });
@@ -7221,15 +7196,12 @@ async function updateMetaGameRatings(userId: string) {
     const metaGameCounts = metaGamesData.Item as MetaGameCounts;
     Object.keys(ratings).forEach(metaGame => {
       if (metaGameCounts[metaGame] === undefined)
-        metaGameCounts[metaGame] = {currentgames: 0, completedgames: 0, standingchallenges: 0};
-      
-      // Use new flattened ratings structure
-      const flattenedKey = `${metaGame}_ratings`;
-      const ratingsSet = new Set<string>();
-      
+        metaGameCounts[metaGame] = {currentgames: 0, completedgames: 0, standingchallenges: 0, ratings: new Set()};
       ratings[metaGame].forEach(rating => {
-        ratingsSet.add(rating.player);
-        work.push(sendCommandWithRetry(
+        if (metaGameCounts[metaGame].ratings === undefined)
+          metaGameCounts[metaGame].ratings = new Set();
+        metaGameCounts[metaGame].ratings!.add(rating.player);
+        work.push(ddbDocClient.send(
           new PutCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
               Item: {
@@ -7242,15 +7214,9 @@ async function updateMetaGameRatings(userId: string) {
             })
         ));
       });
-      
-      // Set new flattened ratings and remove old nested ratings if it exists
-      (metaGameCounts as any)[flattenedKey] = ratingsSet;
-      if (metaGameCounts[metaGame].ratings) {
-        delete metaGameCounts[metaGame].ratings;
-      }
     });
 
-    work.push(sendCommandWithRetry(
+    work.push(ddbDocClient.send(
       new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: {
@@ -7537,10 +7503,7 @@ async function botManageChallenges() {
         games= [];
 
       console.log(`Fetching challenges`);
-      const challengesReceivedIDs: string[] = [
-        ...(user?.challenges_received ?? []),
-        ...(user?.challenges?.received ?? [])
-      ];
+      const challengesReceivedIDs: string[] = user?.challenges?.received ?? [];
       const data = await getChallenges(challengesReceivedIDs);
       const challengesReceived = data.map(r => r.Item as FullChallenge);
       console.log(`Got the following challenges:\n${JSON.stringify(challengesReceived, null, 2)}`);
@@ -8129,171 +8092,3 @@ const getAllUsers = async (): Promise<FullUser[]> => {
     }
     return result
 }
-
-export const migrateChallenges = async (): Promise<any> => {
-  try {
-    console.log('Starting challenge data migration...');
-    
-    const users = await getAllUsers();
-    const userChallengeData = users.filter(user => user.challenges);
-    
-    console.log(`Found ${userChallengeData.length} users with challenge data out of ${users.length} total users`);
-    
-    const migrationResults = {
-      totalUsers: users.length,
-      usersWithChallenges: userChallengeData.length,
-      migratedUsers: 0,
-      errors: [] as string[]
-    };
-
-    for (const user of userChallengeData) {
-      try {
-        const updates: any[] = [];
-        
-        if (user.challenges.issued && user.challenges.issued.length > 0) {
-          updates.push({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USER", "sk": user.id },
-            UpdateExpression: "ADD challenges_issued :ci",
-            ExpressionAttributeValues: { ":ci": user.challenges.issued }
-          });
-        }
-        
-        if (user.challenges.received && user.challenges.received.length > 0) {
-          updates.push({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USER", "sk": user.id },
-            UpdateExpression: "ADD challenges_received :cr",
-            ExpressionAttributeValues: { ":cr": user.challenges.received }
-          });
-        }
-        
-        if (user.challenges.standing && user.challenges.standing.length > 0) {
-          updates.push({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USER", "sk": user.id },
-            UpdateExpression: "ADD challenges_standing :cs",
-            ExpressionAttributeValues: { ":cs": user.challenges.standing }
-          });
-        }
-        
-        if (user.challenges.accepted && user.challenges.accepted.length > 0) {
-          updates.push({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USER", "sk": user.id },
-            UpdateExpression: "ADD challenges_accepted :ca",
-            ExpressionAttributeValues: { ":ca": user.challenges.accepted }
-          });
-        }
-
-        if (updates.length > 0) {
-          // First, migrate to new top-level attributes
-          await Promise.all(updates.map(update => sendCommandWithRetry(new UpdateCommand(update))));
-          
-          // Then delete the old nested attributes to prevent duplicates
-          const removeAttributes = [];
-          if (user.challenges.issued && user.challenges.issued.length > 0) {
-            removeAttributes.push("challenges.issued");
-          }
-          if (user.challenges.received && user.challenges.received.length > 0) {
-            removeAttributes.push("challenges.received");
-          }
-          if (user.challenges.standing && user.challenges.standing.length > 0) {
-            removeAttributes.push("challenges.standing");
-          }
-          if (user.challenges.accepted && user.challenges.accepted.length > 0) {
-            removeAttributes.push("challenges.accepted");
-          }
-          
-          if (removeAttributes.length > 0) {
-            await sendCommandWithRetry(new UpdateCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Key: { "pk": "USER", "sk": user.id },
-              UpdateExpression: `REMOVE ${removeAttributes.join(", ")}`,
-            }));
-          }
-          
-          migrationResults.migratedUsers++;
-          console.log(`Migrated user ${user.id} (${migrationResults.migratedUsers}/${userChallengeData.length})`);
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 10));
-        
-      } catch (error) {
-        const errorMsg = `Failed to migrate user ${user.id}: ${error}`;
-        migrationResults.errors.push(errorMsg);
-        console.error(errorMsg);
-      }
-    }
-    
-    console.log('Challenge migration completed:', migrationResults);
-    return migrationResults;
-    
-  } catch (error) {
-    console.error('Challenge migration failed:', error);
-    throw error;
-  }
-};
-
-export const migrateMetagamesRatings = async (): Promise<any> => {
-  try {
-    console.log('Starting METAGAMES ratings migration...');
-    
-    const metagamesData = await sendCommandWithRetry(new GetCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "METAGAMES", "sk": "COUNTS" }
-    })) as any;
-    
-    if (!metagamesData.Item) {
-      console.log('No METAGAMES data found');
-      return { success: false, message: 'No METAGAMES data found' };
-    }
-    
-    const details = metagamesData.Item as MetaGameCounts;
-    const migrationResults = {
-      totalMetaGames: 0,
-      migratedMetaGames: 0,
-      errors: [] as string[]
-    };
-    
-    // Create new object in memory with flattened ratings
-    const migratedDetails = { ...details };
-    
-    Object.keys(details).forEach(key => {
-      if (key !== "pk" && key !== "sk" && details[key]?.ratings) {
-        migrationResults.totalMetaGames++;
-        
-        // Add new flattened ratings attribute, merging with any existing data
-        const newAttributeName = key + "_ratings";
-        const existingRatings = (migratedDetails as any)[newAttributeName] || new Set();
-        const oldRatings = details[key].ratings || new Set();
-        (migratedDetails as any)[newAttributeName] = new Set([...existingRatings, ...oldRatings]);
-        
-        // Remove old nested ratings attribute
-        delete migratedDetails[key].ratings;
-        
-        migrationResults.migratedMetaGames++;
-        console.log(`Migrated ${key}: ${details[key].ratings?.size ?? 0} ratings`);
-      }
-    });
-    
-    if (migrationResults.migratedMetaGames > 0) {
-      // Single PUT operation to replace the entire record
-      await sendCommandWithRetry(new PutCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: migratedDetails
-      }));
-      
-      console.log(`Successfully migrated ${migrationResults.migratedMetaGames} METAGAMES ratings`);
-    } else {
-      console.log('No ratings found to migrate');
-    }
-    
-    console.log('METAGAMES migration completed:', migrationResults);
-    return migrationResults;
-    
-  } catch (error) {
-    console.error('METAGAMES migration failed:', error);
-    throw error;
-  }
-};
