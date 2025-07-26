@@ -606,6 +606,10 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await endATournament(event.cognitoPoolClaims.sub, pars);
     case "start_tournament":
         return await startATournament(event.cognitoPoolClaims.sub, pars);
+    case "migrate_challenges":
+        return await migrateChallenges(event.cognitoPoolClaims.sub);
+    case "migrate_rating_counts":
+        return await migrateMetagamesRatings(event.cognitoPoolClaims.sub);
     default:
       return {
         statusCode: 500,
@@ -1978,7 +1982,6 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
       "anonymous": pars.anonymous,
       "country": pars.country,
       "tagline": pars.tagline,
-      "challenges" : {},
       "settings": {
         "all": {
          "annotate": true,
@@ -8131,8 +8134,25 @@ const getAllUsers = async (): Promise<FullUser[]> => {
     return result
 }
 
-export const migrateChallenges = async (): Promise<any> => {
+async function migrateChallenges(userId: string) {
+  // Make sure people aren't getting clever
   try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+
     console.log('Starting challenge data migration...');
     
     const users = await getAllUsers();
@@ -8236,8 +8256,25 @@ export const migrateChallenges = async (): Promise<any> => {
   }
 };
 
-export const migrateMetagamesRatings = async (): Promise<any> => {
+async function migrateMetagamesRatings(userId: string) {
+  // Make sure people aren't getting clever
   try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+
     console.log('Starting METAGAMES ratings migration...');
     
     const metagamesData = await sendCommandWithRetry(new GetCommand({
