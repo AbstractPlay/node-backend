@@ -2616,20 +2616,25 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
 
   if (!standing) {
     // Remove from challenger
-    list.push(deleteChallengeFromBothLocations(
-      challenge.challenger.id,
-      new Set([challenge.id]),
-      "issued",
-      "challenges_issued"
-    ));
+    const updateChallenger = ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USER", "sk": challenge.challenger.id },
+      ExpressionAttributeValues: { ":c": new Set([challenge.id]) },
+      ExpressionAttributeNames: { "#c": "challenges", "#ci": "challenges_issued" },
+      UpdateExpression: "delete #c.issued :c, #ci :c",
+    }));
+    list.push(updateChallenger);
     // Remove from challenged
     challenge.challengees.forEach((challengee: { id: string; }) => {
-      list.push(deleteChallengeFromBothLocations(
-        challengee.id,
-        new Set([challenge.id]),
-        "received",
-        "challenges_received"
-      ));
+      list.push(
+        ddbDocClient.send(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { "pk": "USER", "sk": challengee.id },
+          ExpressionAttributeValues: { ":c": new Set([challenge.id]) },
+          ExpressionAttributeNames: { "#c": "challenges", "#cr": "challenges_received" },
+          UpdateExpression: "delete #c.received :c, #cr :c",
+        }))
+      );
     })
   } else if (
       revoked
@@ -2638,12 +2643,14 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
       ) {
     // Remove from challenger
     console.log(`removing duplicated challenge ${standing ? challenge.metaGame + '#' + challenge.id : challenge.id} from challenger ${challenge.challenger.id}`);
-    list.push(deleteChallengeFromBothLocations(
-      challenge.challenger.id,
-      new Set([challenge.metaGame + '#' + challenge.id]),
-      "standing",
-      "challenges_standing"
-    ));
+    const updateChallenger = ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USER", "sk": challenge.challenger.id },
+      ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challenge.id]) },
+      ExpressionAttributeNames: { "#c": "challenges", "#cs": "challenges_standing" },
+      UpdateExpression: "delete #c.standing :c, #cs :c",
+    }));
+    list.push(updateChallenger);
   }
 
   // Remove from players that have already accepted
@@ -2655,12 +2662,15 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
   }
   playersToUpdate.forEach((player: { id: string; }) => {
     console.log(`removing challenge ${standing ? challenge.metaGame + '#' + challenge.id : challenge.id} from ${player.id}`);
-    list.push(deleteChallengeFromBothLocations(
-      player.id,
-      new Set([standing ? challenge.metaGame + '#' + challenge.id : challenge.id]),
-      "accepted",
-      "challenges_accepted"
-    ));
+    list.push(
+      ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER", "sk": player.id },
+        ExpressionAttributeValues: { ":c": new Set([standing ? challenge.metaGame + '#' + challenge.id : challenge.id]) },
+        ExpressionAttributeNames: { "#c": "challenges", "#ca": "challenges_accepted" },
+        UpdateExpression: "delete #c.accepted :c, #ca :c",
+      }))
+    );
   });
 
   // Remove challenge
@@ -2852,25 +2862,15 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       ({challengeId, work: updateChallenge} = await duplicateStandingChallenge(challenge, newplayer));
     }
     // Update accepter
-    const challengeValue = new Set([standing ? challenge.metaGame + '#' + challengeId : challengeId]);
-    
-    // Delete from received challenges (both locations)
-    const deleteFromReceived = deleteChallengeFromBothLocations(
-      userid,
-      challengeValue,
-      "received", 
-      "challenges_received"
-    );
-    
-    // Add to accepted challenges (top-level only)
-    const addToAccepted = sendCommandWithRetry(new UpdateCommand({
+    const updateAccepter = ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userid },
-      UpdateExpression: "ADD challenges_accepted :c",
-      ExpressionAttributeValues: { ":c": challengeValue }
+      ExpressionAttributeValues: { ":c": new Set([standing ? challenge.metaGame + '#' + challengeId : challengeId]) },
+      ExpressionAttributeNames: { "#cr": "challenges_received", "#ca": "challenges_accepted", "#c": "challenges" },
+      UpdateExpression: "delete #c.received :c, #cr :c add #ca :c",
     }));
 
-    await Promise.all([updateChallenge, deleteFromReceived, addToAccepted]);
+    await Promise.all([updateChallenge, updateAccepter]);
     return;
   }
 }
@@ -8297,43 +8297,3 @@ export const migrateMetagamesRatings = async (): Promise<any> => {
     throw error;
   }
 };
-
-// Helper function to safely delete from both nested and top-level challenge attributes
-async function deleteChallengeFromBothLocations(
-  userId: string, 
-  challengeValue: Set<string>, 
-  nestedAttr: string, 
-  topLevelAttr: string
-): Promise<void> {
-  const promises: Promise<any>[] = [];
-  
-  // Delete from nested attribute (this should always work)
-  promises.push(
-    sendCommandWithRetry(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USER", "sk": userId },
-      UpdateExpression: `DELETE #c.${nestedAttr} :c`,
-      ExpressionAttributeNames: { "#c": "challenges" },
-      ExpressionAttributeValues: { ":c": challengeValue }
-    }))
-  );
-  
-  // Delete from top-level attribute (might not exist, so catch errors)
-  promises.push(
-    sendCommandWithRetry(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USER", "sk": userId },
-      UpdateExpression: `DELETE ${topLevelAttr} :c`,
-      ExpressionAttributeValues: { ":c": challengeValue }
-    })).catch(error => {
-      // Ignore errors if the attribute doesn't exist
-      if (error.name === 'ValidationException' && error.message.includes('does not exist')) {
-        console.log(`Top-level attribute ${topLevelAttr} doesn't exist for user ${userId}, skipping`);
-      } else {
-        throw error;
-      }
-    })
-  );
-  
-  await Promise.all(promises);
-}

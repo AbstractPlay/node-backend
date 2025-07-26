@@ -62,11 +62,6 @@ type FullUser = {
     accepted: string[];
     standing: string[];
   }
-  // New top-level challenge attributes for migration
-  challenges_issued?: string[];
-  challenges_received?: string[];
-  challenges_accepted?: string[];
-  challenges_standing?: string[];
   admin: boolean | undefined;
   language: string;
   country: string;
@@ -195,12 +190,8 @@ export const handler: Handler = async (event: any, context?: any) => {
           // count number of metagame games and challenges
           let metaCount = 0;
           const matchingChallenges: string[] = [];
-          const userStandingChallenges = [
-            ...(user.challenges_standing ?? []),
-            ...(user.challenges?.standing ?? [])
-          ];
-          if (userStandingChallenges.length > 0) {
-            for (const challenge of userStandingChallenges) {
+          if (user.challenges.standing !== undefined) {
+            for (const challenge of user.challenges.standing) {
                 if (challenge.startsWith(entry.metaGame)) {
                     metaCount++;
                     matchingChallenges.push(challenge);
@@ -397,8 +388,8 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userid },
       ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challengeId]) },
-      ExpressionAttributeNames: { "#cs": "challenges_standing" },
-      UpdateExpression: "add #cs :c",
+      ExpressionAttributeNames: { "#c": "challenges" },
+      UpdateExpression: "add #c.standing :c",
     }));
 
     const updateStandingChallengeCnt = updateStandingChallengeCount(challenge.metaGame, 1);
