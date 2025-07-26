@@ -8020,7 +8020,8 @@ export function logGetItemError(err: unknown) {
   }
   if (!(err as { code: any; message: any; }).code) {
     console.error(`An exception occurred, investigate and configure retry strategy. Error: ${JSON.stringify(err)}`);
-    console.error(err);
+    console.error('Full error object:', err);
+    console.error('Stack trace:', new Error().stack);
     return;
   }
   // here are no API specific errors to handle for GetItem, common DynamoDB API errors are handled below
