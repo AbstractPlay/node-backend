@@ -44,7 +44,7 @@ type MetaGameCounts = {
     currentgames: number;
     completedgames: number;
     standingchallenges: number;
-    ratings?: Set<string>;
+    ratings?: string[];
     stars?: number;
     tags?: string[];
   }
@@ -844,7 +844,7 @@ async function metaGamesDetails() {
         ...a, 
         [k]: { 
           ...details[k], 
-          "ratings": ((details as any)[k + "_ratings"]?.size ?? 0) + (details[k]?.ratings?.size ?? 0)
+          "ratings": ((details as any)[k + "_ratings"]?.length ?? 0) + (details[k]?.ratings?.length ?? 0)
         }
       }), {})
     // console.log(`Details2:\n${JSON.stringify(details2, undefined, 2)}`);
@@ -7228,10 +7228,12 @@ async function updateMetaGameRatings(userId: string) {
       
       // Use new flattened ratings structure
       const flattenedKey = `${metaGame}_ratings`;
-      const ratingsSet = new Set<string>();
+      const ratingsArray: string[] = [];
       
       ratings[metaGame].forEach(rating => {
-        ratingsSet.add(rating.player);
+        if (!ratingsArray.includes(rating.player)) {
+          ratingsArray.push(rating.player);
+        }
         work.push(sendCommandWithRetry(
           new PutCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -7247,7 +7249,7 @@ async function updateMetaGameRatings(userId: string) {
       });
       
       // Set new flattened ratings and remove old nested ratings if it exists
-      (metaGameCounts as any)[flattenedKey] = ratingsSet;
+      (metaGameCounts as any)[flattenedKey] = ratingsArray;
       if (metaGameCounts[metaGame].ratings) {
         delete metaGameCounts[metaGame].ratings;
       }
@@ -8303,9 +8305,9 @@ async function migrateMetagamesRatings(userId: string) {
         
         // Add new flattened ratings attribute, merging with any existing data
         const newAttributeName = key + "_ratings";
-        const existingRatings = (migratedDetails as any)[newAttributeName] || new Set();
-        const oldRatings = details[key].ratings || new Set();
-        (migratedDetails as any)[newAttributeName] = new Set([...existingRatings, ...oldRatings]);
+        const existingRatings = (migratedDetails as any)[newAttributeName] || [];
+        const oldRatings = details[key].ratings || [];
+        (migratedDetails as any)[newAttributeName] = [...new Set([...existingRatings, ...oldRatings])];
         
         // Remove old nested ratings attribute
         delete migratedDetails[key].ratings;
