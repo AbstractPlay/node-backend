@@ -3278,7 +3278,6 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
           ExpressionAttributeNames: { "#gr": game.metaGame + "_ratings", "#g": game.metaGame },
           ExpressionAttributeValues: {":p": new Set([player.id]), ":user_id": player.id},
           UpdateExpression: "add #gr :p",
-          ConditionExpression: "NOT contains(#g.ratings, :user_id)",
         })));
         console.log(`Scheduled update to metagame ratings counts with player ${player.id}`);
       }
