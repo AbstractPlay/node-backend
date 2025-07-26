@@ -8311,7 +8311,7 @@ async function migrateMetagamesRatings(userId: string) {
         delete migratedDetails[key].ratings;
         
         migrationResults.migratedMetaGames++;
-        console.log(`Migrated ${key}: ${details[key].ratings?.size ?? 0} ratings`);
+        console.log(`Migrated ${key}: ${details[key].ratings?.length ?? 0} ratings`);
       }
     });
     
