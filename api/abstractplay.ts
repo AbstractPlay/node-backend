@@ -8307,7 +8307,7 @@ async function migrateMetagamesRatings(userId: string) {
         const newAttributeName = key + "_ratings";
         const existingRatings = (migratedDetails as any)[newAttributeName] || [];
         const oldRatings = details[key].ratings || [];
-        (migratedDetails as any)[newAttributeName] = [...new Set([...existingRatings, ...oldRatings])];
+        (migratedDetails as any)[newAttributeName] = new Set([...existingRatings, ...oldRatings]);
         
         // Remove old nested ratings attribute
         delete migratedDetails[key].ratings;
