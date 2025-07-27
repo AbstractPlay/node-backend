@@ -3276,7 +3276,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: { "pk": "METAGAMES", "sk": "COUNTS" },
           ExpressionAttributeNames: { "#gr": game.metaGame + "_ratings" },
-          ExpressionAttributeValues: {":p": new Set([player.id]), ":user_id": player.id},
+          ExpressionAttributeValues: { ":p": new Set([player.id]) },
           UpdateExpression: "add #gr :p",
         })));
         console.log(`Scheduled update to metagame ratings counts with player ${player.id}`);
