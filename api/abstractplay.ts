@@ -428,6 +428,93 @@ async function sendCommandWithRetry(command: any, maxRetries = 8, initialDelay =
     }
 }
 
+async function verifyAndCorrectCountWithData(metaGame: string, countType: "currentgames" | "completedgames" | "standingchallenges", actualCount: number, countsData: any) {
+    try {
+        if (!countsData.Item) {
+            console.log(`No METAGAMES COUNTS found, creating initial record for ${metaGame}`);
+            await ddbDocClient.send(new UpdateCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+                ExpressionAttributeNames: { "#g": metaGame },
+                ExpressionAttributeValues: { ":count": actualCount },
+                UpdateExpression: `set #g.${countType} = :count`
+            }));
+            console.log(`Initialized ${countType} for ${metaGame} to ${actualCount}`);
+            return;
+        }
+        
+        const details = countsData.Item as MetaGameCounts;
+        const storedCount = details[metaGame]?.[countType] || 0;
+        
+        if (storedCount !== actualCount) {
+            console.log(`Count mismatch for ${metaGame}.${countType}: stored=${storedCount}, actual=${actualCount}. Correcting...`);
+            
+            await ddbDocClient.send(new UpdateCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+                ExpressionAttributeNames: { "#g": metaGame },
+                ExpressionAttributeValues: { ":count": actualCount },
+                UpdateExpression: `set #g.${countType} = :count`
+            }));
+            
+            console.log(`Corrected ${countType} for ${metaGame} from ${storedCount} to ${actualCount}`);
+        }
+    } catch (error) {
+        console.error(`Error verifying/correcting count for ${metaGame}.${countType}:`, error);
+        // Don't throw - we don't want to break the main query if count correction fails
+    }
+}
+
+async function verifyAndCorrectRatingsCountWithData(metaGame: string, actualRatings: any[], countsData: any) {
+    try {
+        // Extract unique player IDs from actual ratings data as a Set
+        const actualPlayerIds = new Set(actualRatings.map(rating => rating.sk));
+        const actualCount = actualPlayerIds.size;
+        
+        if (!countsData.Item && actualCount > 0) {
+            console.log(`No METAGAMES COUNTS found, creating initial ratings record for ${metaGame}`);
+            await ddbDocClient.send(new UpdateCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+                ExpressionAttributeNames: { "#gr": metaGame + "_ratings" },
+                ExpressionAttributeValues: { ":players": actualPlayerIds },
+                UpdateExpression: `set #gr = :players`
+            }));
+            console.log(`Initialized ratings for ${metaGame} with ${actualCount} players`);
+            return;
+        }
+        
+        const details = countsData.Item as any;
+        const storedPlayerIds = details[metaGame + "_ratings"] || new Set();
+        const storedCount = storedPlayerIds.size;
+        
+        if (storedCount !== actualCount || !setsEqual(storedPlayerIds, actualPlayerIds)) {
+            console.log(`Ratings mismatch for ${metaGame}: stored=${storedCount} players, actual=${actualCount} players. Updating player list...`);
+            
+            await ddbDocClient.send(new UpdateCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+                ExpressionAttributeNames: { "#gr": metaGame + "_ratings" },
+                ExpressionAttributeValues: { ":players": actualPlayerIds },
+                UpdateExpression: `set #gr = :players`
+            }));
+            
+            console.log(`Updated ratings list for ${metaGame} from ${storedCount} to ${actualCount} players`);
+        }
+    } catch (error) {
+        console.error(`Error verifying/correcting ratings for ${metaGame}:`, error);
+        // Don't throw - we don't want to break the main query if count correction fails
+    }
+}
+
+function setsEqual(a: Set<any>, b: Set<any>): boolean {
+    if (a.size !== b.size) return false;
+    for (let item of a) {
+        if (!b.has(item)) return false;
+    }
+    return true;
+}
+
 module.exports.query = async (event: { queryStringParameters: any; }) => {
   console.log(event);
   const pars = event.queryStringParameters;
@@ -672,16 +759,36 @@ async function challengeDetails(pars: { id: string; }) {
 async function games(pars: { metaGame: string, type: string; }) {
   const game = pars.metaGame;
   console.log(game);
+  
+  // Start fetching counts in parallel
+  const countsPromise = ddbDocClient.send(
+    new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        "pk": "METAGAMES", "sk": "COUNTS"
+      },
+    })
+  );
+  
   if (pars.type === "current") {
     try {
-      const gamesData = await ddbDocClient.send(
-        new QueryCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-          ExpressionAttributeValues: { ":pk": "GAME", ":sk": game + '#0#' },
-          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        }));
+      const [gamesData, countsData] = await Promise.all([
+        ddbDocClient.send(
+          new QueryCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+            ExpressionAttributeValues: { ":pk": "GAME", ":sk": game + '#0#' },
+            ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+          })),
+        countsPromise
+      ]);
+      
       const gamelist = gamesData.Items as FullGame[];
+      
+      // Verify and correct current games count
+      const actualCount = gamelist.length;
+      await verifyAndCorrectCountWithData(game, "currentgames", actualCount, countsData);
+      
       const returnlist = gamelist.map(g => {
         const state = GameFactory(g.metaGame, g.state); // JSON.parse(g.state);
         if (state === undefined) {
@@ -701,13 +808,21 @@ async function games(pars: { metaGame: string, type: string; }) {
     }
   } else if (pars.type === "completed") {
     try {
-      const gamesData = await ddbDocClient.send(
-        new QueryCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          KeyConditionExpression: "#pk = :pk",
-          ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES#" + game },
-          ExpressionAttributeNames: { "#pk": "pk" }
-        }));
+      const [gamesData, countsData] = await Promise.all([
+        ddbDocClient.send(
+          new QueryCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            KeyConditionExpression: "#pk = :pk",
+            ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES#" + game },
+            ExpressionAttributeNames: { "#pk": "pk" }
+          })),
+        countsPromise
+      ]);
+      
+      // Verify and correct completed games count
+      const actualCount = gamesData.Items?.length || 0;
+      await verifyAndCorrectCountWithData(game, "completedgames", actualCount, countsData);
+      
       return {
         statusCode: 200,
         body: JSON.stringify(gamesData.Items),
@@ -725,14 +840,33 @@ async function games(pars: { metaGame: string, type: string; }) {
 
 async function ratings(pars: { metaGame: string }) {
   const game = pars.metaGame;
+  
+  // Start fetching counts in parallel
+  const countsPromise = ddbDocClient.send(
+    new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        "pk": "METAGAMES", "sk": "COUNTS"
+      },
+    })
+  );
+  
   try {
-    const ratingsData = await ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "RATINGS#" + game },
-        ExpressionAttributeNames: { "#pk": "pk" }
-      }));
+    const [ratingsData, countsData] = await Promise.all([
+      ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "#pk = :pk",
+          ExpressionAttributeValues: { ":pk": "RATINGS#" + game },
+          ExpressionAttributeNames: { "#pk": "pk" }
+        })),
+      countsPromise
+    ]);
+    
+    // Verify and correct ratings count
+    const actualRatings = ratingsData.Items || [];
+    await verifyAndCorrectRatingsCountWithData(game, actualRatings, countsData);
+    
     return {
       statusCode: 200,
       body: JSON.stringify(ratingsData.Items),
@@ -748,17 +882,36 @@ async function ratings(pars: { metaGame: string }) {
 async function standingChallenges(pars: { metaGame: string; }) {
   const game = pars.metaGame;
   console.log(game);
+  
+  // Start fetching counts in parallel
+  const countsPromise = ddbDocClient.send(
+    new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        "pk": "METAGAMES", "sk": "COUNTS"
+      },
+    })
+  );
+  
   try {
-    const challenges = await ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "STANDINGCHALLENGE#" + game },
-        ExpressionAttributeNames: { "#pk": "pk" }
-      }));
+    const [challengesData, countsData] = await Promise.all([
+      ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "#pk = :pk",
+          ExpressionAttributeValues: { ":pk": "STANDINGCHALLENGE#" + game },
+          ExpressionAttributeNames: { "#pk": "pk" }
+        })),
+      countsPromise
+    ]);
+    
+    // Verify and correct standing challenges count
+    const actualCount = challengesData.Items?.length || 0;
+    await verifyAndCorrectCountWithData(game, "standingchallenges", actualCount, countsData);
+    
     return {
       statusCode: 200,
-      body: JSON.stringify(challenges.Items),
+      body: JSON.stringify(challengesData.Items),
       headers
     };
   }
