@@ -8300,7 +8300,7 @@ async function migrateMetagamesRatings(userId: string) {
     const migratedDetails = { ...details };
     
     Object.keys(details).forEach(key => {
-      if (key !== "pk" && key !== "sk" && details[key]?.ratings) {
+      if (key !== "pk" && key !== "sk" && !key.endsWith("_ratings")) {
         migrationResults.totalMetaGames++;
         
         // Add new flattened ratings attribute, merging with any existing data
