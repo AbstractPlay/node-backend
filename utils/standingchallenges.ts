@@ -56,17 +56,10 @@ type FullUser = {
   email: string;
   gamesUpdate?: number;
   games: Game[];
-  challenges: {
-    issued: string[];
-    received: string[];
-    accepted: string[];
-    standing: string[];
-  }
-  // New top-level challenge attributes for migration
-  challenges_issued?: string[];
-  challenges_received?: string[];
-  challenges_accepted?: string[];
-  challenges_standing?: string[];
+  challenges_issued?: Set<string>;
+  challenges_received?: Set<string>;
+  challenges_accepted?: Set<string>;
+  challenges_standing?: Set<string>;
   admin: boolean | undefined;
   language: string;
   country: string;
@@ -195,10 +188,7 @@ export const handler: Handler = async (event: any, context?: any) => {
           // count number of metagame games and challenges
           let metaCount = 0;
           const matchingChallenges: string[] = [];
-          const userStandingChallenges = [
-            ...(user.challenges_standing ?? []),
-            ...(user.challenges?.standing ?? [])
-          ];
+          const userStandingChallenges: string[] = Array.from(user.challenges_standing ?? new Set<string>());
           if (userStandingChallenges.length > 0) {
             for (const challenge of userStandingChallenges) {
                 if (challenge.startsWith(entry.metaGame)) {
