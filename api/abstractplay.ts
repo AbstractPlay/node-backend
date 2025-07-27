@@ -8307,12 +8307,15 @@ async function migrateMetagamesRatings(userId: string) {
         const newAttributeName = key + "_ratings";
         const existingRatings = (migratedDetails as any)[newAttributeName] || [];
         const oldRatings = details[key].ratings || [];
-        (migratedDetails as any)[newAttributeName] = new Set([...existingRatings, ...oldRatings]);
-        
+        const newSet = new Set([...existingRatings, ...oldRatings]);
+        if (newSet.size > 0) {
+          (migratedDetails as any)[newAttributeName] = newSet;
+          migrationResults.migratedMetaGames++;
+        } 
+               
         // Remove old nested ratings attribute
         delete migratedDetails[key].ratings;
         
-        migrationResults.migratedMetaGames++;
         console.log(`Migrated ${key}: ${details[key].ratings?.length ?? 0} ratings`);
       }
     });
