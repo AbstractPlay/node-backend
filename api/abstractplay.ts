@@ -6972,7 +6972,7 @@ async function reportProblem(pars: { error: string })
       },
       Subject: {
         Charset: "UTF-8",
-        Data: "AbstractPlay front end error report"
+        Data: `AbstractPlay front end error report${process.env.ABSTRACT_PLAY_TABLE?.includes('-dev') ? ' (dev server)' : ''}`
       },
     },
     Source: "abstractplay@mail.abstractplay.com"
