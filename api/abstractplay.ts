@@ -3275,7 +3275,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         list.push(ddbDocClient.send(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-          ExpressionAttributeNames: { "#gr": game.metaGame + "_ratings", "#g": game.metaGame },
+          ExpressionAttributeNames: { "#gr": game.metaGame + "_ratings" },
           ExpressionAttributeValues: {":p": new Set([player.id]), ":user_id": player.id},
           UpdateExpression: "add #gr :p",
         })));
@@ -8117,6 +8117,7 @@ async function *queryItemsGenerator(queryInput: QueryCommandInput): AsyncGenerat
     } while (lastEvaluatedKey !== undefined)
 }
 
+// Make sure to increase the lamda timeout (from 6s) when you want to process all users. Just getting all users already takes about 2s.
 const getAllUsers = async (): Promise<FullUser[]> => {
     const result: FullUser[] = []
     const queryInput: QueryCommandInput = {
