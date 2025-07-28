@@ -119,6 +119,12 @@ type FullUser = {
   email: string;
   gamesUpdate?: number;
   games: Game[];
+  challenges: {
+    issued: Set<string>;
+    received: Set<string>;
+    accepted: Set<string>;
+    standing: Set<string>;
+  }
   challenges_issued?: Set<string>;
   challenges_received?: Set<string>;
   challenges_accepted?: Set<string>;
@@ -682,6 +688,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await endATournament(event.cognitoPoolClaims.sub, pars);
     case "start_tournament":
         return await startATournament(event.cognitoPoolClaims.sub, pars);
+    case "migrate_challenges":
+        return await migrateChallenges(event.cognitoPoolClaims.sub);
     default:
       return {
         statusCode: 500,
@@ -8039,4 +8047,126 @@ const getAllUsers = async (): Promise<FullUser[]> => {
     }
     return result
 }
+
+async function migrateChallenges(userId: string) {
+  // Make sure people aren't getting clever
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+
+    console.log('Starting challenge data migration...');
+    
+    const users = await getAllUsers();
+    const userChallengeData = users.filter(user => user.challenges);
+    
+    console.log(`Found ${userChallengeData.length} users with challenge data out of ${users.length} total users`);
+    
+    const migrationResults = {
+      totalUsers: users.length,
+      usersWithChallenges: userChallengeData.length,
+      migratedUsers: 0,
+      errors: [] as string[]
+    };
+
+    for (const user of userChallengeData) {
+      try {
+        const updates: any[] = [];
+        
+        if (user.challenges.issued && user.challenges.issued.size > 0) {
+          updates.push({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USER", "sk": user.id },
+            UpdateExpression: "ADD challenges_issued :ci",
+            ExpressionAttributeValues: { ":ci": user.challenges.issued }
+          });
+        }
+        
+        if (user.challenges.received && user.challenges.received.size > 0) {
+          updates.push({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USER", "sk": user.id },
+            UpdateExpression: "ADD challenges_received :cr",
+            ExpressionAttributeValues: { ":cr": user.challenges.received }
+          });
+        }
+        
+        if (user.challenges.standing && user.challenges.standing.size > 0) {
+          updates.push({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USER", "sk": user.id },
+            UpdateExpression: "ADD challenges_standing :cs",
+            ExpressionAttributeValues: { ":cs": user.challenges.standing }
+          });
+        }
+        
+        if (user.challenges.accepted && user.challenges.accepted.size > 0) {
+          updates.push({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USER", "sk": user.id },
+            UpdateExpression: "ADD challenges_accepted :ca",
+            ExpressionAttributeValues: { ":ca": user.challenges.accepted }
+          });
+        }
+
+        if (updates.length > 0) {
+          // First, migrate to new top-level attributes
+          await Promise.all(updates.map(update => sendCommandWithRetry(new UpdateCommand(update))));
+          
+          // Then delete the old nested attributes to prevent duplicates
+          const removeAttributes = [];
+          if (user.challenges.issued && user.challenges.issued.size > 0) {
+            removeAttributes.push("challenges.issued");
+          }
+          if (user.challenges.received && user.challenges.received.size > 0) {
+            removeAttributes.push("challenges.received");
+          }
+          if (user.challenges.standing && user.challenges.standing.size > 0) {
+            removeAttributes.push("challenges.standing");
+          }
+          if (user.challenges.accepted && user.challenges.accepted.size > 0) {
+            removeAttributes.push("challenges.accepted");
+          }
+          
+          if (removeAttributes.length > 0) {
+            await sendCommandWithRetry(new UpdateCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Key: { "pk": "USER", "sk": user.id },
+              UpdateExpression: `REMOVE ${removeAttributes.join(", ")}`,
+            }));
+          }
+          
+          migrationResults.migratedUsers++;
+          console.log(`Migrated user ${user.id} (${migrationResults.migratedUsers}/${userChallengeData.length})`);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 10));
+        
+      } catch (error) {
+        const errorMsg = `Failed to migrate user ${user.id}: ${error}`;
+        migrationResults.errors.push(errorMsg);
+        console.error(errorMsg);
+      }
+    }
+    
+    console.log('Challenge migration completed:', migrationResults);
+    return migrationResults;
+    
+  } catch (error) {
+    console.error('Challenge migration failed:', error);
+    throw error;
+  }
+};
 
