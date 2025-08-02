@@ -4961,7 +4961,7 @@ async function getTournament(pars: { tournamentid: string, metaGame: string, isA
         body: JSON.stringify({
           tournament: data[0].Items, 
           tournamentPlayers: [], 
-          tournamentGames: data[1].Items
+          tournamentGames: isArchived ? data[1].Items : data[2].Items
         }),
         headers
       };
