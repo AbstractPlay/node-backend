@@ -318,7 +318,7 @@ type TournamentPlayer = {
 type TournamentGame = {
   pk: string;
   sk: string;
-  gameid: string;
+  id: string;
   player1: string;
   player2: string;
   winner?: string[];
@@ -4800,6 +4800,18 @@ async function archiveTournament(tournament: Tournament) {
       })
     );
     const players = tournamentPlayersData.Items as TournamentPlayer[];
+
+    // Get all tournament games so we can update their tournament references
+    const tournamentGamesData = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": tournament.id + '#' },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+      })
+    );
+    const tournamentGames = tournamentGamesData.Items as TournamentGame[];
+
     // add archive (by metaGame)
     tournament.pk = "COMPLETEDTOURNAMENT";
     tournament.sk = tournament.metaGame + "#" + tournament.id;
@@ -4809,6 +4821,19 @@ async function archiveTournament(tournament: Tournament) {
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: tournament
       })));
+
+    // Update all games to reference the new archived tournament format
+    const newTournamentRef = tournament.metaGame + "#" + tournament.id;
+    for (const tournamentGame of tournamentGames) {
+      // Update completed games (all tournament games should be completed when archiving)
+      work.push(ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "GAME", "sk": tournament.metaGame + '#1#' + tournamentGame.id },
+        ExpressionAttributeValues: { ":newTournamentRef": newTournamentRef },
+        UpdateExpression: "set tournament = :newTournamentRef",
+      })));
+    }
+
     // delete tournament
     work.push(ddbDocClient.send(
       new DeleteCommand({
@@ -4838,10 +4863,15 @@ async function archiveTournament(tournament: Tournament) {
   }
 }
 
-async function getTournament(pars: { tournamentid: string, metaGame: string }) {
+// gameId is only passed if we got here from a user that clicked on the "tournament" link in the game (and is used to fix broken references)
+async function getTournament(pars: { tournamentid: string, metaGame: string, isArchived?: string, gameId?: string }) {
   try {
     const work: Promise<any>[] = [];
-    if (pars.metaGame === 'undefined') {
+    const isArchived = pars.isArchived === 'true';
+    let completedTournament = false;
+    
+    if (!isArchived) {
+      // Look in active tournaments
       work.push(ddbDocClient.send(
         new QueryCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4859,6 +4889,7 @@ async function getTournament(pars: { tournamentid: string, metaGame: string }) {
         })
       ));
     } else {
+      // Look in completed tournaments
       work.push(ddbDocClient.send(
         new QueryCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4867,7 +4898,9 @@ async function getTournament(pars: { tournamentid: string, metaGame: string }) {
           KeyConditionExpression: "#pk = :pk and #sk = :sk",
         })
       ));
+      completedTournament = true;
     }
+    
     work.push(ddbDocClient.send(
       new QueryCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4876,17 +4909,60 @@ async function getTournament(pars: { tournamentid: string, metaGame: string }) {
         KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
       })
     ));
+    
     const data = await Promise.all(work);
-    if (pars.metaGame === 'undefined') {
+    
+    // If tournament not found in active tournaments and we have gameId and metaGame, try archived
+    if (!isArchived && pars.metaGame !== 'undefined' && data[0].Items.length === 0 && pars.gameId) {
+      console.log(`Tournament ${pars.tournamentid} not found in active tournaments, trying completed tournaments`);
+      
+      const completedTournamentData = await ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          ExpressionAttributeValues: { ":pk": "COMPLETEDTOURNAMENT", ":sk": pars.metaGame + '#' + pars.tournamentid },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+          KeyConditionExpression: "#pk = :pk and #sk = :sk",
+        })
+      );
+      
+      if (completedTournamentData.Items && completedTournamentData.Items.length > 0) {
+        console.log(`Found tournament ${pars.tournamentid} in completed tournaments, fixing game reference`);
+        completedTournament = true;
+        
+        // Update the game's tournament reference to point to the new archived format
+        const newTournamentRef = pars.metaGame + '#' + pars.tournamentid;
+        
+        // Since tournament is archived, all games must be completed - update completed game 
+        await ddbDocClient.send(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { "pk": "GAME", "sk": pars.metaGame + '#1#' + pars.gameId },
+          ExpressionAttributeValues: { ":newTournamentRef": newTournamentRef },
+          UpdateExpression: "set tournament = :newTournamentRef",
+        }));
+        
+        // Replace the empty tournament data with the found completed tournament
+        data[0] = completedTournamentData;
+      }
+    }
+    
+    if (!completedTournament) {
       return {
         statusCode: 200,
-        body: JSON.stringify({tournament: data[0].Items, tournamentPlayers: data[1].Items, tournamentGames: data[2].Items}),
+        body: JSON.stringify({
+          tournament: data[0].Items, 
+          tournamentPlayers: data[1]?.Items || [], 
+          tournamentGames: data[2].Items
+        }),
         headers
       };
     } else {
       return {
         statusCode: 200,
-        body: JSON.stringify({tournament: data[0].Items, tournamentPlayers: [], tournamentGames: data[1].Items}),
+        body: JSON.stringify({
+          tournament: data[0].Items, 
+          tournamentPlayers: [], 
+          tournamentGames: data[1].Items
+        }),
         headers
       };
     }
