@@ -515,11 +515,35 @@ function setsEqual(a: Set<any>, b: Set<any>): boolean {
     return true;
 }
 
-module.exports.query = async (event: { queryStringParameters: any; }) => {
+module.exports.query = async (event: { queryStringParameters: any; body?: string; httpMethod: string; }) => {
   console.log(event);
-  const pars = event.queryStringParameters;
+  
+  let pars;
+  let query;
+  
+  // Handle both GET (query parameters) and POST (JSON body) requests
+  if (event.httpMethod === 'POST' && event.body) {
+    try {
+      const bodyData = JSON.parse(event.body);
+      query = bodyData.query;
+      pars = bodyData.pars || {};
+    } catch (error) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          message: "Invalid JSON in request body"
+        }),
+        headers
+      };
+    }
+  } else {
+    // Existing GET request handling
+    pars = event.queryStringParameters;
+    query = pars.query;
+  }
+  
   console.log(pars);
-  switch (pars.query) {
+  switch (query) {
     case "user_names":
       return await userNames();
     case "challenge_details":

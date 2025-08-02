@@ -157,12 +157,16 @@ functions:
               - 'cognito:username'
   query:
     handler: api/abstractplay.query
-    memorySize: 128
+    memorySize: 256
     description: Abstract Play queries that does not need authorization.
     events:
       - http:
           path: query
           method: get
+          cors: true
+      - http:
+          path: query
+          method: post
           cors: true
   yourturn:
     handler: utils/yourturn.handler
