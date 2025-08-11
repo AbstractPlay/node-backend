@@ -442,13 +442,13 @@ async function verifyAndCorrectCountWithData(metaGame: string, countType: "curre
             console.log(`Initialized ${countType} for ${metaGame} to ${actualCount}`);
             return;
         }
-        
+
         const details = countsData.Item as MetaGameCounts;
         const storedCount = details[metaGame]?.[countType] || 0;
-        
+
         if (storedCount !== actualCount) {
             console.log(`Count mismatch for ${metaGame}.${countType}: stored=${storedCount}, actual=${actualCount}. Correcting...`);
-            
+
             await ddbDocClient.send(new UpdateCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
                 Key: { "pk": "METAGAMES", "sk": "COUNTS" },
@@ -456,7 +456,7 @@ async function verifyAndCorrectCountWithData(metaGame: string, countType: "curre
                 ExpressionAttributeValues: { ":count": actualCount },
                 UpdateExpression: `set #g.${countType} = :count`
             }));
-            
+
             console.log(`Corrected ${countType} for ${metaGame} from ${storedCount} to ${actualCount}`);
         }
     } catch (error) {
@@ -470,7 +470,7 @@ async function verifyAndCorrectRatingsCountWithData(metaGame: string, actualRati
         // Extract unique player IDs from actual ratings data as a Set
         const actualPlayerIds = new Set(actualRatings.map(rating => rating.sk));
         const actualCount = actualPlayerIds.size;
-        
+
         if (!countsData.Item && actualCount > 0) {
             console.log(`No METAGAMES COUNTS found, creating initial ratings record for ${metaGame}`);
             await ddbDocClient.send(new UpdateCommand({
@@ -483,14 +483,14 @@ async function verifyAndCorrectRatingsCountWithData(metaGame: string, actualRati
             console.log(`Initialized ratings for ${metaGame} with ${actualCount} players`);
             return;
         }
-        
+
         const details = countsData.Item as any;
         const storedPlayerIds = details[metaGame + "_ratings"] || new Set();
         const storedCount = storedPlayerIds.size;
-        
+
         if (storedCount !== actualCount || !setsEqual(storedPlayerIds, actualPlayerIds)) {
             console.log(`Ratings mismatch for ${metaGame}: stored=${storedCount} players, actual=${actualCount} players. Updating player list...`);
-            
+
             await ddbDocClient.send(new UpdateCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
                 Key: { "pk": "METAGAMES", "sk": "COUNTS" },
@@ -498,7 +498,7 @@ async function verifyAndCorrectRatingsCountWithData(metaGame: string, actualRati
                 ExpressionAttributeValues: { ":players": actualPlayerIds },
                 UpdateExpression: `set #gr = :players`
             }));
-            
+
             console.log(`Updated ratings list for ${metaGame} from ${storedCount} to ${actualCount} players`);
         }
     } catch (error) {
@@ -517,10 +517,10 @@ function setsEqual(a: Set<any>, b: Set<any>): boolean {
 
 module.exports.query = async (event: { queryStringParameters: any; body?: string; httpMethod: string; }) => {
   console.log(event);
-  
+
   let pars;
   let query;
-  
+
   // Handle both GET (query parameters) and POST (JSON body) requests
   if (event.httpMethod === 'POST' && event.body) {
     try {
@@ -541,7 +541,7 @@ module.exports.query = async (event: { queryStringParameters: any; body?: string
     pars = event.queryStringParameters;
     query = pars.query;
   }
-  
+
   console.log(pars);
   switch (query) {
     case "user_names":
@@ -660,6 +660,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await updateGameSettings(event.cognitoPoolClaims.sub, pars);
     case "update_user_settings":
       return await updateUserSettings(event.cognitoPoolClaims.sub, pars);
+    case "update_meta_game_counts":
+      return await updateMetaGameCounts(event.cognitoPoolClaims.sub);
     case "mark_published":
       return await markAsPublished(event.cognitoPoolClaims.sub, pars);
     case "new_tournament":
@@ -779,7 +781,7 @@ async function challengeDetails(pars: { id: string; }) {
 async function games(pars: { metaGame: string, type: string; }) {
   const game = pars.metaGame;
   console.log(game);
-  
+
   // Start fetching counts in parallel
   const countsPromise = ddbDocClient.send(
     new GetCommand({
@@ -789,7 +791,7 @@ async function games(pars: { metaGame: string, type: string; }) {
       },
     })
   );
-  
+
   if (pars.type === "current") {
     try {
       const [gamesData, countsData] = await Promise.all([
@@ -802,13 +804,13 @@ async function games(pars: { metaGame: string, type: string; }) {
           })),
         countsPromise
       ]);
-      
+
       const gamelist = gamesData.Items as FullGame[];
-      
+
       // Verify and correct current games count
       const actualCount = gamelist.length;
       await verifyAndCorrectCountWithData(game, "currentgames", actualCount, countsData);
-      
+
       const returnlist = gamelist.map(g => {
         const state = GameFactory(g.metaGame, g.state); // JSON.parse(g.state);
         if (state === undefined) {
@@ -838,11 +840,11 @@ async function games(pars: { metaGame: string, type: string; }) {
           })),
         countsPromise
       ]);
-      
+
       // Verify and correct completed games count
       const actualCount = gamesData.Items?.length || 0;
       await verifyAndCorrectCountWithData(game, "completedgames", actualCount, countsData);
-      
+
       return {
         statusCode: 200,
         body: JSON.stringify(gamesData.Items),
@@ -860,7 +862,7 @@ async function games(pars: { metaGame: string, type: string; }) {
 
 async function ratings(pars: { metaGame: string }) {
   const game = pars.metaGame;
-  
+
   // Start fetching counts in parallel
   const countsPromise = ddbDocClient.send(
     new GetCommand({
@@ -870,7 +872,7 @@ async function ratings(pars: { metaGame: string }) {
       },
     })
   );
-  
+
   try {
     const [ratingsData, countsData] = await Promise.all([
       ddbDocClient.send(
@@ -882,11 +884,11 @@ async function ratings(pars: { metaGame: string }) {
         })),
       countsPromise
     ]);
-    
+
     // Verify and correct ratings count
     const actualRatings = ratingsData.Items || [];
     await verifyAndCorrectRatingsCountWithData(game, actualRatings, countsData);
-    
+
     return {
       statusCode: 200,
       body: JSON.stringify(ratingsData.Items),
@@ -902,7 +904,7 @@ async function ratings(pars: { metaGame: string }) {
 async function standingChallenges(pars: { metaGame: string; }) {
   const game = pars.metaGame;
   console.log(game);
-  
+
   // Start fetching counts in parallel
   const countsPromise = ddbDocClient.send(
     new GetCommand({
@@ -912,7 +914,7 @@ async function standingChallenges(pars: { metaGame: string; }) {
       },
     })
   );
-  
+
   try {
     const [challengesData, countsData] = await Promise.all([
       ddbDocClient.send(
@@ -924,11 +926,11 @@ async function standingChallenges(pars: { metaGame: string; }) {
         })),
       countsPromise
     ]);
-    
+
     // Verify and correct standing challenges count
     const actualCount = challengesData.Items?.length || 0;
     await verifyAndCorrectCountWithData(game, "standingchallenges", actualCount, countsData);
-    
+
     return {
       statusCode: 200,
       body: JSON.stringify(challengesData.Items),
@@ -1003,9 +1005,9 @@ async function metaGamesDetails() {
     const details2 = Object.keys(details)
       .filter(key => key !== "pk" && key !== "sk" && !key.endsWith("_ratings"))
       .reduce( (a, k) => ({
-        ...a, 
-        [k]: { 
-          ...details[k], 
+        ...a,
+        [k]: {
+          ...details[k],
           "ratings": (details as any)[k + "_ratings"]?.size ?? 0
         }
       }), {})
@@ -3006,7 +3008,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     }
     // Update accepter
     const challengeValue = new Set([standing ? challenge.metaGame + '#' + challengeId : challengeId]);
-    
+
     // Delete from received challenges
     const deleteFromReceived = sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -3014,7 +3016,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       UpdateExpression: "DELETE challenges_received :c",
       ExpressionAttributeValues: { ":c": challengeValue }
     }));
-    
+
     // Add to accepted challenges (top-level only)
     const addToAccepted = sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4893,7 +4895,7 @@ async function getTournament(pars: { tournamentid: string, metaGame: string, isA
     const work: Promise<any>[] = [];
     const isArchived = pars.isArchived === 'true';
     let completedTournament = false;
-    
+
     if (!isArchived) {
       // Look in active tournaments
       work.push(ddbDocClient.send(
@@ -4924,7 +4926,7 @@ async function getTournament(pars: { tournamentid: string, metaGame: string, isA
       ));
       completedTournament = true;
     }
-    
+
     work.push(ddbDocClient.send(
       new QueryCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4933,13 +4935,13 @@ async function getTournament(pars: { tournamentid: string, metaGame: string, isA
         KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
       })
     ));
-    
+
     const data = await Promise.all(work);
-    
+
     // If tournament not found in active tournaments and we have gameId and metaGame, try archived
     if (!isArchived && pars.metaGame !== 'undefined' && data[0].Items.length === 0 && pars.gameId) {
       console.log(`Tournament ${pars.tournamentid} not found in active tournaments, trying completed tournaments`);
-      
+
       const completedTournamentData = await ddbDocClient.send(
         new QueryCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4948,33 +4950,33 @@ async function getTournament(pars: { tournamentid: string, metaGame: string, isA
           KeyConditionExpression: "#pk = :pk and #sk = :sk",
         })
       );
-      
+
       if (completedTournamentData.Items && completedTournamentData.Items.length > 0) {
         console.log(`Found tournament ${pars.tournamentid} in completed tournaments, fixing game reference`);
         completedTournament = true;
-        
+
         // Update the game's tournament reference to point to the new archived format
         const newTournamentRef = pars.metaGame + '#' + pars.tournamentid;
-        
-        // Since tournament is archived, all games must be completed - update completed game 
+
+        // Since tournament is archived, all games must be completed - update completed game
         await ddbDocClient.send(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: { "pk": "GAME", "sk": pars.metaGame + '#1#' + pars.gameId },
           ExpressionAttributeValues: { ":newTournamentRef": newTournamentRef },
           UpdateExpression: "set tournament = :newTournamentRef",
         }));
-        
+
         // Replace the empty tournament data with the found completed tournament
         data[0] = completedTournamentData;
       }
     }
-    
+
     if (!completedTournament) {
       return {
         statusCode: 200,
         body: JSON.stringify({
-          tournament: data[0].Items, 
-          tournamentPlayers: data[1]?.Items || [], 
+          tournament: data[0].Items,
+          tournamentPlayers: data[1]?.Items || [],
           tournamentGames: data[2].Items
         }),
         headers
@@ -4983,8 +4985,8 @@ async function getTournament(pars: { tournamentid: string, metaGame: string, isA
       return {
         statusCode: 200,
         body: JSON.stringify({
-          tournament: data[0].Items, 
-          tournamentPlayers: [], 
+          tournament: data[0].Items,
+          tournamentPlayers: [],
           tournamentGames: isArchived ? data[1].Items : data[2].Items
         }),
         headers
@@ -8119,6 +8121,121 @@ async function *queryItemsGenerator(queryInput: QueryCommandInput): AsyncGenerat
         yield Items
       }
     } while (lastEvaluatedKey !== undefined)
+}
+
+async function updateMetaGameCounts(userId: string) {
+  // Make sure people aren't getting clever
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+
+    const metaGamesDataWork = ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "METAGAMES", "sk": "COUNTS"
+        },
+      }));
+
+    const games: string[] = [];
+    gameinfo.forEach((game) => games.push(game.uid));
+    const currentgames = games.map(game => ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        ExpressionAttributeValues: { ":pk": "GAME", ":sk": game + '#0#' },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        ProjectionExpression: "#pk, #sk"
+      })));
+    const completedgames = games.map(game => ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES#" + game },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        ProjectionExpression: "#pk, #sk"
+      })));
+    const standingchallenges = games.map(game => ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "STANDINGCHALLENGE#" + game },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        ProjectionExpression: "#pk, #sk"
+      })));
+
+    const metaGamesData = await metaGamesDataWork;
+    let metaGameCounts: MetaGameCounts;
+    if (metaGamesData.Item === undefined)
+      metaGameCounts = {};
+    else
+      metaGameCounts = metaGamesData.Item as MetaGameCounts;
+
+    const work = await Promise.all([Promise.all(currentgames), Promise.all(completedgames), Promise.all(standingchallenges)]);
+    console.log("work", work);
+
+    // process stars
+    const players = await getAllUsers();
+    console.log("All players");
+    console.log(JSON.stringify(players.map(p => p.name)));
+    const starCounts = new Map<string, number>();
+    for (const p of players) {
+        if (p.stars !== undefined) {
+            for (const star of p.stars) {
+                if (starCounts.has(star)) {
+                    const val = starCounts.get(star)!;
+                    starCounts.set(star, val + 1);
+                } else {
+                    starCounts.set(star, 1);
+                }
+            }
+        }
+    }
+
+    games.forEach((game, ind) => {
+      if (metaGameCounts[game] === undefined) {
+        metaGameCounts[game] = {
+          "currentgames": work[0][ind].Items ? work[0][ind].Items!.length : 0,
+          "completedgames": work[1][ind].Items ? work[1][ind].Items!.length : 0,
+          "standingchallenges": work[2][ind].Items ? work[2][ind].Items!.length : 0,
+          "stars": starCounts.has(game) ? starCounts.get(game)! : 0,
+        };
+      } else {
+        metaGameCounts[game].currentgames = work[0][ind].Items ? work[0][ind].Items!.length : 0;
+        metaGameCounts[game].completedgames = work[1][ind].Items ? work[1][ind].Items!.length : 0;
+        metaGameCounts[game].standingchallenges = work[2][ind].Items ? work[2][ind].Items!.length : 0;
+        metaGameCounts[game].stars = starCounts.has(game) ? starCounts.get(game)! : 0;
+      }
+    });
+
+    console.log(metaGameCounts);
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: {
+            "pk": "METAGAMES",
+            "sk": "COUNTS",
+            ...metaGameCounts
+          }
+        })
+    );
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to update meta game counts ${userId}`);
+  }
 }
 
 // Make sure to increase the lamda timeout (from 6s) when you want to process all users. Just getting all users already takes about 2s.
