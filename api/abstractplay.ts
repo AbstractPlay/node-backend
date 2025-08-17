@@ -836,7 +836,7 @@ async function games(pars: { metaGame: string, type: string; }) {
             throw new Error(`Could not parse game state for ${g.metaGame}:\n${g.state}`);
         }
         return { "id": g.id, "metaGame": g.metaGame, "players": g.players, "toMove": g.toMove, "gameStarted": g.gameStarted,
-          "numMoves": state.stack.length - 1, "variants": state.variants } });
+          "numMoves": state.stack.length - 1, "variants": state.variants, "commented": g.commented || 0 } });
       return {
         statusCode: 200,
         body: JSON.stringify(returnlist),
