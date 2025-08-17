@@ -194,7 +194,7 @@ type Game = {
   lastMoveTime: number;
   clockHard: boolean;
   noExplore?: boolean;
-  toMove: string | boolean[];
+  toMove?: string | boolean[];
   note?: string;
   seen?: number;
   winner?: number[];
@@ -203,6 +203,7 @@ type Game = {
   gameEnded?: number;
   lastChat?: number;
   variants?: string[];
+  commented?: number; // 0 or missing: no comments or post game variations, 1: has in-game comments, 2: has post game variations, 3: has post game comments. Only used in main COMPLETEDGAMES list.
 }
 
 type FullGame = {
@@ -235,6 +236,7 @@ type FullGame = {
   event?: string;
   division?: number;
   noExplore?: boolean;
+  commented?: number; // 0 or missing: no comments or post game variations, 1: has in-game comments (note this does NOT get updated for post-game comments/variations)
 }
 
 type Playground = {
@@ -649,6 +651,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await invokePie(event.cognitoPoolClaims.sub, pars);
     case "update_note":
       return await updateNote(event.cognitoPoolClaims.sub, pars);
+    case "update_commented":
+      return await updateCommented(event.cognitoPoolClaims.sub, pars);
     case "set_lastSeen":
       return await setLastSeen(event.cognitoPoolClaims.sub, pars);
     case "submit_comment":
@@ -1652,7 +1656,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
 
       console.log(`Checking for out-of-time games`);
       for(const game of games) {
-        if (game.clockHard && game.toMove !== '') {
+        if (game.clockHard && game.toMove && game.toMove !== '') {
           if (Array.isArray(game.toMove)) {
             let minTime = 0;
             let minIndex = -1;
@@ -3349,36 +3353,20 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "players": game.players,
       "clockHard": game.clockHard,
       "noExplore": game.noExplore || false,
-      "toMove": game.toMove,
       "lastMoveTime": timestamp,
       "numMoves": engine.stack.length - 1,
       "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
-      "variants": engine.variants,
-    } as Game;
-    const myGame = {
-      "id": game.id,
-      "metaGame": game.metaGame,
-      "players": game.players,
-      "clockHard": game.clockHard,
-      "noExplore": game.noExplore || false,
-      "toMove": game.toMove,
-      "lastMoveTime": timestamp,
-      "numMoves": engine.stack.length - 1,
-      "gameStarted": new Date(engine.stack[0]._timestamp).getTime(),
-      "variants": engine.variants,
+      "variants": engine.variants
     } as Game;
     if (engine.gameover) {
         playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
         playerGame.winner = engine.winner;
-        myGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
-        myGame.winner = engine.winner;
     }
     const list: Promise<any>[] = [];
     let newRatings: {[metaGame: string] : Rating}[] | null = null;
     if ((game.toMove === "" || game.toMove === null)) {
       newRatings = updateRatings(game, players);
-      myGame.seen = Date.now();
-      list.push(addToGameLists("COMPLETEDGAMES", playerGame, timestamp, game.numMoves !== undefined && game.numMoves > game.numPlayers));
+      list.push(addToGameLists("COMPLETEDGAMES", {...playerGame, commented: game.commented}, timestamp, game.numMoves !== undefined && game.numMoves > game.numPlayers));
       // delete at old sk
       list.push(ddbDocClient.send(
         new DeleteCommand({
@@ -3446,12 +3434,18 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     players.forEach((player, ind) => {
       const games: Game[] = [];
       const updatedGames: string[] = [];
+      playerGame.toMove = game.toMove;
       player.games.forEach(g => {
         if (g.id === playerGame.id) {
-          if (player.id === userid)
-            games.push(myGame);
-          else
+          if (player.id === userid) {
+            if (game.toMove === "" || game.toMove === null)
+              games.push({...playerGame, seen: Date.now()});
+            else
+              games.push(playerGame);
+          }
+          else {
             games.push(playerGame);
+          }
           updatedGames.push(g.id);
         }
         else
@@ -4174,7 +4168,7 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
   return moveForced;
 }
 
-async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; metaGame?: string, comment: string; moveNumber: number; }) {
+async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; metaGame?: string, comment: string; moveNumber: number; updateCommented?: number; }) {
   // reject empty comments
   if ( (pars.comment.length === 0) || (/^\s*$/.test(pars.comment) ) ) {
     return formatReturnError(`Refusing to accept blank comment.`);
@@ -4214,6 +4208,25 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
           "comments": comments
         }
       }));
+  }
+  
+  // Update the commented flag for ongoing games if requested
+  if (pars.updateCommented !== undefined && pars.updateCommented === 1 && pars.metaGame) {
+    try {
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { 
+          "pk": "GAME", 
+          "sk": pars.metaGame + "#0#" + pars.id 
+        },
+        ExpressionAttributeValues: { ":c": 1 },
+        UpdateExpression: "set commented = :c",
+      }));
+      console.log(`Updated commented flag to 1 for game ${pars.id}`);
+    } catch (error) {
+      console.log(`Failed to update commented flag for game ${pars.id}:`, error);
+      // Don't fail the whole operation just because of the flag update
+    }
   }
 
   // if game is completed, `players` will be passed
@@ -4311,7 +4324,23 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
   }
 }
 
-async function saveExploration(userid: string, pars: { public: boolean, game: string; move: number; version: number; tree: Exploration; }) {
+async function saveExploration(userid: string, pars: { public: boolean, game: string; metaGame: string; move: number; version: number; tree: Exploration; updateCommentedFlag?: number; gameEnded?: number; }) {
+  // If we need to update the commented flag for a completed game
+  if (pars.updateCommentedFlag !== undefined && pars.public && pars.gameEnded !== undefined) {
+    // Update the commented flag in COMPLETEDGAMES
+    await ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { 
+        "pk": "COMPLETEDGAMES#" + pars.metaGame, 
+        "sk": pars.game + "#" + pars.gameEnded
+      },
+      ExpressionAttributeValues: { ":c": pars.updateCommentedFlag },
+      UpdateExpression: "set commented = :c",
+    }));
+    
+    console.log(`Updated commented flag for completed game ${pars.game} to ${pars.updateCommentedFlag}`);
+  }
+  
   if (!pars.public) {
     await ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -7531,6 +7560,33 @@ async function updateNote(userId: string, pars: {gameId: string; note?: string;}
    };
 }
 
+async function updateCommented(userId: string, pars: {id: string; metaGame: string; cbit: number; commented: number;}) {
+    console.log(`Updating commented flag for game ${pars.id} to ${pars.commented}`);
+    try {
+        // Directly update the commented flag without checking if game exists
+        // This is a non-critical flag, so we can save the DB lookup
+        await ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { 
+                "pk": "GAME", 
+                "sk": pars.metaGame + "#" + pars.cbit + "#" + pars.id 
+            },
+            ExpressionAttributeValues: { ":c": pars.commented },
+            UpdateExpression: "set commented = :c",
+        }));
+        
+        console.log(`Successfully updated commented flag for game ${pars.id} to ${pars.commented}`);
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ success: true }),
+            headers
+        };
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to update commented flag for game ${pars.id}: ${err}`);
+    }
+}
+
 async function setLastSeen(userId: string, pars: {gameId: string; interval?: number;}) {
     // get USER rec
     let user: FullUser|undefined;
@@ -7618,13 +7674,13 @@ async function botManageChallenges() {
         // the overall meta must be supported
         const info = gameinfo.get(challenge.metaGame);
         if (info?.flags.includes("aiai")) {
-            accepted = true;
+          accepted = true;
         }
         // add any variant exceptions here too
         if (challenge.metaGame === "tumbleweed") {
-            if (challenge.variants.includes("free-neutral") || challenge.variants.includes("capture-delay")) {
-                accepted = false;
-            }
+          if (challenge.variants.includes("free-neutral") || challenge.variants.includes("capture-delay")) {
+            accepted = false;
+          }
         }
 
         // accept/reject challenge
@@ -7640,41 +7696,44 @@ async function botManageChallenges() {
     // have to refetch, sadly!
     // but check for bot's turn early to avoid unnecessary refetches
     try {
-        console.log(`Getting USER record`);
-        const userData = await ddbDocClient.send(
-          new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": "USER",
-              "sk": userId
-            },
-          }));
-        if (userData.Item === undefined) {
-          throw new Error("Could not find a USER record for the AiAi bot");
-        }
-        const user = userData.Item as FullUser;
-        let games: Game[] = user.games;
-        if (games === undefined)
-          games= [];
+      console.log(`Getting USER record`);
+      const userData = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "USER",
+            "sk": userId
+          },
+        }));
+      if (userData.Item === undefined) {
+        throw new Error("Could not find a USER record for the AiAi bot");
+      }
+      const user = userData.Item as FullUser;
+      let games: Game[] = user.games;
+      if (games === undefined)
+        games= [];
 
-        for (const game of games) {
-            const info = gameinfo.get(game.metaGame);
-            if (game.toMove !== null && game.toMove !== "") {
-                const ids: string[] = [];
-                if (info.flags.includes("simultaneous")) {
-                    for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
-                        if (game.toMove[i]) {
-                            ids.push(game.players[i].id);
-                        }
-                    }
-                } else {
-                    ids.push(game.players[parseInt(game.toMove as string, 10)].id);
+      for (const game of games) {
+        const info = gameinfo.get(game.metaGame);
+        if (game.toMove !== null && game.toMove !== "") {
+          const ids: string[] = [];
+          if (info.flags.includes("simultaneous")) {
+            const toMove = game.toMove as boolean[];
+            if (toMove) {
+              for (let i = 0; i < toMove.length; i++) {
+                if (toMove[i]) {
+                    ids.push(game.players[i].id);
                 }
-                if (ids.includes(process.env.AIAI_USERID!)) {
-                    await realPingBot(game.metaGame, game.id);
-                }
+              }
             }
+          } else {
+            ids.push(game.players[parseInt(game.toMove as string, 10)].id);
+          }
+          if (ids.includes(process.env.AIAI_USERID!)) {
+            await realPingBot(game.metaGame, game.id);
+          }
         }
+      }
     } catch (err) {
         logGetItemError(err);
         return formatReturnError(`Unable to manage bot challenges: ${err}`);
