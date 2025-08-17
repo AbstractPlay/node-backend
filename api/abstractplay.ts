@@ -4332,7 +4332,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { 
         "pk": "COMPLETEDGAMES#" + pars.metaGame, 
-        "sk": pars.game + "#" + pars.gameEnded
+        "sk": pars.gameEnded + "#" + pars.game
       },
       ExpressionAttributeValues: { ":c": pars.updateCommentedFlag },
       UpdateExpression: "set commented = :c",
