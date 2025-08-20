@@ -7560,22 +7560,35 @@ async function updateNote(userId: string, pars: {gameId: string; note?: string;}
    };
 }
 
-async function updateCommented(userId: string, pars: {id: string; metaGame: string; cbit: number; commented: number;}) {
+async function updateCommented(userId: string, pars: {id: string; metaGame: string; cbit: number; commented: number; gameEnded?: number;}) {
     console.log(`Updating commented flag for game ${pars.id} to ${pars.commented}`);
     try {
-        // Directly update the commented flag without checking if game exists
-        // This is a non-critical flag, so we can save the DB lookup
-        await ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { 
-                "pk": "GAME", 
-                "sk": pars.metaGame + "#" + pars.cbit + "#" + pars.id 
-            },
-            ExpressionAttributeValues: { ":c": pars.commented },
-            UpdateExpression: "set commented = :c",
-        }));
+        if (pars.cbit === 1 && pars.gameEnded !== undefined) {
+            // For completed games, update COMPLETEDGAMES table
+            await ddbDocClient.send(new UpdateCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: { 
+                    "pk": "COMPLETEDGAMES#" + pars.metaGame, 
+                    "sk": pars.gameEnded + "#" + pars.id
+                },
+                ExpressionAttributeValues: { ":c": pars.commented },
+                UpdateExpression: "set commented = :c",
+            }));
+            console.log(`Successfully updated commented flag in COMPLETEDGAMES for game ${pars.id} to ${pars.commented}`);
+        } else {
+            // For current games, update GAME table
+            await ddbDocClient.send(new UpdateCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: { 
+                    "pk": "GAME", 
+                    "sk": pars.metaGame + "#" + pars.cbit + "#" + pars.id 
+                },
+                ExpressionAttributeValues: { ":c": pars.commented },
+                UpdateExpression: "set commented = :c",
+            }));
+            console.log(`Successfully updated commented flag in GAME for game ${pars.id} to ${pars.commented}`);
+        }
         
-        console.log(`Successfully updated commented flag for game ${pars.id} to ${pars.commented}`);
         return {
             statusCode: 200,
             body: JSON.stringify({ success: true }),
