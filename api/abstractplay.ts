@@ -7575,13 +7575,13 @@ async function updateCommented(userId: string, pars: {id: string; metaGame: stri
                 UpdateExpression: "set commented = :c",
             }));
             console.log(`Successfully updated commented flag in COMPLETEDGAMES for game ${pars.id} to ${pars.commented}`);
-        } else {
+        } else if (pars.cbit === 0) {
             // For current games, update GAME table
             await ddbDocClient.send(new UpdateCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
                 Key: { 
                     "pk": "GAME", 
-                    "sk": pars.metaGame + "#" + pars.cbit + "#" + pars.id 
+                    "sk": pars.metaGame + "#0#" + pars.id 
                 },
                 ExpressionAttributeValues: { ":c": pars.commented },
                 UpdateExpression: "set commented = :c",
