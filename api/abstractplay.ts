@@ -1103,7 +1103,14 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
         await setSeenTime(userid, pars.id);
     }
     // hide other player's simultaneous moves
-    const flags = gameinfo.get(game.metaGame).flags;
+    console.log(`Attempting to get gameinfo for metaGame: "${game.metaGame}" (game id: ${pars.id})`);
+    const gameInfo = gameinfo.get(game.metaGame);
+    if (gameInfo === undefined) {
+      console.error(`Game metaGame "${game.metaGame}" not found in gameinfo for game ${pars.id}`);
+      console.error(`Available games in gameinfo: ${Array.from(gameinfo.keys()).slice(0, 10).join(', ')}...`);
+      throw new Error(`Invalid game type: ${game.metaGame}`);
+    }
+    const flags = gameInfo.flags;
     if (flags !== undefined && flags.includes('simultaneous') && game.partialMove !== undefined) {
       game.partialMove = game.partialMove.split(',').map((m: string, i: number) => (game.players[i].id === userid ? m : '')).join(',');
     }
