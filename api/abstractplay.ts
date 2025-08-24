@@ -4168,7 +4168,164 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
   return moveForced;
 }
 
-async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; metaGame?: string, comment: string; moveNumber: number; updateCommented?: number; }) {
+function isInterestingComment(comment: string): boolean {
+  // Normalize the comment
+  const normalized = comment.toLowerCase().trim();
+  
+  // Remove punctuation for comparison
+  const withoutPunctuation = normalized.replace(/[^\w\s]/g, '');
+  
+  // Common boring phrases (exact matches)
+  const boringPhrases = new Set([
+    'gg', 'glhf', 'gl', 'hf', 'tagg', 'hi', 'hello', 'hey',
+    'thanks', 'thx', 'ty', 'yw', 'np', 'wp', 'well played',
+    'good game', 'good luck', 'have fun', 'thanks for the game',
+    'pie invoked', 'move', 'gg sir', 'gg!', 'tagg!', 'glhf!',
+    'to a good game', 'have a good game', 'good luck!', 'have fun!',
+    'thanks for playing', 'thanks for the game!', 'gg thanks',
+    'yoyo', 'yoyo gl', 'yoyo gl hf'
+  ]);
+  
+  // Check for exact matches (with or without punctuation)
+  if (boringPhrases.has(normalized) || boringPhrases.has(withoutPunctuation)) {
+    return false;
+  }
+  
+  // Split into words for further analysis
+  const words = withoutPunctuation.split(/\s+/).filter(w => w.length > 0);
+  
+  // Very short comments with only common game words are boring
+  const commonWords = new Set([
+    'gg', 'gl', 'hf', 'tagg', 'hi', 'hello', 'yoyo',
+    'thanks', 'thx', 'ty', 'wp', 'move', 'pie', 'invoked',
+    'good', 'game', 'luck', 'fun', 'for', 'the', 'a', 'to',
+    'have', 'sir', 'well', 'played', 'you', 'too'
+  ]);
+  
+  if (words.length <= 3 && words.every(w => commonWords.has(w))) {
+    return false;
+  }
+  
+  // If we got here, the comment is interesting
+  return true;
+}
+
+// Helper function to update lastChat and seen for all players of a game
+// Used by both submitComment (for in-game chats) and saveExploration (for completed game comments)
+async function updateLastChatForPlayers(
+  gameId: string, 
+  metaGame: string,
+  players: {[k: string]: any; id: string}[],
+  currentUserId: string,
+  allowReAdd: boolean = false  // Only true for completed games via saveExploration
+) {
+  console.log(`Updating lastChat for all players of game ${gameId}`);
+  
+  // Lazy-loaded only if needed (when a player doesn't have the game in their list)
+  let fullGame: FullGame | undefined;
+  let gameEngine: any | undefined;
+  
+  const now = Date.now();
+  
+  for (const pid of players.map(p => p.id)) {
+    let data: any;
+    let user: FullUser | undefined;
+    try {
+      data = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "USER",
+            "sk": pid
+          },
+        })
+      );
+      if (data.Item !== undefined) {
+        user = data.Item as FullUser;
+      }
+    } catch (err) {
+      logGetItemError(err);
+      console.log(`Unable to get user data for user ${pid} when updating lastChat`);
+      continue; // Don't fail the whole operation
+    }
+    
+    if (user === undefined) {
+      console.log(`Unable to get user data for user ${pid} when updating lastChat`);
+      continue; // Don't fail the whole operation
+    }
+    
+    const game = user.games?.find(g => g.id === gameId);
+    
+    if (game !== undefined) {
+      game.lastChat = now;
+      // if this is the user who added the comment/exploration, also update their `seen`
+      // so it doesn't get flagged as new
+      if (pid === currentUserId) {
+        game.seen = now + 10;
+      }
+      await updateUserGames(pid, user.gamesUpdate, [gameId], user.games);
+      console.log(`Updated lastChat for user ${user.name} on game ${gameId}`);
+    } else if (allowReAdd) {
+      // Only try to re-add for completed games (when allowReAdd is true)
+      console.log(`User ${user.name} does not have a game entry for ${gameId}, re-adding it`);
+      
+      // Fetch the full game only once (lazy loading)
+      if (fullGame === undefined) {
+        try {
+          const gameData = await ddbDocClient.send(
+            new GetCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Key: {
+                "pk": "GAME",
+                "sk": `${metaGame}#1#${gameId}`
+              },
+            })
+          );
+          if (gameData.Item !== undefined) {
+            fullGame = gameData.Item as FullGame;
+            gameEngine = GameFactory(metaGame, fullGame.state);
+            if (gameEngine === undefined) {
+              console.log(`Unable to hydrate state for ${metaGame}`);
+              fullGame = undefined; // Mark as invalid
+            }
+          }
+        } catch (err) {
+          console.log(`Failed to get completed game ${gameId} for re-adding to user's list:`, err);
+        }
+      }
+      
+      if (fullGame !== undefined && gameEngine !== undefined) {
+        const newGame: Game = {
+          id: gameId,
+          metaGame: metaGame,
+          players: [...fullGame.players], // This has the full User objects with time, etc.
+          lastMoveTime: fullGame.lastMoveTime,
+          clockHard: fullGame.clockHard,
+          toMove: fullGame.toMove || "",
+          numMoves: gameEngine.stack.length - 1,
+          gameStarted: fullGame.gameStarted || new Date(gameEngine.stack[0]._timestamp).getTime(),
+          gameEnded: fullGame.gameEnded || new Date(gameEngine.stack[gameEngine.stack.length - 1]._timestamp).getTime(),
+          lastChat: now,
+          seen: pid === currentUserId ? now + 10 : undefined,
+        };
+        
+        if (!user.games) {
+          user.games = [];
+        }
+        user.games.push(newGame);
+        await updateUserGames(pid, user.gamesUpdate, [gameId], user.games);
+        console.log(`Re-added completed game ${gameId} to user ${user.name}'s games list`);
+      } else {
+        console.log(`Could not re-add game ${gameId} to user ${user.name}'s list - failed to fetch game data`);
+      }
+    } else {
+      // In-game comment but user doesn't have the game - this shouldn't happen
+      console.log(`Warning: User ${user.name} doesn't have in-progress game ${gameId} in their list`);
+    }
+  }
+}
+
+async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; metaGame?: string, comment: string; moveNumber: number; }) {
   // reject empty comments
   if ( (pars.comment.length === 0) || (/^\s*$/.test(pars.comment) ) ) {
     return formatReturnError(`Refusing to accept blank comment.`);
@@ -4197,6 +4354,9 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
   else
     comments = commentsData.comments;
 
+  // Check if there were any interesting comments before adding the new one
+  const hadInterestingCommentBefore = comments.some(c => isInterestingComment(c.comment));
+
   if (comments.reduce((s: number, a: Comment) => s + 110 + Buffer.byteLength(a.comment,'utf8'), 0) < 360000) {
     const comment: Comment = {"comment": pars.comment.substring(0, 4000), "userId": userid, "moveNumber": pars.moveNumber, "timeStamp": Date.now()};
     comments.push(comment);
@@ -4208,123 +4368,45 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
           "comments": comments
         }
       }));
+  
+    // Check if the new comment is interesting
+    const newCommentIsInteresting = isInterestingComment(comment.comment);
+    
+    // If we didn't have interesting comments before but the new one is interesting,
+    // update the GAME record to set commented = 1
+    if (pars.metaGame && !hadInterestingCommentBefore && newCommentIsInteresting) {
+      try {
+        await ddbDocClient.send(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { 
+            "pk": "GAME", 
+            "sk": pars.metaGame + "#0#" + pars.id 
+          },
+          ExpressionAttributeValues: { ":c": 1 },
+          UpdateExpression: "set commented = :c",
+        }));
+        console.log(`Updated commented flag to 1 for game ${pars.id} (first interesting comment added)`);
+      } catch (error) {
+        console.log(`Failed to update commented flag for game ${pars.id}:`, error);
+        // Don't fail the whole operation just because of the flag update
+      }
+    }
   }
   
-  // Update the commented flag for ongoing games if requested
-  if (pars.updateCommented !== undefined && pars.updateCommented === 1 && pars.metaGame) {
-    try {
-      await ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { 
-          "pk": "GAME", 
-          "sk": pars.metaGame + "#0#" + pars.id 
-        },
-        ExpressionAttributeValues: { ":c": 1 },
-        UpdateExpression: "set commented = :c",
-      }));
-      console.log(`Updated commented flag to 1 for game ${pars.id}`);
-    } catch (error) {
-      console.log(`Failed to update commented flag for game ${pars.id}:`, error);
-      // Don't fail the whole operation just because of the flag update
-    }
-  }
-
-  // if game is completed, `players` will be passed
-  // pull each user's record and update `lastChat`
-  if ( ("players" in pars) && (pars.players !== undefined) && (Array.isArray(pars.players)) && ("metaGame" in pars) && (pars.metaGame !== undefined) ) {
-    console.log("This game is closed, so finding all user records");
-    for (const pid of pars.players.map(p => p.id)) {
-        let data: any;
-        let user: FullUser|undefined;
-        try {
-            data = await ddbDocClient.send(
-                new GetCommand({
-                  TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Key: {
-                    "pk": "USER",
-                    "sk": pid
-                    },
-                })
-            )
-            if (data.Item !== undefined) {
-                user = data.Item as FullUser;
-            }
-        } catch (err) {
-            logGetItemError(err);
-            return formatReturnError(`Unable to get user data for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-        }
-        if (user === undefined) {
-            return formatReturnError(`Unable to get user data for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-        }
-        console.log(`Found the following user data:`);
-        console.log(JSON.stringify(user));
-        const game = user.games.find(g => g.id === pars.id);
-        if (game !== undefined) {
-            game.lastChat = Date.now();
-            // if this is the player who submitted the comment, also update their `lastSeen`
-            // so the chat doesn't get flagged as new
-            if (pid === userid) {
-                game.seen = game.lastChat + 10;
-            }
-        } else {
-            console.log(`User ${user.name} does not have a game entry for ${pars.id}`);
-            // pull the corresponding full game record
-            let data: any;
-            let fullGame: FullGame|undefined;
-            try {
-                data = await ddbDocClient.send(
-                    new GetCommand({
-                      TableName: process.env.ABSTRACT_PLAY_TABLE,
-                      Key: {
-                        "pk": "GAME",
-                        "sk": `${pars.metaGame}#1#${pars.id}`
-                        },
-                    })
-                )
-                if (data.Item !== undefined) {
-                    fullGame = data.Item as FullGame;
-                }
-            } catch (err) {
-                logGetItemError(err);
-                return formatReturnError(`Unable to get full game record for ${pars.metaGame}, id ${pars.id}, from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-            }
-            if (fullGame === undefined) {
-                return formatReturnError(`Unable to get full game record for ${pars.metaGame}, id ${pars.id}, from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-            }
-            // push a new `Game` object
-            const engine = GameFactory(pars.metaGame, fullGame.state);
-            if (engine === undefined) {
-                return formatReturnError(`Unable to hydrate state for ${pars.metaGame}: ${fullGame.state}`);
-            }
-            user.games.push({
-                id: pars.id,
-                metaGame: pars.metaGame,
-                players: [...fullGame.players],
-                lastMoveTime: fullGame.lastMoveTime,
-                clockHard: fullGame.clockHard,
-                toMove: fullGame.toMove,
-                numMoves: engine.stack.length - 1,
-                gameStarted: new Date(engine.stack[0]._timestamp).getTime(),
-                gameEnded: new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime(),
-                lastChat: new Date().getTime(),
-            });
-        }
-        try {
-            console.log(`About to save updated user record: ${JSON.stringify(user)}`);
-            await ddbDocClient.send(new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Item: user
-                })
-            );
-        } catch (err) {
-            logGetItemError(err);
-            return formatReturnError(`Unable to save lastchat for user ${pid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-        }
-    }
+  // Update lastChat for all players when a comment is added to an in-game chat
+  // Note: For completed games, comments go through the exploration system (saveExploration)
+  if (pars.players && pars.metaGame) {
+    await updateLastChatForPlayers(
+      pars.id,
+      pars.metaGame,
+      pars.players,
+      userid,
+      false  // Don't re-add game to list for in-game comments
+    );
   }
 }
 
-async function saveExploration(userid: string, pars: { public: boolean, game: string; metaGame: string; move: number; version: number; tree: Exploration; updateCommentedFlag?: number; gameEnded?: number; }) {
+async function saveExploration(userid: string, pars: { public: boolean, game: string; metaGame: string; move: number; version: number; tree: Exploration; updateCommentedFlag?: number; gameEnded?: number; updateLastChat?: boolean; players?: {[k: string]: any; id: string}[]; }) {
   // If we need to update the commented flag for a completed game
   if (pars.updateCommentedFlag !== undefined && pars.public && pars.gameEnded !== undefined) {
     // Update the commented flag in COMPLETEDGAMES
@@ -4339,6 +4421,17 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
     }));
     
     console.log(`Updated commented flag for completed game ${pars.game} to ${pars.updateCommentedFlag}`);
+  }
+  
+  // If we need to update lastChat and seen for all players (completed games, at most once every 10 minutes)
+  if (pars.updateLastChat && pars.public && pars.players) {
+    await updateLastChatForPlayers(
+      pars.game,
+      pars.metaGame,
+      pars.players,
+      userid,
+      true  // Allow re-adding game to list for completed games
+    );
   }
   
   if (!pars.public) {
