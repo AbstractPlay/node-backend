@@ -1103,14 +1103,7 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
         await setSeenTime(userid, pars.id);
     }
     // hide other player's simultaneous moves
-    console.log(`Attempting to get gameinfo for metaGame: "${game.metaGame}" (game id: ${pars.id})`);
-    const gameInfo = gameinfo.get(game.metaGame);
-    if (gameInfo === undefined) {
-      console.error(`Game metaGame "${game.metaGame}" not found in gameinfo for game ${pars.id}`);
-      console.error(`Available games in gameinfo: ${Array.from(gameinfo.keys()).slice(0, 10).join(', ')}...`);
-      throw new Error(`Invalid game type: ${game.metaGame}`);
-    }
-    const flags = gameInfo.flags;
+    const flags = gameinfo.get(game.metaGame).flags;
     if (flags !== undefined && flags.includes('simultaneous') && game.partialMove !== undefined) {
       game.partialMove = game.partialMove.split(',').map((m: string, i: number) => (game.players[i].id === userid ? m : '')).join(',');
     }
@@ -4391,6 +4384,7 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
           },
           ExpressionAttributeValues: { ":c": 1 },
           UpdateExpression: "set commented = :c",
+          ConditionExpression: "attribute_exists(pk) AND attribute_exists(sk)"
         }));
         console.log(`Updated commented flag to 1 for game ${pars.id} (first interesting comment added)`);
       } catch (error) {
@@ -7661,7 +7655,7 @@ async function updateNote(userId: string, pars: {gameId: string; note?: string;}
 }
 
 async function updateCommented(userId: string, pars: {id: string; metaGame: string; cbit: number; commented: number; gameEnded?: number;}) {
-    console.log(`Updating commented flag for game ${pars.id} to ${pars.commented}`);
+    console.log(`Updating commented flag for game ${pars.id} to ${pars.commented}, cbit=${pars.cbit}, gameEnded=${pars.gameEnded}`);
     try {
         if (pars.cbit === 1 && pars.gameEnded !== undefined) {
             // For completed games, update COMPLETEDGAMES table
