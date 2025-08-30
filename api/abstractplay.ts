@@ -4169,6 +4169,9 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
 }
 
 function isInterestingComment(comment: string): boolean {
+  if (!comment || comment.trim().length === 0) {
+    return false;
+  }
   // Normalize the comment
   const normalized = comment.toLowerCase().trim();
   
