@@ -4414,20 +4414,25 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
   // If we need to update the commented flag for a completed game
   if (pars.updateCommentedFlag !== undefined && pars.public && pars.gameEnded !== undefined) {
     // Update the commented flag in COMPLETEDGAMES
-    await ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { 
-        "pk": "COMPLETEDGAMES#" + pars.metaGame, 
-        "sk": pars.gameEnded + "#" + pars.game
-      },
-      ExpressionAttributeValues: { ":c": pars.updateCommentedFlag },
-      UpdateExpression: "set commented = :c",
-    }));
-    
-    console.log(`Updated commented flag for completed game ${pars.game} to ${pars.updateCommentedFlag}`);
+    try {
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { 
+          "pk": "COMPLETEDGAMES#" + pars.metaGame, 
+          "sk": pars.gameEnded + "#" + pars.game
+        },
+        ExpressionAttributeValues: { ":c": pars.updateCommentedFlag },
+        UpdateExpression: "set commented = :c",
+        ConditionExpression: "attribute_exists(pk) AND attribute_exists(sk)"
+      }));
+      console.log(`Updated commented flag for completed game ${pars.game} to ${pars.updateCommentedFlag}`);
+    } catch (error) {
+      console.log(`Failed to update commented flag for completed game ${pars.game}:`, error);
+      // Don't fail the whole operation just because of the flag update
+    }
   }
   
-  // If we need to update lastChat and seen for all players (completed games, at most once every 10 minutes)
+  // If we need to update lastChat and seen for all players (completed games only)
   if (pars.updateLastChat && pars.public && pars.players) {
     await updateLastChatForPlayers(
       pars.game,
@@ -7670,6 +7675,7 @@ async function updateCommented(userId: string, pars: {id: string; metaGame: stri
                 },
                 ExpressionAttributeValues: { ":c": pars.commented },
                 UpdateExpression: "set commented = :c",
+                ConditionExpression: "attribute_exists(pk) AND attribute_exists(sk)"
             }));
             console.log(`Successfully updated commented flag in COMPLETEDGAMES for game ${pars.id} to ${pars.commented}`);
         } else if (pars.cbit === 0) {
@@ -7682,6 +7688,7 @@ async function updateCommented(userId: string, pars: {id: string; metaGame: stri
                 },
                 ExpressionAttributeValues: { ":c": pars.commented },
                 UpdateExpression: "set commented = :c",
+                ConditionExpression: "attribute_exists(pk) AND attribute_exists(sk)"
             }));
             console.log(`Successfully updated commented flag in GAME for game ${pars.id} to ${pars.commented}`);
         }
