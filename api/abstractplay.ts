@@ -2623,6 +2623,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
   const challengeId = pars.id;
   const standing = pars.standing === true;
   const metaGame = pars.metaGame;
+  console.log(`Responding to challenge standing = ${standing} ${metaGame}.${challengeId} for user ${userid}: ${response ? "accepted" : "rejected"}`);
   let comment = pars.comment ? pars.comment.trim() : "";
   if (!comment.endsWith(".") && !comment.endsWith("!") && !comment.endsWith("?"))
     comment += ".";
