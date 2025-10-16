@@ -462,13 +462,13 @@ export const handler: Handler = async (event: any, context?: any) => {
             const ts = new Trueskill({betaStart: 25/9});
             const tsResults = ts.runProcessed(recs);
             const tsRatings = new Map(tsResults.ratings) as Map<string, ITrueskillRating>;
-            if (aggRatingList.filter(r => r.user === player).length !== tsRatings.size) {
-                const elo = new Set<string>(aggRatingList.map(r => r.user));
-                const tsVals = new Set<string>([...tsRatings.values()].map(r => {const [,u] = r.userid.split("|"); return u;}))
-                const inElo = [...elo.values()].filter(u => ! tsVals.has(u));
-                const inTS = [...tsVals.values()].filter(u => ! elo.has(u));
-                throw new Error(`The list of Elo ratings is not the same length as the list of Trueskill ratings.\nList of Elo ratings not in Trueskill: ${JSON.stringify(inElo, null, 2)}\nList of Trueskill ratings not in Elo: ${JSON.stringify(inTS, null, 2)}\nTrueskill ratings: ${JSON.stringify(tsRatings, replacer, 2)}`);
-            }
+            // if (aggRatingList.filter(r => r.user === player).length !== tsRatings.size) {
+            //     const elo = new Set<string>(aggRatingList.map(r => r.user));
+            //     const tsVals = new Set<string>([...tsRatings.values()].map(r => {const [,u] = r.userid.split("|"); return u;}))
+            //     const inElo = [...elo.values()].filter(u => ! tsVals.has(u));
+            //     const inTS = [...tsVals.values()].filter(u => ! elo.has(u));
+            //     throw new Error(`The list of Elo ratings is not the same length as the list of Trueskill ratings.\nList of Elo ratings not in Trueskill: ${JSON.stringify(inElo, null, 2)}\nList of Trueskill ratings not in Elo: ${JSON.stringify(inTS, null, 2)}\nTrueskill ratings: ${JSON.stringify(tsRatings, replacer, 2)}`);
+            // }
             console.log(`Final Trueskill ratings:\n${JSON.stringify([...tsRatings.values()])}`)
 
             // now Glicko
