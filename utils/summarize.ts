@@ -89,6 +89,7 @@ type StatSummary = {
         highest: UserGameRating[];
         avg: UserRating[];
         weighted: UserRating[];
+        aggregate: UserGameRating[];
     };
     topPlayers: UserGameRating[];
     plays: {
@@ -437,6 +438,97 @@ export const handler: Handler = async (event: any, context?: any) => {
         const ratedGames = new Set<string>(ratingList.map(r => r.game));
         const ratedPlayers = new Set<string>(ratingList.map(r => r.user));
 
+        // AGGREGATE RATINGS
+        // rate all records for a given player in a single pool
+        console.log("Doing aggregated ratings");
+        const aggRater = new ELOBasic();
+        const aggRatingList: RatingList = [];
+        // collate list of raw ratings right here and now
+        const aggList: UserGameRating[] = [];
+        for (const [player, recs] of player2recs.entries()) {
+            console.log(`Aggregating all game records for ${player}`);
+            // Elo ratings first
+            const results = aggRater.runProcessed(recs);
+            console.log(`Elo rater:\nTotal records: ${results.recsReceived}, Num rated: ${results.recsRated}\n${results.warnings !== undefined ? results.warnings.join("\n") + "\n" : ""}${results.errors !== undefined ? results.errors.join("\n") + "\n" : ""}`);
+            for (const rating of results.ratings.values()) {
+                rating.gamename = "AGGREGATE";
+                const [,userid] = rating.userid.split("|");
+                rating.userid = userid;
+                aggRatingList.push({user: userid, game: "AGGREGATE", rating});
+            }
+
+            // now Trueskill
+            console.log(`Running Trueskill ratings`);
+            const ts = new Trueskill({betaStart: 25/9});
+            const tsResults = ts.runProcessed(recs);
+            const tsRatings = new Map(tsResults.ratings) as Map<string, ITrueskillRating>;
+            if (aggRatingList.filter(r => r.user === player).length !== tsRatings.size) {
+                const elo = new Set<string>(aggRatingList.map(r => r.user));
+                const tsVals = new Set<string>([...tsRatings.values()].map(r => {const [,u] = r.userid.split("|"); return u;}))
+                const inElo = [...elo.values()].filter(u => ! tsVals.has(u));
+                const inTS = [...tsVals.values()].filter(u => ! elo.has(u));
+                throw new Error(`The list of Elo ratings is not the same length as the list of Trueskill ratings.\nList of Elo ratings not in Trueskill: ${JSON.stringify(inElo, null, 2)}\nList of Trueskill ratings not in Elo: ${JSON.stringify(inTS, null, 2)}\nTrueskill ratings: ${JSON.stringify(tsRatings, replacer, 2)}`);
+            }
+            console.log(`Final Trueskill ratings:\n${JSON.stringify([...tsRatings.values()])}`)
+
+            // now Glicko
+            console.log(`Running Glicko2 ratings`);
+            const glicko = new Glicko2();
+            // get earliest and latest dates for subset
+            const oldest = new Date(recs.map(r => r.header["date-end"]).sort((a, b) => a.localeCompare(b))[0]);
+            const newest = new Date(recs.map(r => r.header["date-end"]).sort((a, b) => b.localeCompare(a))[0]);
+            console.log(`Oldest: ${oldest}, Newest: ${newest}`);
+            const delta = newest.getTime() - oldest.getTime();
+            const period = 60 * 24 * 60 * 60 * 1000;
+            let numPeriods = Math.ceil(delta / period);
+            if (numPeriods === 0) { numPeriods++; }
+            console.log(`Number of periods: ${numPeriods}`);
+            let toDate = new Map<string, IGlickoRating>();
+            let ratedRecs = 0;
+            for (let p = 0; p < numPeriods; p++) {
+                glicko.knownRatings = new Map(toDate);
+                const pMin = oldest.getTime() + (p * period);
+                const pMax = oldest.getTime() + ((p + 1) * period)
+                const recs: APGameRecord[] = [];
+                for (const rec of recs) {
+                    const secs = new Date(rec.header["date-end"]).getTime();
+                    if ( (secs >= pMin) && (secs < pMax) ) {
+                        recs.push(rec);
+                    }
+                }
+                ratedRecs += recs.length;
+                const results = glicko.runProcessed(recs);
+                toDate = new Map(results.ratings as Map<string, IGlickoRating>);
+            }
+            if (ratedRecs !== recs.length) {
+                throw new Error(`The record subset had ${recs.length} records, but only ${ratedRecs} were handed to the rater.`);
+            }
+            // toDate now has the final rating results
+            if (recs.length !== toDate.size) {
+                const elo = new Set<string>(aggList.map(r => r.user));
+                const glicko = new Set<string>([...toDate.values()].map(r => {const [,u] = r.userid.split("|"); return u;}))
+                const inElo = [...elo.values()].filter(u => ! glicko.has(u));
+                const inGlicko = [...glicko.values()].filter(u => ! elo.has(u));
+                throw new Error(`The list of Elo ratings is not the same length as the list of Glicko ratings.\nList of Elo ratings not in Glicko: ${JSON.stringify(inElo, null, 2)}\nList of Glicko ratings not in Elo: ${JSON.stringify(inGlicko, null, 2)}\nGlicko ratings: ${JSON.stringify(toDate, replacer, 2)}`);
+            }
+            console.log(`Final glicko rating results: ${JSON.stringify(toDate, replacer)}`)
+
+            // Save Elo, Glicko2, and Trueskill ratings into rawList
+            for (const userStr of toDate.keys()) {
+                const [,user] = userStr.split("|");
+                const elo = aggRatingList.find(r => r.user === user)?.rating;
+                if (elo === undefined) {
+                    throw new Error(`Could not find a matching Elo rating for ${user}.`);
+                }
+                const ts = tsRatings.get(userStr);
+                if (ts === undefined) {
+                    throw new Error(`Could not find a matching Trueskill rating for ${user}.`);
+                }
+                const glicko = toDate.get(userStr)!;
+                aggList.push({user, game: "AGGREGATE", rating: Math.round(elo.rating), wld: [elo.wins, elo.losses, elo.draws], glicko: {rating: glicko.rating, rd: glicko.rd}, trueskill: {mu: ts.rating, sigma: ts.sigma}});
+            }
+        }
+
         // LISTS OF RATINGS
         console.log("Summarizing ratings");
         // raw [see `rawList` above]
@@ -751,6 +843,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 highest: rawList,
                 avg: avgRatings,
                 weighted: weightedRatings,
+                aggregate: aggList,
             },
             topPlayers,
             plays: {
