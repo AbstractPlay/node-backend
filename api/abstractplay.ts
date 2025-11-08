@@ -1668,19 +1668,84 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
               }});
             if (minIndex !== -1) {
               await updateUserGames(userId, user.gamesUpdate, removedGameIDs, games);
-              game.toMove = '';
-              game.lastMoveTime = game.lastMoveTime + game.players[minIndex].time!;
-              await timeloss(false, minIndex, game.id, game.metaGame, game.lastMoveTime);
+              const newLastMoveTime = game.lastMoveTime + game.players[minIndex].time!;
+
+              try {
+                // Build expected array for condition
+                const expectedToMove = [...game.toMove];
+
+                await ddbDocClient.send(new UpdateCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "GAME",
+                    "sk": game.metaGame + "#0#" + game.id
+                  },
+                  ConditionExpression: "toMove = :expectedToMove",
+                  ExpressionAttributeValues: {
+                    ":expectedToMove": expectedToMove,
+                    ":newToMove": '',
+                    ":newLastMoveTime": newLastMoveTime
+                  },
+                  UpdateExpression: "set toMove = :newToMove, lastMoveTime = :newLastMoveTime"
+                }));
+
+                console.log(`Successfully marked simultaneous game ${game.id} as timed out, processing...`);
+                game.toMove = '';
+                game.lastMoveTime = newLastMoveTime;
+                await timeloss(false, minIndex, game.id, game.metaGame, game.lastMoveTime);
+
+              } catch (err: any) {
+                if (err.name === 'ConditionalCheckFailedException') {
+                  console.log(`Simultaneous game ${game.id} already processed, skipping`);
+                  game.toMove = '';
+                  game.lastMoveTime = newLastMoveTime;
+                } else {
+                  throw err;
+                }
+              }
             }
           } else {
             const toMove = parseInt(game.toMove);
             if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
               // To make sure games are up to date before we update further. Note this is a noop if removedGameIDs === [].
               await updateUserGames(userId, user.gamesUpdate, removedGameIDs, games);
-              game.lastMoveTime = game.lastMoveTime + game.players[toMove].time!;
-              game.toMove = '';
-              // DON'T parallelize this!
-              await timeloss(false, toMove, game.id, game.metaGame, game.lastMoveTime);
+              const newLastMoveTime = game.lastMoveTime + game.players[toMove].time!;
+              try {
+                // Conditional update: only succeed if toMove hasn't been cleared yet
+                await ddbDocClient.send(new UpdateCommand({
+                  TableName: process.env.ABSTRACT_PLAY_TABLE,
+                  Key: {
+                    "pk": "GAME",
+                    "sk": game.metaGame + "#0#" + game.id
+                  },
+                  ConditionExpression: "toMove = :expectedToMove",
+                  ExpressionAttributeValues: {
+                    ":expectedToMove": toMove.toString(),
+                    ":newToMove": '',
+                    ":newLastMoveTime": newLastMoveTime
+                  },
+                  UpdateExpression: "set toMove = :newToMove, lastMoveTime = :newLastMoveTime"
+                }));
+
+                // Only if the conditional update succeeded, process the timeout
+                console.log(`Successfully marked game ${game.id} as timed out, processing...`);
+                game.lastMoveTime = newLastMoveTime;
+                game.toMove = '';
+
+                // Now safe to process timeout - we "own" this timeout
+                await timeloss(false, toMove, game.id, game.metaGame, game.lastMoveTime);
+
+              } catch (err: any) {
+                if (err.name === 'ConditionalCheckFailedException') {
+                  // Another request already processed this timeout, skip
+                  console.log(`Game ${game.id} already processed by another request, skipping`);
+                  // Update local game object to reflect the change
+                  game.toMove = '';
+                  game.lastMoveTime = newLastMoveTime;
+                } else {
+                  throw err;
+                }
+              }
             }
           }
         }
