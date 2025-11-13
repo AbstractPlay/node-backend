@@ -438,8 +438,8 @@ async function verifyAndCorrectCountWithData(metaGame: string, countType: "curre
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
                 Key: { "pk": "METAGAMES", "sk": "COUNTS" },
                 ExpressionAttributeNames: { "#g": metaGame },
-                ExpressionAttributeValues: { ":count": actualCount },
-                UpdateExpression: `set #g.${countType} = :count`
+                ExpressionAttributeValues: { ":gameData": { [countType]: actualCount } },
+                UpdateExpression: `set #g = :gameData`
             }));
             console.log(`Initialized ${countType} for ${metaGame} to ${actualCount}`);
             return;
@@ -454,8 +454,8 @@ async function verifyAndCorrectCountWithData(metaGame: string, countType: "curre
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
                 Key: { "pk": "METAGAMES", "sk": "COUNTS" },
                 ExpressionAttributeNames: { "#g": metaGame },
-                ExpressionAttributeValues: { ":count": actualCount },
-                UpdateExpression: `set #g.${countType} = :count`
+                ExpressionAttributeValues: { ":gameData": { [countType]: actualCount } },
+                UpdateExpression: `set #g = :gameData`
             }));
             console.log(`Initialized ${countType} for new game ${metaGame} to ${actualCount}`);
             return;
