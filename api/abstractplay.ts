@@ -274,6 +274,7 @@ type Exploration = {
   comment: string;
   children: Exploration[];
   outcome?: number; // Optional. 0 for player1 win, 1 for player2 win, -1 for undecided.
+  premove?: boolean; // Optional. If true, this move will be automatically submitted when the opponent plays the parent move.
 };
 
 type Division = {
@@ -3338,20 +3339,44 @@ function deleteFromGameLists(type: string, game: FullGame) {
   return Promise.all(work);
 }
 
-async function submitMove(userid: string, pars: { id: string, move: string, draw: string, metaGame: string, cbit: number}) {
+async function submitMove(userid: string, pars: { id: string, move: string, draw: string, metaGame: string, cbit: number, moveNumber?: number, opponentId?: string,
+  exploration?: Exploration[]
+}) {
   if (pars.cbit !== 0) {
     return formatReturnError("cbit must be 0");
   }
-  let data: any;
-  try {
-    data = await ddbDocClient.send(
+
+  // Build parallel fetch promises
+  const gamePromise = ddbDocClient.send(
+    new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        "pk": "GAME",
+        "sk": pars.metaGame + "#0#" + pars.id
+      },
+    }));
+
+  // If opponentId and moveNumber are provided, also fetch opponent exploration data
+  let opponentExplorationPromise: Promise<any> | null = null;
+  if (pars.opponentId && pars.moveNumber !== undefined) {
+    opponentExplorationPromise = ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk": "GAME",
-          "sk": pars.metaGame + "#0#" + pars.id
+          "pk": "GAMEEXPLORATION#" + pars.id,
+          "sk": pars.opponentId + "#" + (pars.moveNumber - 1)
         },
       }));
+  }
+
+  let data: any;
+  let opponentExplorationData: any = null;
+  try {
+    if (opponentExplorationPromise) {
+      [data, opponentExplorationData] = await Promise.all([gamePromise, opponentExplorationPromise]);
+    } else {
+      data = await gamePromise;
+    }
   }
   catch (error) {
     logGetItemError(error);
@@ -3366,10 +3391,31 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     const engine = GameFactory(game.metaGame, game.state);
     if (!engine)
       throw new Error(`Unknown metaGame ${game.metaGame}`);
+
+    // Validate moveNumber if provided (to catch stale browser submissions)
+    const currentMoveNumber = engine.stack.length;
+    if (pars.moveNumber !== undefined && pars.moveNumber !== currentMoveNumber) {
+      return formatReturnError(`Move number mismatch: browser has ${pars.moveNumber} moves but game has ${currentMoveNumber} moves. Please refresh your browser.`);
+    }
+
+    // Parse explorations if fetched (for premove processing)
+    let opponentExploration: Exploration[] | null = null;
+    let myExploration: Exploration[] | null = null;
+    if (opponentExplorationData?.Item?.tree) {
+      try {
+        opponentExploration = JSON.parse(opponentExplorationData.Item.tree as string);
+      } catch (error) {
+        console.log(`Error parsing opponent exploration tree: ${error}`);
+        // Non-fatal, continue without premove processing
+      }
+    }
+
     const flags = gameinfo.get(game.metaGame).flags;
     const simultaneous = flags !== undefined && flags.includes('simultaneous');
     const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
-    let moveForced = false;
+    let autoMoves = 0;
+    let list: Promise<any>[] = [];
+
     try {
       if (pars.move === "resign") {
         resign(userid, engine, game);
@@ -3380,7 +3426,11 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       } else if (simultaneous) {
         applySimultaneousMove(userid, pars.move, engine as GameBaseSimultaneous, game);
       } else {
-        moveForced = applyMove(userid, pars.move, engine, game, flags);
+        const result = applyMove(userid, pars.move, currentMoveNumber, engine, game, flags, opponentExploration, pars.exploration);
+        autoMoves = result.autoMoves;
+        for (const workItem of result.work) {
+          list.push(workItem);
+        }
       }
     }
     catch (error) {
@@ -3392,7 +3442,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     if (!player)
       throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
     // deal with draw offers
-    if (pars.draw === "drawoffer" && !moveForced) {
+    if (pars.draw === "drawoffer" && autoMoves === 0) {
       player.draw = "offered";
     } else {
       // if a player just moved, other draw offers are declined
@@ -3428,7 +3478,6 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
         playerGame.winner = engine.winner;
     }
-    const list: Promise<any>[] = [];
     let newRatings: {[metaGame: string] : Rating}[] | null = null;
     if ((game.toMove === "" || game.toMove === null)) {
       newRatings = updateRatings(game, players);
@@ -3810,7 +3859,7 @@ function resign(userid: any, engine: GameBase, game: FullGame) {
     if (simultaneous) {
         applySimultaneousMove(userid, "resign", engine as GameBaseSimultaneous, game);
     } else {
-        applyMove(userid, "resign", engine, game, flags);
+        applyMove(userid, "resign", -1, engine, game, flags);
     }
   }
 }
@@ -3854,7 +3903,7 @@ function timeout(userid: string, engine: GameBase|GameBaseSimultaneous, game: Fu
     if (simultaneous) {
         applySimultaneousMove(loserid, "timeout", engine as GameBaseSimultaneous, game);
     } else {
-        applyMove(loserid, "timeout", engine, game, flags);
+        applyMove(loserid, "timeout", -1, engine, game, flags);
     }
   }
 }
@@ -4196,30 +4245,140 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBaseSim
   }
 }
 
-function applyMove(userid: string, move: string, engine: GameBase, game: FullGame, flags: string[]): boolean {
+// Helper to find a child in exploration that matches a move using engine.sameMove
+function findExplorationChild(exploration: Exploration[] | null | undefined, move: string, engine: GameBase): Exploration | null {
+  if (!exploration) return null;
+  for (const child of exploration) {
+    // @ts-ignore - sameMove exists on game engines
+    if (engine.sameMove(move, child.move as unknown as string)) {
+      return child;
+    }
+  }
+  return null;
+}
+
+// Helper to find a premove child in exploration
+function findPremoveChild(exploration: Exploration[] | null | undefined): Exploration | null {
+  if (!exploration) return null;
+  return exploration.find(child => child.premove === true) || null;
+}
+
+// Helper to apply forced moves (automove/autopass) and return true if any were applied
+function applyForcedMove(engine: GameBase, flags: string[]): string {
+  let forcedMove = null;
+  if (flags !== undefined && flags.includes("automove") && !engine.gameover) {
+    // @ts-ignore
+    if (engine.moves().length === 1 && !(flags.includes("pie-even") && engine.state().stack.length === 2)) {
+      // @ts-ignore
+      forcedMove = engine.moves()[0];
+      console.log(`Applying forced move: ${forcedMove}`);
+      engine.move(forcedMove);
+    }
+  } else if (flags !== undefined && flags.includes("autopass") && !engine.gameover) {
+    // @ts-ignore
+    if (engine.moves().length === 1 && engine.moves()[0] === "pass" && !(flags.includes("pie-even") && engine.state().stack.length === 2)) {
+      console.log(`Applying forced pass`);
+      // @ts-ignore
+      forcedMove = engine.moves()[0];
+      console.log(`Applying forced move: ${forcedMove}`);
+      engine.move(forcedMove);
+    }
+  }
+  return forcedMove;
+}
+
+function applyMove(
+  userid: string,
+  move: string,
+  moveNumber: number,
+  engine: GameBase,
+  game: FullGame,
+  flags: string[],
+  opponentExploration: Exploration[] | null = null,
+  myExploration: Exploration[] | null = null
+): {autoMoves: number, work: Promise<any>[]} {
   // non simultaneous move game.
   if (game.players[parseInt(game.toMove as string)].id !== userid) {
     throw new Error('It is not your turn!');
   }
-  let moveForced = false;
+
+  const myPlayerIndex = parseInt(game.toMove as string);
+  const opponentPlayerIndex = 1 - myPlayerIndex;
+
+  // Track exploration positions for both players
+  // explorations[0] is player 0's current exploration node children, explorations[1] is player 1's
+  const explorations: (Exploration[] | null)[] = [null, null];
+  explorations[myPlayerIndex] = myExploration;
+  explorations[opponentPlayerIndex] = opponentExploration;
+  console.log(`My explorations: ${JSON.stringify(explorations[myPlayerIndex])}, Opponent explorations: ${JSON.stringify(explorations[opponentPlayerIndex])}`);
+  let autoMoves = 0;
+
+  // Apply the initial submitted move
+  console.log(`Applying submitted move: ${move}`);
   engine.move(move);
-  if (flags !== undefined && flags.includes("automove")) {
-    // @ts-ignore
-    while (engine.moves().length === 1) {
-        if (flags.includes("pie-even") && engine.state().stack.length === 2) break;
-        // @ts-ignore
-        engine.move(engine.moves()[0]);
-        moveForced = true;
+
+  // Main loop: handle forced moves and premoves until no more can be applied
+  while (!engine.gameover && move) {
+    // Update both explorations based on the applied move
+    explorations[0] = findExplorationChild(explorations[0], move, engine)?.children || null;
+    explorations[1] = findExplorationChild(explorations[1], move, engine)?.children || null;
+
+    // First, apply any forced moves (automove/autopass)
+    move = applyForcedMove(engine, flags);
+    if (!move) {
+      // Check if there's a premove for the current player
+      // @ts-ignore
+      const currentPlayerIndex = engine.currplayer - 1;
+      const currentExploration = explorations[currentPlayerIndex];
+      const premoveNode = findPremoveChild(currentExploration);
+      if (premoveNode) {
+        move = premoveNode.move as unknown as string;
+        console.log(`Applying premove for player ${currentPlayerIndex}: ${move}`);
+      }
     }
-  } else if (flags !== undefined && flags.includes("autopass")) {
-    // @ts-ignore
-    while (engine.moves().length === 1 && engine.moves()[0] === "pass") {
-        if (flags.includes("pie-even") && engine.state().stack.length === 2) break;
-        // @ts-ignore
-        engine.move(engine.moves()[0]);
-        moveForced = true;
+    if (move) {
+      try {
+        engine.move(move);
+        autoMoves += 1;
+      } catch (e) {
+        console.log(`Premove ${move} is invalid!: ${e}`);
+        break;
+      }
     }
   }
+
+  let work: Promise<any>[] = [];
+  if (!engine.gameover) {
+    if (explorations[0]) {
+      // save back the updated exploration for player 0
+      work.push(ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: {
+            "pk": "GAMEEXPLORATION#" + game.id,
+            "sk": game.players[0].id + "#" + (moveNumber + 1 + autoMoves),
+            "user": game.players[0].id,
+            "game": game.id,
+            "move": (moveNumber + 1 + autoMoves),
+            "tree": JSON.stringify(explorations[0])
+          }
+        })));
+    }
+    if (explorations[1]) {
+      // save back the updated exploration for player 1
+      work.push(ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: {
+            "pk": "GAMEEXPLORATION#" + game.id,
+            "sk": game.players[1].id + "#" + (moveNumber + 1 + autoMoves),
+            "user": game.players[1].id,
+            "game": game.id,
+            "move": (moveNumber + 1 + autoMoves),
+            "tree": JSON.stringify(explorations[1])
+          }
+        })));
+    }
+  }
+  
   game.state = engine.serialize();
   if (engine.gameover) {
     game.toMove = "";
@@ -4231,7 +4390,7 @@ function applyMove(userid: string, move: string, engine: GameBase, game: FullGam
     }
     game.toMove = `${engine.currplayer - 1}`;
   }
-  return moveForced;
+  return {autoMoves, work};
 }
 
 function isInterestingComment(comment: string): boolean {
