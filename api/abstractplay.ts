@@ -4356,7 +4356,7 @@ function applyMove(
             "sk": game.players[0].id + "#" + (moveNumber + 2 + autoMoves),
             "user": game.players[0].id,
             "game": game.id,
-            "move": (moveNumber + 1 + autoMoves),
+            "move": (moveNumber + 2 + autoMoves),
             "tree": JSON.stringify(explorations[0])
           }
         })));
@@ -4370,7 +4370,7 @@ function applyMove(
             "sk": game.players[1].id + "#" + (moveNumber + 2 + autoMoves),
             "user": game.players[1].id,
             "game": game.id,
-            "move": (moveNumber + 1 + autoMoves),
+            "move": (moveNumber + 2 + autoMoves),
             "tree": JSON.stringify(explorations[1])
           }
         })));
