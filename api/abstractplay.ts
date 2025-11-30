@@ -3364,7 +3364,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
           "pk": "GAMEEXPLORATION#" + pars.id,
-          "sk": pars.opponentId + "#" + (pars.moveNumber - 1)
+          "sk": pars.opponentId + "#" + pars.moveNumber
         },
       }));
   }
@@ -4353,7 +4353,7 @@ function applyMove(
         TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: {
             "pk": "GAMEEXPLORATION#" + game.id,
-            "sk": game.players[0].id + "#" + (moveNumber + 1 + autoMoves),
+            "sk": game.players[0].id + "#" + (moveNumber + 2 + autoMoves),
             "user": game.players[0].id,
             "game": game.id,
             "move": (moveNumber + 1 + autoMoves),
@@ -4367,7 +4367,7 @@ function applyMove(
         TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: {
             "pk": "GAMEEXPLORATION#" + game.id,
-            "sk": game.players[1].id + "#" + (moveNumber + 1 + autoMoves),
+            "sk": game.players[1].id + "#" + (moveNumber + 2 + autoMoves),
             "user": game.players[1].id,
             "game": game.id,
             "move": (moveNumber + 1 + autoMoves),
