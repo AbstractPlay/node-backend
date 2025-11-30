@@ -4264,15 +4264,14 @@ function findPremoveChild(exploration: Exploration[] | null | undefined): Explor
 }
 
 // Helper to apply forced moves (automove/autopass) and return true if any were applied
-function applyForcedMove(engine: GameBase, flags: string[]): string {
+function findForcedMove(engine: GameBase, flags: string[]): string {
   let forcedMove = null;
   if (flags !== undefined && flags.includes("automove") && !engine.gameover) {
     // @ts-ignore
     if (engine.moves().length === 1 && !(flags.includes("pie-even") && engine.state().stack.length === 2)) {
       // @ts-ignore
       forcedMove = engine.moves()[0];
-      console.log(`Applying forced move: ${forcedMove}`);
-      engine.move(forcedMove);
+      console.log(`Found forced move: ${forcedMove}`);
     }
   } else if (flags !== undefined && flags.includes("autopass") && !engine.gameover) {
     // @ts-ignore
@@ -4280,8 +4279,7 @@ function applyForcedMove(engine: GameBase, flags: string[]): string {
       console.log(`Applying forced pass`);
       // @ts-ignore
       forcedMove = engine.moves()[0];
-      console.log(`Applying forced move: ${forcedMove}`);
-      engine.move(forcedMove);
+      console.log(`Found forced move: ${forcedMove}`);
     }
   }
   return forcedMove;
@@ -4324,7 +4322,7 @@ function applyMove(
     explorations[1] = findExplorationChild(explorations[1], move, engine)?.children || null;
 
     // First, apply any forced moves (automove/autopass)
-    move = applyForcedMove(engine, flags);
+    move = findForcedMove(engine, flags);
     if (!move) {
       // Check if there's a premove for the current player
       // @ts-ignore
