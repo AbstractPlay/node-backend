@@ -4347,7 +4347,7 @@ function applyMove(
 
   let work: Promise<any>[] = [];
   if (!engine.gameover) {
-    if (explorations[0]) {
+    if (explorations[0] && explorations[0].length > 0) {
       // save back the updated exploration for player 0
       work.push(ddbDocClient.send(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4361,7 +4361,7 @@ function applyMove(
           }
         })));
     }
-    if (explorations[1]) {
+    if (explorations[1] && explorations[1].length > 0) {
       // save back the updated exploration for player 1
       work.push(ddbDocClient.send(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
