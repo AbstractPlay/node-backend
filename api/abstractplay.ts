@@ -4353,10 +4353,10 @@ function applyMove(
         TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: {
             "pk": "GAMEEXPLORATION#" + game.id,
-            "sk": game.players[0].id + "#" + (moveNumber + 2 + autoMoves),
+            "sk": game.players[0].id + "#" + (moveNumber + 1 + autoMoves),
             "user": game.players[0].id,
             "game": game.id,
-            "move": (moveNumber + 2 + autoMoves),
+            "move": (moveNumber + 1 + autoMoves),
             "tree": JSON.stringify(explorations[0])
           }
         })));
@@ -4367,10 +4367,10 @@ function applyMove(
         TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: {
             "pk": "GAMEEXPLORATION#" + game.id,
-            "sk": game.players[1].id + "#" + (moveNumber + 2 + autoMoves),
+            "sk": game.players[1].id + "#" + (moveNumber + 1 + autoMoves),
             "user": game.players[1].id,
             "game": game.id,
-            "move": (moveNumber + 2 + autoMoves),
+            "move": (moveNumber + 1 + autoMoves),
             "tree": JSON.stringify(explorations[1])
           }
         })));
