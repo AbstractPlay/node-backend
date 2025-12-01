@@ -3,12 +3,11 @@
 import { S3Client, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, type _Object } from "@aws-sdk/client-s3";
 import { Handler } from "aws-lambda";
 import { GameFactory, addResource } from '@abstractplay/gameslib';
-import { type APGameRecord } from '@abstractplay/recranks';
 import { gunzipSync, strFromU8 } from "fflate";
 import { load as loadIon } from "ion-js";
 import { ReservoirSampler } from "../lib/ReservoirSampler";
 import i18n from 'i18next';
-import enGames from "@abstractplay/gameslib/locales/en/apgames.json";
+// import enGames from "@abstractplay/gameslib/locales/en/apgames.json";
 import enBack from "../locales/en/apback.json";
 
 const REGION = "us-east-1";
