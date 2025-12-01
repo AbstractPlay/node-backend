@@ -2,7 +2,7 @@
 
 import { S3Client, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, type _Object } from "@aws-sdk/client-s3";
 import { Handler } from "aws-lambda";
-import { GameFactory, addResource } from '@abstractplay/gameslib';
+import { GameFactory, addResource, gameinfo } from '@abstractplay/gameslib';
 import { gunzipSync, strFromU8 } from "fflate";
 import { load as loadIon } from "ion-js";
 import { ReservoirSampler } from "../lib/ReservoirSampler";
@@ -13,7 +13,7 @@ import enBack from "../locales/en/apback.json";
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
 const DUMP_BUCKET = "abstractplay-db-dump";
-const REC_BUCKET = "records.abstractplay.com";
+const REC_BUCKET = "thumbnails.abstractplay.com";
 
 type BasicRec = {
     Item: {
@@ -203,6 +203,20 @@ export const handler: Handler = async (event: any, context?: any) => {
         allRecs.set(meta, JSON.stringify(json));
     }
     console.log(`Generated ${allRecs.size} thumbnails`);
+
+    // get list of production metas
+    const metasProd = [...gameinfo.keys()].sort((a, b) => {
+        const na = gameinfo.get(a).name;
+        const nb = gameinfo.get(b).name;
+        if (na < nb) return -1;
+        else if (na > nb) return 1;
+        return 0;
+    })
+    .filter(id => !gameinfo.get(id).flags.includes("experimental"));
+    const keys = [...allRecs.keys()].filter(id => !metasProd.includes(id));
+    if (keys.length > 0) {
+        console.log(`${keys.length} production games do not have active or completed game records, and so no thumbnail was generated: ${JSON.stringify(keys)}`);
+    }
 
     // write files to S3
     // meta games
