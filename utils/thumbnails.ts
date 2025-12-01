@@ -2,6 +2,7 @@
 
 import { S3Client, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, type _Object } from "@aws-sdk/client-s3";
 import { Handler } from "aws-lambda";
+import { CloudFrontClient, CreateInvalidationCommand, type CreateInvalidationCommandInput } from "@aws-sdk/client-cloudfront";
 import { GameFactory, addResource, gameinfo } from '@abstractplay/gameslib';
 import { gunzipSync, strFromU8 } from "fflate";
 import { load as loadIon } from "ion-js";
@@ -14,6 +15,7 @@ const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
 const DUMP_BUCKET = "abstractplay-db-dump";
 const REC_BUCKET = "thumbnails.abstractplay.com";
+const cloudfront = new CloudFrontClient({region: REGION});
 
 type BasicRec = {
     Item: {
@@ -232,6 +234,24 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
     }
     console.log("Thumbnails stored");
+
+    // invalidate CloudFront distribution
+    const cfParams: CreateInvalidationCommandInput = {
+        DistributionId: "E3MX0I75ULVTVT",
+        InvalidationBatch: {
+            CallerReference: Date.now().toString(),
+            Paths: {
+                Quantity: 1,
+                Items: ["/*"],
+            },
+        },
+    };
+    const cfCmd = new CreateInvalidationCommand(cfParams);
+    const cfResponse = await cloudfront.send(cfCmd);
+    if (cfResponse["$metadata"].httpStatusCode !== 200) {
+        console.log(cfResponse);
+    }
+    console.log("Invalidation sent");
 
     console.log("ALL DONE");
   })
