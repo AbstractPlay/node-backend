@@ -257,7 +257,7 @@ functions:
           name: abstractplay-${self:provider.stage}-summarize
           description: Summarize generated game reports
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # 6am UTC every sunday (giving plenty of time for the record generation to complete)
+          # 6am UTC daily (giving plenty of time for the record generation to complete)
           schedule: cron(0 6 * * ? *)
   starttournaments:
     handler: utils/starttournaments.handler
@@ -281,6 +281,19 @@ functions:
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # Midnight and noon UTC every day
           schedule: cron(0 0,12 * * ? *)
+  thumbnails:
+    handler: utils/thumbnails.handler
+    description: Generates random thumbnails daily
+    timeout: 900
+    memorySize: 10240
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-records
+          description: Generates random thumbnails daily
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 6am UTC daily (giving record generation plenty of time to complete)
+          schedule: cron(0 6 * * ? *)
+
   # scratch:
   #   handler: utils/scratch.handler
   #   description: For testing only
