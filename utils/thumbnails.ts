@@ -100,8 +100,8 @@ export const handler: Handler = async (event: any, context?: any) => {
     gameInfoProd.forEach(rec => {
         if (rec.name in stats) {
             const len = stats[rec.name].lenMedian;
-            meta2min.set(rec.uid, len * 0.25);
-            meta2max.set(rec.uid, len * 0.75);
+            meta2min.set(rec.uid, Math.round(len * 0.25));
+            meta2max.set(rec.uid, Math.round(len * 0.75));
         } else {
             console.log(`Could not find meta stats for "${rec.uid}".`);
         }
