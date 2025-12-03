@@ -41,6 +41,10 @@ params:
 
 package:
   excludeDevDependencies: false
+  include:
+    - lib/svgdom-wrapper.mjs
+    - lib/nanoid-wrapper.mjs
+    - types/types.d.ts
 
 plugins:
   - serverless-plugin-common-excludes
