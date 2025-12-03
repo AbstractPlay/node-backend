@@ -1,9 +1,9 @@
-// types.d.ts
-declare module '../lib/svgdom-wrapper.mjs' {
+// types/types.d.ts
+declare module 'svgdom-wrapper' {
   import type { Window } from 'svgdom';
   export function makeWindow(): Window;
 }
 
-declare module '../lib/nanoid-wrapper.mjs' {
+declare module 'nanoid-wrapper' {
   export function generateId(): string;
 }
