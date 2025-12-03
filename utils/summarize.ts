@@ -79,7 +79,7 @@ interface GeoStats {
     n: number;
 }
 
-type StatSummary = {
+export type StatSummary = {
     numGames: number;
     numPlayers: number;
     oldestRec?: string;

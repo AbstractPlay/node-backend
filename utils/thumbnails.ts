@@ -3,10 +3,11 @@
 import { S3Client, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, type _Object } from "@aws-sdk/client-s3";
 import { Handler } from "aws-lambda";
 import { CloudFrontClient, CreateInvalidationCommand, type CreateInvalidationCommandInput } from "@aws-sdk/client-cloudfront";
-import { GameFactory, addResource, gameinfo } from '@abstractplay/gameslib';
+import { GameFactory, addResource, gameinfo, type APGamesInformation } from '@abstractplay/gameslib';
 import { gunzipSync, strFromU8 } from "fflate";
 import { load as loadIon } from "ion-js";
 import { ReservoirSampler } from "../lib/ReservoirSampler";
+import { type StatSummary } from "./summarize";
 import i18n from 'i18next';
 // import enGames from "@abstractplay/gameslib/locales/en/apgames.json";
 import enBack from "../locales/en/apback.json";
@@ -15,6 +16,7 @@ const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
 const DUMP_BUCKET = "abstractplay-db-dump";
 const REC_BUCKET = "thumbnails.abstractplay.com";
+const STATS_BUCKET = "records.abstractplay.com";
 const cloudfront = new CloudFrontClient({region: REGION});
 
 type BasicRec = {
@@ -47,6 +49,12 @@ type SamplerEntry = {
     completed: ReservoirSampler<GameRec>;
 }
 
+const randomInt = (max: number, min = 1): number => {
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 export const handler: Handler = async (event: any, context?: any) => {
   await (i18n
   .init({
@@ -66,6 +74,39 @@ export const handler: Handler = async (event: any, context?: any) => {
         throw new Error(`i18n is not initialized where it should be!`);
     }
     addResource("en");
+
+    // get list of production metas
+    const gameInfoProd = ([...gameinfo.values()] as APGamesInformation[]).filter(rec => !rec.flags.includes("experimental"));
+
+    // load summary stats
+    const cmd = new GetObjectCommand({
+        Bucket: STATS_BUCKET,
+        Key: "_summary.json"
+    });
+    const response = await s3.send(cmd);
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of response.Body as any) {
+        chunks.push(chunk as Uint8Array);
+    }
+    const fileContent = Buffer.concat(chunks).toString("utf-8");
+    const parsed = JSON.parse(fileContent) as StatSummary;
+    const stats = parsed.metaStats;
+
+    // determine minimum and maximum move numbers
+    const MIN = 5;
+    const MAX = 1000;
+    const meta2min = new Map<string, number>();
+    const meta2max = new Map<string, number>();
+    gameInfoProd.forEach(rec => {
+        if (rec.name in stats) {
+            const len = stats[rec.name].lenMedian;
+            meta2min.set(rec.uid, len * 0.25);
+            meta2max.set(rec.uid, len * 0.75);
+        } else {
+            console.log(`Could not find meta stats for "${rec.uid}".`);
+        }
+    });
+
     // scan bucket for data folder
     const command = new ListObjectsV2Command({
         Bucket: DUMP_BUCKET,
@@ -136,24 +177,32 @@ export const handler: Handler = async (event: any, context?: any) => {
                                 const rec = json.Item;
                                 if (rec.pk === "GAME") {
                                     const [meta, cbit,] = rec.sk.split("#");
-                                    if (samplerMap.has(meta)) {
-                                        const sampler = samplerMap.get(meta)!;
-                                        if (cbit === "1") {
-                                            sampler.completed.add(rec as GameRec);
+                                    const g = GameFactory(meta, rec.state);
+                                    if (g === undefined) {
+                                        throw new Error(`Error instantiating the following game record:\n${rec}`);
+                                    }
+                                    const numMoves = g.stack.length;
+                                    const min = meta2min.get(meta) || MIN;
+                                    if (numMoves >= min) {
+                                        if (samplerMap.has(meta)) {
+                                            const sampler = samplerMap.get(meta)!;
+                                            if (cbit === "1") {
+                                                sampler.completed.add(rec as GameRec);
+                                            } else {
+                                                sampler.active.add(rec as GameRec);
+                                            }
                                         } else {
-                                            sampler.active.add(rec as GameRec);
+                                            const sampler: SamplerEntry = {
+                                                completed: new ReservoirSampler<GameRec>(),
+                                                active: new ReservoirSampler<GameRec>(),
+                                            };
+                                            if (cbit === "1") {
+                                                sampler.completed.add(rec as GameRec);
+                                            } else {
+                                                sampler.active.add(rec as GameRec);
+                                            }
+                                            samplerMap.set(meta, sampler);
                                         }
-                                    } else {
-                                        const sampler: SamplerEntry = {
-                                            completed: new ReservoirSampler<GameRec>(),
-                                            active: new ReservoirSampler<GameRec>(),
-                                        };
-                                        if (cbit === "1") {
-                                            sampler.completed.add(rec as GameRec);
-                                        } else {
-                                            sampler.active.add(rec as GameRec);
-                                        }
-                                        samplerMap.set(meta, sampler);
                                     }
                                 }
                             }
@@ -177,6 +226,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     // We now have a list of random records for each game. For each one:
     //   - Instantiate
     //   - Serialize it with the `strip` option to strip out hidden information
+    //   - Select a random move between p25 and p75
     //   - Render and store the JSON
     const allRecs = new Map<string, string>();
     for (const [meta, entry] of samplerMap.entries()) {
@@ -201,20 +251,18 @@ export const handler: Handler = async (event: any, context?: any) => {
         if (g === undefined) {
             throw new Error(`Error instantiating the following game record AFTER STRIPPING:\n${rec}`);
         }
+        const min = meta2min.get(meta) || MIN;
+        const max = meta2max.get(meta) || MAX;
+        const random = randomInt(max, min);
+        const realmove = Math.min(random, g.stack.length);
+        g.load(realmove);
         const json = g.render({});
         allRecs.set(meta, JSON.stringify(json));
     }
     console.log(`Generated ${allRecs.size} thumbnails`);
 
-    // get list of production metas
-    const metasProd = [...gameinfo.keys()].sort((a, b) => {
-        const na = gameinfo.get(a).name;
-        const nb = gameinfo.get(b).name;
-        if (na < nb) return -1;
-        else if (na > nb) return 1;
-        return 0;
-    })
-    .filter(id => !gameinfo.get(id).flags.includes("experimental"));
+    // look for games with no thumbnails
+    const metasProd = gameInfoProd.map(rec => rec.uid);
     const keys = [...allRecs.keys()].filter(id => !metasProd.includes(id));
     if (keys.length > 0) {
         console.log(`${keys.length} production games do not have active or completed game records, and so no thumbnail was generated: ${JSON.stringify(keys)}`);
