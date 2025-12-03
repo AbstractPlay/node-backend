@@ -3,7 +3,6 @@
   "version": "1.0.0-beta",
   "description": "node.js lambda with DynamoDB",
   "main": "??",
-  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build-ts": "tsc",
