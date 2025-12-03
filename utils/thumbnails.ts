@@ -251,18 +251,8 @@ export const handler: Handler = async (event: any, context?: any) => {
         if (g === undefined) {
             throw new Error(`Error instantiating the following game record AFTER STRIPPING:\n${rec}`);
         }
-        const min = meta2min.get(meta) || MIN;
-        const max = meta2max.get(meta) || MAX;
-        const random = randomInt(max, min);
-        const realmove = Math.min(random, g.stack.length - 1);
-        try {
-            g.load(realmove);
-            const json = g.render({});
-            allRecs.set(meta, JSON.stringify(json));
-        } catch (ex) {
-            console.log(`An error occured when loading a specific move and trying to render it. Skipping this thumbnail. ${JSON.stringify({meta, min, max, random, realmove, totalMoves: g.stack.length, sk: rec.sk})}`);
-            continue;
-        }
+        const json = g.render({});
+        allRecs.set(meta, JSON.stringify(json));
     }
     console.log(`Generated ${allRecs.size} thumbnails`);
 
