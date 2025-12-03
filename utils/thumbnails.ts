@@ -254,7 +254,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         const min = meta2min.get(meta) || MIN;
         const max = meta2max.get(meta) || MAX;
         const random = randomInt(max, min);
-        const realmove = Math.min(random, g.stack.length);
+        const realmove = Math.min(random, g.stack.length - 1);
         g.load(realmove);
         const json = g.render({});
         allRecs.set(meta, JSON.stringify(json));
