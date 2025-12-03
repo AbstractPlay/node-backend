@@ -255,8 +255,13 @@ export const handler: Handler = async (event: any, context?: any) => {
         const max = meta2max.get(meta) || MAX;
         const random = randomInt(max, min);
         const realmove = Math.min(random, g.stack.length - 1);
-        g.load(realmove);
-        const json = g.render({});
+        let json: any;
+        try {
+            g.load(realmove);
+            json = g.render({});
+        } catch (ex) {
+            throw new Error(`An error occured when loading a specific move and trying to render it. ${JSON.stringify({meta, min, max, random, realmove, totalMoves: g.stack.length, sk: rec.sk})}`);
+        }
         allRecs.set(meta, JSON.stringify(json));
     }
     console.log(`Generated ${allRecs.size} thumbnails`);
