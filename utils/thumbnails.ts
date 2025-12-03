@@ -13,8 +13,6 @@ import i18n from 'i18next';
 import enBack from "../locales/en/apback.json";
 import { registerWindow, SVG, Svg } from "@svgdotjs/svg.js";
 import { APRenderRep, type IRenderOptions, addPrefix, render } from "@abstractplay/renderer";
-import { customAlphabet } from "nanoid";
-const nanoid = customAlphabet("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 5);
 
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
@@ -53,10 +51,17 @@ type SamplerEntry = {
     completed: ReservoirSampler<GameRec>;
 }
 
-const randomInt = (max: number, min = 1): number => {
-    min = Math.ceil(min);
-    max = Math.floor(max);
-    return Math.floor(Math.random() * (max - min + 1)) + min;
+async function makeIdGenerator() {
+  // Dynamically import nanoid
+  const { customAlphabet } = await import('nanoid');
+
+  // Create a generator with your custom alphabet
+  const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  const length = 5;
+
+  const generate = customAlphabet(alphabet, length);
+
+  return generate;
 }
 
 export const handler: Handler = async (event: any, context?: any) => {
@@ -283,6 +288,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     console.log("Thumbnails stored");
 
     // pre-render light and dark mode versions of the SVGs
+    console.log("Attempting to pre-render light/dark SVGs");
     const contextLight = {
         background: "#fff",
         strokes: "#000",
@@ -303,15 +309,16 @@ export const handler: Handler = async (event: any, context?: any) => {
         ["light", contextLight],
         ["dark", contextDark],
     ]);
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { createSVGWindow } = require("svgdom");
+    const generateId = await makeIdGenerator();
+    const svgdom = await import('svgdom');
+    const { createSVGWindow } = svgdom;
     const window = createSVGWindow();
     const document = window.document;
 
     // register window and document
     registerWindow(window, document);
     for (const [meta, json] of allRecs.entries()) {
-        const prefix = nanoid();
+        const prefix = generateId();
         for (const [name, context] of contexts.entries()) {
             const canvas = SVG(document.documentElement) as Svg;
             const opts: IRenderOptions = {prefix, target: canvas, colourContext: context};
@@ -328,6 +335,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
         }
     }
+    console.log("Pre-rendering complete")
 
     // invalidate CloudFront distribution
     const cfParams: CreateInvalidationCommandInput = {
