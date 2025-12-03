@@ -255,14 +255,14 @@ export const handler: Handler = async (event: any, context?: any) => {
         const max = meta2max.get(meta) || MAX;
         const random = randomInt(max, min);
         const realmove = Math.min(random, g.stack.length - 1);
-        let json: any;
         try {
             g.load(realmove);
-            json = g.render({});
+            const json = g.render({});
+            allRecs.set(meta, JSON.stringify(json));
         } catch (ex) {
-            throw new Error(`An error occured when loading a specific move and trying to render it. ${JSON.stringify({meta, min, max, random, realmove, totalMoves: g.stack.length, sk: rec.sk})}`);
+            console.log(`An error occured when loading a specific move and trying to render it. Skipping this thumbnail. ${JSON.stringify({meta, min, max, random, realmove, totalMoves: g.stack.length, sk: rec.sk})}`);
+            continue;
         }
-        allRecs.set(meta, JSON.stringify(json));
     }
     console.log(`Generated ${allRecs.size} thumbnails`);
 
@@ -309,6 +309,6 @@ export const handler: Handler = async (event: any, context?: any) => {
     console.log("ALL DONE");
   })
   .catch(err => {
-    throw new Error(`An error occurred while initializing i18next:\n${err}`);
+    throw new Error(`An error occurred (final catch):\n${err}`);
   }));
 };
