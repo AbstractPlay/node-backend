@@ -11,10 +11,6 @@ import { type StatSummary } from "./summarize";
 import i18n from 'i18next';
 // import enGames from "@abstractplay/gameslib/locales/en/apgames.json";
 import enBack from "../locales/en/apback.json";
-import { registerWindow, SVG, Svg } from "@svgdotjs/svg.js";
-import { APRenderRep, type IRenderOptions, addPrefix, render } from "@abstractplay/renderer";
-import { customAlphabet } from "nanoid";
-const nanoid = customAlphabet("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 5);
 
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
@@ -232,7 +228,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     //   - Serialize it with the `strip` option to strip out hidden information
     //   - Select a random move between p25 and p75
     //   - Render and store the JSON
-    const allRecs = new Map<string, APRenderRep>();
+    const allRecs = new Map<string, string>();
     for (const [meta, entry] of samplerMap.entries()) {
         const active = entry.active.getSample();
         let rec: GameRec;
@@ -256,7 +252,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             throw new Error(`Error instantiating the following game record AFTER STRIPPING:\n${rec}`);
         }
         const json = g.render({});
-        allRecs.set(meta, json);
+        allRecs.set(meta, JSON.stringify(json));
     }
     console.log(`Generated ${allRecs.size} thumbnails`);
 
@@ -273,7 +269,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         const cmd = new PutObjectCommand({
             Bucket: REC_BUCKET,
             Key: `${meta}.json`,
-            Body: JSON.stringify(json),
+            Body: json,
         });
         const response = await s3.send(cmd);
         if (response["$metadata"].httpStatusCode !== 200) {
@@ -281,53 +277,6 @@ export const handler: Handler = async (event: any, context?: any) => {
         }
     }
     console.log("Thumbnails stored");
-
-    // pre-render light and dark mode versions of the SVGs
-    const contextLight = {
-        background: "#fff",
-        strokes: "#000",
-        borders: "#000",
-        labels: "#000",
-        annotations: "#000",
-        fill: "#000",
-    };
-    const contextDark = {
-        background: "#222",
-        strokes: "#6d6d6d",
-        borders: "#000",
-        labels: "#009fbf",
-        annotations: "#99cccc",
-        fill: "#e6f2f2",
-    };
-    const contexts = new Map<string, {[k: string]: string}>([
-        ["light", contextLight],
-        ["dark", contextDark],
-    ]);
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { createSVGWindow } = require("svgdom");
-    const window = createSVGWindow();
-    const document = window.document;
-
-    // register window and document
-    registerWindow(window, document);
-    for (const [meta, json] of allRecs.entries()) {
-        const prefix = nanoid();
-        for (const [name, context] of contexts.entries()) {
-            const canvas = SVG(document.documentElement) as Svg;
-            const opts: IRenderOptions = {prefix, target: canvas, colourContext: context};
-            render(json as APRenderRep, opts)
-            const svgStr = addPrefix(canvas.svg(), opts);
-            const cmd = new PutObjectCommand({
-                Bucket: REC_BUCKET,
-                Key: `${meta}-${name}.svg`,
-                Body: svgStr,
-            });
-            const response = await s3.send(cmd);
-            if (response["$metadata"].httpStatusCode !== 200) {
-                console.log(response);
-            }
-        }
-    }
 
     // invalidate CloudFront distribution
     const cfParams: CreateInvalidationCommandInput = {

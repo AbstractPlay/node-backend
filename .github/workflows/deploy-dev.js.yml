@@ -57,9 +57,6 @@ jobs:
     - name: Install NPM dependencies
       run: npm i
 
-    - name: Install development renderer
-      run: npm remove @abstractplay/renderer && npm i @abstractplay/renderer@development
-
     - name: Install development gameslib
       run: npm remove @abstractplay/gameslib && npm i @abstractplay/gameslib@development
 
