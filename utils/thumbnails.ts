@@ -297,9 +297,9 @@ export const handler: Handler = async (event: any, context?: any) => {
         ["dark", contextDark],
     ]);
     // Dynamically import the ESM wrapper
-    const { makeWindow } = await import('svgdom-wrapper');
+    const { makeWindow } = await import("../lib/svgdom-wrapper.js");
     // Example: generate an ID using nanoid wrapper
-    const { generateId } = await import('nanoid-wrapper');
+    const { generateId } = await import("../lib/nanoid-wrapper.js");
     const window = makeWindow();
     const document = window.document;
 
