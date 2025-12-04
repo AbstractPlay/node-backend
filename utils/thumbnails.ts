@@ -13,6 +13,10 @@ import i18n from 'i18next';
 import enBack from "../locales/en/apback.json";
 import { registerWindow, SVG, Svg } from "@svgdotjs/svg.js";
 import { APRenderRep, type IRenderOptions, addPrefix, render } from "@abstractplay/renderer";
+import { createSVGWindow } from 'svgdom';
+import { customAlphabet } from 'nanoid';
+const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const generateId = customAlphabet(alphabet, 5);
 
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
@@ -309,9 +313,6 @@ export const handler: Handler = async (event: any, context?: any) => {
         ["light", contextLight],
         ["dark", contextDark],
     ]);
-    const generateId = await makeIdGenerator();
-    const svgdom = await import('svgdom');
-    const { createSVGWindow } = svgdom;
     const window = createSVGWindow();
     const document = window.document;
 
