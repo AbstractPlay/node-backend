@@ -58,6 +58,7 @@
     "i": "^0.3.7",
     "i18next-parser": "^7.7.0",
     "npm": "^9.9.4",
+    "serverless": "^3.40.0",
     "serverless-plugin-common-excludes": "^4.0.0",
     "serverless-plugin-include-dependencies": "^5.1.0",
     "typescript": "^5.0.4"
