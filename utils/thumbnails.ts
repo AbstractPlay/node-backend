@@ -51,6 +51,19 @@ type SamplerEntry = {
     completed: ReservoirSampler<GameRec>;
 }
 
+async function makeIdGenerator() {
+  // Dynamically import nanoid
+  const { customAlphabet } = await import('nanoid');
+
+  // Create a generator with your custom alphabet
+  const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  const length = 5;
+
+  const generate = customAlphabet(alphabet, length);
+
+  return generate;
+}
+
 export const handler: Handler = async (event: any, context?: any) => {
   await (i18n
   .init({
@@ -296,11 +309,10 @@ export const handler: Handler = async (event: any, context?: any) => {
         ["light", contextLight],
         ["dark", contextDark],
     ]);
-    // Dynamically import the ESM wrapper
-    const { makeWindow } = await import('../lib/svgdom-wrapper.mjs');
-    // Example: generate an ID using nanoid wrapper
-    const { generateId } = await import('../lib/nanoid-wrapper.mjs');
-    const window = makeWindow();
+    const generateId = await makeIdGenerator();
+    const svgdom = await import('svgdom');
+    const { createSVGWindow } = svgdom;
+    const window = createSVGWindow();
     const document = window.document;
 
     // register window and document
