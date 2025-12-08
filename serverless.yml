@@ -85,20 +85,16 @@ provider:
         - Effect: 'Allow'
           Action:
             - 's3:ListBucket'
-          Resource: 'arn:aws:s3:::abstractplay-db-dump'
+          Resource:
+            - 'arn:aws:s3:::abstractplay-db-dump'
+            - 'arn:aws:s3:::records.abstractplay.com'
         - Effect: 'Allow'
           Action:
             - 's3:GetObject'
             - 's3:PutObject'
-          Resource: 'arn:aws:s3:::abstractplay-db-dump/*'
-        - Effect: 'Allow'
-          Action:
-            - 's3:ListBucket'
-          Resource: 'arn:aws:s3:::records.abstractplay.com'
-        - Effect: 'Allow'
-          Action:
-            - 's3:PutObject'
-          Resource: 'arn:aws:s3:::records.abstractplay.com/*'
+          Resource:
+            - 'arn:aws:s3:::abstractplay-db-dump/*'
+            - 'arn:aws:s3:::records.abstractplay.com/*'
 
 resources:
   Resources:
