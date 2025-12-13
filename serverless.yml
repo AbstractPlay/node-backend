@@ -173,16 +173,6 @@ functions:
           description: Send out "your turn" notifications
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           schedule: cron(0 14,22 * * ? *)
-  dumpdb:
-    handler: utils/dumpdb.handler
-    description: Triggers a full export of production DB to S3
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-dumpdb
-          description: Triggers a full export of production DB to S3
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # midnight UTC every Sunday
-          schedule: cron(0 0 * * ? *)
   records:
     handler: utils/records.handler
     description: Generates static lists of game records
