@@ -173,18 +173,6 @@ functions:
           description: Send out "your turn" notifications
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           schedule: cron(0 14,22 * * ? *)
-  records:
-    handler: utils/records.handler
-    description: Generates static lists of game records
-    timeout: 900
-    memorySize: 10240
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-records
-          description: Generates static lists of game records
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # 3am UTC every sunday (giving the dump plenty of time to complete)
-          schedule: cron(0 3 * * ? *)
   tournament-data:
     handler: utils/tournament-data.handler
     description: Summarizes tournament data
@@ -197,54 +185,6 @@ functions:
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # 3am UTC every sunday (giving the dump plenty of time to complete)
           schedule: cron(0 3 * * ? *)
-  records-ttm:
-    handler: utils/records-ttm.handler
-    description: Generates static time-to-move results of each game
-    timeout: 900
-    memorySize: 10240
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-records-ttm
-          description: Generates static time-to-move results of each game
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # 3am UTC every sunday (giving the dump plenty of time to complete)
-          schedule: cron(0 3 * * ? *)
-  records-move-times:
-    handler: utils/records-move-times.handler
-    description: Generates list of moves made in past 180 days
-    timeout: 900
-    memorySize: 10240
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-records-move-times
-          description: Generates list of moves made in past 180 days
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # 3am UTC every sunday (giving the dump plenty of time to complete)
-          schedule: cron(0 3 * * ? *)
-  records-manifest:
-    handler: utils/records-manifest.handler
-    description: Generates manifest file for records bucket
-    timeout: 900
-    memorySize: 10240
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-records-manifest
-          description: Generates static time-to-move results of each game
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # 4am UTC every sunday (giving the various records scripts time to complete)
-          # then run again after summarize
-          schedule: cron(0 4,7 * * ? *)
-  summarize:
-    handler: utils/summarize.handler
-    description: Summarize generated game reports
-    timeout: 60
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-summarize
-          description: Summarize generated game reports
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # 6am UTC daily (giving plenty of time for the record generation to complete)
-          schedule: cron(0 6 * * ? *)
   starttournaments:
     handler: utils/starttournaments.handler
     description: Checks if any tournaments are ready to start (and starts or cancels them)
