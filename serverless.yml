@@ -165,7 +165,7 @@ resources:
         MessageRetentionPeriod: 86400  # 1 day, adjust as needed
 
     # this supposedly forces the websocket stage to redeploy every run
-    WebsocketsStage:
+    WebsocketsDeploymentStage:
       Type: AWS::ApiGatewayV2::Stage
       Properties:
         StageName: ${self:provider.stage}
