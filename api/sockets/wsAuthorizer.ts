@@ -26,7 +26,7 @@ export const wsAuthorizer = async (event: WebSocketAuthorizerEvent) => {
   try {
     console.log(`Verifying JWT: ${token}`);
     const payload = await verifier.verify(token);
-    console.log("Validated");
+    console.log(`Validated: ${JSON.stringify(payload)}`);
     return {
       isAuthorized: true,
       context: {
