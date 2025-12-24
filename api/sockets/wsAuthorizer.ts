@@ -28,14 +28,36 @@ export const wsAuthorizer = async (event: WebSocketAuthorizerEvent) => {
     const payload = await verifier.verify(token);
     console.log(`Validated: ${JSON.stringify(payload)}`);
     return {
-      isAuthorized: true,
-      context: {
-        userId: payload.sub,
-        email: payload.email,
-      },
+        "principalId": payload.sub,
+        "policyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Action": "execute-api:Invoke",
+                    "Effect": "Allow",
+                    "Resource": "*"
+                }
+            ]
+        },
+        "context": {
+            "userId": payload.sub,
+            "email": payload.email
+        }
     };
   } catch (err) {
     console.error("JWT verification failed", err);
-    return { isAuthorized: false };
+    return {
+        "principalId": "anonymous",
+        "policyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Action": "execute-api:Invoke",
+                    "Effect": "Deny",
+                    "Resource": "*"
+                }
+            ]
+        }
+    };
   }
 };
