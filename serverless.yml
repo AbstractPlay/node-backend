@@ -183,7 +183,7 @@ resources:
           Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/*/$disconnect
 
     # for autodeployments
-    WebsocketsDeployment:
+    WebsocketsDeployment${sls:instanceId}:
       Type: AWS::ApiGatewayV2::Deployment
       Properties:
         ApiId:
@@ -200,11 +200,10 @@ resources:
         ApiId:
           Ref: WebsocketsApi
         DeploymentId:
-          Ref: WebsocketsDeployment
+          Ref: WebsocketsDeployment${sls:instanceId}
         DefaultRouteSettings:
           DataTraceEnabled: true       # enables execution logging
           LoggingLevel: INFO           # ERROR | INFO
-
 
   Outputs:
     WsMessageQueueArn:
