@@ -14,7 +14,8 @@ const verifier = CognitoJwtVerifier.create({
 });
 
 export const wsAuthorizer = async (event: WebSocketAuthorizerEvent) => {
-  const token = event.identitySource?.[0];
+    console.log("Authorizer event:", JSON.stringify(event));
+    const token = event.identitySource?.[0];
 //   // API Gateway normalizes header keys to lowercase
 //   const token =
 //     event.headers?.["sec-websocket-protocol"] ||
