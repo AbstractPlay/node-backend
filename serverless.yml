@@ -189,6 +189,9 @@ resources:
         ApiId:
           Ref: WebsocketsApi
         Description: Force redeploy
+        DefaultRouteSettings:
+          DataTraceEnabled: true       # enables execution logging
+          LoggingLevel: INFO           # ERROR | INFO
       DependsOn:
         - SconnectWebsocketsRoute
         - SdisconnectWebsocketsRoute
