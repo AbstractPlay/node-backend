@@ -199,7 +199,7 @@ resources:
         StageName: ${self:provider.stage}
         Description: Redeploy ${sls:instanceId}   # forces stage update
         ApiId: !Ref WebsocketsApi
-        DeploymentId: !Ref WebsocketsDeployment
+        DeploymentId: !GetAtt WebsocketsDeployment.DeploymentId
         DefaultRouteSettings:
           DataTraceEnabled: true       # enables execution logging
           LoggingLevel: INFO           # ERROR | INFO
