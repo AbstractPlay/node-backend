@@ -4,7 +4,7 @@ jspm_packages
 
 # Serverless directories
 .serverless
-/api/*.js
+/api/**/*.js
 /utils/*.js
 .vscode/
 bin/

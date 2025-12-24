@@ -447,7 +447,7 @@ async function verifyAndCorrectCountWithData(metaGame: string, countType: "curre
         }
 
         const details = countsData.Item as MetaGameCounts;
-        
+
         // Check if the metaGame nested attribute exists at all
         if (!details[metaGame]) {
             console.log(`No nested attribute for ${metaGame} in METAGAMES COUNTS, initializing...`);
@@ -461,7 +461,7 @@ async function verifyAndCorrectCountWithData(metaGame: string, countType: "curre
             console.log(`Initialized ${countType} for new game ${metaGame} to ${actualCount}`);
             return;
         }
-        
+
         const storedCount = details[metaGame][countType] || 0;
 
         if (storedCount !== actualCount) {
@@ -2944,22 +2944,22 @@ async function updateStandingChallengeCount(metaGame: any, diff: number) {
     ExpressionAttributeValues: {":n": diff, ":zero": 0},
     UpdateExpression: "set #g.standingchallenges = if_not_exists(#g.standingchallenges, :zero) + :n",
   });
-  
+
   try {
     return await ddbDocClient.send(updateCommand);
   } catch (error: any) {
     if (error.name === 'ValidationException') {
       console.log(`ValidationException updating METAGAMES/COUNTS standing challenges for new game ${metaGame}. Initializing nested attribute...`);
-      
+
       // Fetch current METAGAMES/COUNTS record
       const countsData = await ddbDocClient.send(new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "METAGAMES", "sk": "COUNTS" }
       }));
-      
+
       // Initialize the nested attribute for this game
       await verifyAndCorrectCountWithData(metaGame, "standingchallenges", 0, countsData);
-      
+
       // Retry the original update
       return await ddbDocClient.send(updateCommand);
     }
@@ -3257,21 +3257,21 @@ async function addToGameLists(type: string, game: Game, now: number, keepgame: b
       ExpressionAttributeValues: {":n": 1, ":zero": 0},
       UpdateExpression: "set #g.currentgames = if_not_exists(#g.currentgames, :zero) + :n"
     });
-    
+
     work.push(
       sendCommandWithRetry(updateCommand).catch(async (error) => {
         if (error.name === 'ValidationException') {
           console.log(`ValidationException updating METAGAMES/COUNTS for new game ${game.metaGame}. Initializing nested attribute...`);
-          
+
           // Fetch current METAGAMES/COUNTS record
           const countsData = await ddbDocClient.send(new GetCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: { "pk": "METAGAMES", "sk": "COUNTS" }
           }));
-          
+
           // Initialize the nested attribute for this game
           await verifyAndCorrectCountWithData(game.metaGame, "currentgames", 0, countsData);
-          
+
           // Retry the original update
           return sendCommandWithRetry(updateCommand);
         }
@@ -4375,7 +4375,7 @@ function applyMove(
         })));
     }
   }
-  
+
   game.state = engine.serialize();
   if (engine.gameover) {
     game.toMove = "";
@@ -4396,10 +4396,10 @@ function isInterestingComment(comment: string): boolean {
   }
   // Normalize the comment
   const normalized = comment.toLowerCase().trim();
-  
+
   // Remove punctuation for comparison
   const withoutPunctuation = normalized.replace(/[^\w\s]/g, '');
-  
+
   // Common boring phrases (exact matches)
   const boringPhrases = new Set([
     'gg', 'glhf', 'gl', 'hf', 'tagg', 'hi', 'hello', 'hey',
@@ -4410,15 +4410,15 @@ function isInterestingComment(comment: string): boolean {
     'thanks for playing', 'thanks for the game!', 'gg thanks',
     'yoyo', 'yoyo gl', 'yoyo gl hf'
   ]);
-  
+
   // Check for exact matches (with or without punctuation)
   if (boringPhrases.has(normalized) || boringPhrases.has(withoutPunctuation)) {
     return false;
   }
-  
+
   // Split into words for further analysis
   const words = withoutPunctuation.split(/\s+/).filter(w => w.length > 0);
-  
+
   // Very short comments with only common game words are boring
   const commonWords = new Set([
     'gg', 'gl', 'hf', 'tagg', 'hi', 'hello', 'yoyo',
@@ -4426,11 +4426,11 @@ function isInterestingComment(comment: string): boolean {
     'good', 'game', 'luck', 'fun', 'for', 'the', 'a', 'to',
     'have', 'sir', 'well', 'played', 'you', 'too'
   ]);
-  
+
   if (words.length <= 3 && words.every(w => commonWords.has(w))) {
     return false;
   }
-  
+
   // If we got here, the comment is interesting
   return true;
 }
@@ -4438,20 +4438,20 @@ function isInterestingComment(comment: string): boolean {
 // Helper function to update lastChat and seen for all players of a game
 // Used by both submitComment (for in-game chats) and saveExploration (for completed game comments)
 async function updateLastChatForPlayers(
-  gameId: string, 
+  gameId: string,
   metaGame: string,
   players: {[k: string]: any; id: string}[],
   currentUserId: string,
   allowReAdd: boolean = false  // Only true for completed games via saveExploration
 ) {
   console.log(`Updating lastChat for all players of game ${gameId}`);
-  
+
   // Lazy-loaded only if needed (when a player doesn't have the game in their list)
   let fullGame: FullGame | undefined;
   let gameEngine: any | undefined;
-  
+
   const now = Date.now();
-  
+
   for (const pid of players.map(p => p.id)) {
     let data: any;
     let user: FullUser | undefined;
@@ -4473,14 +4473,14 @@ async function updateLastChatForPlayers(
       console.log(`Unable to get user data for user ${pid} when updating lastChat`);
       continue; // Don't fail the whole operation
     }
-    
+
     if (user === undefined) {
       console.log(`Unable to get user data for user ${pid} when updating lastChat`);
       continue; // Don't fail the whole operation
     }
-    
+
     const game = user.games?.find(g => g.id === gameId);
-    
+
     if (game !== undefined) {
       game.lastChat = now;
       // if this is the user who added the comment/exploration, also update their `seen`
@@ -4493,7 +4493,7 @@ async function updateLastChatForPlayers(
     } else if (allowReAdd) {
       // Only try to re-add for completed games (when allowReAdd is true)
       console.log(`User ${user.name} does not have a game entry for ${gameId}, re-adding it`);
-      
+
       // Fetch the full game only once (lazy loading)
       if (fullGame === undefined) {
         try {
@@ -4518,7 +4518,7 @@ async function updateLastChatForPlayers(
           console.log(`Failed to get completed game ${gameId} for re-adding to user's list:`, err);
         }
       }
-      
+
       if (fullGame !== undefined && gameEngine !== undefined) {
         const newGame: Game = {
           id: gameId,
@@ -4533,7 +4533,7 @@ async function updateLastChatForPlayers(
           lastChat: now,
           seen: pid === currentUserId ? now + 10 : undefined,
         };
-        
+
         if (!user.games) {
           user.games = [];
         }
@@ -4593,19 +4593,19 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
           "comments": comments
         }
       }));
-  
+
     // Check if the new comment is interesting
     const newCommentIsInteresting = isInterestingComment(comment.comment);
-    
+
     // If we didn't have interesting comments before but the new one is interesting,
     // update the GAME record to set commented = 1
     if (pars.metaGame && !hadInterestingCommentBefore && newCommentIsInteresting) {
       try {
         await ddbDocClient.send(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { 
-            "pk": "GAME", 
-            "sk": pars.metaGame + "#0#" + pars.id 
+          Key: {
+            "pk": "GAME",
+            "sk": pars.metaGame + "#0#" + pars.id
           },
           ExpressionAttributeValues: { ":c": 1 },
           UpdateExpression: "set commented = :c",
@@ -4618,7 +4618,7 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
       }
     }
   }
-  
+
   // Update lastChat for all players when a comment is added to an in-game chat
   // Note: For completed games, comments go through the exploration system (saveExploration)
   if (pars.players && pars.metaGame) {
@@ -4639,8 +4639,8 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
     try {
       await ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { 
-          "pk": "COMPLETEDGAMES#" + pars.metaGame, 
+        Key: {
+          "pk": "COMPLETEDGAMES#" + pars.metaGame,
           "sk": pars.gameEnded + "#" + pars.game
         },
         ExpressionAttributeValues: { ":c": pars.updateCommentedFlag },
@@ -4653,7 +4653,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
       // Don't fail the whole operation just because of the flag update
     }
   }
-  
+
   // If we need to update lastChat and seen for all players (completed games only)
   if (pars.updateLastChat && pars.public && pars.players) {
     await updateLastChatForPlayers(
@@ -4664,7 +4664,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
       true  // Allow re-adding game to list for completed games
     );
   }
-  
+
   if (!pars.public) {
     await ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -7866,8 +7866,8 @@ async function updateCommented(userId: string, pars: {id: string; metaGame: stri
             // For completed games, update COMPLETEDGAMES table
             await ddbDocClient.send(new UpdateCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: { 
-                    "pk": "COMPLETEDGAMES#" + pars.metaGame, 
+                Key: {
+                    "pk": "COMPLETEDGAMES#" + pars.metaGame,
                     "sk": pars.gameEnded + "#" + pars.id
                 },
                 ExpressionAttributeValues: { ":c": pars.commented },
@@ -7879,9 +7879,9 @@ async function updateCommented(userId: string, pars: {id: string; metaGame: stri
             // For current games, update GAME table
             await ddbDocClient.send(new UpdateCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: { 
-                    "pk": "GAME", 
-                    "sk": pars.metaGame + "#0#" + pars.id 
+                Key: {
+                    "pk": "GAME",
+                    "sk": pars.metaGame + "#0#" + pars.id
                 },
                 ExpressionAttributeValues: { ":c": pars.commented },
                 UpdateExpression: "set commented = :c",
@@ -7889,7 +7889,7 @@ async function updateCommented(userId: string, pars: {id: string; metaGame: stri
             }));
             console.log(`Successfully updated commented flag in GAME for game ${pars.id} to ${pars.commented}`);
         }
-        
+
         return {
             statusCode: 200,
             body: JSON.stringify({ success: true }),

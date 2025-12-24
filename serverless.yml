@@ -24,23 +24,42 @@ custom:
   scheduleEnabled:
     prod: true
     dev: false
+
   recbucket:
     prod: "records.abstractplay.com"
     dev: "records.abstractplay.com"
+
   dumpbucket: "abstractplay-db-dump"
 
-params:
-  dev:
-    profile: AbstractPlayDev
-    userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_2zrzbEjoU
-    sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue
-  prod:
-    profile: AbstractPlayProd
-    userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_YCjgSZHJm
-    sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-prod-aiai-queue
+  websocketDomain:
+    Fn::Join:
+      - ""
+      - - Ref: WebsocketsApi
+        - ".execute-api."
+        - Ref: AWS::Region
+        - ".amazonaws.com"
+
+  stageConfig:
+    dev:
+      profile: AbstractPlayDev
+      userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_2zrzbEjoU
+      userpoolId: us-east-1_2zrzbEjoU
+      userpoolClient: 14mpql1tmvntup4p2anm4jt782
+      sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue
+
+    prod:
+      profile: AbstractPlayProd
+      userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_YCjgSZHJm
+      userpoolId: us-east-1_YCjgSZHJm
+      userpoolClient: 2isan3ctk1aabt2v6r6aptlpg
+      sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-prod-aiai-queue
+
 
 package:
+  # individually: true
   excludeDevDependencies: false
+  exclude:
+    - node_modules/@aws-sdk/**
 
 plugins:
   - serverless-plugin-common-excludes
@@ -51,19 +70,23 @@ provider:
   runtime: nodejs20.x
   versionFunctions: false
   stage: ${opt:stage, 'dev'}
-  profile: ${param:profile}
+  profile: ${self:custom.stageConfig.${self:provider.stage}.profile}
   region: us-east-1
+  logs:
+    websocket: true
   environment:
     ABSTRACT_PLAY_TABLE: abstract-play-${self:provider.stage}
-    userpool: ${param:userpool}
-    SQS_URL: ${param:sqsurl}
+    userpool: ${self:custom.stageConfig.${self:provider.stage}.userpool}
+    userpoolId: ${self:custom.stageConfig.${self:provider.stage}.userpoolId}
+    userpoolClient: ${self:custom.stageConfig.${self:provider.stage}.userpoolClient}
+    SQS_URL: ${self:custom.stageConfig.${self:provider.stage}.sqsurl}
     AIAI_USERID: SkQfHAjeDxs8eeEnScuYA
-    TOTP_KEY: ${env:TOTP_KEY}
-    VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
-    VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
-    # TOTP_KEY: ${file(../apsecrets.yml):totp_key}
-    # VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
-    # VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
+    # TOTP_KEY: ${env:TOTP_KEY}
+    # VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
+    # VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
+    TOTP_KEY: ${file(../apsecrets.yml):totp_key}
+    VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
+    VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
   iam:
     role:
       statements:
@@ -134,11 +157,68 @@ resources:
          RestApiId:
            Ref: 'ApiGatewayRestApi'
 
+    WsMessageQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: abstractplay-ws-messages-${self:provider.stage}
+        VisibilityTimeout: 900   # match your consumer Lambda timeout
+        MessageRetentionPeriod: 86400  # 1 day, adjust as needed
+
+    # this supposedly forces the websocket stage to redeploy every run
+    WebsocketsStage:
+      Type: AWS::ApiGatewayV2::Stage
+      Properties:
+        StageName: ${self:provider.stage}
+        ApiId:
+          Ref: WebsocketsApi
+        AutoDeploy: true
+
+    # Apparently this is explicitly needed (which makes no sense to me, but there it is)
+    ConnectLambdaPermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName: ${self:service}-${self:provider.stage}-connect
+        Action: lambda:InvokeFunction
+        Principal: apigateway.amazonaws.com
+        SourceArn:
+          Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/*/$connect
+    DisconnectLambdaPermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName: ${self:service}-${self:provider.stage}-disconnect
+        Action: lambda:InvokeFunction
+        Principal: apigateway.amazonaws.com
+        SourceArn:
+          Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/*/$disconnect
+
+  Outputs:
+    WsMessageQueueArn:
+      Value: !GetAtt WsMessageQueue.Arn
+      Export:
+        Name: WsMessageQueueArn-${self:provider.stage}
+    WsMessageQueueUrl:
+      Value: !Ref WsMessageQueue
+      Export:
+        Name: WsMessageQueueUrl-${self:provider.stage}
+    WebsocketApiUrl:
+      Value:
+        Fn::Join:
+          - ""
+          - - "wss://"
+            - Ref: WebsocketsApi
+            - ".execute-api."
+            - Ref: AWS::Region
+            - ".amazonaws.com/"
+            - ${self:provider.stage}
+      Export:
+        Name: ${self:service}-${self:provider.stage}-WebsocketApiUrl
+
 functions:
   authQuery:
     handler: api/abstractplay.authQuery
     memorySize: 1024
     description: Abstract Play queries that need authorization.
+    logRetentionInDays: 30
     events:
       - http:
           path: authQuery
@@ -155,6 +235,7 @@ functions:
     handler: api/abstractplay.query
     memorySize: 256
     description: Abstract Play queries that does not need authorization.
+    logRetentionInDays: 30
     events:
       - http:
           path: query
@@ -167,6 +248,7 @@ functions:
   yourturn:
     handler: utils/yourturn.handler
     description: Sends out "your turn" notifications
+    logRetentionInDays: 30
     events:
       - eventBridge:
           name: abstractplay-${self:provider.stage}-yourturn
@@ -178,6 +260,7 @@ functions:
     description: Summarizes tournament data
     timeout: 900
     memorySize: 10240
+    logRetentionInDays: 30
     events:
       - eventBridge:
           name: abstractplay-${self:provider.stage}-tournament-data
@@ -189,6 +272,7 @@ functions:
     handler: utils/starttournaments.handler
     description: Checks if any tournaments are ready to start (and starts or cancels them)
     timeout: 600
+    logRetentionInDays: 30
     events:
       - eventBridge:
           name: abstractplay-${self:provider.stage}-starttournaments
@@ -200,6 +284,7 @@ functions:
     handler: utils/standingchallenges.handler
     description: Manages preset standing challenge requests
     timeout: 600
+    logRetentionInDays: 30
     events:
       - eventBridge:
           name: abstractplay-${self:provider.stage}-standingchallenges
@@ -207,6 +292,42 @@ functions:
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # Midnight and noon UTC every day
           schedule: cron(0 0,12 * * ? *)
+
+  # websocket functions
+  wsAuthorizer:
+    name: wsAuthorizer
+    handler: api/sockets/wsAuthorizer.wsAuthorizer
+    logRetentionInDays: 7
+
+  connect:
+    handler: api/sockets/connectHandler.handler
+    logRetentionInDays: 7
+    events:
+      - websocket:
+          route: $connect
+          authorizer:
+            name: wsAuthorizer
+            identitySource: route.request.header.sec-websocket-protocol
+
+  disconnect:
+    handler: api/sockets/disconnectHandler.handler
+    logRetentionInDays: 7
+    events:
+      - websocket:
+          route: $disconnect
+
+  messageHandler:
+    handler: api/sockets/messageHandler.handler
+    logRetentionInDays: 7
+    environment:
+      DOMAIN_NAME: ${self:custom.websocketDomain}
+      STAGE: ${self:provider.stage}
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - WsMessageQueue
+              - Arn
 
   # scratch:
   #   handler: utils/scratch.handler
