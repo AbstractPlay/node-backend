@@ -188,7 +188,7 @@ resources:
       Properties:
         ApiId:
           Ref: WebsocketsApi
-        Description: Force redeploy ${sls:timestamp}
+        Description: Force redeploy ${sls:instanceId}
       DependsOn:
         - SconnectWebsocketsRoute
         - SdisconnectWebsocketsRoute
