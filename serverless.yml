@@ -314,6 +314,7 @@ functions:
   connect:
     handler: api/sockets/connectHandler.handler
     logRetentionInDays: 7
+    timeout: 30
     events:
       - websocket:
           route: $connect
@@ -323,6 +324,7 @@ functions:
 
   disconnect:
     handler: api/sockets/disconnectHandler.handler
+    timeout: 30
     logRetentionInDays: 7
     events:
       - websocket:
@@ -331,6 +333,7 @@ functions:
   messageHandler:
     handler: api/sockets/messageHandler.handler
     logRetentionInDays: 7
+    timeout: 30
     environment:
       DOMAIN_NAME: ${self:custom.websocketDomain}
       STAGE: ${self:provider.stage}
