@@ -197,6 +197,7 @@ resources:
       Type: AWS::ApiGatewayV2::Stage
       Properties:
         StageName: ${self:provider.stage}
+        Description: Redeploy ${sls:instanceId}   # forces stage update
         ApiId: !Ref WebsocketsApi
         DeploymentId: !Ref WebsocketsDeployment
         DefaultRouteSettings:
