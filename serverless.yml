@@ -321,7 +321,7 @@ functions:
           route: $connect
           authorizer:
             name: wsAuthorizer
-            identitySource: route.request.header.sec-websocket-protocol
+            identitySource: route.request.header.Sec-WebSocket-Protocol
 
   disconnect:
     handler: api/sockets/disconnectHandler.handler
