@@ -172,6 +172,14 @@ resources:
         ApiId:
           Ref: WebsocketsApi
         AutoDeploy: true
+        Description: Serverless Websockets
+        DefaultRouteSettings:
+          DataTraceEnabled: true
+          LoggingLevel: INFO
+        AccessLogSettings:
+          DestinationArn:
+            Fn::Sub: arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${WebsocketsLogGroup}
+          Format: '$context.identity.sourceIp $context.identity.caller $context.identity.user [$context.requestTime] "$context.eventType $context.routeKey $context.connectionId" $context.requestId'
 
     # Apparently this is explicitly needed (which makes no sense to me, but there it is)
     ConnectLambdaPermission:
