@@ -197,10 +197,8 @@ resources:
       Type: AWS::ApiGatewayV2::Stage
       Properties:
         StageName: ${self:provider.stage}
-        ApiId:
-          Ref: WebsocketsApi
-        DeploymentId:
-          Ref: WebsocketsDeployment
+        ApiId: !Ref WebsocketsApi
+        DeploymentId: !Ref WebsocketsDeployment
         DefaultRouteSettings:
           DataTraceEnabled: true       # enables execution logging
           LoggingLevel: INFO           # ERROR | INFO
