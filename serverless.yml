@@ -120,6 +120,10 @@ provider:
             - 'arn:aws:s3:::records.abstractplay.com/*'
 
 resources:
+  extensions:
+    WebsocketsDeploymentStage:
+      Properties:
+        AutoDeploy: true
   Resources:
     # One table design
     AbstractGamesDynamoDbTable:
@@ -163,23 +167,6 @@ resources:
         QueueName: abstractplay-ws-messages-${self:provider.stage}
         VisibilityTimeout: 900   # match your consumer Lambda timeout
         MessageRetentionPeriod: 86400  # 1 day, adjust as needed
-
-    # this supposedly forces the websocket stage to redeploy every run
-    WebsocketsDeploymentStage:
-      Type: AWS::ApiGatewayV2::Stage
-      Properties:
-        StageName: ${self:provider.stage}
-        ApiId:
-          Ref: WebsocketsApi
-        AutoDeploy: true
-        Description: Serverless Websockets
-        DefaultRouteSettings:
-          DataTraceEnabled: true
-          LoggingLevel: INFO
-        AccessLogSettings:
-          DestinationArn:
-            Fn::Sub: arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${WebsocketsLogGroup}
-          Format: '$context.identity.sourceIp $context.identity.caller $context.identity.user [$context.requestTime] "$context.eventType $context.routeKey $context.connectionId" $context.requestId'
 
     # Apparently this is explicitly needed (which makes no sense to me, but there it is)
     ConnectLambdaPermission:
