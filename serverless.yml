@@ -81,12 +81,12 @@ provider:
     userpoolClient: ${self:custom.stageConfig.${self:provider.stage}.userpoolClient}
     SQS_URL: ${self:custom.stageConfig.${self:provider.stage}.sqsurl}
     AIAI_USERID: SkQfHAjeDxs8eeEnScuYA
-    TOTP_KEY: ${env:TOTP_KEY}
-    VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
-    VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
-    # TOTP_KEY: ${file(../apsecrets.yml):totp_key}
-    # VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
-    # VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
+    # TOTP_KEY: ${env:TOTP_KEY}
+    # VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
+    # VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
+    TOTP_KEY: ${file(../apsecrets.yml):totp_key}
+    VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
+    VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
   iam:
     role:
       statements:
@@ -120,10 +120,6 @@ provider:
             - 'arn:aws:s3:::records.abstractplay.com/*'
 
 resources:
-  extensions:
-    WebsocketsDeploymentStage:
-      Properties:
-        AutoDeploy: true
   Resources:
     # One table design
     AbstractGamesDynamoDbTable:
@@ -185,6 +181,27 @@ resources:
         Principal: apigateway.amazonaws.com
         SourceArn:
           Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/*/$disconnect
+
+    # for autodeployments
+    WebsocketsDeployment:
+      Type: AWS::ApiGatewayV2::Deployment
+      Properties:
+        ApiId:
+          Ref: WebsocketsApi
+        Description: Force redeploy
+      DependsOn:
+        - SconnectWebsocketsRoute
+        - SdisconnectWebsocketsRoute
+
+    WebsocketsDeploymentStage:
+      Type: AWS::ApiGatewayV2::Stage
+      Properties:
+        StageName: ${self:provider.stage}
+        ApiId:
+          Ref: WebsocketsApi
+        DeploymentId:
+          Ref: WebsocketsDeployment
+
 
   Outputs:
     WsMessageQueueArn:
