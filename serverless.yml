@@ -183,26 +183,26 @@ resources:
           Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/*/$disconnect
 
     # for autodeployments
-    WebsocketsDeployment:
-      Type: AWS::ApiGatewayV2::Deployment
-      Properties:
-        ApiId:
-          Ref: WebsocketsApi
-        Description: Force redeploy ${sls:instanceId}
-      DependsOn:
-        - SconnectWebsocketsRoute
-        - SdisconnectWebsocketsRoute
+    # WebsocketsDeployment:
+    #   Type: AWS::ApiGatewayV2::Deployment
+    #   Properties:
+    #     ApiId:
+    #       Ref: WebsocketsApi
+    #     Description: Force redeploy ${sls:instanceId}
+    #   DependsOn:
+    #     - SconnectWebsocketsRoute
+    #     - SdisconnectWebsocketsRoute
 
-    WebsocketsDeploymentStage:
-      Type: AWS::ApiGatewayV2::Stage
-      Properties:
-        StageName: ${self:provider.stage}
-        Description: Redeploy ${sls:instanceId}   # forces stage update
-        ApiId: !Ref WebsocketsApi
-        DeploymentId: !Ref WebsocketsDeployment
-        DefaultRouteSettings:
-          DataTraceEnabled: true       # enables execution logging
-          LoggingLevel: INFO           # ERROR | INFO
+    # WebsocketsDeploymentStage:
+    #   Type: AWS::ApiGatewayV2::Stage
+    #   Properties:
+    #     StageName: ${self:provider.stage}
+    #     Description: Redeploy ${sls:instanceId}   # forces stage update
+    #     ApiId: !Ref WebsocketsApi
+    #     DeploymentId: !Ref WebsocketsDeployment
+    #     DefaultRouteSettings:
+    #       DataTraceEnabled: true       # enables execution logging
+    #       LoggingLevel: INFO           # ERROR | INFO
 
   Outputs:
     WsMessageQueueArn:
