@@ -4,6 +4,7 @@ import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { APIGatewayProxyEventV2 } from "aws-lambda";
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 
 type WebSocketRequestContext = APIGatewayProxyEventV2["requestContext"] & {
   connectionId: string;
@@ -53,7 +54,7 @@ export const handler = async (event: WebSocketEvent) => {
     console.log(`Verifying JWT: ${token}`);
     const payload = await verifier.verify(token);
     console.log(`Validated: ${JSON.stringify(payload)}`);
-    const { connectionId } = event.requestContext;
+    const { connectionId, domainName, stage } = event.requestContext;
     const userId = payload.sub;
 
     console.log(`About to store the following record: ${JSON.stringify({ connectionId, userId})}`);
@@ -75,9 +76,21 @@ export const handler = async (event: WebSocketEvent) => {
         })
     );
     console.log("Record written");
+    // Now send a message back to the client
+    const apiGwClient = new ApiGatewayManagementApiClient({
+      region: "us-east-1",
+      endpoint: `https://${domainName}/${stage}`,
+    });
+
+    await apiGwClient.send(
+      new PostToConnectionCommand({
+        ConnectionId: connectionId,
+        Data: Buffer.from(JSON.stringify({ message: "Subscription successful" })),
+      })
+    );
+    return { statusCode: 200 };
   } catch (ex) {
     console.log("Subscribe error:", ex);
+    return { statusCode: 500 };
   }
-
-  return { statusCode: 200 };
 };
