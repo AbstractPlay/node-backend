@@ -3,7 +3,7 @@
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { APIGatewayProxyEventV2 } from "aws-lambda";
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 
 type WebSocketRequestContext = APIGatewayProxyEventV2["requestContext"] & {
@@ -76,7 +76,19 @@ export const handler = async (event: WebSocketEvent) => {
         })
     );
     console.log(`Result: ${JSON.stringify(result)}`);
-    console.log("Record written");
+
+    // get the record to make sure
+      const getRec = await ddbDocClient.send(
+         new GetCommand({
+           TableName: process.env.ABSTRACT_PLAY_TABLE,
+           Key: {
+             "pk": "wsConnections",
+             "sk": connectionId
+           },
+         })
+      );
+      console.log(`Found record: ${JSON.stringify(getRec)}`);
+
     // Now send a message back to the client
     const apiGwClient = new ApiGatewayManagementApiClient({
       region: REGION,
