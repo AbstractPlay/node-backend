@@ -53,8 +53,9 @@ export const handler = async (event: WebSocketEvent) => {
     const payload = await verifier.verify(token);
     console.log(`Validated: ${JSON.stringify(payload)}`);
     const { connectionId } = event.requestContext;
-
     const userId = payload.sub;
+
+    console.log(`About to store the following record: ${JSON.stringify({ connectionId, userId})}`);
 
     await ddbDocClient.send(
         new PutCommand({
@@ -72,16 +73,6 @@ export const handler = async (event: WebSocketEvent) => {
         })
     );
   } catch (ex) {
-    console.log("Connect error:", JSON.stringify(ex));
-    const domain = event.requestContext.domainName;
-    const stage = event.requestContext.stage;
-    const connectionId = event.requestContext.connectionId;
-
-    const mgmt = new ApiGatewayManagementApiClient({
-      endpoint: `https://${domain}/${stage}`,
-    });
-
-    await mgmt.send(new DeleteConnectionCommand({ ConnectionId: connectionId }));
-    return { statusCode: 401 };
+    console.log("Subscribe error:", JSON.stringify(ex));
   }
 };
