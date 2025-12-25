@@ -72,11 +72,6 @@ provider:
   stage: ${opt:stage, 'dev'}
   profile: ${self:custom.stageConfig.${self:provider.stage}.profile}
   region: us-east-1
-  apiGateway:
-    websocketApiName: myWebSocketApi
-    websocketApi:
-      subprotocols:
-        - auth   # <-- fixed subprotocol name the browser requests
   logs:
     websocket: true
   environment:
@@ -168,6 +163,15 @@ resources:
         QueueName: abstractplay-ws-messages-${self:provider.stage}
         VisibilityTimeout: 900   # match your consumer Lambda timeout
         MessageRetentionPeriod: 86400  # 1 day, adjust as needed
+
+    MyWebSocketApi:
+      Type: AWS::ApiGatewayV2::Api
+      Properties:
+        Name: myWebSocketApi
+        ProtocolType: WEBSOCKET
+        RouteSelectionExpression: $request.body.action
+        Subprotocols:
+          - auth
 
     # Apparently this is explicitly needed (which makes no sense to me, but there it is)
     ConnectLambdaPermission:
