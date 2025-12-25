@@ -86,6 +86,8 @@ provider:
     userpoolClient: ${self:custom.stageConfig.${self:provider.stage}.userpoolClient}
     SQS_URL: ${self:custom.stageConfig.${self:provider.stage}.sqsurl}
     AIAI_USERID: SkQfHAjeDxs8eeEnScuYA
+    WEBSOCKET_DOMAIN: ${cf:${self:service}-${self:provider.stage}.WebSocketApiDomainName}
+    WEBSOCKET_STAGE: ${self:provider.stage}
     TOTP_KEY: ${env:TOTP_KEY}
     VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
     VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
@@ -218,6 +220,14 @@ resources:
       Value: !Ref WsMessageQueue
       Export:
         Name: WsMessageQueueUrl-${self:provider.stage}
+    WebSocketApiDomainName:
+      Value:
+        Fn::Join:
+          - ""
+          - - Ref: WebsocketsApi
+            - ".execute-api."
+            - Ref: AWS::Region
+            - ".amazonaws.com"
     WebsocketApiUrl:
       Value:
         Fn::Join:

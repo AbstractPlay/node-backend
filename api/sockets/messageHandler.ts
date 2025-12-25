@@ -8,6 +8,7 @@ import {
   ApiGatewayManagementApiClient,
   PostToConnectionCommand,
 } from "@aws-sdk/client-apigatewaymanagementapi";
+import { SQSEvent, SQSRecord } from "aws-lambda";
 
 const REGION = "us-east-1";
 const clnt = new DynamoDBClient({ region: REGION });
@@ -26,7 +27,7 @@ const unmarshallOptions = {
 const translateConfig = { marshallOptions, unmarshallOptions };
 const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
 
-export const handler = async (event: any) => {
+export const handler = async (event: SQSEvent) => {
   // SQS may batch multiple messages
   for (const record of event.Records) {
     await processRecord(record);
@@ -35,7 +36,7 @@ export const handler = async (event: any) => {
   return { statusCode: 200 };
 };
 
-async function processRecord(record: any) {
+async function processRecord(record: SQSRecord) {
   let body;
   try {
     body = JSON.parse(record.body);
@@ -75,11 +76,13 @@ async function processRecord(record: any) {
   const now = Math.floor(Date.now() / 1000);
 
   for (const item of result.Items ?? []) {
+    console.log(`Processing item: ${JSON.stringify(item)}`);
     const connectionId = item.sk.S!;
     const ttl = item.ttl?.N ? parseInt(item.ttl.N) : null;
 
     // Delete expired TTL entries
     if (ttl && ttl < now) {
+        console.log(`Deleting expired connection: ${connectionId}`);
       await deleteConnection(connectionId);
       continue;
     }
