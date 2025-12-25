@@ -106,7 +106,7 @@ async function deleteConnection(connectionId: string) {
   try {
     await ddbDocClient.send(
       new DeleteItemCommand({
-        TableName: process.env.CONNECTIONS_TABLE!,
+        TableName: process.env.ABSTRACT_PLAY_TABLE!,
         Key: {
           pk: { S: "wsConnections" },
           sk: { S: connectionId },

@@ -1,4 +1,5 @@
-import { ApiGatewayManagementApiClient, DeleteConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+'use strict';
+
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { APIGatewayProxyEventV2 } from "aws-lambda";
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
@@ -56,6 +57,7 @@ export const handler = async (event: WebSocketEvent) => {
     const userId = payload.sub;
 
     console.log(`About to store the following record: ${JSON.stringify({ connectionId, userId})}`);
+    console.log(`Table name: ${process.env.ABSTRACT_PLAY_TABLE}`);
 
     await ddbDocClient.send(
         new PutCommand({
@@ -72,6 +74,7 @@ export const handler = async (event: WebSocketEvent) => {
             },
         })
     );
+    console.log("Record written");
   } catch (ex) {
     console.log("Subscribe error:", JSON.stringify(ex));
   }
