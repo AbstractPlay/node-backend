@@ -75,4 +75,6 @@ export const handler = async (event: WebSocketEvent) => {
   } catch (ex) {
     console.log("Subscribe error:", JSON.stringify(ex));
   }
+
+  return { statusCode: 200 };
 };
