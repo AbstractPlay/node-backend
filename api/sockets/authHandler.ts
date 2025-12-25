@@ -60,7 +60,7 @@ export const handler = async (event: WebSocketEvent) => {
     console.log(`About to store the following record: ${JSON.stringify({ connectionId, userId})}`);
     console.log(`Table name: ${process.env.ABSTRACT_PLAY_TABLE}`);
 
-    await ddbDocClient.send(
+    const result = await ddbDocClient.send(
         new PutCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE!,
             Item: {
@@ -75,10 +75,11 @@ export const handler = async (event: WebSocketEvent) => {
             },
         })
     );
+    console.log(`Result: ${JSON.stringify(result)}`);
     console.log("Record written");
     // Now send a message back to the client
     const apiGwClient = new ApiGatewayManagementApiClient({
-      region: "us-east-1",
+      region: REGION,
       endpoint: `https://${domainName}/${stage}`,
     });
 
