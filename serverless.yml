@@ -46,6 +46,7 @@ custom:
       userpoolId: us-east-1_2zrzbEjoU
       userpoolClient: 14mpql1tmvntup4p2anm4jt782
       sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue
+      wsDomain: qwmw4fb0l6.execute-api.us-east-1.amazonaws.com
 
     prod:
       profile: AbstractPlayProd
@@ -53,7 +54,7 @@ custom:
       userpoolId: us-east-1_YCjgSZHJm
       userpoolClient: 2isan3ctk1aabt2v6r6aptlpg
       sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-prod-aiai-queue
-
+      wsDomain: qwmw4fb0l6.execute-api.us-east-1.amazonaws.com
 
 package:
   # individually: true
@@ -86,7 +87,7 @@ provider:
     userpoolClient: ${self:custom.stageConfig.${self:provider.stage}.userpoolClient}
     SQS_URL: ${self:custom.stageConfig.${self:provider.stage}.sqsurl}
     AIAI_USERID: SkQfHAjeDxs8eeEnScuYA
-    WEBSOCKET_DOMAIN: ${cf:${self:service}-${self:provider.stage}.WebSocketApiDomainName}
+    WEBSOCKET_DOMAIN: ${self:custom.stageConfig.${self:provider.stage}.wsDomain}
     WEBSOCKET_STAGE: ${self:provider.stage}
     TOTP_KEY: ${env:TOTP_KEY}
     VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
