@@ -312,10 +312,10 @@ functions:
           schedule: cron(0 0,12 * * ? *)
 
   # websocket functions
-  wsAuthorizer:
-    name: wsAuthorizer
-    handler: api/sockets/wsAuthorizer.wsAuthorizer
-    logRetentionInDays: 7
+  # wsAuthorizer:
+  #   name: wsAuthorizer
+  #   handler: api/sockets/wsAuthorizer.wsAuthorizer
+  #   logRetentionInDays: 7
 
   connect:
     handler: api/sockets/connectHandler.handler
@@ -324,9 +324,9 @@ functions:
     events:
       - websocket:
           route: $connect
-          authorizer:
-            name: wsAuthorizer
-            identitySource: route.request.header.Sec-WebSocket-Protocol
+          # authorizer:
+          #   name: wsAuthorizer
+          #   identitySource: route.request.header.Sec-WebSocket-Protocol
 
   disconnect:
     handler: api/sockets/disconnectHandler.handler
@@ -336,13 +336,13 @@ functions:
       - websocket:
           route: $disconnect
 
-  auth:
+  subscribe:
     handler: api/sockets/authHandler.handler
     logRetentionInDays: 7
     timeout: 30
     events:
       - websocket:
-          route: auth
+          route: subscribe
 
   messageHandler:
     handler: api/sockets/messageHandler.handler
