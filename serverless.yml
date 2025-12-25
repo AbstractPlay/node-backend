@@ -331,6 +331,12 @@ functions:
       - websocket:
           route: $disconnect
 
+  auth:
+    handler: api/sockets/authHandler.handler
+    events:
+      - websocket:
+          route: auth
+
   messageHandler:
     handler: api/sockets/messageHandler.handler
     logRetentionInDays: 7

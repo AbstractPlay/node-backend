@@ -1,5 +1,3 @@
-import { CognitoJwtVerifier } from "aws-jwt-verify";
-
 interface WebSocketAuthorizerEvent {
   type: string;
   methodArn: string;
@@ -8,58 +6,74 @@ interface WebSocketAuthorizerEvent {
   identitySource?: string[];
 }
 
-const verifier = CognitoJwtVerifier.create({
-  userPoolId: process.env.userpoolId!,
-  tokenUse: "id",
-  clientId: process.env.userpoolClient!,
-});
-
 export const wsAuthorizer = async (event: WebSocketAuthorizerEvent) => {
     console.log("Authorizer event:", JSON.stringify(event));
-  const token =
+  const proto =
     event.headers?.["Sec-WebSocket-Protocol"] ||
     event.multiValueHeaders?.["Sec-WebSocket-Protocol"]?.[0];
 
-  if (!token) {
-    console.error("Missing Sec-WebSocket-Protocol header");
-    return { isAuthorized: false };
+  if (proto !== "auth") {
+    return {
+      principalId: "anonymous",
+      policyDocument: {
+        Version: "2012-10-17",
+        Statement: [{ Action: "execute-api:Invoke", Effect: "Deny", Resource: "*" }]
+      }
+    };
   }
 
-  try {
-    console.log(`Verifying JWT: ${token}`);
-    const payload = await verifier.verify(token);
-    console.log(`Validated: ${JSON.stringify(payload)}`);
-    return {
-        "principalId": payload.sub,
-        "policyDocument": {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Action": "execute-api:Invoke",
-                    "Effect": "Allow",
-                    "Resource": "*"
-                }
-            ]
-        },
-        "context": {
-            "userId": payload.sub,
-            "email": payload.email
-        }
-    };
-  } catch (err) {
-    console.error("JWT verification failed", err);
-    return {
-        "principalId": "anonymous",
-        "policyDocument": {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Action": "execute-api:Invoke",
-                    "Effect": "Deny",
-                    "Resource": "*"
-                }
-            ]
-        }
-    };
-  }
+  return {
+    principalId: "user",
+    policyDocument: {
+      Version: "2012-10-17",
+      Statement: [{ Action: "execute-api:Invoke", Effect: "Allow", Resource: "*" }]
+    }
+  };
+
+//   const token =
+//     event.headers?.["Sec-WebSocket-Protocol"] ||
+//     event.multiValueHeaders?.["Sec-WebSocket-Protocol"]?.[0];
+
+//   if (!token) {
+//     console.error("Missing Sec-WebSocket-Protocol header");
+//     return { isAuthorized: false };
+//   }
+
+//   try {
+//     console.log(`Verifying JWT: ${token}`);
+//     const payload = await verifier.verify(token);
+//     console.log(`Validated: ${JSON.stringify(payload)}`);
+//     return {
+//         "principalId": payload.sub,
+//         "policyDocument": {
+//             "Version": "2012-10-17",
+//             "Statement": [
+//                 {
+//                     "Action": "execute-api:Invoke",
+//                     "Effect": "Allow",
+//                     "Resource": "*"
+//                 }
+//             ]
+//         },
+//         "context": {
+//             "userId": payload.sub,
+//             "email": payload.email
+//         }
+//     };
+//   } catch (err) {
+//     console.error("JWT verification failed", err);
+//     return {
+//         "principalId": "anonymous",
+//         "policyDocument": {
+//             "Version": "2012-10-17",
+//             "Statement": [
+//                 {
+//                     "Action": "execute-api:Invoke",
+//                     "Effect": "Deny",
+//                     "Resource": "*"
+//                 }
+//             ]
+//         }
+//     };
+//   }
 };
