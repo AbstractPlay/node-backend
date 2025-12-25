@@ -4,6 +4,7 @@ interface WebSocketAuthorizerEvent {
   type: string;
   methodArn: string;
   headers?: Record<string, string>;
+  multiValueHeaders?: Record<string, string[]>;
   identitySource?: string[];
 }
 
@@ -15,11 +16,9 @@ const verifier = CognitoJwtVerifier.create({
 
 export const wsAuthorizer = async (event: WebSocketAuthorizerEvent) => {
     console.log("Authorizer event:", JSON.stringify(event));
-    const token = event.identitySource?.[0];
-//   // API Gateway normalizes header keys to lowercase
-//   const token =
-//     event.headers?.["sec-websocket-protocol"] ||
-//     event.headers?.["Sec-WebSocket-Protocol"];
+  const token =
+    event.headers?.["Sec-WebSocket-Protocol"] ||
+    event.multiValueHeaders?.["Sec-WebSocket-Protocol"]?.[0];
 
   if (!token) {
     console.error("Missing Sec-WebSocket-Protocol header");
