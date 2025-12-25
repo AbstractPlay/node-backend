@@ -37,7 +37,7 @@ const verifier = CognitoJwtVerifier.create({
   clientId: process.env.userpoolClient!,
 });
 
-export const wsAuthorizer = async (event: WebSocketEvent) => {
+export const handler = async (event: WebSocketEvent) => {
 
    // Parse the incoming message body
     const body = JSON.parse(event.body ?? "{}");
