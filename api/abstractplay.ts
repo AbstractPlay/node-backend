@@ -8712,9 +8712,7 @@ const getAllUsers = async (): Promise<FullUser[]> => {
 /**
  * Count all items for a given partition key, paginating until complete.
  */
-async function countByPk(
-  pkValue: string
-): Promise<number> {
+async function countByPk(pkValue: string): Promise<number> {
   let total = 0;
   let lastKey: Record<string, any> | undefined = undefined;
 
@@ -8723,7 +8721,7 @@ async function countByPk(
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       KeyConditionExpression: `pk = :pk`,
       ExpressionAttributeValues: {
-        ":pk": { S: pkValue },
+        ":pk": pkValue,
       },
       Select: "COUNT",
       ExclusiveStartKey: lastKey,
