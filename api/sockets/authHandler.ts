@@ -3,8 +3,8 @@
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { APIGatewayProxyEventV2 } from "aws-lambda";
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
-import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+// import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 
 type WebSocketRequestContext = APIGatewayProxyEventV2["requestContext"] & {
   connectionId: string;
@@ -51,16 +51,16 @@ export const handler = async (event: WebSocketEvent) => {
   }
 
   try {
-    console.log(`Verifying JWT: ${token}`);
+    // console.log(`Verifying JWT: ${token}`);
     const payload = await verifier.verify(token);
-    console.log(`Validated: ${JSON.stringify(payload)}`);
-    const { connectionId, domainName, stage } = event.requestContext;
+    // console.log(`Validated: ${JSON.stringify(payload)}`);
+    const { connectionId/*, domainName, stage*/ } = event.requestContext;
     const userId = payload.sub;
 
-    console.log(`About to store the following record: ${JSON.stringify({ connectionId, userId})}`);
-    console.log(`Table name: ${process.env.ABSTRACT_PLAY_TABLE}`);
+    // console.log(`About to store the following record: ${JSON.stringify({ connectionId, userId})}`);
+    // console.log(`Table name: ${process.env.ABSTRACT_PLAY_TABLE}`);
 
-    const result = await ddbDocClient.send(
+    /*const result =*/ await ddbDocClient.send(
         new PutCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE!,
             Item: {
@@ -75,32 +75,32 @@ export const handler = async (event: WebSocketEvent) => {
             },
         })
     );
-    console.log(`Result: ${JSON.stringify(result)}`);
+    // console.log(`Result: ${JSON.stringify(result)}`);
 
-    // get the record to make sure
-      const getRec = await ddbDocClient.send(
-         new GetCommand({
-           TableName: process.env.ABSTRACT_PLAY_TABLE,
-           Key: {
-             "pk": "wsConnections",
-             "sk": connectionId
-           },
-         })
-      );
-      console.log(`Found record: ${JSON.stringify(getRec)}`);
+    // // get the record to make sure
+    //   const getRec = await ddbDocClient.send(
+    //      new GetCommand({
+    //        TableName: process.env.ABSTRACT_PLAY_TABLE,
+    //        Key: {
+    //          "pk": "wsConnections",
+    //          "sk": connectionId
+    //        },
+    //      })
+    //   );
+    //   console.log(`Found record: ${JSON.stringify(getRec)}`);
 
     // Now send a message back to the client
-    const apiGwClient = new ApiGatewayManagementApiClient({
-      region: REGION,
-      endpoint: `https://${domainName}/${stage}`,
-    });
+    // const apiGwClient = new ApiGatewayManagementApiClient({
+    //   region: REGION,
+    //   endpoint: `https://${domainName}/${stage}`,
+    // });
 
-    await apiGwClient.send(
-      new PostToConnectionCommand({
-        ConnectionId: connectionId,
-        Data: Buffer.from(JSON.stringify({ message: "Subscription successful" })),
-      })
-    );
+    // await apiGwClient.send(
+    //   new PostToConnectionCommand({
+    //     ConnectionId: connectionId,
+    //     Data: Buffer.from(JSON.stringify({ message: "Subscription successful" })),
+    //   })
+    // );
     return { statusCode: 200 };
   } catch (ex) {
     console.log("Subscribe error:", ex);

@@ -30,7 +30,7 @@ const translateConfig = { marshallOptions, unmarshallOptions };
 const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
 
 export const handler = async (event: WebSocketDisconnectEvent) => {
-  console.log("Disconnect event:", JSON.stringify(event));
+//   console.log("Disconnect event:", JSON.stringify(event));
   const { connectionId } = event.requestContext;
 
   try {

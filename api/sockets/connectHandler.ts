@@ -12,6 +12,6 @@ interface WebSocketConnectEvent {
 }
 
 export const handler = async (event: WebSocketConnectEvent) => {
-  console.log("Connect event:", event);
+//   console.log("Connect event:", event);
   return { statusCode: 200 };
 };

@@ -27,6 +27,14 @@ const unmarshallOptions = {
 const translateConfig = { marshallOptions, unmarshallOptions };
 const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
 
+type MsgBody = {
+  domainName: string;
+  stage: string;
+  verb: string;
+  payload?: any;
+  exclude?: string[];
+};
+
 export const handler = async (event: SQSEvent) => {
   // SQS may batch multiple messages
   for (const record of event.Records) {
@@ -37,7 +45,7 @@ export const handler = async (event: SQSEvent) => {
 };
 
 async function processRecord(record: SQSRecord) {
-  let body;
+  let body: MsgBody;
   try {
     body = JSON.parse(record.body);
   } catch {
@@ -45,7 +53,7 @@ async function processRecord(record: SQSRecord) {
     return;
   }
 
-  const { verb, payload, domainName, stage } = body;
+  const { verb, payload, exclude, domainName, stage } = body;
 
   if (!domainName || !stage) {
     console.error("Missing domainName or stage in SQS message");
@@ -77,6 +85,7 @@ async function processRecord(record: SQSRecord) {
   for (const conn of result.Items ?? []) {
     console.log(`Processing connection: ${JSON.stringify(conn)}`);
     const connectionId = conn.sk.S!;
+    const userId = conn.userId.S!;
     const ttl = conn.ttl?.N ? parseInt(conn.ttl.N) : null;
 
     // Delete expired TTL entries
@@ -86,20 +95,23 @@ async function processRecord(record: SQSRecord) {
       continue;
     }
 
-    try {
-      await apigw.send(
-        new PostToConnectionCommand({
-          ConnectionId: connectionId,
-          Data: Buffer.from(JSON.stringify({ verb, payload })),
-        })
-      );
-    } catch (err: any) {
-      // 410 Gone → stale connection
-      if (err.statusCode === 410) {
-        await deleteConnection(connectionId);
-      } else {
-        console.error("Error posting to connection", err);
-      }
+    // send message to all but excluded connections
+    if (exclude === undefined || !exclude.includes(userId)) {
+        try {
+            await apigw.send(
+                new PostToConnectionCommand({
+                    ConnectionId: connectionId,
+                    Data: Buffer.from(JSON.stringify({ verb, payload })),
+                })
+            );
+        } catch (err: any) {
+            // 410 Gone → stale connection
+            if (err.statusCode === 410) {
+                await deleteConnection(connectionId);
+            } else {
+                console.error("Error posting to connection", err);
+            }
+        }
     }
   }
 }
