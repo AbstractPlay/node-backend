@@ -3,7 +3,7 @@
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, BatchWriteCommand, QueryCommandInput } from '@aws-sdk/lib-dynamodb';
-import { SQSClient, SendMessageCommand, SendMessageRequest } from "@aws-sdk/client-sqs";
+import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageRequest } from "@aws-sdk/client-sqs";
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
@@ -170,6 +170,7 @@ type MeData = {
     challengesAccepted?: FullChallenge[];
     standingChallenges?: FullChallenge[];
     realStanding?: StandingChallenge[];
+    connections: number;
 }
 
 type Rating = {
@@ -405,6 +406,14 @@ type StandingChallengeRec = {
     standing: StandingChallenge[];
 };
 
+type WsMsgBody = {
+  domainName: string;
+  stage: string;
+  verb: string;
+  payload?: any;
+  exclude?: string[];
+};
+
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function sendCommandWithRetry(command: any, maxRetries = 8, initialDelay = 100, maxDelay = 5000) {
@@ -527,7 +536,7 @@ async function verifyAndCorrectRatingsCountWithData(metaGame: string, actualRati
 
 function setsEqual(a: Set<any>, b: Set<any>): boolean {
     if (a.size !== b.size) return false;
-    for (let item of a) {
+    for (const item of a) {
         if (!b.has(item)) return false;
     }
     return true;
@@ -1767,6 +1776,9 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
         UpdateExpression: "set lastSeen = :dt"
     }));
 
+    // Get number of current connections
+    const connections = await countByPk("wsConnections");
+
     let data = null;
     console.log(`Fetching challenges`);
     let tagData, paletteData, standingData;
@@ -1832,6 +1844,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "challengesAccepted": (data[2] as any[]).map(d => d.Item),
           "standingChallenges": (data[3] as any[]).map(d => d.Item),
           "realStanding": realStanding,
+          "connections": connections,
         } as MeData, Set_toJSON),
         headers
       };
@@ -1853,6 +1866,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           tags,
           palettes,
           "realStanding": realStanding,
+          "connections": connections,
         } as MeData, Set_toJSON),
         headers
       }
@@ -3413,7 +3427,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     const simultaneous = flags !== undefined && flags.includes('simultaneous');
     const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
     let autoMoves = 0;
-    let list: Promise<any>[] = [];
+    const list: Promise<any>[] = [];
 
     try {
       if (pars.move === "resign") {
@@ -3608,6 +3622,9 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
 
     await realPingBot(game.metaGame, game.id, game);
     await Promise.all(list);
+
+    // broadcasting that state has updated
+    await wsBroadcast("game", {"meta": pars.metaGame, "id": pars.id}, [userid]);
 
     // TODO: Rehydrate state, run it through the stripper, and then replace with the new, stripped state
     if (game.gameEnded === undefined) {
@@ -4344,7 +4361,7 @@ function applyMove(
     }
   }
 
-  let work: Promise<any>[] = [];
+  const work: Promise<any>[] = [];
   if (!engine.gameover) {
     if (explorations[0] && explorations[0].length > 0) {
       // save back the updated exploration for player 0
@@ -4442,7 +4459,7 @@ async function updateLastChatForPlayers(
   metaGame: string,
   players: {[k: string]: any; id: string}[],
   currentUserId: string,
-  allowReAdd: boolean = false  // Only true for completed games via saveExploration
+  allowReAdd = false  // Only true for completed games via saveExploration
 ) {
   console.log(`Updating lastChat for all players of game ${gameId}`);
 
@@ -4629,6 +4646,11 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
       userid,
       false  // Don't re-add game to list for in-game comments
     );
+  }
+
+  if (pars.metaGame) {
+    // broadcasting that state has updated
+    await wsBroadcast("game", {"meta": pars.metaGame, "id": pars.id}, [userid]);
   }
 }
 
@@ -7628,7 +7650,7 @@ async function sendPush(opts: PushOptions) {
     }
 
     if(subscription !== undefined) {
-      // treat both 410 and 404 as permanent. There are a LOT of 404 web push errors in the logs and apparently these are because since June 2024 the Chrome/FCM push service has changed the way it reports stale or deleted web‑push registrations.
+      // treat both 410 and 404 as permanent. There are a LOT of 404 web push errors in the logs and apparently these are because since June 2024 the Chrome/FCM push service has changed the way it reports stale or deleted web‑push registrations.
       const PERMANENT_FAILURES = new Set([404, 410]);
 
       try {
@@ -8687,3 +8709,48 @@ const getAllUsers = async (): Promise<FullUser[]> => {
     return result
 }
 
+/**
+ * Count all items for a given partition key, paginating until complete.
+ */
+async function countByPk(
+  pkValue: string
+): Promise<number> {
+  let total = 0;
+  let lastKey: Record<string, any> | undefined = undefined;
+
+  do {
+    const params: QueryCommandInput = {
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      KeyConditionExpression: `pk = :pk`,
+      ExpressionAttributeValues: {
+        ":pk": { S: pkValue },
+      },
+      Select: "COUNT",
+      ExclusiveStartKey: lastKey,
+    };
+
+    const result = await ddbDocClient.send(new QueryCommand(params));
+
+    total += result.Count ?? 0;
+    lastKey = result.LastEvaluatedKey;
+  } while (lastKey);
+
+  return total;
+}
+
+async function wsBroadcast (verb: string, payload: any, exclude?: string[]): Promise<SendMessageCommandOutput> {
+    // construct message
+    const body: WsMsgBody = {
+        domainName: process.env.WEBSOCKET_DOMAIN!,
+        stage: process.env.WEBSOCKET_STAGE!,
+        verb,
+        payload,
+        exclude,
+    }
+    const input: SendMessageRequest = {
+        QueueUrl: process.env.WEBSOCKET_SQS,
+        MessageBody: JSON.stringify(body),
+    }
+    const cmd = new SendMessageCommand(input);
+    return sqsClient.send(cmd);
+}
