@@ -168,22 +168,22 @@ resources:
         MessageRetentionPeriod: 86400  # 1 day, adjust as needed
 
     # Apparently this is explicitly needed (which makes no sense to me, but there it is)
-    ConnectLambdaPermission:
-      Type: AWS::Lambda::Permission
-      Properties:
-        FunctionName: ${self:service}-${self:provider.stage}-connect
-        Action: lambda:InvokeFunction
-        Principal: apigateway.amazonaws.com
-        SourceArn:
-          Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/*/$connect
-    DisconnectLambdaPermission:
-      Type: AWS::Lambda::Permission
-      Properties:
-        FunctionName: ${self:service}-${self:provider.stage}-disconnect
-        Action: lambda:InvokeFunction
-        Principal: apigateway.amazonaws.com
-        SourceArn:
-          Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/*/$disconnect
+    # ConnectLambdaPermission:
+    #   Type: AWS::Lambda::Permission
+    #   Properties:
+    #     FunctionName: ${self:service}-${self:provider.stage}-connect
+    #     Action: lambda:InvokeFunction
+    #     Principal: apigateway.amazonaws.com
+    #     SourceArn:
+    #       Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/*/$connect
+    # DisconnectLambdaPermission:
+    #   Type: AWS::Lambda::Permission
+    #   Properties:
+    #     FunctionName: ${self:service}-${self:provider.stage}-disconnect
+    #     Action: lambda:InvokeFunction
+    #     Principal: apigateway.amazonaws.com
+    #     SourceArn:
+    #       Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/*/$disconnect
 
     # for autodeployments
     # WebsocketsDeployment:
