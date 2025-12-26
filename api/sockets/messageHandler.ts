@@ -52,8 +52,7 @@ async function processRecord(record: SQSRecord) {
     return;
   }
 
-  // Only accept "chat" and "game"
-  if (verb !== "chat" && verb !== "game") {
+  if (!["chat", "game", "test"].includes(verb)) {
     console.warn("Unsupported verb:", verb);
     return;
   }
@@ -75,10 +74,10 @@ async function processRecord(record: SQSRecord) {
 
   const now = Math.floor(Date.now() / 1000);
 
-  for (const item of result.Items ?? []) {
-    console.log(`Processing item: ${JSON.stringify(item)}`);
-    const connectionId = item.sk.S!;
-    const ttl = item.ttl?.N ? parseInt(item.ttl.N) : null;
+  for (const conn of result.Items ?? []) {
+    console.log(`Processing connection: ${JSON.stringify(conn)}`);
+    const connectionId = conn.sk.S!;
+    const ttl = conn.ttl?.N ? parseInt(conn.ttl.N) : null;
 
     // Delete expired TTL entries
     if (ttl && ttl < now) {

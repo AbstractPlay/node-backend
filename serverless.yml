@@ -73,11 +73,6 @@ provider:
   stage: ${opt:stage, 'dev'}
   profile: ${self:custom.stageConfig.${self:provider.stage}.profile}
   region: us-east-1
-  apiGateway:
-    websocketApiName: myWebSocketApi
-    websocketApi:
-      subprotocols:
-        - auth   # <-- fixed subprotocol name the browser requests
   logs:
     websocket: true
   environment:
