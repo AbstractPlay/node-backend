@@ -59,5 +59,8 @@
     "serverless-plugin-common-excludes": "^4.0.0",
     "serverless-plugin-include-dependencies": "^5.1.0",
     "typescript": "^5.0.4"
+  },
+  "overrides": {
+    "splaytree": "3.1.2"
   }
 }
