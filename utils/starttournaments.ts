@@ -32,7 +32,9 @@ const translateConfig = { marshallOptions, unmarshallOptions };
 const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
 const headers = {
   'content-type': 'application/json',
-  'Access-Control-Allow-Origin': '*'
+  'Access-Control-Allow-Origin': '*',
+  "Access-Control-Allow-Headers": "*",
+  "Access-Control-Allow-Methods": "*"
 };
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
