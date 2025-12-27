@@ -7653,10 +7653,14 @@ async function sendPush(opts: PushOptions) {
       // treat both 410 and 404 as permanent. There are a LOT of 404 web push errors in the logs and apparently these are because since June 2024 the Chrome/FCM push service has changed the way it reports stale or deleted web‑push registrations.
       const PERMANENT_FAILURES = new Set([404, 410]);
 
+      let subject = "https://play.abstractplay.com";
+      if (process.env.WEBSOCKET_STAGE === "dev") {
+        subject = "https://play.dev.abstractplay.com";
+      }
       try {
           const options: RequestOptions = {
             vapidDetails: {
-              subject: 'https://play.abstractplay.com',
+              subject,
               publicKey: process.env.VAPID_PUBLIC_KEY as string,
               privateKey: process.env.VAPID_PRIVATE_KEY as string,
             },
