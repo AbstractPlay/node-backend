@@ -8749,8 +8749,8 @@ async function countAndVisibleUserIds(pkValue: string): Promise<{
   totalCount: number;
   visibleUserIds: string[];
 }> {
-  let totalCount = 0;
-  const visibleUserIds: string[] = [];
+  const allUsers = new Set<string>();
+  const visibleUsers = new Set<string>();
   let lastKey: Record<string, any> | undefined = undefined;
 
   do {
@@ -8768,15 +8768,13 @@ async function countAndVisibleUserIds(pkValue: string): Promise<{
     const result = await ddbDocClient.send(new QueryCommand(params));
     const items = result.Items ?? [];
 
-    // Count all items
-    totalCount += items.length;
-
     // Collect userIds where invisible is missing or false
     for (const item of items) {
+      allUsers.add(item.userId);
       if (item.invisible !== true) {
         // invisible is undefined OR false
         if (item.userId) {
-          visibleUserIds.push(item.userId);
+          visibleUsers.add(item.userId);
         }
       }
     }
@@ -8784,7 +8782,7 @@ async function countAndVisibleUserIds(pkValue: string): Promise<{
     lastKey = result.LastEvaluatedKey;
   } while (lastKey);
 
-  return { totalCount, visibleUserIds };
+  return { totalCount: allUsers.size, visibleUserIds: [...visibleUsers] };
 }
 
 async function wsBroadcast (verb: string, payload: any, exclude?: string[]): Promise<SendMessageCommandOutput> {
