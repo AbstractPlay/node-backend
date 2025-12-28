@@ -44,6 +44,7 @@ export const handler = async (event: WebSocketEvent) => {
    // Parse the incoming message body
     const body = JSON.parse(event.body ?? "{}");
     const token: string | undefined = body.token;
+    const invisible: boolean = body.invisible ?? false;
 
   if (!token) {
      console.error("Missing token in auth message");
@@ -69,6 +70,7 @@ export const handler = async (event: WebSocketEvent) => {
 
                 connectionId,
                 userId,
+                invisible,
 
                 // Optional TTL for auto-cleanup
                 ttl: Math.floor(Date.now() / 1000) + 3600,
