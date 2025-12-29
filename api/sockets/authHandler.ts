@@ -52,6 +52,9 @@ export const handler = async (event: WebSocketEvent) => {
       return { statusCode: 400, body: "Missing token" };
   }
 
+  const domain = event.requestContext.domainName;
+  const stage = event.requestContext.stage;
+
   try {
     // console.log(`Verifying JWT: ${token}`);
     const payload = await verifier.verify(token);
@@ -72,6 +75,7 @@ export const handler = async (event: WebSocketEvent) => {
                 connectionId,
                 userId,
                 invisible,
+                endpoint: `https://${domain}/${stage}`,
 
                 // Optional TTL for auto-cleanup
                 ttl: Math.floor(Date.now() / 1000) + 3600,

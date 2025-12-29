@@ -53,21 +53,12 @@ async function processRecord(record: SQSRecord) {
     return;
   }
 
-  const { verb, payload, exclude, domainName, stage } = body;
-
-  if (!domainName || !stage) {
-    console.error("Missing domainName or stage in SQS message");
-    return;
-  }
+  const { verb, payload, exclude } = body;
 
   if (!["chat", "game", "test", "connections"].includes(verb)) {
     console.warn("Unsupported verb:", verb);
     return;
   }
-
-  const apigw = new ApiGatewayManagementApiClient({
-    endpoint: `https://${domainName}/${stage}`,
-  });
 
   // Query all active connections
   const result = await ddbDocClient.send(
@@ -83,7 +74,10 @@ async function processRecord(record: SQSRecord) {
   const now = Math.floor(Date.now() / 1000);
 
   for (const conn of result.Items ?? []) {
-    console.log(`Processing connection: ${JSON.stringify(conn)}`);
+    const endpoint = conn.endpoint.S!;
+    const apigw = new ApiGatewayManagementApiClient({
+        endpoint,
+    });
     const connectionId = conn.sk.S!;
     const userId = conn.userId.S!;
     const ttl = conn.ttl?.N ? parseInt(conn.ttl.N) : null;

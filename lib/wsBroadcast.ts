@@ -4,8 +4,6 @@ const REGION = "us-east-1";
 const sqsClient = new SQSClient({ region: REGION });
 
 type WsMsgBody = {
-  domainName: string;
-  stage: string;
   verb: string;
   payload?: any;
   exclude?: string[];
@@ -14,8 +12,6 @@ type WsMsgBody = {
 export async function wsBroadcast (verb: string, payload: any, exclude?: string[]): Promise<SendMessageCommandOutput> {
     // construct message
     const body: WsMsgBody = {
-        domainName: process.env.WEBSOCKET_DOMAIN!,
-        stage: process.env.WEBSOCKET_STAGE!,
         verb,
         payload,
         exclude,
