@@ -13,6 +13,7 @@ import i18n from 'i18next';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
 import it from '../locales/it/apback.json';
+import { wsBroadcast } from '../lib/wsBroadcast';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -172,8 +173,6 @@ type MeData = {
     challengesAccepted?: FullChallenge[];
     standingChallenges?: FullChallenge[];
     realStanding?: StandingChallenge[];
-    connections: number;
-    connected: string[]
 }
 
 type Rating = {
@@ -407,14 +406,6 @@ type StandingChallengeRec = {
     pk: "REALSTANDING";
     sk: string; // user's ID
     standing: StandingChallenge[];
-};
-
-type WsMsgBody = {
-  domainName: string;
-  stage: string;
-  verb: string;
-  payload?: any;
-  exclude?: string[];
 };
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -1779,9 +1770,6 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
         UpdateExpression: "set lastSeen = :dt"
     }));
 
-    // Get number of current connections
-    const { totalCount: connections, visibleUserIds: connected } = await countAndVisibleUserIds("wsConnections");
-
     let data = null;
     console.log(`Fetching challenges`);
     let tagData, paletteData, standingData;
@@ -1847,8 +1835,6 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "challengesAccepted": (data[2] as any[]).map(d => d.Item),
           "standingChallenges": (data[3] as any[]).map(d => d.Item),
           "realStanding": realStanding,
-          "connections": connections,
-          "connected": connected,
         } as MeData, Set_toJSON),
         headers
       };
@@ -1870,8 +1856,6 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           tags,
           palettes,
           "realStanding": realStanding,
-          "connections": connections,
-          "connected": connected,
         } as MeData, Set_toJSON),
         headers
       }
@@ -8716,88 +8700,4 @@ const getAllUsers = async (): Promise<FullUser[]> => {
       result.push(...page as FullUser[]);
     }
     return result
-}
-
-/**
- * Count all items for a given partition key, paginating until complete.
- */
-// async function countByPk(pkValue: string): Promise<number> {
-//   let total = 0;
-//   let lastKey: Record<string, any> | undefined = undefined;
-
-//   do {
-//     const params: QueryCommandInput = {
-//       TableName: process.env.ABSTRACT_PLAY_TABLE,
-//       KeyConditionExpression: `pk = :pk`,
-//       ExpressionAttributeValues: {
-//         ":pk": pkValue,
-//       },
-//       Select: "COUNT",
-//       ExclusiveStartKey: lastKey,
-//     };
-
-//     const result = await ddbDocClient.send(new QueryCommand(params));
-
-//     total += result.Count ?? 0;
-//     lastKey = result.LastEvaluatedKey;
-//   } while (lastKey);
-
-//   return total;
-// }
-
-async function countAndVisibleUserIds(pkValue: string): Promise<{
-  totalCount: number;
-  visibleUserIds: string[];
-}> {
-  const allUsers = new Set<string>();
-  const visibleUsers = new Set<string>();
-  let lastKey: Record<string, any> | undefined = undefined;
-
-  do {
-    const params: QueryCommandInput = {
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      KeyConditionExpression: "pk = :pk",
-      ExpressionAttributeValues: {
-        ":pk": pkValue,
-      },
-      // Only fetch what we need
-      ProjectionExpression: "userId, invisible",
-      ExclusiveStartKey: lastKey,
-    };
-
-    const result = await ddbDocClient.send(new QueryCommand(params));
-    const items = result.Items ?? [];
-
-    // Collect userIds where invisible is missing or false
-    for (const item of items) {
-      allUsers.add(item.userId);
-      if (item.invisible !== true) {
-        // invisible is undefined OR false
-        if (item.userId) {
-          visibleUsers.add(item.userId);
-        }
-      }
-    }
-
-    lastKey = result.LastEvaluatedKey;
-  } while (lastKey);
-
-  return { totalCount: allUsers.size, visibleUserIds: [...visibleUsers] };
-}
-
-async function wsBroadcast (verb: string, payload: any, exclude?: string[]): Promise<SendMessageCommandOutput> {
-    // construct message
-    const body: WsMsgBody = {
-        domainName: process.env.WEBSOCKET_DOMAIN!,
-        stage: process.env.WEBSOCKET_STAGE!,
-        verb,
-        payload,
-        exclude,
-    }
-    const input: SendMessageRequest = {
-        QueueUrl: process.env.WEBSOCKET_SQS,
-        MessageBody: JSON.stringify(body),
-    }
-    const cmd = new SendMessageCommand(input);
-    return sqsClient.send(cmd);
 }

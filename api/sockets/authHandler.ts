@@ -4,7 +4,8 @@ import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { APIGatewayProxyEventV2 } from "aws-lambda";
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
-// import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+import { getConnections } from '../../lib/getConnections';
+import { wsBroadcast } from '../../lib/wsBroadcast';
 
 type WebSocketRequestContext = APIGatewayProxyEventV2["requestContext"] & {
   connectionId: string;
@@ -79,30 +80,9 @@ export const handler = async (event: WebSocketEvent) => {
     );
     // console.log(`Result: ${JSON.stringify(result)}`);
 
-    // // get the record to make sure
-    //   const getRec = await ddbDocClient.send(
-    //      new GetCommand({
-    //        TableName: process.env.ABSTRACT_PLAY_TABLE,
-    //        Key: {
-    //          "pk": "wsConnections",
-    //          "sk": connectionId
-    //        },
-    //      })
-    //   );
-    //   console.log(`Found record: ${JSON.stringify(getRec)}`);
+    const conns = await getConnections();
+    await wsBroadcast("connections", conns);
 
-    // Now send a message back to the client
-    // const apiGwClient = new ApiGatewayManagementApiClient({
-    //   region: REGION,
-    //   endpoint: `https://${domainName}/${stage}`,
-    // });
-
-    // await apiGwClient.send(
-    //   new PostToConnectionCommand({
-    //     ConnectionId: connectionId,
-    //     Data: Buffer.from(JSON.stringify({ message: "Subscription successful" })),
-    //   })
-    // );
     return { statusCode: 200 };
   } catch (ex) {
     console.log("Subscribe error:", ex);

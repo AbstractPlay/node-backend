@@ -3,6 +3,8 @@
 
 import { DynamoDBClient, DeleteItemCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { getConnections } from '../../lib/getConnections';
+import { wsBroadcast } from '../../lib/wsBroadcast';
 
 interface WebSocketDisconnectEvent {
   requestContext: {
@@ -44,7 +46,8 @@ export const handler = async (event: WebSocketDisconnectEvent) => {
       })
     );
 
-    console.log(`Disconnected: ${connectionId}`);
+    const conns = await getConnections();
+    await wsBroadcast("connections", conns);
   } catch (err) {
     console.error("Disconnect cleanup failed", err);
   }
