@@ -1853,6 +1853,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "stars": user.stars,
           "bggid": user.bggid,
           "about": user.about,
+          "mayPush": user.mayPush,
           tags,
           palettes,
           "realStanding": realStanding,
