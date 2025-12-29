@@ -40,6 +40,8 @@ const verifier = CognitoJwtVerifier.create({
   clientId: process.env.userpoolClient!,
 });
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const handler = async (event: WebSocketEvent) => {
 
    // Parse the incoming message body
@@ -84,7 +86,8 @@ export const handler = async (event: WebSocketEvent) => {
     );
     // console.log(`Result: ${JSON.stringify(result)}`);
 
-    const conns = await getConnections(true);
+    await sleep(500);
+    const conns = await getConnections();
     await wsBroadcast("connections", conns);
 
     return { statusCode: 200 };
