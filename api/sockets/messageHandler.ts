@@ -60,7 +60,7 @@ async function processRecord(record: SQSRecord) {
     return;
   }
 
-  if (!["chat", "game", "test"].includes(verb)) {
+  if (!["chat", "game", "test", "connections"].includes(verb)) {
     console.warn("Unsupported verb:", verb);
     return;
   }
