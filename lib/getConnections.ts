@@ -18,7 +18,7 @@ const unmarshallOptions = {
 const translateConfig = { marshallOptions, unmarshallOptions };
 const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
 
-export async function getConnections(): Promise<{
+export async function getConnections(consistent = false): Promise<{
   totalCount: number;
   visibleUserIds: string[];
 }> {
@@ -36,6 +36,7 @@ export async function getConnections(): Promise<{
       // Only fetch what we need
       ProjectionExpression: "userId, invisible",
       ExclusiveStartKey: lastKey,
+      ConsistentRead: consistent,
     };
 
     const result = await ddbDocClient.send(new QueryCommand(params));

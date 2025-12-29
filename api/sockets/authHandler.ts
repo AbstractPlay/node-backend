@@ -84,7 +84,7 @@ export const handler = async (event: WebSocketEvent) => {
     );
     // console.log(`Result: ${JSON.stringify(result)}`);
 
-    const conns = await getConnections();
+    const conns = await getConnections(true);
     await wsBroadcast("connections", conns);
 
     return { statusCode: 200 };
