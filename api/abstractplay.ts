@@ -2,7 +2,7 @@
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, QueryCommandOutput, BatchWriteCommand, QueryCommandInput } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, BatchWriteCommand, QueryCommandInput, GetCommandOutput, PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageRequest } from "@aws-sdk/client-sqs";
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
@@ -410,12 +410,12 @@ type StandingChallengeRec = {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function sendCommandWithRetry(command: any, maxRetries = 8, initialDelay = 100, maxDelay = 5000) {
+async function sendCommandWithRetry<T = any>(command: any, maxRetries = 8, initialDelay = 100, maxDelay = 5000): Promise<T> {
     let retries = 0;
     while (retries < maxRetries) {
         try {
             // @ts-ignore
-            return await ddbDocClient.send(command);
+            return await ddbDocClient.send(command) as T;
         } catch (err: any) {
             if (['ThrottlingException', 'ProvisionedThroughputExceededException', 'InternalServerError', 'ServiceUnavailable'].includes(err.name)) {
                 retries++;
@@ -432,6 +432,8 @@ async function sendCommandWithRetry(command: any, maxRetries = 8, initialDelay =
             }
         }
     }
+    // This should never be reached due to the throw in the catch block
+    throw new Error(`Command failed after ${maxRetries} retries without a retryable error`);
 }
 
 async function verifyAndCorrectCountWithData(metaGame: string, countType: "currentgames" | "completedgames" | "standingchallenges", actualCount: number, countsData: any) {
@@ -3183,7 +3185,7 @@ async function duplicateStandingChallenge(challenge: { [x: string]: any; metaGam
 
 async function getPlayers(playerIDs: string[]) {
   const list = playerIDs.map((id: string) =>
-    ddbDocClient.send(
+    sendCommandWithRetry<GetCommandOutput>(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
@@ -3351,7 +3353,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
   }
 
   // Build parallel fetch promises
-  const gamePromise = ddbDocClient.send(
+  const gamePromise = sendCommandWithRetry<GetCommandOutput>(
     new GetCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: {
@@ -3361,9 +3363,9 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     }));
 
   // If opponentId and moveNumber are provided, also fetch opponent exploration data
-  let opponentExplorationPromise: Promise<any> | null = null;
+  let opponentExplorationPromise: Promise<GetCommandOutput> | null = null;
   if (pars.opponentId && pars.moveNumber !== undefined) {
-    opponentExplorationPromise = ddbDocClient.send(
+    opponentExplorationPromise = sendCommandWithRetry<GetCommandOutput>(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
@@ -3486,7 +3488,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       newRatings = updateRatings(game, players);
       list.push(addToGameLists("COMPLETEDGAMES", {...playerGame, commented: game.commented}, timestamp, game.numMoves !== undefined && game.numMoves > game.numPlayers));
       // delete at old sk
-      list.push(ddbDocClient.send(
+      list.push(sendCommandWithRetry<DeleteCommandOutput>(
         new DeleteCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
@@ -3542,7 +3544,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       }
     }
     game.lastMoveTime = timestamp;
-    const updateGame = ddbDocClient.send(new PutCommand({
+    const updateGame = sendCommandWithRetry<PutCommandOutput>(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
         Item: game
       }));
@@ -3573,7 +3575,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       console.log(`Scheduled update to player ${player.id}, ${player.name}, with games`, games);
       if (newRatings !== null) {
         list.push(
-          ddbDocClient.send(new UpdateCommand({
+          sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: { "pk": "USER", "sk": player.id },
             ExpressionAttributeValues: { ":rs": newRatings[ind] },
@@ -3581,7 +3583,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
           }))
         );
 
-        list.push(ddbDocClient.send(new PutCommand({
+        list.push(sendCommandWithRetry<PutCommandOutput>(new PutCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: {
             "pk": "RATINGS#" + game.metaGame,
@@ -3593,7 +3595,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         })));
         console.log(`Scheduled update ratings`, newRatings[ind][game.metaGame]);
 
-        list.push(ddbDocClient.send(new UpdateCommand({
+        list.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: { "pk": "METAGAMES", "sk": "COUNTS" },
           ExpressionAttributeNames: { "#gr": game.metaGame + "_ratings" },
@@ -3656,7 +3658,7 @@ async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: n
       score = 0.5;
     }
     console.log(`player ${player.name} now has score ${score} in game ${game.id} from tournament ${game.tournament}`);
-    work.push(ddbDocClient.send(new UpdateCommand({
+    work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTPLAYER", "sk": game.tournament + '#' + game.division!.toString() + '#' + player.id },
       ExpressionAttributeNames: { "#s": "score", "#t": "timeout" },
@@ -3665,14 +3667,14 @@ async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: n
     })));
   }
   const winner = game.winner?.map((w: number) => game.players[w - 1].id);
-  work.push(ddbDocClient.send(new UpdateCommand({
+  work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "TOURNAMENTGAME", "sk": game.tournament + '#' + game.division!.toString() + '#' + game.id },
     ExpressionAttributeNames: { "#w": "winner" },
     ExpressionAttributeValues: { ":w": winner },
     UpdateExpression: "set #w = :w"
   })));
-  const tournamentData = await ddbDocClient.send(new UpdateCommand({
+  const tournamentData = await sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "TOURNAMENT", "sk": game.tournament },
     ExpressionAttributeNames: { "#d": "divisions", "#n": game.division!.toString() },
@@ -4355,7 +4357,7 @@ function applyMove(
   if (!engine.gameover) {
     if (explorations[0] && explorations[0].length > 0) {
       // save back the updated exploration for player 0
-      work.push(ddbDocClient.send(new PutCommand({
+      work.push(sendCommandWithRetry<PutCommandOutput>(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: {
             "pk": "GAMEEXPLORATION#" + game.id,
@@ -4369,7 +4371,7 @@ function applyMove(
     }
     if (explorations[1] && explorations[1].length > 0) {
       // save back the updated exploration for player 1
-      work.push(ddbDocClient.send(new PutCommand({
+      work.push(sendCommandWithRetry<PutCommandOutput>(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
           Item: {
             "pk": "GAMEEXPLORATION#" + game.id,
@@ -6024,8 +6026,8 @@ async function endTournament(tournament: Tournament) {
         }
         if (division.numCompleted === division.numGames && !division.processed) {
           // Get games
-          const work2: Promise<any>[] = [];
-          work2.push(ddbDocClient.send(
+          const work2: Promise<QueryCommandOutput>[] = [];
+          work2.push(sendCommandWithRetry<QueryCommandOutput>(
             new QueryCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
@@ -6033,7 +6035,7 @@ async function endTournament(tournament: Tournament) {
               ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
             })));
           // And players (we need the ratings at the start of the tournament)
-          work2.push(ddbDocClient.send(
+          work2.push(sendCommandWithRetry<QueryCommandOutput>(
             new QueryCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournament.id + '#' + divisionNumber + '#' },
@@ -6100,7 +6102,7 @@ async function endTournament(tournament: Tournament) {
           division.winner = bestPlayerName;
           // Update tournament players
           for (const player of players) {
-            work.push(ddbDocClient.send(new UpdateCommand({
+            work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               Key: { "pk": "TOURNAMENTPLAYER", "sk": `${tournament.id}#${divisionNumber}#${player.playerid}` },
               ExpressionAttributeNames: { "#t": "tiebreak" },
@@ -6108,7 +6110,7 @@ async function endTournament(tournament: Tournament) {
               UpdateExpression: "set #t = :t"
             })));
             if (player.timeout) {
-              work.push(ddbDocClient.send(new UpdateCommand({
+              work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
                 TableName: process.env.ABSTRACT_PLAY_TABLE,
                 Key: { "pk": "TOURNAMENTPLAYER", "sk": `${tournament.nextid}#1#${player.playerid}` },
                 ExpressionAttributeNames: { "#t": "timeout" },
@@ -6130,7 +6132,7 @@ async function endTournament(tournament: Tournament) {
       if (tournamentUpdated) {
         // Update tournament
         if (!alldone) {
-          work.push(ddbDocClient.send(new UpdateCommand({
+          work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: { "pk": "TOURNAMENT", "sk": tournament.id },
             ExpressionAttributeValues: { ":ds": tournament.divisions },
@@ -6138,14 +6140,14 @@ async function endTournament(tournament: Tournament) {
           })));
         } else {
           const now = Date.now();
-          work.push(ddbDocClient.send(new UpdateCommand({
+          work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: { "pk": "TOURNAMENT", "sk": tournament.id },
             ExpressionAttributeValues: { ":ds": tournament.divisions, ":dt": now },
             UpdateExpression: "set divisions = :ds, dateEnded = :dt",
           })));
           // Start the clock for next tournament start
-          work.push(ddbDocClient.send(new UpdateCommand({
+          work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: { "pk": "TOURNAMENT", "sk": tournament.nextid },
             ExpressionAttributeValues: { ":dt": now },
@@ -6153,7 +6155,7 @@ async function endTournament(tournament: Tournament) {
           })));
           // Send e-mails to participants
           // Now we need ALL players, not just the ones in the current division
-          const playersData = await ddbDocClient.send(
+          const playersData = await sendCommandWithRetry<QueryCommandOutput>(
             new QueryCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
               ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournament.id },
@@ -7400,7 +7402,7 @@ async function eventClose(userid: string, pars: {eventid: string, winner: string
 async function eventUpdates(pars: {eventid: string, gameid: string, winner: string[]}): Promise<any[]> {
     const work: Promise<any>[] = [];
     work.push(
-        ddbDocClient.send(new UpdateCommand({
+        sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: { "pk": "ORGEVENTGAME", "sk": `${pars.eventid}#${pars.gameid}` },
             ExpressionAttributeValues: { ":win": pars.winner, ":arb": false},
