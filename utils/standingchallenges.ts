@@ -180,8 +180,18 @@ export const handler: Handler = async (event: any, context?: any) => {
             continue;
         }
         const user = userrec.Item as FullUser;
+        // sort entries by meta/variant (meta first)
+        const entries = rec.standing.sort((a, b) => {
+            if (a.sensitivity === b.sensitivity) {
+                return 0;
+            } else if (a.sensitivity === "meta") {
+                return -1;
+            } else {
+                return 1;
+            }
+        });
         // for each challenge
-        for (const entry of rec.standing) {
+        for (const entry of entries) {
           entryCount++;
           if (entry.suspended) { continue; }
           let totalExisting = 0;
