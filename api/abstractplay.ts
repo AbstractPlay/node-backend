@@ -2132,7 +2132,7 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
 async function getGamesForUser(userId: any) {
   const games: Game[] = [];
   for (const game of gameinfo.values()) {
-    let count = 0;
+    // let count = 0;
     let result = await ddbDocClient.send(
       new QueryCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -2146,11 +2146,11 @@ async function getGamesForUser(userId: any) {
             "#sk": "sk"
         },
         ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
-        Limit: 2 // For testing!
+        // Limit: 2 // For testing!
       })
     );
     if (result !== undefined) {
-        count += result.Count || 0;
+        // count += result.Count || 0;
         processGames(userId, result, games);
         let last = result.LastEvaluatedKey;
         while (last !== undefined && result !== undefined) {
@@ -2167,17 +2167,17 @@ async function getGamesForUser(userId: any) {
                         "#sk": "sk"
                     },
                     ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
-                    Limit: 2, // For testing!
+                    // Limit: 2, // For testing!
                     ExclusiveStartKey: last
                 }));
-            count += result.Count || 0;
+            // count += result.Count || 0;
             processGames(userId, result, games);
             last = result.LastEvaluatedKey;
         }
     }
-    if (count > 0) {
-        console.log(`Found ${count} ${game.uid} game${count !== 1 ? "s" : ""}`);
-    }
+    // if (count > 0) {
+    //     console.log(`Found ${count} ${game.uid} game${count !== 1 ? "s" : ""}`);
+    // }
   }
   return games;
 }
@@ -2186,17 +2186,13 @@ function processGames(userid: any, result: QueryCommandOutput, games: Game[]) {
   if (result.Items === undefined)
     throw new Error("processGames: no games found!?");
   const fullGames = result.Items as FullGame[];
-  if (fullGames === undefined) {
-    console.log(`'processGames' received a results object with no Items`);
-  }
-  fullGames.forEach((game) => {
-    if (!("players" in game)) {
-        console.log(`No 'players' property in a fetched game:\n${JSON.stringify(game)}`);
-    } else if (game.players.some((p: { id: any; }) => p.id === userid)) {
-        console.log(`Pushing the following game to the array:`, game);
-      games.push({"id": game.id, "metaGame": game.metaGame, "players": game.players, "clockHard": game.clockHard, "toMove": game.toMove, "lastMoveTime": game.lastMoveTime, "noExplore": game.noExplore || false});
+  if (fullGames !== undefined) {
+    for (const game of fullGames) {
+        if ("players" in game) {
+            games.push({"id": game.id, "metaGame": game.metaGame, "players": game.players, "clockHard": game.clockHard, "toMove": game.toMove, "lastMoveTime": game.lastMoveTime, "noExplore": game.noExplore || false});
+        }
     }
-  });
+  }
 }
 
 async function getChallenges(challengeIds: string[]) {
