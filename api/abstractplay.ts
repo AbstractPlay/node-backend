@@ -2132,6 +2132,7 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
 async function getGamesForUser(userId: any) {
   const games: Game[] = [];
   gameinfo.forEach(async (game) => {
+    let count = 0;
     let result = await ddbDocClient.send(
       new QueryCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -2141,10 +2142,9 @@ async function getGamesForUser(userId: any) {
         ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
         Limit: 2   // For testing!
         }));
-    console.log("result", result);
+    count += result.Count || 0;
     processGames(userId, result, games);
     let last = result.LastEvaluatedKey;
-    console.log("last", last);
     while (last !== undefined) {
       result = await ddbDocClient.send(
         new QueryCommand({
@@ -2156,9 +2156,13 @@ async function getGamesForUser(userId: any) {
           Limit: 2,   // For testing!
           ExclusiveStartKey: last
         }));
+      count += result.Count || 0;
       processGames(userId, result, games);
       last = result.LastEvaluatedKey;
       console.log("result", result);
+    }
+    if (count > 0) {
+        console.log(`Found ${count} ${game.uid} game${count !== 1 ? "s" : ""}`);
     }
   });
   return games;
@@ -8279,6 +8283,12 @@ async function fixGames(userId: string, pars: {targetId: string}) {
         ExpressionAttributeValues: { ":games": games || [] },
         UpdateExpression: "set games = :games",
     }));
+    return {
+      statusCode: 200,
+      body: JSON.stringify({message: `Rebuilt games for ${pars.targetId}`}),
+      headers
+    };
+
   } catch (err) {
         logGetItemError(err);
         return formatReturnError(`Unable to fix_games ${pars.targetId}`);
