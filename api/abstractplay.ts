@@ -2131,7 +2131,7 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
 // This is expensive, so only use when things go belly up. E.g. if a game had to be deleted.
 async function getGamesForUser(userId: any) {
   const games: Game[] = [];
-  gameinfo.forEach(async (game) => {
+  for (const game of gameinfo.values()) {
     let count = 0;
     let result = await ddbDocClient.send(
       new QueryCommand({
@@ -2178,7 +2178,7 @@ async function getGamesForUser(userId: any) {
     if (count > 0) {
         console.log(`Found ${count} ${game.uid} game${count !== 1 ? "s" : ""}`);
     }
-  });
+  }
   return games;
 }
 
