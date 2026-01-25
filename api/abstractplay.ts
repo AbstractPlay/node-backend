@@ -2173,7 +2173,6 @@ async function getGamesForUser(userId: any) {
             count += result.Count || 0;
             processGames(userId, result, games);
             last = result.LastEvaluatedKey;
-            console.log("result", result);
         }
     }
     if (count > 0) {
@@ -8297,6 +8296,7 @@ async function fixGames(userId: string, pars: {targetId: string}) {
 
   try {
     const games = await getGamesForUser(pars.targetId);
+    console.log(`Trying to set the following games:`, games);
     await ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "USER", "sk": pars.targetId },
