@@ -723,6 +723,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await pingBot(event.cognitoPoolClaims.sub, pars);
     case "onetime_fix":
       return await onetimeFix(event.cognitoPoolClaims.sub);
+    case "fix_games":
+        return await fixGames(event.cognitoPoolClaims.sub, pars);
     case "test_push":
       return await testPush(event.cognitoPoolClaims.sub);
     case "test_async":
@@ -8243,6 +8245,44 @@ async function onetimeFix(userId: string) {
 //     }));
 //   }
 //   console.log(`All done! Total units used: ${totalUnits}`);
+}
+
+async function fixGames(userId: string, pars: {targetId: string}) {
+  // Make sure people aren't getting clever
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      })
+    );
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+  } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to onetimeFix ${userId}`);
+  }
+
+  try {
+    const games = await getGamesForUser(pars.targetId);
+    await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER", "sk": pars.targetId },
+        ExpressionAttributeValues: { ":games": games || [] },
+        UpdateExpression: "set games = :games",
+    }));
+  } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`Unable to fix_games ${pars.targetId}`);
+  }
 }
 
 async function testPush(userId: string) {
