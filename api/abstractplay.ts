@@ -2193,6 +2193,7 @@ function processGames(userid: any, result: QueryCommandOutput, games: Game[]) {
     if (!("players" in game)) {
         console.log(`No 'players' property in a fetched game:\n${JSON.stringify(game)}`);
     } else if (game.players.some((p: { id: any; }) => p.id === userid)) {
+        console.log(`Pushing the following game to the array:`, game);
       games.push({"id": game.id, "metaGame": game.metaGame, "players": game.players, "clockHard": game.clockHard, "toMove": game.toMove, "lastMoveTime": game.lastMoveTime, "noExplore": game.noExplore || false});
     }
   });
