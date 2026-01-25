@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
+7/* eslint-disable @typescript-eslint/ban-ts-comment */
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
@@ -2149,30 +2149,32 @@ async function getGamesForUser(userId: any) {
         Limit: 2 // For testing!
       })
     );
-    count += result.Count || 0;
-    processGames(userId, result, games);
-    let last = result.LastEvaluatedKey;
-    while (last !== undefined) {
-      result = await ddbDocClient.send(
-        new QueryCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :skPrefix)",
-            ExpressionAttributeValues: {
-                ":pk": "GAME",
-                ":skPrefix": game.uid + "#0"
-            },
-            ExpressionAttributeNames: {
-                "#pk": "pk",
-                "#sk": "sk"
-            },
-            ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
-            Limit: 2, // For testing!
-            ExclusiveStartKey: last
-        }));
-      count += result.Count || 0;
-      processGames(userId, result, games);
-      last = result.LastEvaluatedKey;
-      console.log("result", result);
+    if (result !== undefined) {
+        count += result.Count || 0;
+        processGames(userId, result, games);
+        let last = result.LastEvaluatedKey;
+        while (last !== undefined && result !== undefined) {
+            result = await ddbDocClient.send(
+                new QueryCommand({
+                    TableName: process.env.ABSTRACT_PLAY_TABLE,
+                    KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :skPrefix)",
+                    ExpressionAttributeValues: {
+                        ":pk": "GAME",
+                        ":skPrefix": game.uid + "#0"
+                    },
+                    ExpressionAttributeNames: {
+                        "#pk": "pk",
+                        "#sk": "sk"
+                    },
+                    ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
+                    Limit: 2, // For testing!
+                    ExclusiveStartKey: last
+                }));
+            count += result.Count || 0;
+            processGames(userId, result, games);
+            last = result.LastEvaluatedKey;
+            console.log("result", result);
+        }
     }
     if (count > 0) {
         console.log(`Found ${count} ${game.uid} game${count !== 1 ? "s" : ""}`);
@@ -2185,8 +2187,13 @@ function processGames(userid: any, result: QueryCommandOutput, games: Game[]) {
   if (result.Items === undefined)
     throw new Error("processGames: no games found!?");
   const fullGames = result.Items as FullGame[];
-  fullGames.forEach((game: { players: any[]; id: any; metaGame: any; clockHard: any; toMove: any; lastMoveTime: any; noExplore?: any; }) => {
-    if (game.players.some((p: { id: any; }) => p.id === userid)) {
+  if (fullGames === undefined) {
+    console.log(`'processGames' received a results object with no Items`);
+  }
+  fullGames.forEach((game) => {
+    if (!("players" in game)) {
+        console.log(`No 'players' property in a fetched game:\n${JSON.stringify(game)}`);
+    } else if (game.players.some((p: { id: any; }) => p.id === userid)) {
       games.push({"id": game.id, "metaGame": game.metaGame, "players": game.players, "clockHard": game.clockHard, "toMove": game.toMove, "lastMoveTime": game.lastMoveTime, "noExplore": game.noExplore || false});
     }
   });
@@ -8301,10 +8308,9 @@ async function fixGames(userId: string, pars: {targetId: string}) {
       body: JSON.stringify({message: `Rebuilt games for ${pars.targetId}`}),
       headers
     };
-
   } catch (err) {
         logGetItemError(err);
-        return formatReturnError(`Unable to fix_games ${pars.targetId}`);
+        return formatReturnError(`Unable to fix_games for ${pars.targetId}`);
   }
 }
 
