@@ -2136,25 +2136,38 @@ async function getGamesForUser(userId: any) {
     let result = await ddbDocClient.send(
       new QueryCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "CURRENTGAMES#" + game.uid },
-        ExpressionAttributeNames: { "#pk": "pk" },
+        KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :skPrefix)",
+        ExpressionAttributeValues: {
+            ":pk": "GAME",
+            ":skPrefix": game.uid + "#0"
+        },
+        ExpressionAttributeNames: {
+            "#pk": "pk",
+            "#sk": "sk"
+        },
         ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
-        Limit: 2   // For testing!
-        }));
+        Limit: 2 // For testing!
+      })
+    );
     count += result.Count || 0;
     processGames(userId, result, games);
     let last = result.LastEvaluatedKey;
     while (last !== undefined) {
       result = await ddbDocClient.send(
         new QueryCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          KeyConditionExpression: "#pk = :pk",
-          ExpressionAttributeValues: { ":pk": "CURRENTGAMES#" + game.uid },
-          ExpressionAttributeNames: { "#pk": "pk" },
-          ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
-          Limit: 2,   // For testing!
-          ExclusiveStartKey: last
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :skPrefix)",
+            ExpressionAttributeValues: {
+                ":pk": "GAME",
+                ":skPrefix": game.uid + "#0"
+            },
+            ExpressionAttributeNames: {
+                "#pk": "pk",
+                "#sk": "sk"
+            },
+            ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
+            Limit: 2, // For testing!
+            ExclusiveStartKey: last
         }));
       count += result.Count || 0;
       processGames(userId, result, games);
