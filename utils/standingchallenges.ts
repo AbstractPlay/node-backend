@@ -180,6 +180,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             continue;
         }
         const user = userrec.Item as FullUser;
+        // console.log(`Looking at standing entries for ${user.name} (${user.id})`);
         // sort entries by meta/variant (meta first)
         const entries = rec.standing.sort((a, b) => {
             if (a.sensitivity === b.sensitivity) {
@@ -192,6 +193,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         });
         // for each challenge
         for (const entry of entries) {
+        //   console.log(`Looking at entry:`, entry);
           entryCount++;
           if (entry.suspended) { continue; }
           let totalExisting = 0;
@@ -251,7 +253,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             if (!hasMatchingChallenges) {
                 for (const game of matchingGames) {
                     if (stringArraysEqual(game.variants || [], entry.variants || [])) {
-                        totalExisting;
+                        totalExisting++;
                     }
                 }
             }
