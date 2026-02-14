@@ -1844,7 +1844,12 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
     const customizations: {[key: string]: Customization} = {};
     if (customizationData.Items !== undefined) {
         for (const item of (customizationData.Items as CustomizationRec[])) {
-            customizations[item.sk] = item.settings;
+            const settings: any = item.settings;
+            if (typeof settings === "string") {
+                customizations[item.sk] = JSON.parse(settings);
+            } else {
+                customizations[item.sk] = settings;
+            }
         }
     }
 
@@ -2453,12 +2458,16 @@ async function savePalettes(userid: string, pars: { palettes: Palette[] }) {
 async function saveCustomization(userid: string, pars: { metaGame: string; settings: Customization }) {
     try {
         // console.log(`Saving customization for user ${userid}, game ${pars.metaGame}:\n${JSON.stringify(pars.settings)}`);
+        let settings = pars.settings as Customization|string;
+        if (typeof settings === "string") {
+            settings = JSON.parse(settings);
+        }
         await ddbDocClient.send(new PutCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Item: {
                 "pk": "CUSTOMIZATION#" + userid,
                 "sk": pars.metaGame,
-                "settings": pars.settings,
+                "settings": settings,
             }
         }));
     } catch (error) {
