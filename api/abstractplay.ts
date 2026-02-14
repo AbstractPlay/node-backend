@@ -173,6 +173,7 @@ type MeData = {
     challengesAccepted?: FullChallenge[];
     standingChallenges?: FullChallenge[];
     realStanding?: StandingChallenge[];
+    customizations?: {[key: string]: any};
 }
 
 type Rating = {
@@ -639,6 +640,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await saveTags(event.cognitoPoolClaims.sub, pars);
     case "save_palettes":
       return await savePalettes(event.cognitoPoolClaims.sub, pars);
+    case "save_customization":
+      return await saveCustomization(event.cognitoPoolClaims.sub, pars);
     case "update_standing":
       return await updateStanding(event.cognitoPoolClaims.sub, pars);
     case "new_challenge":
@@ -1642,6 +1645,16 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
         })
     );
 
+    // fetch customizations
+    const customizationWork = ddbDocClient.send(
+        new QueryCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            KeyConditionExpression: "#pk = :pk",
+            ExpressionAttributeValues: { ":pk": "CUSTOMIZATION#" + userId },
+            ExpressionAttributeNames: { "#pk": "pk" },
+        })
+    );
+
     const removedGameIDs: string[] = [];
     if (!pars || !pars.size || pars.size !== "small") {
       // LogInOutButton calls "me" with "small". If we do the below from the dashboard (and then at the same time from LogInOutButton) we run into
@@ -1776,7 +1789,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
 
     let data = null;
     console.log(`Fetching challenges`);
-    let tagData, paletteData, standingData;
+    let tagData, paletteData, standingData, customizationData;
     if (!pars || !pars.size || pars.size !== "small") {
       const challengesIssuedIDs: string[] = Array.from(user?.challenges_issued ?? new Set());
       const challengesReceivedIDs: string[] = Array.from(user?.challenges_received ?? new Set());
@@ -1787,16 +1800,18 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       const challengesAccepted = getChallenges(challengesAcceptedIDs);
       const standingChallenges = getChallenges(standingChallengeIDs);
       data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges, tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork]);
+        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork]);
       tagData = data[4];
       paletteData = data[5];
       standingData = data[9];
+      customizationData = data[10];
     } else {
       data = await Promise.all([tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork]);
+        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork]);
       tagData = data[0];
       paletteData = data[1];
       standingData = data[5];
+      customizationData = data[6];
     }
     let tags: TagList[] = [];
     if (tagData.Item !== undefined) {
@@ -1812,6 +1827,12 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
     if (standingData.Item !== undefined) {
         const standingRec = standingData.Item as StandingChallengeRec;
         realStanding = standingRec.standing;
+    }
+    const customizations: {[key: string]: any} = {};
+    if (customizationData.Items !== undefined) {
+        for (const item of customizationData.Items) {
+            customizations[item.sk] = item.settings;
+        }
     }
 
     if (data && (!pars || !pars.size || pars.size !== "small")) {
@@ -1839,6 +1860,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "challengesAccepted": (data[2] as any[]).map(d => d.Item),
           "standingChallenges": (data[3] as any[]).map(d => d.Item),
           "realStanding": realStanding,
+          customizations,
         } as MeData, Set_toJSON),
         headers
       };
@@ -1861,6 +1883,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           tags,
           palettes,
           "realStanding": realStanding,
+          customizations,
         } as MeData, Set_toJSON),
         headers
       }
@@ -2409,6 +2432,30 @@ async function savePalettes(userid: string, pars: { palettes: Palette[] }) {
         statusCode: 200,
         body: JSON.stringify({
           message: `Successfully saved palettes for ${userid}`,
+        }),
+        headers
+    };
+}
+
+async function saveCustomization(userid: string, pars: { metaGame: string; settings: any }) {
+    try {
+        // console.log(`Saving customization for user ${userid}, game ${pars.metaGame}:\n${JSON.stringify(pars.settings)}`);
+        await ddbDocClient.send(new PutCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Item: {
+                "pk": "CUSTOMIZATION#" + userid,
+                "sk": pars.metaGame,
+                "settings": pars.settings,
+            }
+        }));
+    } catch (error) {
+        logGetItemError(error);
+        throw new Error("saveCustomization: Failed to save customization");
+    }
+    return {
+        statusCode: 200,
+        body: JSON.stringify({
+            message: `Successfully saved customization for ${userid}, ${pars.metaGame}`,
         }),
         headers
     };
