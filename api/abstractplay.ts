@@ -655,6 +655,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await savePalettes(event.cognitoPoolClaims.sub, pars);
     case "save_customization":
       return await saveCustomization(event.cognitoPoolClaims.sub, pars);
+    case "delete_customization":
+      return await deleteCustomization(event.cognitoPoolClaims.sub, pars);
     case "update_standing":
       return await updateStanding(event.cognitoPoolClaims.sub, pars);
     case "new_challenge":
@@ -2478,6 +2480,29 @@ async function saveCustomization(userid: string, pars: { metaGame: string; setti
         statusCode: 200,
         body: JSON.stringify({
             message: `Successfully saved customization for ${userid}, ${pars.metaGame}`,
+        }),
+        headers
+    };
+}
+
+async function deleteCustomization(userid: string, pars: { metaGame: string }) {
+    try {
+        console.log(`Deleting customization for user ${userid}, game ${pars.metaGame}`);
+        await ddbDocClient.send(new DeleteCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+                "pk": "CUSTOMIZATION#" + userid,
+                "sk": pars.metaGame,
+            }
+        }));
+    } catch (error) {
+        logGetItemError(error);
+        throw new Error("deleteCustomization: Failed to delete customization");
+    }
+    return {
+        statusCode: 200,
+        body: JSON.stringify({
+            message: `Successfully deleted customization for ${userid}, ${pars.metaGame}`,
         }),
         headers
     };
