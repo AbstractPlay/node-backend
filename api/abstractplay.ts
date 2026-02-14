@@ -386,6 +386,19 @@ type PaletteRec = {
     palettes: Palette[];
 }
 
+type Customization = {
+    colourContext: {
+        [k: string]: string;
+    },
+    palette: string[];
+}
+
+type CustomizationRec = {
+    pk: string;
+    sk: string;
+    settings: Customization;
+}
+
 // SDG-style standing challenges
 type StandingChallenge = {
     id: string;
@@ -1828,9 +1841,9 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
         const standingRec = standingData.Item as StandingChallengeRec;
         realStanding = standingRec.standing;
     }
-    const customizations: {[key: string]: any} = {};
+    const customizations: {[key: string]: Customization} = {};
     if (customizationData.Items !== undefined) {
-        for (const item of customizationData.Items) {
+        for (const item of (customizationData.Items as CustomizationRec[])) {
             customizations[item.sk] = item.settings;
         }
     }
@@ -2437,7 +2450,7 @@ async function savePalettes(userid: string, pars: { palettes: Palette[] }) {
     };
 }
 
-async function saveCustomization(userid: string, pars: { metaGame: string; settings: any }) {
+async function saveCustomization(userid: string, pars: { metaGame: string; settings: Customization }) {
     try {
         // console.log(`Saving customization for user ${userid}, game ${pars.metaGame}:\n${JSON.stringify(pars.settings)}`);
         await ddbDocClient.send(new PutCommand({
