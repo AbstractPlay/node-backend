@@ -7929,7 +7929,8 @@ async function invokePie(userid: string, pars: {id: string, metaGame: string, cb
         });
 
         // insert a comment into the game log
-        list.push(submitComment("", {id: game.id, comment: "Pie invoked.", moveNumber: 2}));
+        const thisPlayer = players.find(p => p.id === userid)!;
+        list.push(submitComment("", {id: game.id, comment: `${thisPlayer.name} elected to switch seats. As a result, the game record for ply 1 has been retroactively changed to look as if ${thisPlayer.name} made that move.`, moveNumber: 2}));
 
         list.push(sendSubmittedMoveEmails(game, players, false, []));
         console.log("Scheduled emails");
