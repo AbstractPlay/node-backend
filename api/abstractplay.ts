@@ -3535,6 +3535,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     const simultaneous = flags !== undefined && flags.includes('simultaneous');
     const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
     let autoMoves = 0;
+    let autoMovesPerPlayer: number[] = [];
     const list: Promise<any>[] = [];
 
     try {
@@ -3549,6 +3550,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       } else {
         const result = applyMove(userid, pars.move, currentMoveNumber, engine, game, flags, opponentExploration, pars.exploration);
         autoMoves = result.autoMoves;
+        autoMovesPerPlayer = result.autoMovesPerPlayer;
         for (const workItem of result.work) {
           list.push(workItem);
         }
@@ -3578,6 +3580,13 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     else
       player.time = player.time! - timeUsed + game.clockInc * 3600000;
     if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
+    // Apply time increments for players whose moves were auto-applied (forced moves or premoves)
+    for (let i = 0; i < autoMovesPerPlayer.length; i++) {
+      if (autoMovesPerPlayer[i] > 0) {
+        game.players[i].time = (game.players[i].time || 0) + autoMovesPerPlayer[i] * game.clockInc * 3600000;
+        if (game.players[i].time! > game.clockMax * 3600000) game.players[i].time = game.clockMax * 3600000;
+      }
+    }
     // console.log("players", game.players);
     const playerIDs = game.players.map((p: { id: any; }) => p.id);
     // TODO: We are updating players and their games. This should be put in some kind of critical section!
@@ -4418,7 +4427,7 @@ function applyMove(
   flags: string[],
   opponentExploration: Exploration[] | null = null,
   myExploration: Exploration[] | null = null
-): {autoMoves: number, work: Promise<any>[]} {
+): {autoMoves: number, autoMovesPerPlayer: number[], work: Promise<any>[]} {
   // non simultaneous move game.
   if (game.players[parseInt(game.toMove as string)].id !== userid) {
     throw new Error('It is not your turn!');
@@ -4434,6 +4443,7 @@ function applyMove(
   explorations[opponentPlayerIndex] = opponentExploration;
   console.log(`My explorations: ${JSON.stringify(explorations[myPlayerIndex])}, Opponent explorations: ${JSON.stringify(explorations[opponentPlayerIndex])}`);
   let autoMoves = 0;
+  const autoMovesPerPlayer: number[] = new Array(game.players.length).fill(0);
 
   // Apply the initial submitted move
   console.log(`Applying submitted move: ${move}`);
@@ -4459,9 +4469,12 @@ function applyMove(
       }
     }
     if (move) {
+      // @ts-ignore
+      const movedPlayerIndex = engine.currplayer - 1;
       try {
         engine.move(move);
         autoMoves += 1;
+        autoMovesPerPlayer[movedPlayerIndex] += 1;
       } catch (e) {
         console.log(`Premove ${move} is invalid!: ${e}`);
         break;
@@ -4512,7 +4525,7 @@ function applyMove(
     }
     game.toMove = `${engine.currplayer - 1}`;
   }
-  return {autoMoves, work};
+  return {autoMoves, autoMovesPerPlayer, work};
 }
 
 function isInterestingComment(comment: string): boolean {
