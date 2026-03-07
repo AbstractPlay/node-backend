@@ -341,6 +341,9 @@ type OrgEvent = {
     dateEnd?: number;
     winner?: string[];
     visible: boolean;
+    maxPlayers: number;
+    invited?: string[];
+    blocked?: string[];
 }
 
 type OrgEventGame = {
@@ -729,6 +732,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await eventUpdateName(event.cognitoPoolClaims.sub, pars);
     case "event_update_desc":
       return await eventUpdateDesc(event.cognitoPoolClaims.sub, pars);
+    case "event_update_invites":
+      return await eventUpdateInvites(event.cognitoPoolClaims.sub, pars);
     case "event_update_result":
       return await eventUpdateResult(event.cognitoPoolClaims.sub, pars);
     case "event_update_divisions":
@@ -6397,7 +6402,7 @@ async function eventGetEvents() {
       }
 }
 
-async function eventCreate(userid: string, pars: {name: string, date: number, description: string}) {
+async function eventCreate(userid: string, pars: {name: string, date: number, description: string, maxPlayers: number}) {
     // authorize first
     try {
         const user = await ddbDocClient.send(
@@ -6429,6 +6434,9 @@ async function eventCreate(userid: string, pars: {name: string, date: number, de
             organizer: userid,
             dateStart: pars.date,
             visible: false,
+            invited: [],
+            blocked: [],
+            maxPlayers: pars.maxPlayers,
         };
         await ddbDocClient.send(
             new PutCommand({
@@ -6647,6 +6655,37 @@ async function eventRegister(userid: string, pars: {eventid: string}) {
                 body: "You may only register for events that are open for registration.",
                 headers,
             };
+        }
+        if (eventRec.blocked !== undefined && eventRec.blocked.includes(userid)) {
+            return {
+                statusCode: 400,
+                body: "You are blocked from registering for this event.",
+                headers,
+            };
+        }
+        if (eventRec.invited !== undefined && eventRec.invited.length > 0 && !eventRec.invited.includes(userid)) {
+            return {
+                statusCode: 400,
+                body: "This event is by invitation only.",
+                headers,
+            };
+        }
+        if (eventRec.maxPlayers > 0) {
+            const players = await ddbDocClient.send(
+                new QueryCommand({
+                    TableName: process.env.ABSTRACT_PLAY_TABLE,
+                    KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+                    ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
+                    ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+                    Select: "COUNT"
+            }));
+            if (players.Count !== undefined && players.Count >= eventRec.maxPlayers) {
+                return {
+                    statusCode: 400,
+                    body: "This event is full.",
+                    headers,
+                };
+            }
         }
         const newRec: OrgEventPlayer = {
             pk: "ORGEVENTPLAYER",
@@ -6900,6 +6939,70 @@ async function eventUpdateDesc(userid: string, pars: {eventid: string, descripti
     } catch (error) {
         logGetItemError(error);
         return formatReturnError(`Unable to update event start date. Error: ${error}`);
+    }
+}
+
+async function eventUpdateInvites(userid: string, pars: {eventid: string, invited: string[], blocked: string[]}) {
+    // authorize first
+    let userRec: FullUser|undefined;
+    try {
+        const user = await ddbDocClient.send(
+        new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+            "pk": "USER",
+            "sk": userid
+            },
+        }));
+        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        userRec = user.Item as FullUser;
+    } catch (err) {
+        logGetItemError(err);
+        return formatReturnError(`eventUpdateInvites: Unable to load user record to authorize ${userid}`);
+    }
+    try {
+        const event = await ddbDocClient.send(
+            new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: {
+                "pk": "ORGEVENT",
+                "sk": pars.eventid
+                },
+        }));
+        if (event.Item === undefined) {
+            return {
+                statusCode: 404,
+                headers,
+            };
+        }
+        const eventRec = event.Item as OrgEvent;
+        if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
+            return {
+                statusCode: 401,
+                headers
+            };
+        }
+        eventRec.invited = pars.invited;
+        eventRec.blocked = pars.blocked;
+        await ddbDocClient.send(
+            new PutCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Item: eventRec,
+              })
+          );
+        return {
+            statusCode: 200,
+            body: JSON.stringify(eventRec),
+            headers
+        };
+    } catch (error) {
+        logGetItemError(error);
+        return formatReturnError(`Unable to update event invites. Error: ${error}`);
     }
 }
 
