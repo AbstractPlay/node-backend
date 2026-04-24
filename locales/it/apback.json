@@ -1,5 +1,5 @@
 {
-    "ChallengeBody": "[IT] {{challenger}} has challenged you to a game of {{metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
+    "ChallengeBody": "[LIST_TEST] {{challenger}} has challenged you to a game of {{metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
     "ChallengeRejectedBody": "[IT] {{quitter}} has declined the {{metaGame}} challenge. The challenge has been removed.",
     "ChallengeRejectedSubject": "[IT] AbstractPlay: challenge rejected",
     "ChallengeRevokedBody": "[IT] {{name}} has revoked his {{metaGame}} challenge.",
