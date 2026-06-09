@@ -1,9 +1,10 @@
-7/* eslint-disable @typescript-eslint/ban-ts-comment */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, BatchWriteCommand, QueryCommandInput, GetCommandOutput, PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageRequest } from "@aws-sdk/client-sqs";
+import { CognitoIdentityProviderClient, CreateUserPoolClientCommand, DeleteUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
@@ -14,10 +15,13 @@ import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
 import it from '../locales/it/apback.json';
 import { wsBroadcast } from '../lib/wsBroadcast';
+import { isBotId, getParticipants, getBotRecord, filterHumanIds, botToFullUserStub } from '../lib/participants';
+import { enqueueBotOutbound, getToMovePlayerIds, loadGameRecord } from '../lib/botOutbound';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
 const sqsClient = new SQSClient({ region: REGION });
+const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
 const clnt = new DynamoDBClient({ region: REGION });
 const marshallOptions = {
   // Whether to automatically convert empty strings, blobs, and sets to `null`.
@@ -84,20 +88,20 @@ type FullChallenge = {
 }
 
 export type UserSettings = {
+  [k: string]: any;
+  all?: {
     [k: string]: any;
-    all?: {
-        [k: string]: any;
-        color?: string;
-        annotate?: boolean;
-        notifications?: {
-            gameStart: boolean;
-            gameEnd: boolean;
-            challenges: boolean;
-            yourturn: boolean;
-            tournamentStart: boolean;
-            tournamentEnd: boolean;
-        }
+    color?: string;
+    annotate?: boolean;
+    notifications?: {
+      gameStart: boolean;
+      gameEnd: boolean;
+      challenges: boolean;
+      yourturn: boolean;
+      tournamentStart: boolean;
+      tournamentEnd: boolean;
     }
+  }
 };
 
 export type UserLastSeen = {
@@ -123,11 +127,12 @@ type FullUser = {
   gamesUpdate?: number;
   games: Game[];
   challenges_issued?: Set<string>;
+  bots?: Set<string>;
   challenges_received?: Set<string>;
   challenges_accepted?: Set<string>;
   challenges_standing?: Set<string>;
   admin: boolean | undefined;
-  organizer: boolean|undefined;
+  organizer: boolean | undefined;
   language: string;
   country: string;
   lastSeen?: number;
@@ -144,36 +149,49 @@ type FullUser = {
 }
 
 export type UsersData = {
-    id: string;
-    name: string;
-    country: string;
-    lastSeen: number;
-    stars: string[];
-    bggid?: string;
-    about?: string;
+  id: string;
+  name: string;
+  country: string;
+  lastSeen: number;
+  stars: string[];
+  bggid?: string;
+  about?: string;
+  bot: boolean;
+};
+
+type Bot = {
+  pk?: string;
+  sk: string;
+  name: string;
+  endpoint: string;
+  owner: string;
+  lastseen: number;
+  description?: string;
+  supported?: { meta: string; variants: string[] }[];
 };
 
 type MeData = {
-    id: string;
-    name: string;
-    admin: boolean;
-    organizer: boolean;
-    language: string;
-    country: string;
-    games: Game[];
-    settings: UserSettings;
-    stars: string[];
-    bggid?: string;
-    about?: string;
-    tags?: TagList[];
-    palettes?: Palette[];
-    mayPush: boolean;
-    challengesIssued?: FullChallenge[];
-    challengesReceived?: FullChallenge[];
-    challengesAccepted?: FullChallenge[];
-    standingChallenges?: FullChallenge[];
-    realStanding?: StandingChallenge[];
-    customizations?: {[key: string]: any};
+  id: string;
+  name: string;
+  admin: boolean;
+  organizer: boolean;
+  language: string;
+  country: string;
+  games: Game[];
+  settings: UserSettings;
+  stars: string[];
+  bggid?: string;
+  about?: string;
+  tags?: TagList[];
+  palettes?: Palette[];
+  mayPush: boolean;
+  bots?: Bot[];
+  challengesIssued?: FullChallenge[];
+  challengesReceived?: FullChallenge[];
+  challengesAccepted?: FullChallenge[];
+  standingChallenges?: FullChallenge[];
+  realStanding?: StandingChallenge[];
+  customizations?: { [key: string]: any };
 }
 
 type Rating = {
@@ -184,15 +202,15 @@ type Rating = {
 }
 
 type Note = {
-    pk: string;
-    sk: string;
-    note: string;
+  pk: string;
+  sk: string;
+  note: string;
 }
 
 type Game = {
   pk?: string,
   sk?: string,
-  id : string;
+  id: string;
   metaGame: string;
   players: User[];
   lastMoveTime: number;
@@ -244,10 +262,10 @@ type FullGame = {
 }
 
 type Playground = {
-    pk: "PLAYGROUND";
-    sk: string;
-    metaGame: string;
-    state: string;
+  pk: "PLAYGROUND";
+  sk: string;
+  metaGame: string;
+  state: string;
 }
 
 type Comment = {
@@ -258,17 +276,17 @@ type Comment = {
 }
 
 type PushCredentials = {
-    pk: string;
-    sk: string;
-    payload: any;
+  pk: string;
+  sk: string;
+  payload: any;
 }
 
 type PushOptions = {
-    userId: string;
-    title: string;
-    body: string;
-    topic: "yourturn"|"ended"|"started"|"challenges"|"test"|"tournament";
-    url?: string; //relative url of target page, if appropriate
+  userId: string;
+  title: string;
+  body: string;
+  topic: "yourturn" | "ended" | "started" | "challenges" | "test" | "tournament";
+  url?: string; //relative url of target page, if appropriate
 }
 
 type Exploration = {
@@ -332,227 +350,227 @@ type TournamentGame = {
 };
 
 type OrgEvent = {
-    pk: "ORGEVENT";
-    sk: string;             // <eventid>
-    name: string;
-    description: string;
-    organizer: string;
-    dateStart: number;
-    dateEnd?: number;
-    winner?: string[];
-    visible: boolean;
-    maxPlayers: number;
-    invited?: string[];
-    blocked?: string[];
+  pk: "ORGEVENT";
+  sk: string;             // <eventid>
+  name: string;
+  description: string;
+  organizer: string;
+  dateStart: number;
+  dateEnd?: number;
+  winner?: string[];
+  visible: boolean;
+  maxPlayers: number;
+  invited?: string[];
+  blocked?: string[];
 }
 
 type OrgEventGame = {
-    pk: "ORGEVENTGAME";
-    sk: string;             // <eventid>#<gameid>
-    metaGame: string;
-    variants?: string[];
-    round: number;
-    gameid: string;
-    player1: string;
-    player2: string;
-    winner?: string[];
-    arbitrated?: boolean;
+  pk: "ORGEVENTGAME";
+  sk: string;             // <eventid>#<gameid>
+  metaGame: string;
+  variants?: string[];
+  round: number;
+  gameid: string;
+  player1: string;
+  player2: string;
+  winner?: string[];
+  arbitrated?: boolean;
 };
 
 type OrgEventPlayer = {
-    pk: "ORGEVENTPLAYER";
-    sk: string;             // <eventid>#<playerid>
-    playerid: string;
-    division?: number;
-    seed?: number;
+  pk: "ORGEVENTPLAYER";
+  sk: string;             // <eventid>#<playerid>
+  playerid: string;
+  division?: number;
+  seed?: number;
 };
 
 type TagList = {
-    meta: string;
-    tags: string[];
+  meta: string;
+  tags: string[];
 }
 
 type TagRec = {
-    pk: "TAG";
-    sk: string;
-    tags: TagList[];
+  pk: "TAG";
+  sk: string;
+  tags: TagList[];
 }
 
 type Palette = {
-    name: string;
-    colours: string[];
+  name: string;
+  colours: string[];
 }
 
 type PaletteRec = {
-    pk: "PALETTES";
-    sk: string;
-    palettes: Palette[];
+  pk: "PALETTES";
+  sk: string;
+  palettes: Palette[];
 }
 
 type Customization = {
-    colourContext: {
-        [k: string]: string;
-    },
-    palette: string[];
+  colourContext: {
+    [k: string]: string;
+  },
+  palette: string[];
 }
 
 type CustomizationRec = {
-    pk: string;
-    sk: string;
-    settings: Customization;
+  pk: string;
+  sk: string;
+  settings: Customization;
 }
 
 // SDG-style standing challenges
 type StandingChallenge = {
-    id: string;
-    metaGame: string;
-    numPlayers: number;
-    variants?: string[];
-    clockStart: number;
-    clockInc: number;
-    clockMax: number;
-    clockHard: boolean;
-    rated: boolean;
-    noExplore?: boolean
-    limit: number;
-    sensitivity: "meta"|"variants";
-    suspended: boolean;
+  id: string;
+  metaGame: string;
+  numPlayers: number;
+  variants?: string[];
+  clockStart: number;
+  clockInc: number;
+  clockMax: number;
+  clockHard: boolean;
+  rated: boolean;
+  noExplore?: boolean
+  limit: number;
+  sensitivity: "meta" | "variants";
+  suspended: boolean;
 };
 
 type StandingChallengeRec = {
-    pk: "REALSTANDING";
-    sk: string; // user's ID
-    standing: StandingChallenge[];
+  pk: "REALSTANDING";
+  sk: string; // user's ID
+  standing: StandingChallenge[];
 };
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function sendCommandWithRetry<T = any>(command: any, maxRetries = 8, initialDelay = 100, maxDelay = 5000): Promise<T> {
-    let retries = 0;
-    while (retries < maxRetries) {
-        try {
-            // @ts-ignore
-            return await ddbDocClient.send(command) as T;
-        } catch (err: any) {
-            if (['ThrottlingException', 'ProvisionedThroughputExceededException', 'InternalServerError', 'ServiceUnavailable'].includes(err.name)) {
-                retries++;
-                if (retries >= maxRetries) {
-                    console.error(`Command failed after ${maxRetries} retries.`);
-                    throw err;
-                }
-                const delay = Math.min(initialDelay * Math.pow(2, retries - 1), maxDelay);
-                const jitter = delay * 0.1 * Math.random();
-                console.log(`Retryable error (${err.name}) caught. Retrying in ${Math.round(delay + jitter)}ms...`);
-                await sleep(delay + jitter);
-            } else {
-                throw err;
-            }
+  let retries = 0;
+  while (retries < maxRetries) {
+    try {
+      // @ts-ignore
+      return await ddbDocClient.send(command) as T;
+    } catch (err: any) {
+      if (['ThrottlingException', 'ProvisionedThroughputExceededException', 'InternalServerError', 'ServiceUnavailable'].includes(err.name)) {
+        retries++;
+        if (retries >= maxRetries) {
+          console.error(`Command failed after ${maxRetries} retries.`);
+          throw err;
         }
+        const delay = Math.min(initialDelay * Math.pow(2, retries - 1), maxDelay);
+        const jitter = delay * 0.1 * Math.random();
+        console.log(`Retryable error (${err.name}) caught. Retrying in ${Math.round(delay + jitter)}ms...`);
+        await sleep(delay + jitter);
+      } else {
+        throw err;
+      }
     }
-    // This should never be reached due to the throw in the catch block
-    throw new Error(`Command failed after ${maxRetries} retries without a retryable error`);
+  }
+  // This should never be reached due to the throw in the catch block
+  throw new Error(`Command failed after ${maxRetries} retries without a retryable error`);
 }
 
 async function verifyAndCorrectCountWithData(metaGame: string, countType: "currentgames" | "completedgames" | "standingchallenges", actualCount: number, countsData: any) {
-    try {
-        if (!countsData.Item) {
-            console.log(`No METAGAMES COUNTS found, creating initial record for ${metaGame}`);
-            await ddbDocClient.send(new UpdateCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-                ExpressionAttributeNames: { "#g": metaGame },
-                ExpressionAttributeValues: { ":gameData": { [countType]: actualCount } },
-                UpdateExpression: `set #g = :gameData`
-            }));
-            console.log(`Initialized ${countType} for ${metaGame} to ${actualCount}`);
-            return;
-        }
-
-        const details = countsData.Item as MetaGameCounts;
-
-        // Check if the metaGame nested attribute exists at all
-        if (!details[metaGame]) {
-            console.log(`No nested attribute for ${metaGame} in METAGAMES COUNTS, initializing...`);
-            await ddbDocClient.send(new UpdateCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-                ExpressionAttributeNames: { "#g": metaGame },
-                ExpressionAttributeValues: { ":gameData": { [countType]: actualCount } },
-                UpdateExpression: `set #g = :gameData`
-            }));
-            console.log(`Initialized ${countType} for new game ${metaGame} to ${actualCount}`);
-            return;
-        }
-
-        const storedCount = details[metaGame][countType] || 0;
-
-        if (storedCount !== actualCount) {
-            console.log(`Count mismatch for ${metaGame}.${countType}: stored=${storedCount}, actual=${actualCount}. Correcting...`);
-
-            await ddbDocClient.send(new UpdateCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-                ExpressionAttributeNames: { "#g": metaGame },
-                ExpressionAttributeValues: { ":count": actualCount },
-                UpdateExpression: `set #g.${countType} = :count`
-            }));
-
-            console.log(`Corrected ${countType} for ${metaGame} from ${storedCount} to ${actualCount}`);
-        }
-    } catch (error) {
-        console.error(`Error verifying/correcting count for ${metaGame}.${countType}:`, error);
-        // Don't throw - we don't want to break the main query if count correction fails
+  try {
+    if (!countsData.Item) {
+      console.log(`No METAGAMES COUNTS found, creating initial record for ${metaGame}`);
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+        ExpressionAttributeNames: { "#g": metaGame },
+        ExpressionAttributeValues: { ":gameData": { [countType]: actualCount } },
+        UpdateExpression: `set #g = :gameData`
+      }));
+      console.log(`Initialized ${countType} for ${metaGame} to ${actualCount}`);
+      return;
     }
+
+    const details = countsData.Item as MetaGameCounts;
+
+    // Check if the metaGame nested attribute exists at all
+    if (!details[metaGame]) {
+      console.log(`No nested attribute for ${metaGame} in METAGAMES COUNTS, initializing...`);
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+        ExpressionAttributeNames: { "#g": metaGame },
+        ExpressionAttributeValues: { ":gameData": { [countType]: actualCount } },
+        UpdateExpression: `set #g = :gameData`
+      }));
+      console.log(`Initialized ${countType} for new game ${metaGame} to ${actualCount}`);
+      return;
+    }
+
+    const storedCount = details[metaGame][countType] || 0;
+
+    if (storedCount !== actualCount) {
+      console.log(`Count mismatch for ${metaGame}.${countType}: stored=${storedCount}, actual=${actualCount}. Correcting...`);
+
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+        ExpressionAttributeNames: { "#g": metaGame },
+        ExpressionAttributeValues: { ":count": actualCount },
+        UpdateExpression: `set #g.${countType} = :count`
+      }));
+
+      console.log(`Corrected ${countType} for ${metaGame} from ${storedCount} to ${actualCount}`);
+    }
+  } catch (error) {
+    console.error(`Error verifying/correcting count for ${metaGame}.${countType}:`, error);
+    // Don't throw - we don't want to break the main query if count correction fails
+  }
 }
 
 async function verifyAndCorrectRatingsCountWithData(metaGame: string, actualRatings: any[], countsData: any) {
-    try {
-        // Extract unique player IDs from actual ratings data as a Set
-        const actualPlayerIds = new Set(actualRatings.map(rating => rating.sk));
-        const actualCount = actualPlayerIds.size;
+  try {
+    // Extract unique player IDs from actual ratings data as a Set
+    const actualPlayerIds = new Set(actualRatings.map(rating => rating.sk));
+    const actualCount = actualPlayerIds.size;
 
-        if (!countsData.Item && actualCount > 0) {
-            console.log(`No METAGAMES COUNTS found, creating initial ratings record for ${metaGame}`);
-            await ddbDocClient.send(new UpdateCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-                ExpressionAttributeNames: { "#gr": metaGame + "_ratings" },
-                ExpressionAttributeValues: { ":players": actualPlayerIds },
-                UpdateExpression: `set #gr = :players`
-            }));
-            console.log(`Initialized ratings for ${metaGame} with ${actualCount} players`);
-            return;
-        }
-
-        const details = countsData.Item as any;
-        const storedPlayerIds = details[metaGame + "_ratings"] || new Set();
-        const storedCount = storedPlayerIds.size;
-
-        if (storedCount !== actualCount || !setsEqual(storedPlayerIds, actualPlayerIds)) {
-            console.log(`Ratings mismatch for ${metaGame}: stored=${storedCount} players, actual=${actualCount} players. Updating player list...`);
-
-            await ddbDocClient.send(new UpdateCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-                ExpressionAttributeNames: { "#gr": metaGame + "_ratings" },
-                ExpressionAttributeValues: { ":players": actualPlayerIds },
-                UpdateExpression: `set #gr = :players`
-            }));
-
-            console.log(`Updated ratings list for ${metaGame} from ${storedCount} to ${actualCount} players`);
-        }
-    } catch (error) {
-        console.error(`Error verifying/correcting ratings for ${metaGame}:`, error);
-        // Don't throw - we don't want to break the main query if count correction fails
+    if (!countsData.Item && actualCount > 0) {
+      console.log(`No METAGAMES COUNTS found, creating initial ratings record for ${metaGame}`);
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+        ExpressionAttributeNames: { "#gr": metaGame + "_ratings" },
+        ExpressionAttributeValues: { ":players": actualPlayerIds },
+        UpdateExpression: `set #gr = :players`
+      }));
+      console.log(`Initialized ratings for ${metaGame} with ${actualCount} players`);
+      return;
     }
+
+    const details = countsData.Item as any;
+    const storedPlayerIds = details[metaGame + "_ratings"] || new Set();
+    const storedCount = storedPlayerIds.size;
+
+    if (storedCount !== actualCount || !setsEqual(storedPlayerIds, actualPlayerIds)) {
+      console.log(`Ratings mismatch for ${metaGame}: stored=${storedCount} players, actual=${actualCount} players. Updating player list...`);
+
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+        ExpressionAttributeNames: { "#gr": metaGame + "_ratings" },
+        ExpressionAttributeValues: { ":players": actualPlayerIds },
+        UpdateExpression: `set #gr = :players`
+      }));
+
+      console.log(`Updated ratings list for ${metaGame} from ${storedCount} to ${actualCount} players`);
+    }
+  } catch (error) {
+    console.error(`Error verifying/correcting ratings for ${metaGame}:`, error);
+    // Don't throw - we don't want to break the main query if count correction fails
+  }
 }
 
 function setsEqual(a: Set<any>, b: Set<any>): boolean {
-    if (a.size !== b.size) return false;
-    for (const item of a) {
-        if (!b.has(item)) return false;
-    }
-    return true;
+  if (a.size !== b.size) return false;
+  for (const item of a) {
+    if (!b.has(item)) return false;
+  }
+  return true;
 }
 
 module.exports.query = async (event: { queryStringParameters: any; body?: string; httpMethod: string; }) => {
@@ -629,6 +647,36 @@ module.exports.query = async (event: { queryStringParameters: any; body?: string
   }
 }
 
+module.exports.botQuery = async (event: { body: string; cognitoPoolClaims: PartialClaims; }) => {
+  console.log("botQuery: ", event.body);
+  let body: any;
+  try {
+    body = JSON.parse(event.body);
+  } catch (error) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        message: "Invalid JSON in request body"
+      }),
+      headers
+    };
+  }
+
+  const verb = body.verb;
+  switch (verb) {
+    case "move":
+      return await handleMove(event.cognitoPoolClaims, body);
+    default:
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          message: `Unknown bot verb '${verb}'`
+        }),
+        headers
+      };
+  }
+}
+
 type PartialClaims = { sub: string; email: string; email_verified: boolean };
 
 // It looks like there is no way to "run and forget", you need to finish all work before returning a response to the front end. :(
@@ -640,6 +688,15 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
   switch (query) {
     case "me":
       return await me(event.cognitoPoolClaims, pars);
+    case "create_bot":
+    case "createBot":
+      return await createBot(event.cognitoPoolClaims, pars);
+    case "update_bot":
+    case "updateBot":
+      return await updateBot(event.cognitoPoolClaims, pars);
+    case "delete_bot":
+    case "deleteBot":
+      return await deleteBot(event.cognitoPoolClaims, pars);
     case "next_game":
       return await nextGame(event.cognitoPoolClaims.sub);
     case "my_settings":
@@ -721,11 +778,11 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
     case "event_delete":
       return await eventDelete(event.cognitoPoolClaims.sub, pars);
     case "event_publish":
-        return await eventPublish(event.cognitoPoolClaims.sub, pars);
+      return await eventPublish(event.cognitoPoolClaims.sub, pars);
     case "event_register":
-        return await eventRegister(event.cognitoPoolClaims.sub, pars);
+      return await eventRegister(event.cognitoPoolClaims.sub, pars);
     case "event_withdraw":
-        return await eventWithdraw(event.cognitoPoolClaims.sub, pars);
+      return await eventWithdraw(event.cognitoPoolClaims.sub, pars);
     case "event_update_start":
       return await eventUpdateStart(event.cognitoPoolClaims.sub, pars);
     case "event_update_name":
@@ -747,7 +804,7 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
     case "onetime_fix":
       return await onetimeFix(event.cognitoPoolClaims.sub);
     case "fix_games":
-        return await fixGames(event.cognitoPoolClaims.sub, pars);
+      return await fixGames(event.cognitoPoolClaims.sub, pars);
     case "test_push":
       return await testPush(event.cognitoPoolClaims.sub);
     case "test_async":
@@ -757,7 +814,7 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
     case "end_tournament":
       return await endATournament(event.cognitoPoolClaims.sub, pars);
     case "start_tournament":
-        return await startATournament(event.cognitoPoolClaims.sub, pars);
+      return await startATournament(event.cognitoPoolClaims.sub, pars);
     default:
       return {
         statusCode: 500,
@@ -772,15 +829,25 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
 async function userNames() {
   console.log("userNames: Scanning users.");
   try {
-    const data = await ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "USERS" },
-        ExpressionAttributeNames: { "#pk": "pk", "#name": "name"},
-        ProjectionExpression: "sk, #name, lastSeen, country, stars, bggid, about",
-        ReturnConsumedCapacity: "INDEXES"
-      }));
+    const [data, botData] = await Promise.all([
+      ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "#pk = :pk",
+          ExpressionAttributeValues: { ":pk": "USERS" },
+          ExpressionAttributeNames: { "#pk": "pk", "#name": "name" },
+          ProjectionExpression: "sk, #name, lastSeen, country, stars, bggid, about",
+          ReturnConsumedCapacity: "INDEXES"
+        })),
+      ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "#pk = :pk",
+          ExpressionAttributeValues: { ":pk": "BOT" },
+          ExpressionAttributeNames: { "#pk": "pk", "#name": "name" },
+          ProjectionExpression: "sk, #name, lastseen, description, supported",
+        })),
+    ]);
 
     const users = data.Items;
     if (users == undefined) {
@@ -790,12 +857,23 @@ async function userNames() {
     // tweak bot info
     const idx = users.findIndex(u => u.sk === process.env.AIAI_USERID);
     if (idx !== -1) {
-        users[idx].lastSeen = Date.now();
+      users[idx].lastSeen = Date.now();
     }
+
+    const userResults = users.map(u => ({ id: u.sk, name: u.name, country: u.country, stars: u.stars, lastSeen: u.lastSeen, bggid: u.bggid, about: u.about, bot: false } as UsersData));
+    const botResults = (botData.Items ?? []).map(b => ({
+      id: b.sk,
+      name: b.name,
+      country: "",
+      stars: [...new Set(((b.supported ?? []) as { meta: string }[]).map(s => s.meta))],
+      lastSeen: b.lastseen ?? 0,
+      about: b.description,
+      bot: true,
+    } as UsersData));
 
     return {
       statusCode: 200,
-      body: JSON.stringify(users.map(u => ({id: u.sk, name: u.name, country: u.country, stars: u.stars, lastSeen: u.lastSeen, bggid: u.bggid, about: u.about} as UsersData))),
+      body: JSON.stringify([...userResults, ...botResults]),
       headers
     };
   }
@@ -864,10 +942,13 @@ async function games(pars: { metaGame: string, type: string; }) {
       const returnlist = gamelist.map(g => {
         const state = GameFactory(g.metaGame, g.state); // JSON.parse(g.state);
         if (state === undefined) {
-            throw new Error(`Could not parse game state for ${g.metaGame}:\n${g.state}`);
+          throw new Error(`Could not parse game state for ${g.metaGame}:\n${g.state}`);
         }
-        return { "id": g.id, "metaGame": g.metaGame, "players": g.players, "toMove": g.toMove, "gameStarted": g.gameStarted,
-          "numMoves": state.stack.length - 1, "variants": state.variants, "commented": g.commented || 0 } });
+        return {
+          "id": g.id, "metaGame": g.metaGame, "players": g.players, "toMove": g.toMove, "gameStarted": g.gameStarted,
+          "numMoves": state.stack.length - 1, "variants": state.variants, "commented": g.commented || 0
+        }
+      });
       return {
         statusCode: 200,
         body: JSON.stringify(returnlist),
@@ -993,34 +1074,34 @@ async function standingChallenges(pars: { metaGame: string; }) {
   }
 }
 
-async function assembleTags(): Promise<TagList[]|undefined> {
-    try {
-        const data = await ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk",
-                ExpressionAttributeValues: { ":pk": "TAG" },
-                ExpressionAttributeNames: { "#pk": "pk" },
-        }));
-        const allTags = data.Items as TagRec[];
-        const collated = new Map<string, string[]>();
-        if (allTags !== undefined) {
-            for (const rec of allTags) {
-                for (const {meta, tags} of rec.tags) {
-                    const uniques = new Set<string>(tags);
-                    if (collated.has(meta)) {
-                        for (const tag of collated.get(meta)!) {
-                            uniques.add(tag);
-                        }
-                    }
-                    collated.set(meta, [...uniques.values()].sort((a,b) => a.localeCompare(b)));
-                }
+async function assembleTags(): Promise<TagList[] | undefined> {
+  try {
+    const data = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "TAG" },
+        ExpressionAttributeNames: { "#pk": "pk" },
+      }));
+    const allTags = data.Items as TagRec[];
+    const collated = new Map<string, string[]>();
+    if (allTags !== undefined) {
+      for (const rec of allTags) {
+        for (const { meta, tags } of rec.tags) {
+          const uniques = new Set<string>(tags);
+          if (collated.has(meta)) {
+            for (const tag of collated.get(meta)!) {
+              uniques.add(tag);
             }
+          }
+          collated.set(meta, [...uniques.values()].sort((a, b) => a.localeCompare(b)));
         }
-        return [...collated.entries()].map(([meta, tags]) => {return {meta, tags}});
-    } catch (error) {
-        return undefined;
+      }
     }
+    return [...collated.entries()].map(([meta, tags]) => { return { meta, tags } });
+  } catch (error) {
+    return undefined;
+  }
 }
 
 async function metaGamesDetails() {
@@ -1037,24 +1118,24 @@ async function metaGamesDetails() {
     // get list of tags
     const taglist = await assembleTags();
     if (taglist === undefined) {
-        throw new Error("An error occured while fetching game tags");
+      throw new Error("An error occured while fetching game tags");
     }
     for (const key of Object.keys(details)) {
-        if ( (key === "pk") || (key === "sk") || key.endsWith("_ratings") ) {
-            continue;
-        }
-        const tags = taglist.find(l => l.meta === key);
-        if (tags !== undefined) {
-            details[key].tags = [...tags.tags]
-        } else {
-            details[key].tags = [];
-        }
+      if ((key === "pk") || (key === "sk") || key.endsWith("_ratings")) {
+        continue;
+      }
+      const tags = taglist.find(l => l.meta === key);
+      if (tags !== undefined) {
+        details[key].tags = [...tags.tags]
+      } else {
+        details[key].tags = [];
+      }
     }
     // console.log(`Details:\n${JSON.stringify(details, undefined, 2)}`);
     // Change every "ratings" to the number of elements in the Set.
     const details2 = Object.keys(details)
       .filter(key => key !== "pk" && key !== "sk" && !key.endsWith("_ratings"))
-      .reduce( (a, k) => ({
+      .reduce((a, k) => ({
         ...a,
         [k]: {
           ...details[k],
@@ -1131,7 +1212,7 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
     }
     // Always set seen time, not just when the game is over
     if (userid !== undefined && userid !== null && userid !== "") {
-        await setSeenTime(userid, pars.id);
+      await setSeenTime(userid, pars.id);
     }
     // hide other player's simultaneous moves
     const flags = gameinfo.get(game.metaGame).flags;
@@ -1141,7 +1222,7 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
     const noteData = await getNote;
     console.log(`Fetched notes:\n${JSON.stringify(noteData)}`);
     if (noteData.Item !== undefined && noteData.Item.note) {
-        game.note = noteData.Item.note;
+      game.note = noteData.Item.note;
     }
     let comments = [];
     const commentData = await getComments;
@@ -1151,24 +1232,24 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
 
     // TODO: Rehydrate state, run it through the stripper if game is not over, and then replace with the new, stripped state
     if (game.gameEnded === undefined) {
-        const engine = GameFactory(game.metaGame, game.state);
-        if (engine === undefined) {
-            throw new Error(`Could not rehydrate the state for id "${pars.id}", cbit "${pars.cbit}", meta "${pars.metaGame}".`);
+      const engine = GameFactory(game.metaGame, game.state);
+      if (engine === undefined) {
+        throw new Error(`Could not rehydrate the state for id "${pars.id}", cbit "${pars.cbit}", meta "${pars.metaGame}".`);
+      }
+      if (!engine.gameover) {
+        let player: number | undefined;
+        const pidx = game.players.findIndex(p => p.id === userid);
+        if (pidx >= 0) {
+          player = pidx + 1;
         }
-        if (!engine.gameover) {
-            let player: number|undefined;
-            const pidx = game.players.findIndex(p => p.id === userid);
-            if (pidx >= 0) {
-                player = pidx + 1;
-            }
-            game.state = engine.serialize({strip: true, player});
-        }
+        game.state = engine.serialize({ strip: true, player });
+      }
     }
 
     console.log(`Returning 200.`);
     return {
       statusCode: 200,
-      body: JSON.stringify({"game": game, "comments": comments}),
+      body: JSON.stringify({ "game": game, "comments": comments }),
       headers
     };
   }
@@ -1179,260 +1260,260 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
 }
 
 async function newPlayground(userid: string, pars: { metaGame: string; state: string; }) {
-    console.log(`New playground request received:\nGame: ${pars.metaGame}\nState: ${pars.state}`);
-    // first make sure it's a 2-player non-simultaneous game
-    const info: APGamesInformation|undefined = gameinfo.get(pars.metaGame);
-    let valid = true;
-    if (info !== undefined) {
-        if ( (! info.playercounts.includes(2)) || (info.flags.includes("simultaneous")) ) {
-            valid = false;
-        }
-    } else {
-        valid = false;
+  console.log(`New playground request received:\nGame: ${pars.metaGame}\nState: ${pars.state}`);
+  // first make sure it's a 2-player non-simultaneous game
+  const info: APGamesInformation | undefined = gameinfo.get(pars.metaGame);
+  let valid = true;
+  if (info !== undefined) {
+    if ((!info.playercounts.includes(2)) || (info.flags.includes("simultaneous"))) {
+      valid = false;
     }
+  } else {
+    valid = false;
+  }
 
-    if (! valid) {
-        console.log(`Invalid game (400)`);
-        return {
-            statusCode: 400,
-            headers
-        };
-    }
+  if (!valid) {
+    console.log(`Invalid game (400)`);
+    return {
+      statusCode: 400,
+      headers
+    };
+  }
 
-    // initialize the playground
-    try {
-        // delete existing exploration
-        console.log(`Deleting existing exploration`);
-        const explorationQuery = ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk",
-                ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + userid },
-                ExpressionAttributeNames: { "#pk": "pk" },
-        }));
-        const explorationData = await explorationQuery;
-        const explorationRecs = explorationData.Items;
-        if (explorationRecs !== undefined) {
-            const batches = Math.ceil(explorationRecs.length / 10);
-            for (let batch = 0; batch < batches; batch++) {
-                const subset = explorationRecs.slice(batch * 10, 10);
-                await ddbDocClient.send(
-                    new BatchWriteCommand({
-                        "RequestItems": {
-                            [process.env.ABSTRACT_PLAY_TABLE!]: subset.map(item => ({
-                                DeleteRequest: {
-                                    Key: {
-                                        pk: item.pk,
-                                        sk: item.sk,
-                                    }
-                                }
-                            }))
-                        }
-                    })
-                );
-            }
-        }
-
-        // create new playground record
-        console.log(`Creating playground record`);
-        const Item: Playground = {
-            pk: "PLAYGROUND",
-            sk: userid,
-            metaGame: pars.metaGame,
-            state: pars.state,
-        };
+  // initialize the playground
+  try {
+    // delete existing exploration
+    console.log(`Deleting existing exploration`);
+    const explorationQuery = ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + userid },
+        ExpressionAttributeNames: { "#pk": "pk" },
+      }));
+    const explorationData = await explorationQuery;
+    const explorationRecs = explorationData.Items;
+    if (explorationRecs !== undefined) {
+      const batches = Math.ceil(explorationRecs.length / 10);
+      for (let batch = 0; batch < batches; batch++) {
+        const subset = explorationRecs.slice(batch * 10, 10);
         await ddbDocClient.send(
-            new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item,
-            })
+          new BatchWriteCommand({
+            "RequestItems": {
+              [process.env.ABSTRACT_PLAY_TABLE!]: subset.map(item => ({
+                DeleteRequest: {
+                  Key: {
+                    pk: item.pk,
+                    sk: item.sk,
+                  }
+                }
+              }))
+            }
+          })
         );
-        console.log(`Returning ${JSON.stringify(Item)}`);
-        return {
-            statusCode: 200,
-            body: JSON.stringify(Item),
-            headers
-        };
+      }
     }
-    catch (error) {
-        handleCommonErrors(error as {code: any; message: any});
-        return formatReturnError(`Unable to create playground for ${userid}: ${error}`);
-    }
+
+    // create new playground record
+    console.log(`Creating playground record`);
+    const Item: Playground = {
+      pk: "PLAYGROUND",
+      sk: userid,
+      metaGame: pars.metaGame,
+      state: pars.state,
+    };
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item,
+      })
+    );
+    console.log(`Returning ${JSON.stringify(Item)}`);
+    return {
+      statusCode: 200,
+      body: JSON.stringify(Item),
+      headers
+    };
+  }
+  catch (error) {
+    handleCommonErrors(error as { code: any; message: any });
+    return formatReturnError(`Unable to create playground for ${userid}: ${error}`);
+  }
 }
 
 async function resetPlayground(userid: string) {
-    console.log(`Playground reset requested`);
-    try {
-        // delete existing exploration
-        console.log(`Deleting existing exploration`);
-        const explorationQuery = ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk",
-                ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + userid },
-                ExpressionAttributeNames: { "#pk": "pk" },
-        }));
-        const explorationData = await explorationQuery;
-        const explorationRecs = explorationData.Items;
-        if (explorationRecs !== undefined) {
-            const batches = Math.ceil(explorationRecs.length / 10);
-            for (let batch = 0; batch < batches; batch++) {
-                const subset = explorationRecs.slice(batch * 10, 10);
-                await ddbDocClient.send(
-                    new BatchWriteCommand({
-                        "RequestItems": {
-                            [process.env.ABSTRACT_PLAY_TABLE!]: subset.map(item => ({
-                                DeleteRequest: {
-                                    Key: {
-                                        pk: item.pk,
-                                        sk: item.sk,
-                                    }
-                                }
-                            }))
-                        }
-                    })
-                );
-            }
-        }
-
-        // delete existing playground record
+  console.log(`Playground reset requested`);
+  try {
+    // delete existing exploration
+    console.log(`Deleting existing exploration`);
+    const explorationQuery = ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + userid },
+        ExpressionAttributeNames: { "#pk": "pk" },
+      }));
+    const explorationData = await explorationQuery;
+    const explorationRecs = explorationData.Items;
+    if (explorationRecs !== undefined) {
+      const batches = Math.ceil(explorationRecs.length / 10);
+      for (let batch = 0; batch < batches; batch++) {
+        const subset = explorationRecs.slice(batch * 10, 10);
         await ddbDocClient.send(
-            new DeleteCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Key: {
-                "pk": "PLAYGROUND", "sk": userid
-              },
-            })
-        )
-        console.log(`Playground reset`);
-        return {
-            statusCode: 200,
-            headers
-        };
+          new BatchWriteCommand({
+            "RequestItems": {
+              [process.env.ABSTRACT_PLAY_TABLE!]: subset.map(item => ({
+                DeleteRequest: {
+                  Key: {
+                    pk: item.pk,
+                    sk: item.sk,
+                  }
+                }
+              }))
+            }
+          })
+        );
+      }
     }
-    catch (error) {
-        handleCommonErrors(error as {code: any; message: any});
-        return formatReturnError(`Unable to reset playground for ${userid}: ${error}`);
-    }
+
+    // delete existing playground record
+    await ddbDocClient.send(
+      new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "PLAYGROUND", "sk": userid
+        },
+      })
+    )
+    console.log(`Playground reset`);
+    return {
+      statusCode: 200,
+      headers
+    };
+  }
+  catch (error) {
+    handleCommonErrors(error as { code: any; message: any });
+    return formatReturnError(`Unable to reset playground for ${userid}: ${error}`);
+  }
 }
 
 async function getPlayground(userid: string, pars: any) {
-    try {
-      const getGame = ddbDocClient.send(
-         new GetCommand({
-           TableName: process.env.ABSTRACT_PLAY_TABLE,
-           Key: {
-             "pk": "PLAYGROUND",
-             "sk": userid
-           },
-         }));
+  try {
+    const getGame = ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "PLAYGROUND",
+          "sk": userid
+        },
+      }));
 
-      const gameData = await getGame;
-      const game = gameData.Item as Playground;
-      if (game === undefined) {
-        return {
-             statusCode: 200,
-             body: JSON.stringify(null),
-             headers
-           };
-      }  else {
-         return {
-            headers,
-            statusCode: 200,
-            body: JSON.stringify(game),
-          };
-      }
-    }
-    catch (error) {
-      logGetItemError(error);
-      return formatReturnError(`Unable to get playground for user ${userid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    const gameData = await getGame;
+    const game = gameData.Item as Playground;
+    if (game === undefined) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify(null),
+        headers
+      };
+    } else {
+      return {
+        headers,
+        statusCode: 200,
+        body: JSON.stringify(game),
+      };
     }
   }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get playground for user ${userid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+}
 
-async function toggleStar(userid: string, pars: {metaGame: string}) {
-    try {
-        // get player
-        const player = (await getPlayers([userid]))[0];
-        // add or remove metaGame
-        let delta = 0;
-        if (player.stars === undefined) {
-            player.stars = [];
-        }
-        if (! player.stars.includes(pars.metaGame)) {
-            delta = 1;
-            player.stars.push(pars.metaGame);
-        } else {
-            delta = -1;
-            const idx = player.stars.findIndex(m => m === pars.metaGame);
-            player.stars.splice(idx, 1);
-        }
-        // queue player update
-        const list: Promise<any>[] = [];
-        list.push(
-            ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USER", "sk": player.id },
-            ExpressionAttributeValues: { ":ss": player.stars },
-            UpdateExpression: "set stars = :ss",
-            }))
-        );
-        list.push(
-            ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USERS", "sk": player.id },
-            ExpressionAttributeValues: { ":ss": player.stars },
-            UpdateExpression: "set stars = :ss",
-            }))
-        );
-        console.log(`Queued update to player ${player.id}, ${player.name}, toggling star for ${pars.metaGame}: ${delta}`);
-
-        /* Don't need to do this. Can just add directly. Assumes the metaCount has been updated before adding a new game, otherwise will throw an error. */
-        // get metagame counts
-        // const data = await ddbDocClient.send(
-        //     new GetCommand({
-        //       TableName: process.env.ABSTRACT_PLAY_TABLE,
-        //       Key: {
-        //         "pk": "METAGAMES", "sk": "COUNTS"
-        //     },
-        // }));
-        // const details = data.Item as MetaGameCounts;
-        // if (! (pars.metaGame in details)) {
-        //     throw new Error(`Could not find a metagame record for '${pars.metaGame}'`);
-        // }
-        // // update count
-        // if (details[pars.metaGame].stars === undefined) {
-        //     details[pars.metaGame].stars = 0;
-        // }
-        // details[pars.metaGame].stars! += delta;
-
-        // queue game update
-        list.push(
-            ddbDocClient.send(new UpdateCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-                ExpressionAttributeNames: { "#g": pars.metaGame },
-                ExpressionAttributeValues: {":n": delta, ":zero": 0},
-                UpdateExpression: "set #g.stars = if_not_exists(#g.stars, :zero) + :n",
-            }))
-        );
-
-        // run all updates
-        console.log("Running queued updates");
-        await Promise.all(list);
-        console.log("Done");
-        return {
-            statusCode: 200,
-            body: JSON.stringify(player.stars),
-            headers
-        };
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to toggle star for ${userid}, ${pars.metaGame} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+async function toggleStar(userid: string, pars: { metaGame: string }) {
+  try {
+    // get player
+    const player = (await getPlayers([userid]))[0];
+    // add or remove metaGame
+    let delta = 0;
+    if (player.stars === undefined) {
+      player.stars = [];
     }
+    if (!player.stars.includes(pars.metaGame)) {
+      delta = 1;
+      player.stars.push(pars.metaGame);
+    } else {
+      delta = -1;
+      const idx = player.stars.findIndex(m => m === pars.metaGame);
+      player.stars.splice(idx, 1);
+    }
+    // queue player update
+    const list: Promise<any>[] = [];
+    list.push(
+      ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER", "sk": player.id },
+        ExpressionAttributeValues: { ":ss": player.stars },
+        UpdateExpression: "set stars = :ss",
+      }))
+    );
+    list.push(
+      ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USERS", "sk": player.id },
+        ExpressionAttributeValues: { ":ss": player.stars },
+        UpdateExpression: "set stars = :ss",
+      }))
+    );
+    console.log(`Queued update to player ${player.id}, ${player.name}, toggling star for ${pars.metaGame}: ${delta}`);
+
+    /* Don't need to do this. Can just add directly. Assumes the metaCount has been updated before adding a new game, otherwise will throw an error. */
+    // get metagame counts
+    // const data = await ddbDocClient.send(
+    //     new GetCommand({
+    //       TableName: process.env.ABSTRACT_PLAY_TABLE,
+    //       Key: {
+    //         "pk": "METAGAMES", "sk": "COUNTS"
+    //     },
+    // }));
+    // const details = data.Item as MetaGameCounts;
+    // if (! (pars.metaGame in details)) {
+    //     throw new Error(`Could not find a metagame record for '${pars.metaGame}'`);
+    // }
+    // // update count
+    // if (details[pars.metaGame].stars === undefined) {
+    //     details[pars.metaGame].stars = 0;
+    // }
+    // details[pars.metaGame].stars! += delta;
+
+    // queue game update
+    list.push(
+      ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+        ExpressionAttributeNames: { "#g": pars.metaGame },
+        ExpressionAttributeValues: { ":n": delta, ":zero": 0 },
+        UpdateExpression: "set #g.stars = if_not_exists(#g.stars, :zero) + :n",
+      }))
+    );
+
+    // run all updates
+    console.log("Running queued updates");
+    await Promise.all(list);
+    console.log("Done");
+    return {
+      statusCode: 200,
+      body: JSON.stringify(player.stars),
+      headers
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to toggle star for ${userid}, ${pars.metaGame} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
 }
 
 // NOTE: This function will blow up hidden-information games
-async function injectState(userid: string, pars: { id: string; newState: string; metaGame: string;}) {
+async function injectState(userid: string, pars: { id: string; newState: string; metaGame: string; }) {
   // Make sure people aren't getting clever
   try {
     const user = await ddbDocClient.send(
@@ -1471,7 +1552,7 @@ async function injectState(userid: string, pars: { id: string; newState: string;
     console.log(gameData);
     game = gameData.Item as FullGame;
     if (game === undefined) {
-        throw new Error(`Game ${pars.id} not found`);
+      throw new Error(`Game ${pars.id} not found`);
     }
   } catch (error) {
     logGetItemError(error);
@@ -1484,8 +1565,8 @@ async function injectState(userid: string, pars: { id: string; newState: string;
   try {
     await ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: game
-      }));
+      Item: game
+    }));
   } catch (error) {
     logGetItemError(error);
     return formatReturnError(`Unable to update game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
@@ -1522,8 +1603,8 @@ async function updateGameSettings(userid: string, pars: { game: string, settings
     try {
       await ddbDocClient.send(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Item: game
-        }));
+        Item: game
+      }));
     }
     catch (error) {
       logGetItemError(error);
@@ -1591,6 +1672,257 @@ async function updateUserSettings(userid: string, pars: { settings: any; }) {
   }
 }
 
+async function createBot(claim: PartialClaims, pars: { name: string, endpoint: string }) {
+  if (!claim || !claim.sub) {
+    return {
+      statusCode: 401,
+      body: JSON.stringify({ message: "Unauthorized" }),
+      headers
+    };
+  }
+  const name = pars?.name;
+  if (!name || name.trim().length === 0) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: "A name is required for the bot" }),
+      headers
+    };
+  }
+  const endpoint = pars?.endpoint;
+  if (!endpoint || endpoint.trim().length === 0) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: "An HTTPS endpoint is required for the bot" }),
+      headers
+    };
+  }
+
+  try {
+    const userPoolId = process.env.BOTPOOL_ID;
+    if (!userPoolId) {
+      throw new Error("BOTPOOL_ID environment variable is not set");
+    }
+
+    const command = new CreateUserPoolClientCommand({
+      UserPoolId: userPoolId,
+      ClientName: name,
+      GenerateSecret: true,
+    });
+
+    const response = await cognitoClient.send(command);
+    const clientId = response.UserPoolClient?.ClientId;
+    const clientSecret = response.UserPoolClient?.ClientSecret;
+
+    if (!clientId || !clientSecret) {
+      throw new Error("Cognito did not return ClientId or ClientSecret");
+    }
+
+    // Create DynamoDB record
+    await ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Item: {
+        pk: "BOT",
+        sk: clientId,
+        name,
+        endpoint,
+        lastseen: Date.now(),
+        owner: claim.sub
+      }
+    }));
+
+    // Update owner's USER record
+    await ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USER", "sk": claim.sub },
+      ExpressionAttributeNames: { "#b": "bots" },
+      ExpressionAttributeValues: { ":b": new Set([clientId]) },
+      UpdateExpression: "ADD #b :b",
+    }));
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ clientId, clientSecret }),
+      headers
+    };
+  } catch (error: any) {
+    console.error("Error creating bot: ", error);
+    return formatReturnError(`Unable to create bot: ${error.message || error}`);
+  }
+}
+
+async function updateBot(
+  claim: PartialClaims,
+  pars: {
+    clientId: string;
+    name: string;
+    endpoint: string;
+    description?: string;
+    supported?: { meta: string; variants: string[] }[];
+  }
+) {
+  if (!claim || !claim.sub) {
+    return {
+      statusCode: 401,
+      body: JSON.stringify({ message: "Unauthorized" }),
+      headers
+    };
+  }
+
+  const clientId = pars?.clientId;
+  if (!clientId || clientId.trim().length === 0) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: "A clientId is required to identify the bot" }),
+      headers
+    };
+  }
+
+  try {
+    const data = await ddbDocClient.send(new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        pk: "BOT",
+        sk: clientId
+      }
+    }));
+
+    if (!data.Item) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ message: `Bot with client ID ${clientId} not found` }),
+        headers
+      };
+    }
+
+    const bot = data.Item;
+    if (bot.owner !== claim.sub) {
+      return {
+        statusCode: 403,
+        body: JSON.stringify({ message: "You are not the owner of this bot" }),
+        headers
+      };
+    }
+
+    // Update the values (but never update clientId/sk)
+    if (pars.name !== undefined) {
+      bot.name = pars.name;
+    }
+    if (pars.description !== undefined) {
+      bot.description = pars.description;
+    }
+    if (pars.supported !== undefined) {
+      if (!Array.isArray(pars.supported)) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ message: "supported must be an array of objects matching {meta: string, variants: string[]}" }),
+          headers
+        };
+      }
+      bot.supported = pars.supported;
+    }
+
+    await ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Item: bot
+    }));
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: "Bot updated successfully" }),
+      headers
+    };
+  } catch (error: any) {
+    console.error("Error updating bot: ", error);
+    return formatReturnError(`Unable to update bot: ${error.message || error}`);
+  }
+}
+
+async function deleteBot(claim: PartialClaims, pars: { clientId: string }) {
+  if (!claim || !claim.sub) {
+    return {
+      statusCode: 401,
+      body: JSON.stringify({ message: "Unauthorized" }),
+      headers
+    };
+  }
+
+  const clientId = pars?.clientId;
+  if (!clientId || clientId.trim().length === 0) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: "A clientId is required to identify the bot to delete" }),
+      headers
+    };
+  }
+
+  try {
+    // 1. Fetch BOT record to verify owner
+    const data = await ddbDocClient.send(new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        pk: "BOT",
+        sk: clientId
+      }
+    }));
+
+    if (!data.Item) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ message: `Bot with client ID ${clientId} not found` }),
+        headers
+      };
+    }
+
+    const bot = data.Item;
+    if (bot.owner !== claim.sub) {
+      return {
+        statusCode: 403,
+        body: JSON.stringify({ message: "You are not the owner of this bot" }),
+        headers
+      };
+    }
+
+    // 2. Delete User Pool Client from botpool
+    const userPoolId = process.env.BOTPOOL_ID;
+    if (!userPoolId) {
+      throw new Error("BOTPOOL_ID environment variable is not set");
+    }
+
+    const command = new DeleteUserPoolClientCommand({
+      UserPoolId: userPoolId,
+      ClientId: clientId
+    });
+    await cognitoClient.send(command);
+
+    // 3. Delete BOT record from DynamoDB
+    await ddbDocClient.send(new DeleteCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        pk: "BOT",
+        sk: clientId
+      }
+    }));
+
+    // Update owner's USER record
+    await ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USER", "sk": claim.sub },
+      ExpressionAttributeNames: { "#b": "bots" },
+      UpdateExpression: "DELETE #b :b",
+      ExpressionAttributeValues: { ":b": new Set([clientId]) }
+    }));
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: "Bot deleted successfully" }),
+      headers
+    };
+  } catch (error: any) {
+    console.error("Error deleting bot: ", error);
+    return formatReturnError(`Unable to delete bot: ${error.message || error}`);
+  }
+}
+
 async function me(claim: PartialClaims, pars: { size: string, vars: string, update: string }) {
   const userId = claim.sub;
   const email = claim.email;
@@ -1625,7 +1957,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       await updateUserEMail(claim);
     let games = user.games;
     if (games == undefined)
-      games= [];
+      games = [];
     if (fixGames) {
       console.log("games before", games);
       games = await getGamesForUser(userId);
@@ -1634,46 +1966,49 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
 
     // fetch tags
     const tagWork = ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "TAG",
-            "sk": userId
-            },
-        })
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "TAG",
+          "sk": userId
+        },
+      })
     );
 
     // fetch palettes
     const paletteWork = ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "PALETTES",
-            "sk": userId
-            },
-        })
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "PALETTES",
+          "sk": userId
+        },
+      })
     );
 
     // fetch "real" standing challenges
     const standingWork = ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "REALSTANDING",
-            "sk": userId
-            },
-        })
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "REALSTANDING",
+          "sk": userId
+        },
+      })
     );
 
     // fetch customizations
     const customizationWork = ddbDocClient.send(
-        new QueryCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            KeyConditionExpression: "#pk = :pk",
-            ExpressionAttributeValues: { ":pk": "CUSTOMIZATION#" + userId },
-            ExpressionAttributeNames: { "#pk": "pk" },
-        })
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "CUSTOMIZATION#" + userId },
+        ExpressionAttributeNames: { "#pk": "pk" },
+      })
     );
+
+    const botIds: string[] = Array.from(user?.bots ?? new Set());
+    const botsWork = getBots(botIds);
 
     const removedGameIDs: string[] = [];
     if (!pars || !pars.size || pars.size !== "small") {
@@ -1684,10 +2019,10 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       console.log(`Checking for recently completed games`);
       // As soon as a game is over move it to archive status (game.type = 0).
       // Remove the game from user's games list one week after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
-      for (let i = games.length - 1; i >= 0; i-- ) {
+      for (let i = games.length - 1; i >= 0; i--) {
         const game = games[i];
-        if (game.toMove === "" || game.toMove === null ) {
-          if ( (game.seen !== undefined) && (Date.now() - (game.seen || 0) > 7 * 24 * 3600000) && ((game.lastChat || 0) <= (game.seen || 0)) ) {
+        if (game.toMove === "" || game.toMove === null) {
+          if ((game.seen !== undefined) && (Date.now() - (game.seen || 0) > 7 * 24 * 3600000) && ((game.lastChat || 0) <= (game.seen || 0))) {
             games.splice(i, 1);
             removedGameIDs.push(game.id);
           }
@@ -1696,7 +2031,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       // Check for out-of-time games
 
       console.log(`Checking for out-of-time games`);
-      for(const game of games) {
+      for (const game of games) {
         if (game.clockHard && game.toMove && game.toMove !== '') {
           if (Array.isArray(game.toMove)) {
             let minTime = 0;
@@ -1706,7 +2041,8 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
               if (p && game.players[i].time! - elapsed < minTime) {
                 minTime = game.players[i].time! - elapsed;
                 minIndex = i;
-              }});
+              }
+            });
             if (minIndex !== -1) {
               await updateUserGames(userId, user.gamesUpdate, removedGameIDs, games);
               const newLastMoveTime = game.lastMoveTime + game.players[minIndex].time!;
@@ -1801,15 +2137,15 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       UpdateExpression: "set lastSeen = :dt"
     }));
     const lastSeenUsersWork = ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USERS", "sk": userId },
-        ExpressionAttributeValues: { ":dt": Date.now() },
-        UpdateExpression: "set lastSeen = :dt"
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USERS", "sk": userId },
+      ExpressionAttributeValues: { ":dt": Date.now() },
+      UpdateExpression: "set lastSeen = :dt"
     }));
 
     let data = null;
     console.log(`Fetching challenges`);
-    let tagData, paletteData, standingData, customizationData;
+    let tagData, paletteData, standingData, customizationData, botData;
     if (!pars || !pars.size || pars.size !== "small") {
       const challengesIssuedIDs: string[] = Array.from(user?.challenges_issued ?? new Set());
       const challengesReceivedIDs: string[] = Array.from(user?.challenges_received ?? new Set());
@@ -1820,44 +2156,47 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       const challengesAccepted = getChallenges(challengesAcceptedIDs);
       const standingChallenges = getChallenges(standingChallengeIDs);
       data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges, tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork]);
+        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork, botsWork]);
       tagData = data[4];
       paletteData = data[5];
       standingData = data[9];
       customizationData = data[10];
+      botData = data[11];
     } else {
       data = await Promise.all([tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork]);
+        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork, botsWork]);
       tagData = data[0];
       paletteData = data[1];
       standingData = data[5];
       customizationData = data[6];
+      botData = data[7];
     }
+    const bots = (botData as any[]).map(d => d.Item);
     let tags: TagList[] = [];
     if (tagData.Item !== undefined) {
-        const tagRec = tagData.Item as TagRec;
-        tags = tagRec.tags;
+      const tagRec = tagData.Item as TagRec;
+      tags = tagRec.tags;
     }
     let palettes: Palette[] = [];
     if (paletteData.Item !== undefined) {
-        const paletteRec = paletteData.Item as PaletteRec;
-        palettes = paletteRec.palettes;
+      const paletteRec = paletteData.Item as PaletteRec;
+      palettes = paletteRec.palettes;
     }
     let realStanding: StandingChallenge[] = [];
     if (standingData.Item !== undefined) {
-        const standingRec = standingData.Item as StandingChallengeRec;
-        realStanding = standingRec.standing;
+      const standingRec = standingData.Item as StandingChallengeRec;
+      realStanding = standingRec.standing;
     }
-    const customizations: {[key: string]: Customization} = {};
+    const customizations: { [key: string]: Customization } = {};
     if (customizationData.Items !== undefined) {
-        for (const item of (customizationData.Items as CustomizationRec[])) {
-            const settings: any = item.settings;
-            if (typeof settings === "string") {
-                customizations[item.sk] = JSON.parse(settings);
-            } else {
-                customizations[item.sk] = settings;
-            }
+      for (const item of (customizationData.Items as CustomizationRec[])) {
+        const settings: any = item.settings;
+        if (typeof settings === "string") {
+          customizations[item.sk] = JSON.parse(settings);
+        } else {
+          customizations[item.sk] = settings;
         }
+      }
     }
 
     if (data && (!pars || !pars.size || pars.size !== "small")) {
@@ -1880,6 +2219,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           tags,
           palettes,
           "mayPush": user.mayPush,
+          bots,
           "challengesIssued": (data[0] as any[]).map(d => d.Item),
           "challengesReceived": (data[1] as any[]).map(d => d.Item),
           "challengesAccepted": (data[2] as any[]).map(d => d.Item),
@@ -1905,6 +2245,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "bggid": user.bggid,
           "about": user.about,
           "mayPush": user.mayPush,
+          bots,
           tags,
           palettes,
           "realStanding": realStanding,
@@ -1920,70 +2261,73 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
 }
 
 async function nextGame(userid: string) {
-    try {
-      console.log(`Getting USER record`);
-      const userData = await ddbDocClient.send(
-        new GetCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "USER",
-            "sk": userid
-          },
-        }));
-      if (userData.Item === undefined) {
-        return {
-          statusCode: 400,
-          headers
-        };
-      }
-      const userRec = userData.Item as FullUser;
-
-      // get list of all games where it is your turn
-      type GameWithTime = {
-        game: Game;
-        remaining: number;
-      };
-      const yourturn: GameWithTime[] = [];
-      for (const game of userRec.games) {
-        const thisPlayerIdx = game.players.findIndex(p => p.id === userid);
-        // explicitly this player's turn
-        if ((Array.isArray(game.toMove) && game.toMove.length > thisPlayerIdx + 1 && game.toMove[thisPlayerIdx]) || (game.toMove === thisPlayerIdx.toString())) {
-            const remaining = (game.players[thisPlayerIdx].time || 0) - (Date.now() - game.lastMoveTime);
-            yourturn.push({game, remaining});
-        }
-      }
-      // sort by time remaining
-      yourturn.sort((a,b) => a.remaining - b.remaining);
-      console.log(`It is your turn in ${yourturn.length} games.`)
-      console.log(`Yourturn results: ${JSON.stringify(yourturn, null, 2)}`)
+  try {
+    console.log(`Getting USER record`);
+    const userData = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userid
+        },
+      }));
+    if (userData.Item === undefined) {
       return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify(yourturn.map(x => x.game)),
-      }
-    } catch (err) {
-      logGetItemError(err);
-      return formatReturnError(`Unable to get next game for ${userid}`);
+        statusCode: 400,
+        headers
+      };
     }
+    const userRec = userData.Item as FullUser;
+
+    // get list of all games where it is your turn
+    type GameWithTime = {
+      game: Game;
+      remaining: number;
+    };
+    const yourturn: GameWithTime[] = [];
+    for (const game of userRec.games) {
+      const thisPlayerIdx = game.players.findIndex(p => p.id === userid);
+      // explicitly this player's turn
+      if ((Array.isArray(game.toMove) && game.toMove.length > thisPlayerIdx + 1 && game.toMove[thisPlayerIdx]) || (game.toMove === thisPlayerIdx.toString())) {
+        const remaining = (game.players[thisPlayerIdx].time || 0) - (Date.now() - game.lastMoveTime);
+        yourturn.push({ game, remaining });
+      }
+    }
+    // sort by time remaining
+    yourturn.sort((a, b) => a.remaining - b.remaining);
+    console.log(`It is your turn in ${yourturn.length} games.`)
+    console.log(`Yourturn results: ${JSON.stringify(yourturn, null, 2)}`)
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify(yourturn.map(x => x.game)),
+    }
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to get next game for ${userid}`);
+  }
 }
 
 async function updateUserEMail(claim: PartialClaims) {
-    if (claim.email && claim.email.trim().length > 0) {
-      console.log(`updateUserEMail: updating email to ${claim.email}`);
-      return ddbDocClient.send(new UpdateCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "USER", "sk": claim.sub },
-          ExpressionAttributeValues: { ":e": claim.email },
-          UpdateExpression: "set email = :e",
-        }));
-    } else {
-      console.log(`updateUserEMail: claim.email is ${claim.email}`);
-    }
+  if (claim.email && claim.email.trim().length > 0) {
+    console.log(`updateUserEMail: updating email to ${claim.email}`);
+    return ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USER", "sk": claim.sub },
+      ExpressionAttributeValues: { ":e": claim.email },
+      UpdateExpression: "set email = :e",
+    }));
+  } else {
+    console.log(`updateUserEMail: claim.email is ${claim.email}`);
+  }
 }
 
 // Make sure we "lock" games while updating. We are often updating multiple games at once.
 async function updateUserGames(userId: string, gamesUpdate: undefined | number, gameIDsChanged: string[], games: Game[] = []) {
   if (gameIDsChanged.length === 0) {
+    return;
+  }
+  if (await isBotId(userId)) {
     return;
   }
   const gameIDsCloned = gameIDsChanged.slice();
@@ -2047,9 +2391,9 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
             return;
           } catch (innerErr: any) {
             if (innerErr.name === 'ConditionalCheckFailedException') {
-                count++;
+              count++;
             } else {
-                throw innerErr;
+              throw innerErr;
             }
           }
         }
@@ -2144,22 +2488,22 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
   }
   if (pars.attribute === "country") {
     work.push(ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USERS", "sk": userId },
-        ExpressionAttributeValues: { ":newcountry": val },
-        ExpressionAttributeNames: { "#country": "country" },
-        UpdateExpression: "set #country = :newcountry"
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USERS", "sk": userId },
+      ExpressionAttributeValues: { ":newcountry": val },
+      ExpressionAttributeNames: { "#country": "country" },
+      UpdateExpression: "set #country = :newcountry"
     })));
   }
   if (attr === "bggid" || attr === "about") {
     console.log(`Pushing USERS update: ${userId} -> ${attr} = ${val}`)
     work.push(ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USERS", "sk": userId },
-        ExpressionAttributeValues: { ":v": val },
-        ExpressionAttributeNames: { "#a": attr },
-        UpdateExpression: "set #a = :v"
-      })));
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USERS", "sk": userId },
+      ExpressionAttributeValues: { ":v": val },
+      ExpressionAttributeNames: { "#a": attr },
+      UpdateExpression: "set #a = :v"
+    })));
   }
   try {
     await Promise.all(work);
@@ -2186,42 +2530,42 @@ async function getGamesForUser(userId: any) {
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :skPrefix)",
         ExpressionAttributeValues: {
-            ":pk": "GAME",
-            ":skPrefix": game.uid + "#0"
+          ":pk": "GAME",
+          ":skPrefix": game.uid + "#0"
         },
         ExpressionAttributeNames: {
-            "#pk": "pk",
-            "#sk": "sk"
+          "#pk": "pk",
+          "#sk": "sk"
         },
         ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
         // Limit: 2 // For testing!
       })
     );
     if (result !== undefined) {
+      // count += result.Count || 0;
+      processGames(userId, result, games);
+      let last = result.LastEvaluatedKey;
+      while (last !== undefined && result !== undefined) {
+        result = await ddbDocClient.send(
+          new QueryCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :skPrefix)",
+            ExpressionAttributeValues: {
+              ":pk": "GAME",
+              ":skPrefix": game.uid + "#0"
+            },
+            ExpressionAttributeNames: {
+              "#pk": "pk",
+              "#sk": "sk"
+            },
+            ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
+            // Limit: 2, // For testing!
+            ExclusiveStartKey: last
+          }));
         // count += result.Count || 0;
         processGames(userId, result, games);
-        let last = result.LastEvaluatedKey;
-        while (last !== undefined && result !== undefined) {
-            result = await ddbDocClient.send(
-                new QueryCommand({
-                    TableName: process.env.ABSTRACT_PLAY_TABLE,
-                    KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :skPrefix)",
-                    ExpressionAttributeValues: {
-                        ":pk": "GAME",
-                        ":skPrefix": game.uid + "#0"
-                    },
-                    ExpressionAttributeNames: {
-                        "#pk": "pk",
-                        "#sk": "sk"
-                    },
-                    ProjectionExpression: "id, players, metaGame, clockHard, toMove, lastMoveTime, noExplore",
-                    // Limit: 2, // For testing!
-                    ExclusiveStartKey: last
-                }));
-            // count += result.Count || 0;
-            processGames(userId, result, games);
-            last = result.LastEvaluatedKey;
-        }
+        last = result.LastEvaluatedKey;
+      }
     }
     // if (count > 0) {
     //     console.log(`Found ${count} ${game.uid} game${count !== 1 ? "s" : ""}`);
@@ -2236,9 +2580,9 @@ function processGames(userid: any, result: QueryCommandOutput, games: Game[]) {
   const fullGames = result.Items as FullGame[];
   if (fullGames !== undefined) {
     for (const game of fullGames) {
-        if ("players" in game) {
-            games.push({"id": game.id, "metaGame": game.metaGame, "players": game.players, "clockHard": game.clockHard, "toMove": game.toMove, "lastMoveTime": game.lastMoveTime, "noExplore": game.noExplore || false});
-        }
+      if ("players" in game) {
+        games.push({ "id": game.id, "metaGame": game.metaGame, "players": game.players, "clockHard": game.clockHard, "toMove": game.toMove, "lastMoveTime": game.lastMoveTime, "noExplore": game.noExplore || false });
+      }
     }
   }
 }
@@ -2278,6 +2622,20 @@ async function getChallenges(challengeIds: string[]) {
   return Promise.all(challenges);
 }
 
+async function getBots(botIds: string[]) {
+  return Promise.all(botIds.map((clientId: string) =>
+    ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          pk: "BOT",
+          sk: clientId
+        }
+      })
+    )
+  ));
+}
+
 async function newProfile(claim: PartialClaims, pars: { name: any; consent: any; anonymous: any; country: any; tagline: any; }) {
   const userid = claim.sub;
   const email = claim.email;
@@ -2286,22 +2644,22 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
     return formatReturnError(`No email for user ${pars.name}, id ${userid} in newProfile`);
   }
   const data = {
-      "pk": "USER",
-      "sk": userid,
-      "id": userid,
-      "name": pars.name,
-      "email": email,
-      "consent": pars.consent,
-      "anonymous": pars.anonymous,
-      "country": pars.country,
-      "tagline": pars.tagline,
-      "settings": {
-        "all": {
-         "annotate": true,
-         "color": "standard"
-        }
+    "pk": "USER",
+    "sk": userid,
+    "id": userid,
+    "name": pars.name,
+    "email": email,
+    "consent": pars.consent,
+    "anonymous": pars.anonymous,
+    "country": pars.country,
+    "tagline": pars.tagline,
+    "settings": {
+      "all": {
+        "annotate": true,
+        "color": "standard"
       }
-    };
+    }
+  };
   // So that we can list all users
   const data2 = {
     "pk": "USERS",
@@ -2309,11 +2667,11 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
     "name": pars.name
   };
   try {
-    const insertUser =  ddbDocClient.send(new PutCommand({
+    const insertUser = ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: data
     }));
-    const insertIntoUserList =  ddbDocClient.send(new PutCommand({
+    const insertIntoUserList = ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: data2
     }));
@@ -2333,211 +2691,246 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
 }
 
 async function setPush(userid: string, pars: { state: boolean }) {
-    try {
-        console.log(`Setting 'mayPush' to ${pars.state} for user ${userid}`);
-        await ddbDocClient.send(
-            new UpdateCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {"pk": "USER", "sk": userid},
-                ExpressionAttributeNames: {"#mp": "mayPush"},
-                ExpressionAttributeValues: {":mp": pars.state},
-                UpdateExpression: "set #mp = :mp"
-            })
-        );
-        if (pars.state === false) {
-            // purge any existing push data for this user
-            await ddbDocClient.send(
-                new DeleteCommand({
-                  TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Key: {
-                    "pk": "PUSH", "sk": userid
-                  },
-                })
-            )
-        }
-    } catch (error) {
-        logGetItemError(error);
-        throw new Error("setPush: Failed to save push preference");
+  try {
+    console.log(`Setting 'mayPush' to ${pars.state} for user ${userid}`);
+    await ddbDocClient.send(
+      new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER", "sk": userid },
+        ExpressionAttributeNames: { "#mp": "mayPush" },
+        ExpressionAttributeValues: { ":mp": pars.state },
+        UpdateExpression: "set #mp = :mp"
+      })
+    );
+    if (pars.state === false) {
+      // purge any existing push data for this user
+      await ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "PUSH", "sk": userid
+          },
+        })
+      )
     }
-    return {
-        statusCode: 200,
-        body: JSON.stringify({
-          message: `Successfully saved push preference for ${userid}`,
-        }),
-        headers
-    };
+  } catch (error) {
+    logGetItemError(error);
+    throw new Error("setPush: Failed to save push preference");
+  }
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: `Successfully saved push preference for ${userid}`,
+    }),
+    headers
+  };
 }
 
 async function savePush(userid: string, pars: { payload: any }) {
-    try {
-        console.log(`Attempting to save push notification credentials for user ${userid}:\n${JSON.stringify(pars.payload)}`);
-        await ddbDocClient.send(new PutCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Item: {
-                "pk": "PUSH",
-                "sk": userid,
-                "payload": pars.payload,
-              }
-        }));
-    } catch (error) {
-        logGetItemError(error);
-        throw new Error("savePush: Failed to save push notification credentials");
-    }
-    return {
-        statusCode: 200,
-        body: JSON.stringify({
-          message: `Successfully saved push notifications credentials for ${userid}`,
-        }),
-        headers
-    };
+  try {
+    console.log(`Attempting to save push notification credentials for user ${userid}:\n${JSON.stringify(pars.payload)}`);
+    await ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Item: {
+        "pk": "PUSH",
+        "sk": userid,
+        "payload": pars.payload,
+      }
+    }));
+  } catch (error) {
+    logGetItemError(error);
+    throw new Error("savePush: Failed to save push notification credentials");
+  }
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: `Successfully saved push notifications credentials for ${userid}`,
+    }),
+    headers
+  };
 }
 
 async function saveTags(userid: string, pars: { payload: TagList[] }) {
-    try {
-        console.log(`Attempting to save tags for user ${userid}:\n${JSON.stringify(pars.payload)}`);
-        if (pars.payload.length === 0) {
-            await ddbDocClient.send(
-                new DeleteCommand({
-                  TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Key: {
-                    "pk": "TAG", "sk": userid
-                  },
-                })
-            )
-        } else {
-            await ddbDocClient.send(new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Item: {
-                    "pk": "TAG",
-                    "sk": userid,
-                    "tags": pars.payload,
-                  }
-            }));
+  try {
+    console.log(`Attempting to save tags for user ${userid}:\n${JSON.stringify(pars.payload)}`);
+    if (pars.payload.length === 0) {
+      await ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "TAG", "sk": userid
+          },
+        })
+      )
+    } else {
+      await ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: {
+          "pk": "TAG",
+          "sk": userid,
+          "tags": pars.payload,
         }
-    } catch (error) {
-        logGetItemError(error);
-        throw new Error("saveTags: Failed to save tags");
+      }));
     }
-    return {
-        statusCode: 200,
-        body: JSON.stringify({
-          message: `Successfully saved tags for ${userid}`,
-        }),
-        headers
-    };
+  } catch (error) {
+    logGetItemError(error);
+    throw new Error("saveTags: Failed to save tags");
+  }
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: `Successfully saved tags for ${userid}`,
+    }),
+    headers
+  };
 }
 
 async function savePalettes(userid: string, pars: { palettes: Palette[] }) {
-    try {
-        console.log(`Attempting to save palettes for user ${userid}:\n${JSON.stringify(pars.palettes)}`);
-        if (pars.palettes.length === 0) {
-            await ddbDocClient.send(
-                new DeleteCommand({
-                  TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Key: {
-                    "pk": "PALETTES", "sk": userid
-                  },
-                })
-            )
-        } else {
-            await ddbDocClient.send(new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Item: {
-                    "pk": "PALETTES",
-                    "sk": userid,
-                    "palettes": pars.palettes,
-                  } as PaletteRec
-            }));
-        }
-    } catch (error) {
-        logGetItemError(error);
-        throw new Error("saveTags: Failed to save palettes");
+  try {
+    console.log(`Attempting to save palettes for user ${userid}:\n${JSON.stringify(pars.palettes)}`);
+    if (pars.palettes.length === 0) {
+      await ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "PALETTES", "sk": userid
+          },
+        })
+      )
+    } else {
+      await ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: {
+          "pk": "PALETTES",
+          "sk": userid,
+          "palettes": pars.palettes,
+        } as PaletteRec
+      }));
     }
-    return {
-        statusCode: 200,
-        body: JSON.stringify({
-          message: `Successfully saved palettes for ${userid}`,
-        }),
-        headers
-    };
+  } catch (error) {
+    logGetItemError(error);
+    throw new Error("saveTags: Failed to save palettes");
+  }
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: `Successfully saved palettes for ${userid}`,
+    }),
+    headers
+  };
 }
 
 async function saveCustomization(userid: string, pars: { metaGame: string; settings: Customization }) {
-    try {
-        // console.log(`Saving customization for user ${userid}, game ${pars.metaGame}:\n${JSON.stringify(pars.settings)}`);
-        let settings = pars.settings as Customization|string;
-        if (typeof settings === "string") {
-            settings = JSON.parse(settings);
-        }
-        await ddbDocClient.send(new PutCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Item: {
-                "pk": "CUSTOMIZATION#" + userid,
-                "sk": pars.metaGame,
-                "settings": settings,
-            }
-        }));
-    } catch (error) {
-        logGetItemError(error);
-        throw new Error("saveCustomization: Failed to save customization");
+  try {
+    // console.log(`Saving customization for user ${userid}, game ${pars.metaGame}:\n${JSON.stringify(pars.settings)}`);
+    let settings = pars.settings as Customization | string;
+    if (typeof settings === "string") {
+      settings = JSON.parse(settings);
     }
-    return {
-        statusCode: 200,
-        body: JSON.stringify({
-            message: `Successfully saved customization for ${userid}, ${pars.metaGame}`,
-        }),
-        headers
-    };
+    await ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Item: {
+        "pk": "CUSTOMIZATION#" + userid,
+        "sk": pars.metaGame,
+        "settings": settings,
+      }
+    }));
+  } catch (error) {
+    logGetItemError(error);
+    throw new Error("saveCustomization: Failed to save customization");
+  }
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: `Successfully saved customization for ${userid}, ${pars.metaGame}`,
+    }),
+    headers
+  };
 }
 
 async function deleteCustomization(userid: string, pars: { metaGame: string }) {
-    try {
-        console.log(`Deleting customization for user ${userid}, game ${pars.metaGame}`);
-        await ddbDocClient.send(new DeleteCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-                "pk": "CUSTOMIZATION#" + userid,
-                "sk": pars.metaGame,
-            }
-        }));
-    } catch (error) {
-        logGetItemError(error);
-        throw new Error("deleteCustomization: Failed to delete customization");
-    }
-    return {
-        statusCode: 200,
-        body: JSON.stringify({
-            message: `Successfully deleted customization for ${userid}, ${pars.metaGame}`,
-        }),
-        headers
-    };
+  try {
+    console.log(`Deleting customization for user ${userid}, game ${pars.metaGame}`);
+    await ddbDocClient.send(new DeleteCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        "pk": "CUSTOMIZATION#" + userid,
+        "sk": pars.metaGame,
+      }
+    }));
+  } catch (error) {
+    logGetItemError(error);
+    throw new Error("deleteCustomization: Failed to delete customization");
+  }
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: `Successfully deleted customization for ${userid}, ${pars.metaGame}`,
+    }),
+    headers
+  };
 }
 
-async function updateStanding(userid: string, pars: {entries: StandingChallenge[]}) {
-    try {
-        // simply replace the existing record
-        const Item: StandingChallengeRec = {
-            pk: "REALSTANDING",
-            sk: userid,
-            standing: pars.entries,
-        };
-        await ddbDocClient.send(
-            new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item,
-            })
-        );
-        console.log(`Returning ${JSON.stringify(Item)}`);
-        return {
-            statusCode: 200,
-            body: JSON.stringify(Item),
-            headers
-        };
+async function updateStanding(userid: string, pars: { entries: StandingChallenge[] }) {
+  try {
+    // simply replace the existing record
+    const Item: StandingChallengeRec = {
+      pk: "REALSTANDING",
+      sk: userid,
+      standing: pars.entries,
+    };
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item,
+      })
+    );
+    console.log(`Returning ${JSON.stringify(Item)}`);
+    return {
+      statusCode: 200,
+      body: JSON.stringify(Item),
+      headers
+    };
+  }
+  catch (error) {
+    handleCommonErrors(error as { code: any; message: any });
+    return formatReturnError(`Unable to update standing challenges for ${userid}: ${error}`);
+  }
+}
+
+async function notifyRegisteredBotsTurn(metaGame: string, gameid: string, game?: FullGame) {
+  let loaded = game;
+  if (!loaded) {
+    const item = await loadGameRecord(metaGame, gameid);
+    if (!item) {
+      return;
     }
-    catch (error) {
-        handleCommonErrors(error as {code: any; message: any});
-        return formatReturnError(`Unable to update standing challenges for ${userid}: ${error}`);
+    loaded = item as FullGame;
+  }
+  const info = gameinfo.get(metaGame);
+  const simultaneous = info.flags !== undefined && info.flags.includes('simultaneous');
+  const toMoveIds = getToMovePlayerIds(loaded, simultaneous);
+  for (const id of toMoveIds) {
+    if (await isBotId(id)) {
+      await enqueueBotOutbound({ type: 'move', metaGame, gameid, botId: id });
     }
+  }
+}
+
+export async function botRespondToChallenge(
+  botId: string,
+  challengeId: string,
+  metaGame: string,
+  standing: boolean,
+  accepted: boolean
+) {
+  return respondedChallenge(botId, {
+    response: accepted,
+    id: challengeId,
+    standing,
+    metaGame,
+    comment: accepted ? "Let's play!" : "",
+  });
 }
 
 async function newChallenge(userid: string, challenge: FullChallenge) {
@@ -2546,31 +2939,32 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
     return await newStandingChallenge(userid, challenge);
   }
   const challengeId = uuid();
+  const botChallengees: { id: string }[] = [];
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: {
-        "pk": "CHALLENGE",
-        "sk": challengeId,
-        "id": challengeId,
-        "metaGame": challenge.metaGame,
-        "numPlayers": challenge.numPlayers,
-        "standing": challenge.standing,
-        "duration": challenge.duration,
-        "seating": challenge.seating,
-        "variants": challenge.variants,
-        "challenger": challenge.challenger,
-        "challengees": challenge.challengees, // users that were challenged
-        "players": [challenge.challenger], // users that have accepted
-        "clockStart": challenge.clockStart,
-        "clockInc": challenge.clockInc,
-        "clockMax": challenge.clockMax,
-        "clockHard": challenge.clockHard,
-        "rated": challenge.rated,
-        "noExplore": challenge.noExplore || false,
-        "comment": challenge.comment || "",
-        "dateIssued": Date.now(),
-      }
-    }));
+    Item: {
+      "pk": "CHALLENGE",
+      "sk": challengeId,
+      "id": challengeId,
+      "metaGame": challenge.metaGame,
+      "numPlayers": challenge.numPlayers,
+      "standing": challenge.standing,
+      "duration": challenge.duration,
+      "seating": challenge.seating,
+      "variants": challenge.variants,
+      "challenger": challenge.challenger,
+      "challengees": challenge.challengees, // users that were challenged
+      "players": [challenge.challenger], // users that have accepted
+      "clockStart": challenge.clockStart,
+      "clockInc": challenge.clockInc,
+      "clockMax": challenge.clockMax,
+      "clockHard": challenge.clockHard,
+      "rated": challenge.rated,
+      "noExplore": challenge.noExplore || false,
+      "comment": challenge.comment || "",
+      "dateIssued": Date.now(),
+    }
+  }));
 
   const updateChallenger = ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -2582,19 +2976,27 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
 
   const list: Promise<any>[] = [addChallenge, updateChallenger];
   if (challenge.challengees !== undefined) {
-    challenge.challengees.forEach((challengee: { id: string; }) => {
-      list.push(
-        ddbDocClient.send(new UpdateCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "USER", "sk": challengee.id },
-          ExpressionAttributeValues: { ":c": new Set([challengeId]) },
-          ExpressionAttributeNames: { "#cr": "challenges_received" },
-          UpdateExpression: "add #cr :c",
-        }))
-      );
-    })
+    const humanChallengees: { id: string; name?: string }[] = [];
+    for (const challengee of challenge.challengees) {
+      if (await isBotId(challengee.id)) {
+        botChallengees.push(challengee);
+      } else {
+        humanChallengees.push(challengee);
+        list.push(
+          ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "USER", "sk": challengee.id },
+            ExpressionAttributeValues: { ":c": new Set([challengeId]) },
+            ExpressionAttributeNames: { "#cr": "challenges_received" },
+            UpdateExpression: "add #cr :c",
+          }))
+        );
+      }
+    }
     try {
-      list.push(sendChallengedEmail(challenge.challenger.name, challenge.challengees, challenge.metaGame, challenge.comment));
+      if (humanChallengees.length > 0) {
+        list.push(sendChallengedEmail(challenge.challenger.name, humanChallengees as User[], challenge.metaGame, challenge.comment));
+      }
     } catch (error) {
       logGetItemError(error);
       throw new Error("newChallenge: Failed to send emails");
@@ -2604,13 +3006,23 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
     await Promise.all(list);
     console.log("Successfully added challenge" + challengeId);
 
+    for (const challengee of botChallengees) {
+      await enqueueBotOutbound({
+        type: 'challenge',
+        challengeId,
+        metaGame: challenge.metaGame,
+        botId: challengee.id,
+        standing: false,
+      });
+    }
+
     // If the bot is challenged, trigger its challenge mgmt code here
     if (challenge.challengees !== undefined) {
-        const idx = challenge.challengees.findIndex(u => u.id === process.env.AIAI_USERID);
-        if (idx !== -1) {
-            console.log("Triggering bot management code");
-            await botManageChallenges();
-        }
+      const idx = challenge.challengees.findIndex(u => u.id === process.env.AIAI_USERID);
+      if (idx !== -1) {
+        console.log("Triggering bot management code");
+        await botManageChallenges();
+      }
     }
 
     return {
@@ -2630,28 +3042,28 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
   const challengeId = uuid();
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: {
-        "pk": "STANDINGCHALLENGE#" + challenge.metaGame,
-        "sk": challengeId,
-        "id": challengeId,
-        "metaGame": challenge.metaGame,
-        "numPlayers": challenge.numPlayers,
-        "standing": challenge.standing,
-        "duration": challenge.duration,
-        "seating": challenge.seating,
-        "variants": challenge.variants,
-        "challenger": challenge.challenger,
-        "players": [challenge.challenger], // users that have accepted
-        "clockStart": challenge.clockStart,
-        "clockInc": challenge.clockInc,
-        "clockMax": challenge.clockMax,
-        "clockHard": challenge.clockHard,
-        "rated": challenge.rated,
-        "noExplore": challenge.noExplore || false,
-        "comment": challenge.comment || "",
-        "dateIssued": Date.now(),
-      }
-    }));
+    Item: {
+      "pk": "STANDINGCHALLENGE#" + challenge.metaGame,
+      "sk": challengeId,
+      "id": challengeId,
+      "metaGame": challenge.metaGame,
+      "numPlayers": challenge.numPlayers,
+      "standing": challenge.standing,
+      "duration": challenge.duration,
+      "seating": challenge.seating,
+      "variants": challenge.variants,
+      "challenger": challenge.challenger,
+      "players": [challenge.challenger], // users that have accepted
+      "clockStart": challenge.clockStart,
+      "clockInc": challenge.clockInc,
+      "clockMax": challenge.clockMax,
+      "clockHard": challenge.clockHard,
+      "rated": challenge.rated,
+      "noExplore": challenge.noExplore || false,
+      "comment": challenge.comment || "",
+      "dateIssued": Date.now(),
+    }
+  }));
 
   const updateChallenger = ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -2680,7 +3092,8 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
 }
 
 async function sendChallengedEmail(challengerName: string, opponents: User[], metaGame: string, comment: string | undefined) {
-  const players: FullUser[] = await getPlayers(opponents.map((o: { id: any; }) => o.id));
+  const humanIds = await filterHumanIds(opponents.map((o: { id: any; }) => o.id));
+  const players: FullUser[] = await getPlayers(humanIds);
   metaGame = gameinfo.get(metaGame).name;
   await initi18n('en');
   const work: Promise<any>[] = [];
@@ -2688,28 +3101,28 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
   if (!comment.endsWith(".") && !comment.endsWith("!") && !comment.endsWith("?"))
     comment += ".";
   for (const player of players) {
-    if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-        await changeLanguageForPlayer(player);
-        let body;
-        if (comment === ".") {
-          body = i18n.t("ChallengeBody", { "challenger": challengerName, metaGame });
-        } else {
-          body = i18n.t("ChallengeBodyComment", { "challenger": challengerName, metaGame, comment });
-        }
-        if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-          const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), body);
-          work.push(sesClient.send(comm));
-        } else {
-            console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
-        }
-        // push notifications are sent no matter what
-        work.push(sendPush({
-          userId: player.id,
-          topic: "challenges",
-          title: i18n.t("PUSH.titles.challenged"),
-          body: body,
-          url: "/",
-        }));
+    if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
+      await changeLanguageForPlayer(player);
+      let body;
+      if (comment === ".") {
+        body = i18n.t("ChallengeBody", { "challenger": challengerName, metaGame });
+      } else {
+        body = i18n.t("ChallengeBodyComment", { "challenger": challengerName, metaGame, comment });
+      }
+      if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges)) {
+        const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), body);
+        work.push(sesClient.send(comm));
+      } else {
+        console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
+      }
+      // push notifications are sent no matter what
+      work.push(sendPush({
+        userId: player.id,
+        topic: "challenges",
+        title: i18n.t("PUSH.titles.challenged"),
+        body: body,
+        url: "/",
+      }));
     } else {
       console.log(`No verified email address found for ${player.name} (${player.id})`);
     }
@@ -2717,12 +3130,12 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
   return Promise.all(work);
 }
 
-async function revokeChallenge(userid: any, pars: { id: string; metaGame: string; standing: boolean; comment:string; }) {
+async function revokeChallenge(userid: any, pars: { id: string; metaGame: string; standing: boolean; comment: string; }) {
   let challenge: Challenge | undefined;
   const work: Promise<any>[] = [];
-  let work1 : Promise<any> | undefined;
+  let work1: Promise<any> | undefined;
   try {
-    ({challenge, work : work1} = await removeChallenge(pars.id, pars.metaGame, pars.standing === true, true, userid));
+    ({ challenge, work: work1 } = await removeChallenge(pars.id, pars.metaGame, pars.standing === true, true, userid));
   } catch (err) {
     logGetItemError(err);
     return formatReturnError("Failed to remove challenge");
@@ -2738,63 +3151,63 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
     await initi18n('en');
     // Inform challenged
     if (challenge.challengees) {
-      const players: FullUser[] = await getPlayers(challenge.challengees.map((c: { id: any; }) => c.id));
+      const players: FullUser[] = await getPlayers(await filterHumanIds(challenge.challengees.map((c: { id: any; }) => c.id)));
       for (const player of players) {
         await changeLanguageForPlayer(player);
         let body;
         if (comment === ".") {
-          body = i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame});
+          body = i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame });
         } else {
-          body = i18n.t("ChallengeRevokedBodyComment", { name: challenge.challenger.name, metaGame, comment});
+          body = i18n.t("ChallengeRevokedBodyComment", { name: challenge.challenger.name, metaGame, comment });
         }
-        if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-            if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), body);
-                work.push(sesClient.send(comm));
-            } else {
-                console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
-            }
+        if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
+          if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges)) {
+            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), body);
+            work.push(sesClient.send(comm));
+          } else {
+            console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
+          }
         } else {
-            console.log(`No verified email address found for ${player.name} (${player.id})`);
+          console.log(`No verified email address found for ${player.name} (${player.id})`);
         }
         // push notifications are sent no matter what
         work.push(sendPush({
-            userId: player.id,
-            topic: "challenges",
-            title: i18n.t("PUSH.titles.revoked"),
-            body: body,
-            url: "/",
+          userId: player.id,
+          topic: "challenges",
+          title: i18n.t("PUSH.titles.revoked"),
+          body: body,
+          url: "/",
         }));
       }
     }
     // Inform players that have already accepted
     if (challenge.players) {
-      const players = await getPlayers(challenge.players.map((c: { id: any; }) => c.id).filter((id: any) => id !== challenge!.challenger.id));
+      const players = await getPlayers(await filterHumanIds(challenge.players.map((c: { id: any; }) => c.id).filter((id: any) => id !== challenge!.challenger.id)));
       for (const player of players) {
         await changeLanguageForPlayer(player);
         let body;
         if (comment === ".") {
-          body = i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame});
+          body = i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame });
         } else {
-          body = i18n.t("ChallengeRevokedBodyComment", { name: challenge.challenger.name, metaGame, comment});
+          body = i18n.t("ChallengeRevokedBodyComment", { name: challenge.challenger.name, metaGame, comment });
         }
-        if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-            if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), body);
-                work.push(sesClient.send(comm));
-                    } else {
-                console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
-            }
+        if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
+          if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges)) {
+            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), body);
+            work.push(sesClient.send(comm));
+          } else {
+            console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
+          }
         } else {
-            console.log(`No verified email address found for ${player.name} (${player.id})`);
+          console.log(`No verified email address found for ${player.name} (${player.id})`);
         }
         // push notifications are sent no matter what
         work.push(sendPush({
-            userId: player.id,
-            topic: "challenges",
-            title: i18n.t("PUSH.titles.revoked"),
-            body: body,
-            url: "/",
+          userId: player.id,
+          topic: "challenges",
+          title: i18n.t("PUSH.titles.revoked"),
+          body: body,
+          url: "/",
         }));
       }
     }
@@ -2811,7 +3224,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
   };
 }
 
-async function respondedChallenge(userid: string, pars: { response: boolean; id: string; standing?: boolean; metaGame: string; comment: string;}) {
+async function respondedChallenge(userid: string, pars: { response: boolean; id: string; standing?: boolean; metaGame: string; comment: string; }) {
   const response = pars.response;
   const challengeId = pars.id;
   const standing = pars.standing === true;
@@ -2844,33 +3257,33 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       await initi18n('en');
       try {
         for (const [ind, player] of email.players.entries()) {
-            await changeLanguageForPlayer(player);
-            let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
-            if (ind === 0 || email.simultaneous) {
-              body += " " + i18n.t("YourMove");
-            }
-            if (comment !== "." && player.id !== userid) {
-              body += " " + i18n.t("ChallengeResponseComment", { comment });
-            }
-            if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-                if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameStart) ) {
-                    const ebody = body + " " + i18n.t("GameLink", { metaGame: metaGame, gameId: email.gameId});
-                    const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), ebody);
-                    work.push(sesClient.send(comm));
-                } else {
-                    console.log(`Player ${player.name} (${player.id}) has elected to not receive game start notifications.`);
-                }
+          await changeLanguageForPlayer(player);
+          let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
+          if (ind === 0 || email.simultaneous) {
+            body += " " + i18n.t("YourMove");
+          }
+          if (comment !== "." && player.id !== userid) {
+            body += " " + i18n.t("ChallengeResponseComment", { comment });
+          }
+          if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
+            if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameStart)) {
+              const ebody = body + " " + i18n.t("GameLink", { metaGame: metaGame, gameId: email.gameId });
+              const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), ebody);
+              work.push(sesClient.send(comm));
             } else {
-                console.log(`No verified email address found for ${player.name} (${player.id})`);
+              console.log(`Player ${player.name} (${player.id}) has elected to not receive game start notifications.`);
             }
-            // push notifications are sent no matter what
-            work.push(sendPush({
-                userId: player.id,
-                topic: "started",
-                title: i18n.t("PUSH.titles.started"),
-                body,
-                url: "/",
-            }));
+          } else {
+            console.log(`No verified email address found for ${player.name} (${player.id})`);
+          }
+          // push notifications are sent no matter what
+          work.push(sendPush({
+            userId: player.id,
+            topic: "started",
+            title: i18n.t("PUSH.titles.started"),
+            body,
+            url: "/",
+          }));
         }
       } catch (err) {
         logGetItemError(err);
@@ -2881,7 +3294,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
     let challenge: Challenge | undefined;
     let work2: Promise<any> | undefined;
     try {
-      ({challenge, work: work2} = await removeChallenge(pars.id, pars.metaGame, standing, false, userid));
+      ({ challenge, work: work2 } = await removeChallenge(pars.id, pars.metaGame, standing, false, userid));
       await work2;
       console.log("Successfully removed challenge " + pars.id);
       ret = {
@@ -2899,7 +3312,7 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
     if (challenge !== undefined) {
       await initi18n('en');
       // Inform everyone (except the decliner, he knows).
-      const players: FullUser[] = await getPlayers(challenge.challengees!.map(c => c.id).filter(id => id !== userid).concat(challenge.players.map(c => c.id)));
+      const players: FullUser[] = await getPlayers(await filterHumanIds(challenge.challengees!.map(c => c.id).filter(id => id !== userid).concat(challenge.players.map(c => c.id))));
       const quitter = challenge.challengees!.find(c => c.id === userid)!.name;
       const metaGame = gameinfo.get(challenge.metaGame).name;
       for (const player of players) {
@@ -2908,23 +3321,23 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
         if (comment !== ".") {
           body += " " + i18n.t("ChallengeResponseComment", { comment });
         }
-        if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-          if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges) ) {
+        if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
+          if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges)) {
             const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), body);
             work.push(sesClient.send(comm));
           } else {
-              console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
+            console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
           }
         } else {
-            console.log(`No verified email address found for ${player.name} (${player.id})`);
+          console.log(`No verified email address found for ${player.name} (${player.id})`);
         }
         // push notifications are sent no matter what
         work.push(sendPush({
-            userId: player.id,
-            topic: "challenges",
-            title: i18n.t("PUSH.titles.declined"),
-            body: body,
-            url: "/",
+          userId: player.id,
+          topic: "challenges",
+          title: i18n.t("PUSH.titles.declined"),
+          body: body,
+          url: "/",
         }));
       }
     }
@@ -2945,14 +3358,14 @@ async function removeChallenge(challengeId: string, metaGame: string, standing: 
   if (chall.Item === undefined) {
     // The challenge might have been revoked or rejected by another user (while you were deciding)
     console.log("Challenge not found");
-    return {"challenge": undefined, "work": undefined};
+    return { "challenge": undefined, "work": undefined };
   }
   const challenge = chall.Item as Challenge;
   if (revoked && challenge.challenger.id !== quitter)
     throw new Error(`${quitter} tried to revoke a challenge that they did not create.`);
   if (!revoked && !(challenge.players.find((p: { id: any; }) => p.id === quitter) || (!standing && challenge.challengees!.find((p: { id: any; }) => p.id === quitter))))
     throw new Error(`${quitter} tried to leave a challenge that they are not part of.`);
-  return {challenge, "work": removeAChallenge(challenge, standing, revoked, false, quitter)};
+  return { challenge, "work": removeAChallenge(challenge, standing, revoked, false, quitter) };
 }
 
 // Remove the challenge either because the game has started, or someone withrew: either challenger revoked the challenge or someone withdrew an acceptance, or didn't accept the challenge.
@@ -2962,7 +3375,7 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
   // determine if a standing challenge has expired
   let expired = false;
   if (standing && !revoked) {
-    if ( ("duration" in challenge) && (typeof challenge.duration === "number") && (challenge.duration > 0) ) {
+    if (("duration" in challenge) && (typeof challenge.duration === "number") && (challenge.duration > 0)) {
       if (challenge.duration === 1) {
         expired = true;
       } else {
@@ -2971,9 +3384,9 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
           ddbDocClient.send(
             new UpdateCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Key: {"pk": "STANDINGCHALLENGE#" + challenge.metaGame, "sk": challenge.id},
-              ExpressionAttributeValues: {":d": challenge.duration - 1},
-              ExpressionAttributeNames: {"#d": "duration"},
+              Key: { "pk": "STANDINGCHALLENGE#" + challenge.metaGame, "sk": challenge.id },
+              ExpressionAttributeValues: { ":d": challenge.duration - 1 },
+              ExpressionAttributeNames: { "#d": "duration" },
               UpdateExpression: "set #d = :d"
             })
           )
@@ -2991,19 +3404,21 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
       ExpressionAttributeValues: { ":c": new Set([challenge.id]) }
     })));
     // Remove from challenged
-    challenge.challengees.forEach((challengee: { id: string; }) => {
-      list.push(sendCommandWithRetry(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USER", "sk": challengee.id },
-        UpdateExpression: "DELETE challenges_received :c",
-        ExpressionAttributeValues: { ":c": new Set([challenge.id]) }
-      })));
-    })
+    for (const challengee of challenge.challengees) {
+      if (!(await isBotId(challengee.id))) {
+        list.push(sendCommandWithRetry(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { "pk": "USER", "sk": challengee.id },
+          UpdateExpression: "DELETE challenges_received :c",
+          ExpressionAttributeValues: { ":c": new Set([challenge.id]) }
+        })));
+      }
+    }
   } else if (
-      revoked
-      || challenge.numPlayers > 2 // Had to duplicate the standing challenge when someone accepted but there were still spots left. Remove the duplicated standing challenge
-      || expired
-      ) {
+    revoked
+    || challenge.numPlayers > 2 // Had to duplicate the standing challenge when someone accepted but there were still spots left. Remove the duplicated standing challenge
+    || expired
+  ) {
     // Remove from challenger
     console.log(`removing duplicated challenge ${standing ? challenge.metaGame + '#' + challenge.id : challenge.id} from challenger ${challenge.challenger.id}`);
     list.push(sendCommandWithRetry(new UpdateCommand({
@@ -3019,9 +3434,12 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
   if (standing || revoked || started) {
     playersToUpdate = challenge.players.filter((p: { id: any; }) => p.id != challenge.challenger.id);
   } else {
-    playersToUpdate = [{"id": quitter}];
+    playersToUpdate = [{ "id": quitter }];
   }
-  playersToUpdate.forEach((player: { id: string; }) => {
+  for (const player of playersToUpdate) {
+    if (await isBotId(player.id)) {
+      continue;
+    }
     console.log(`removing challenge ${standing ? challenge.metaGame + '#' + challenge.id : challenge.id} from ${player.id}`);
     list.push(sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -3029,7 +3447,7 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
       UpdateExpression: "DELETE challenges_accepted :c",
       ExpressionAttributeValues: { ":c": new Set([standing ? challenge.metaGame + '#' + challenge.id : challenge.id]) }
     })));
-  });
+  }
 
   // Remove challenge
   if (!standing) {
@@ -3068,7 +3486,7 @@ async function updateStandingChallengeCount(metaGame: any, diff: number) {
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "METAGAMES", "sk": "COUNTS" },
     ExpressionAttributeNames: { "#g": metaGame },
-    ExpressionAttributeValues: {":n": diff, ":zero": 0},
+    ExpressionAttributeValues: { ":n": diff, ":zero": 0 },
     UpdateExpression: "set #g.standingchallenges = if_not_exists(#g.standingchallenges, :zero) + :n",
   });
 
@@ -3131,7 +3549,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       playerIDs.push(userid);
       playerIDs.push(challenge.challenger.id);
     }
-    const playersFull = await getPlayers(playerIDs);
+    const playersFull = await getParticipants(playerIDs);
     let whoseTurn: string | boolean[] = "0";
     const info = gameinfo.get(challenge.metaGame);
     if (info.flags !== undefined && info.flags.includes('simultaneous')) {
@@ -3149,43 +3567,43 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     console.log(`Variants in the game engine: ${JSON.stringify(engine.variants)}`);
     const state = engine.serialize();
     const now = Date.now();
-    const gamePlayers = playersFull.map(p => { return {"id": p.id, "name": p.name, "time": challenge.clockStart * 3600000 }}) as User[];
+    const gamePlayers = playersFull.map(p => { return { "id": p.id, "name": p.name, "time": challenge.clockStart * 3600000 } }) as User[];
     if (info.flags !== undefined && info.flags.includes('perspective')) {
       let rot = 180;
       if (playerIDs.length > 2 && info.flags !== undefined && info.flags.includes('rotate90')) {
         rot = -90;
       }
       for (let i = 1; i < playerIDs.length; i++) {
-        gamePlayers[i].settings = {"rotate": i * rot};
+        gamePlayers[i].settings = { "rotate": i * rot };
       }
     }
     const addGame = ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: {
-          "pk": "GAME",
-          "sk": challenge.metaGame + "#0#" + gameId,
-          "id": gameId,
-          "metaGame": challenge.metaGame,
-          "numPlayers": challenge.numPlayers,
-          "rated": challenge.rated === true,
-          "players": gamePlayers,
-          "clockStart": challenge.clockStart,
-          "clockInc": challenge.clockInc,
-          "clockMax": challenge.clockMax,
-          "clockHard": challenge.clockHard,
-          "noExplore": challenge.noExplore || false,
-          "state": state,
-          "toMove": whoseTurn,
-          "lastMoveTime": now,
-          "gameStarted": now,
-          "variants": engine.variants,
-        }
-      }));
+      Item: {
+        "pk": "GAME",
+        "sk": challenge.metaGame + "#0#" + gameId,
+        "id": gameId,
+        "metaGame": challenge.metaGame,
+        "numPlayers": challenge.numPlayers,
+        "rated": challenge.rated === true,
+        "players": gamePlayers,
+        "clockStart": challenge.clockStart,
+        "clockInc": challenge.clockInc,
+        "clockMax": challenge.clockMax,
+        "clockHard": challenge.clockHard,
+        "noExplore": challenge.noExplore || false,
+        "state": state,
+        "toMove": whoseTurn,
+        "lastMoveTime": now,
+        "gameStarted": now,
+        "variants": engine.variants,
+      }
+    }));
     // this should be all the info we want to show on the "my games" summary page.
     const game = {
       "id": gameId,
       "metaGame": challenge.metaGame,
-      "players": playersFull.map(p => {return {"id": p.id, "name": p.name, "time": challenge.clockStart * 3600000}}),
+      "players": playersFull.map(p => { return { "id": p.id, "name": p.name, "time": challenge.clockStart * 3600000 } }),
       "clockHard": challenge.clockHard,
       "noExplore": challenge.noExplore || false,
       "toMove": whoseTurn,
@@ -3201,16 +3619,22 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
 
     // Update players
     playersFull.forEach(player => {
-      let games = player.games;
-      if (games === undefined)
-        games = [];
-      games.push(game);
+      if (player.isBot) {
+        return;
+      }
+      const games = [...(player.games ?? []) as Game[], game];
       const updatedGameIDs = [game.id];
       list.push(updateUserGames(player.id, player.gamesUpdate, updatedGameIDs, games));
     });
     try {
       await Promise.all(list);
-      return { metaGame: info.name, players: playersFull, simultaneous: info.flags !== undefined && info.flags.includes('simultaneous'), gameId };
+      await notifyRegisteredBotsTurn(challenge.metaGame, gameId);
+      return {
+        metaGame: info.name,
+        players: playersFull.filter(p => !p.isBot) as unknown as FullUser[],
+        simultaneous: info.flags !== undefined && info.flags.includes('simultaneous'),
+        gameId
+      };
     }
     catch (error) {
       logGetItemError(error);
@@ -3221,8 +3645,8 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     // Update challenge
     let newplayer: User | undefined;
     if (standing) {
-      const playerFull = await getPlayers([userid]);
-      newplayer = {"id" : playerFull[0].id, "name": playerFull[0].name };
+      const playerFull = await getParticipants([userid]);
+      newplayer = { "id": playerFull[0].id, "name": playerFull[0].name };
     } else {
       newplayer = challenge.challengees!.find(c => c.id == userid);
       if (!newplayer)
@@ -3234,32 +3658,32 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       players!.push(newplayer);
       updateChallenge = ddbDocClient.send(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Item: challenge
-        }));
+        Item: challenge
+      }));
     } else {
       // need to duplicate the challenge, because numPlayers > 2 and we have our first accepter
-      ({challengeId, work: updateChallenge} = await duplicateStandingChallenge(challenge, newplayer));
+      ({ challengeId, work: updateChallenge } = await duplicateStandingChallenge(challenge, newplayer));
     }
     // Update accepter
     const challengeValue = new Set([standing ? challenge.metaGame + '#' + challengeId : challengeId]);
 
-    // Delete from received challenges
-    const deleteFromReceived = sendCommandWithRetry(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USER", "sk": userid },
-      UpdateExpression: "DELETE challenges_received :c",
-      ExpressionAttributeValues: { ":c": challengeValue }
-    }));
+    const userUpdates: Promise<any>[] = [updateChallenge];
+    if (!(await isBotId(userid))) {
+      userUpdates.push(sendCommandWithRetry(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER", "sk": userid },
+        UpdateExpression: "DELETE challenges_received :c",
+        ExpressionAttributeValues: { ":c": challengeValue }
+      })));
+      userUpdates.push(sendCommandWithRetry(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER", "sk": userid },
+        UpdateExpression: "ADD challenges_accepted :c",
+        ExpressionAttributeValues: { ":c": challengeValue }
+      })));
+    }
 
-    // Add to accepted challenges (top-level only)
-    const addToAccepted = sendCommandWithRetry(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USER", "sk": userid },
-      UpdateExpression: "ADD challenges_accepted :c",
-      ExpressionAttributeValues: { ":c": challengeValue }
-    }));
-
-    await Promise.all([updateChallenge, deleteFromReceived, addToAccepted]);
+    await Promise.all(userUpdates);
     return;
   }
 }
@@ -3269,27 +3693,27 @@ async function duplicateStandingChallenge(challenge: { [x: string]: any; metaGam
   console.log("Duplicate challenge with newplayer", newplayer);
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: {
-        "pk": "STANDINGCHALLENGE#" + challenge.metaGame,
-        "sk": challengeId,
-        "id": challengeId,
-        "metaGame": challenge.metaGame,
-        "numPlayers": challenge.numPlayers,
-        "standing": challenge.standing,
-        "seating": challenge.seating,
-        "variants": challenge.variants,
-        "challenger": challenge.challenger,
-        "players": [challenge.challenger, newplayer], // users that have accepted
-        "challengees": [challenge.challenger, newplayer], // users that have accepted
-        "clockStart": challenge.clockStart,
-        "clockInc": challenge.clockInc,
-        "clockMax": challenge.clockMax,
-        "clockHard": challenge.clockHard,
-        "noExplore": challenge.noExplore || false,
-        "rated": challenge.rated,
-        "dateIssued": challenge.dateIssued,
-      }
-    }));
+    Item: {
+      "pk": "STANDINGCHALLENGE#" + challenge.metaGame,
+      "sk": challengeId,
+      "id": challengeId,
+      "metaGame": challenge.metaGame,
+      "numPlayers": challenge.numPlayers,
+      "standing": challenge.standing,
+      "seating": challenge.seating,
+      "variants": challenge.variants,
+      "challenger": challenge.challenger,
+      "players": [challenge.challenger, newplayer], // users that have accepted
+      "challengees": [challenge.challenger, newplayer], // users that have accepted
+      "clockStart": challenge.clockStart,
+      "clockInc": challenge.clockInc,
+      "clockMax": challenge.clockMax,
+      "clockHard": challenge.clockHard,
+      "noExplore": challenge.noExplore || false,
+      "rated": challenge.rated,
+      "dateIssued": challenge.dateIssued,
+    }
+  }));
 
   const updateStandingChallengeCnt = updateStandingChallengeCount(challenge.metaGame, 1);
 
@@ -3301,28 +3725,45 @@ async function duplicateStandingChallenge(challenge: { [x: string]: any; metaGam
     UpdateExpression: "add #cs :c",
   }));
 
-  return {challengeId, "work": Promise.all([addChallenge, updateStandingChallengeCnt, updateChallenger])};
+  return { challengeId, "work": Promise.all([addChallenge, updateStandingChallengeCnt, updateChallenger]) };
 }
 
 async function getPlayers(playerIDs: string[]) {
-  const list = playerIDs.map((id: string) =>
-    sendCommandWithRetry<GetCommandOutput>(
+  const players: FullUser[] = [];
+  for (const id of playerIDs) {
+    if (await isBotId(id)) {
+      const bot = await getBotRecord(id);
+      if (bot) {
+        players.push(botToFullUserStub(bot) as FullUser);
+      }
+      continue;
+    }
+    const playerData = await sendCommandWithRetry<GetCommandOutput>(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
           "pk": "USER", "sk": id
         },
       })
-    )
-  );
-  const players = await Promise.all(list);
-  return players.map(player => player.Item as FullUser);
+    );
+    if (playerData.Item) {
+      players.push(playerData.Item as FullUser);
+    }
+  }
+  return players;
 }
 
 async function getPlayersSlowly(playerIDs: string[]) {
   const players: FullUser[] = [];
   for (const id of playerIDs) {
     try {
+      if (await isBotId(id)) {
+        const bot = await getBotRecord(id);
+        if (bot) {
+          players.push(botToFullUserStub(bot) as FullUser);
+        }
+        continue;
+      }
       const playerData = await ddbDocClient.send(
         new GetCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -3331,7 +3772,9 @@ async function getPlayersSlowly(playerIDs: string[]) {
           },
         })
       );
-      players.push(playerData.Item as FullUser);
+      if (playerData.Item) {
+        players.push(playerData.Item as FullUser);
+      }
     } catch (error) {
       logGetItemError(error);
       console.log(`Unable to get player ${id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
@@ -3341,39 +3784,82 @@ async function getPlayersSlowly(playerIDs: string[]) {
   return players;
 }
 
+async function scheduleRatingUpdates(
+  game: FullGame,
+  player: { id: string; name: string },
+  ind: number,
+  newRatings: { [metaGame: string]: Rating }[] | null,
+  list: Promise<any>[]
+) {
+  if (newRatings === null || await isBotId(player.id)) {
+    return;
+  }
+  list.push(
+    sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USER", "sk": player.id },
+      ExpressionAttributeValues: { ":rs": newRatings[ind] },
+      UpdateExpression: "set ratings = :rs"
+    }))
+  );
+
+  list.push(sendCommandWithRetry<PutCommandOutput>(new PutCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Item: {
+      "pk": "RATINGS#" + game.metaGame,
+      "sk": player.id,
+      "id": player.id,
+      "name": player.name,
+      "rating": newRatings[ind][game.metaGame]
+    }
+  })));
+
+  list.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: { "pk": "METAGAMES", "sk": "COUNTS" },
+    ExpressionAttributeNames: { "#gr": game.metaGame + "_ratings" },
+    ExpressionAttributeValues: { ":p": new Set([player.id]) },
+    UpdateExpression: "add #gr :p",
+  })));
+}
+
 async function addToGameLists(type: string, game: Game, now: number, keepgame: boolean) {
   const work: Promise<any>[] = [];
   const sk = now + "#" + game.id;
   if (type === "COMPLETEDGAMES" && keepgame) {
     work.push(sendCommandWithRetry(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: {
-          "pk": type,
-          "sk": sk,
-          ...game}
-      })));
+      Item: {
+        "pk": type,
+        "sk": sk,
+        ...game
+      }
+    })));
     work.push(sendCommandWithRetry(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: {
-          "pk": type + "#" + game.metaGame,
-          "sk": sk,
-          ...game}
-      })));
+      Item: {
+        "pk": type + "#" + game.metaGame,
+        "sk": sk,
+        ...game
+      }
+    })));
     game.players.forEach((player: { id: string; }) => {
       work.push(sendCommandWithRetry(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Item: {
-            "pk": type + "#" + player.id,
-            "sk": sk,
-            ...game}
-        })));
+        Item: {
+          "pk": type + "#" + player.id,
+          "sk": sk,
+          ...game
+        }
+      })));
       work.push(sendCommandWithRetry(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Item: {
-            "pk": type + "#" + game.metaGame + "#" + player.id,
-            "sk": sk,
-            ...game}
-        })));
+        Item: {
+          "pk": type + "#" + game.metaGame + "#" + player.id,
+          "sk": sk,
+          ...game
+        }
+      })));
     });
   }
   if (type === "CURRENTGAMES") {
@@ -3381,7 +3867,7 @@ async function addToGameLists(type: string, game: Game, now: number, keepgame: b
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": game.metaGame },
-      ExpressionAttributeValues: {":n": 1, ":zero": 0},
+      ExpressionAttributeValues: { ":n": 1, ":zero": 0 },
       UpdateExpression: "set #g.currentgames = if_not_exists(#g.currentgames, :zero) + :n"
     });
 
@@ -3407,10 +3893,10 @@ async function addToGameLists(type: string, game: Game, now: number, keepgame: b
     );
   } else {
     let update = "set #g.currentgames = if_not_exists(#g.currentgames, :zero) + :nm";
-    const eavObj: {[k: string]: number} = {":nm": -1, ":zero": 0};
+    const eavObj: { [k: string]: number } = { ":nm": -1, ":zero": 0 };
     if (keepgame) {
-        update += ", #g.completedgames = if_not_exists(#g.completedgames, :zero) + :n";
-        eavObj[":n"] = 1
+      update += ", #g.completedgames = if_not_exists(#g.completedgames, :zero) + :n";
+      eavObj[":n"] = 1
     }
     work.push(sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -3459,14 +3945,15 @@ function deleteFromGameLists(type: string, game: FullGame) {
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": game.metaGame },
-      ExpressionAttributeValues: {":n": -1, ":zero": 0},
+      ExpressionAttributeValues: { ":n": -1, ":zero": 0 },
       UpdateExpression: "set #g.currentgames = if_not_exists(#g.currentgames, :zero) + :n"
     })));
   }
   return Promise.all(work);
 }
 
-async function submitMove(userid: string, pars: { id: string, move: string, draw: string, metaGame: string, cbit: number, moveNumber?: number, opponentId?: string,
+async function submitMove(userid: string, pars: {
+  id: string, move: string, draw: string, metaGame: string, cbit: number, moveNumber?: number, opponentId?: string,
   exploration?: Exploration[]
 }) {
   if (pars.cbit !== 0) {
@@ -3548,7 +4035,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
         resign(userid, engine, game);
       } else if (pars.move === "timeout") {
         timeout(userid, engine, game);
-      } else if (pars.move === "" && pars.draw === "drawaccepted"){
+      } else if (pars.move === "" && pars.draw === "drawaccepted") {
         drawaccepted(userid, engine, game, simultaneous);
       } else if (simultaneous) {
         applySimultaneousMove(userid, pars.move, engine as GameBaseSimultaneous, game);
@@ -3584,7 +4071,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
     else
       player.time = player.time! - timeUsed + game.clockInc * 3600000;
-    if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
+    if (player.time > game.clockMax * 3600000) player.time = game.clockMax * 3600000;
     // Apply time increments for players whose moves were auto-applied (forced moves or premoves)
     for (let i = 0; i < autoMovesPerPlayer.length; i++) {
       if (autoMovesPerPlayer[i] > 0) {
@@ -3595,7 +4082,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
     // console.log("players", game.players);
     const playerIDs = game.players.map((p: { id: any; }) => p.id);
     // TODO: We are updating players and their games. This should be put in some kind of critical section!
-    const players = await getPlayers(playerIDs);
+    const players = await getParticipants(playerIDs);
 
     // this should be all the info we want to show on the "my games" summary page.
     const playerGame = {
@@ -3610,19 +4097,19 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       "variants": engine.variants
     } as Game;
     if (engine.gameover) {
-        playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
-        playerGame.winner = engine.winner;
+      playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
+      playerGame.winner = engine.winner;
     }
-    let newRatings: {[metaGame: string] : Rating}[] | null = null;
+    let newRatings: { [metaGame: string]: Rating }[] | null = null;
     if ((game.toMove === "" || game.toMove === null)) {
-      newRatings = updateRatings(game, players);
-      list.push(addToGameLists("COMPLETEDGAMES", {...playerGame, commented: game.commented}, timestamp, game.numMoves !== undefined && game.numMoves > game.numPlayers));
+      newRatings = updateRatings(game, players as unknown as FullUser[]);
+      list.push(addToGameLists("COMPLETEDGAMES", { ...playerGame, commented: game.commented }, timestamp, game.numMoves !== undefined && game.numMoves > game.numPlayers));
       // delete at old sk
       list.push(sendCommandWithRetry<DeleteCommandOutput>(
         new DeleteCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
-            "pk":"GAME",
+            "pk": "GAME",
             "sk": game.sk
           }
         })
@@ -3638,58 +4125,62 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
        */
       // TODO: Find a way to schedule deletions
       // delete associated notes
-    //   try {
-    //     const notesData = await ddbDocClient.send(
-    //         new QueryCommand({
-    //           TableName: process.env.ABSTRACT_PLAY_TABLE,
-    //           KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-    //           ExpressionAttributeValues: { ":pk": "NOTE", ":sk": game.id },
-    //           ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-    //           ProjectionExpression: "#pk, #sk"
-    //     }));
-    //     if ( (notesData.Items) && (notesData.Items.length > 0) ) {
-    //         const notesList = notesData.Items as Note[];
-    //         for (const note of notesList) {
-    //             list.push(ddbDocClient.send(
-    //                 new DeleteCommand({
-    //                   TableName: process.env.ABSTRACT_PLAY_TABLE,
-    //                   Key: {
-    //                     "pk": note.pk,
-    //                     "sk": note.sk
-    //                   }
-    //                 })
-    //             ));
-    //         }
-    //     }
-    //   } catch (err) {
-    //     logGetItemError(err);
-    //     return formatReturnError('Unable to process submit move');
-    //   }
+      //   try {
+      //     const notesData = await ddbDocClient.send(
+      //         new QueryCommand({
+      //           TableName: process.env.ABSTRACT_PLAY_TABLE,
+      //           KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+      //           ExpressionAttributeValues: { ":pk": "NOTE", ":sk": game.id },
+      //           ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      //           ProjectionExpression: "#pk, #sk"
+      //     }));
+      //     if ( (notesData.Items) && (notesData.Items.length > 0) ) {
+      //         const notesList = notesData.Items as Note[];
+      //         for (const note of notesList) {
+      //             list.push(ddbDocClient.send(
+      //                 new DeleteCommand({
+      //                   TableName: process.env.ABSTRACT_PLAY_TABLE,
+      //                   Key: {
+      //                     "pk": note.pk,
+      //                     "sk": note.sk
+      //                   }
+      //                 })
+      //             ));
+      //         }
+      //     }
+      //   } catch (err) {
+      //     logGetItemError(err);
+      //     return formatReturnError('Unable to process submit move');
+      //   }
       if (game.tournament !== undefined) {
-        list.push(tournamentUpdates(game, players, pars.move === "timeout" ? parseInt(game.toMove) : undefined));
+        list.push(tournamentUpdates(game, players as unknown as FullUser[], pars.move === "timeout" ? parseInt(game.toMove) : undefined));
       }
       if (game.event !== undefined) {
-        const winners = engine.winner.map(n => players[n-1]).map (p => p.id);
-        list.push(eventUpdates({eventid: game.event, gameid: pars.id, winner: winners}))
+        const winners = engine.winner.map(n => players[n - 1]).map(p => p.id);
+        list.push(eventUpdates({ eventid: game.event, gameid: pars.id, winner: winners }))
       }
     }
     game.lastMoveTime = timestamp;
     const updateGame = sendCommandWithRetry<PutCommandOutput>(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: game
-      }));
+      Item: game
+    }));
     list.push(updateGame);
     console.log("Scheduled update to game");
     // Update players
-    players.forEach((player, ind) => {
+    for (let ind = 0; ind < players.length; ind++) {
+      const player = players[ind];
+      if (player.isBot) {
+        continue;
+      }
       const games: Game[] = [];
       const updatedGames: string[] = [];
       playerGame.toMove = game.toMove;
-      player.games.forEach(g => {
+      (player.games as Game[] ?? []).forEach(g => {
         if (g.id === playerGame.id) {
           if (player.id === userid) {
             if (game.toMove === "" || game.toMove === null)
-              games.push({...playerGame, seen: Date.now()});
+              games.push({ ...playerGame, seen: Date.now() });
             else
               games.push(playerGame);
           }
@@ -3703,65 +4194,36 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
       });
       list.push(updateUserGames(player.id, player.gamesUpdate, updatedGames, games));
       console.log(`Scheduled update to player ${player.id}, ${player.name}, with games`, games);
-      if (newRatings !== null) {
-        list.push(
-          sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USER", "sk": player.id },
-            ExpressionAttributeValues: { ":rs": newRatings[ind] },
-            UpdateExpression: "set ratings = :rs"
-          }))
-        );
-
-        list.push(sendCommandWithRetry<PutCommandOutput>(new PutCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Item: {
-            "pk": "RATINGS#" + game.metaGame,
-            "sk": player.id,
-            "id": player.id,
-            "name": player.name,
-            "rating": newRatings[ind][game.metaGame]
-          }
-        })));
-        console.log(`Scheduled update ratings`, newRatings[ind][game.metaGame]);
-
-        list.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-          ExpressionAttributeNames: { "#gr": game.metaGame + "_ratings" },
-          ExpressionAttributeValues: { ":p": new Set([player.id]) },
-          UpdateExpression: "add #gr :p",
-        })));
-        console.log(`Scheduled update to metagame ratings counts with player ${player.id}`);
-      }
-    });
+      await scheduleRatingUpdates(game, player, ind, newRatings, list);
+    }
 
     if (simultaneous)
       game.partialMove = game.players.map((p: User, i: number) => (p.id === userid ? game.partialMove!.split(',')[i] : '')).join(',');
 
-    list.push(sendSubmittedMoveEmails(game, players, simultaneous, newRatings));
+    list.push(sendSubmittedMoveEmails(game, players.filter(p => !p.isBot) as unknown as FullUser[], simultaneous, newRatings));
     console.log("Scheduled emails");
 
     await realPingBot(game.metaGame, game.id, game);
+    await notifyRegisteredBotsTurn(game.metaGame, game.id, game);
     await Promise.all(list);
 
     // broadcasting that state has updated
-    await wsBroadcast("game", {"meta": pars.metaGame, "id": pars.id}, [userid]);
+    await wsBroadcast("game", { "meta": pars.metaGame, "id": pars.id }, [userid]);
 
     // TODO: Rehydrate state, run it through the stripper, and then replace with the new, stripped state
     if (game.gameEnded === undefined) {
-        const engine = GameFactory(game.metaGame, game.state);
-        if (engine === undefined) {
-            throw new Error(`Could not rehydrate the state for id "${pars.id}", meta "${pars.metaGame}".`);
+      const engine = GameFactory(game.metaGame, game.state);
+      if (engine === undefined) {
+        throw new Error(`Could not rehydrate the state for id "${pars.id}", meta "${pars.metaGame}".`);
+      }
+      if (!engine.gameover) {
+        let player: number | undefined;
+        const pidx = game.players.findIndex(p => p.id === userid);
+        if (pidx >= 0) {
+          player = pidx + 1;
         }
-        if (!engine.gameover) {
-            let player: number|undefined;
-            const pidx = game.players.findIndex(p => p.id === userid);
-            if (pidx >= 0) {
-                player = pidx + 1;
-            }
-            game.state = engine.serialize({strip: true, player});
-        }
+        game.state = engine.serialize({ strip: true, player });
+      }
     }
 
     console.log("All updates complete");
@@ -3777,7 +4239,7 @@ async function submitMove(userid: string, pars: { id: string, move: string, draw
   }
 }
 
-async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: number | undefined ) {
+async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: number | undefined) {
   let work: Promise<any>[] = [];
   for (let i = 0; i < 2; i++) {
     const player = players[i];
@@ -3835,8 +4297,8 @@ function updateRatings(game: FullGame, players: FullUser[]) {
     return null;
   if (game.numPlayers !== 2)
     throw new Error(`Only 2 player games can be rated, game ${game.id}`);
-  let rating1: Rating = {rating: 1200, N: 0, wins: 0, draws: 0}
-  let rating2: Rating = {rating: 1200, N: 0, wins: 0, draws: 0}
+  let rating1: Rating = { rating: 1200, N: 0, wins: 0, draws: 0 }
+  let rating2: Rating = { rating: 1200, N: 0, wins: 0, draws: 0 }
   if (players[0].ratings !== undefined && players[0].ratings[game.metaGame] !== undefined)
     rating1 = players[0].ratings[game.metaGame];
   if (players[1].ratings !== undefined && players[1].ratings[game.metaGame] !== undefined)
@@ -3884,15 +4346,15 @@ function updateRatings(game: FullGame, players: FullUser[]) {
 function getK(N: number) {
   return (
     N < 10 ? 40
-    : N < 20 ? 30
-    : N < 40 ? 25
-    : 20
+      : N < 20 ? 30
+        : N < 40 ? 25
+          : 20
   );
 }
 
 async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], simultaneous: any, newRatings: any[] | null) {
   await initi18n('en');
-  const work: Promise<any>[] =  [];
+  const work: Promise<any>[] = [];
   if (game.toMove !== '') {
     let playerIds: any[] = [];
     if (!simultaneous) {
@@ -3907,11 +4369,11 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
     for (const player of players) {
       await changeLanguageForPlayer(player);
       work.push(sendPush({
-          userId: player.id,
-          topic: "yourturn",
-          title: i18n.t("PUSH.titles.yourturn"),
-          body: i18n.t("YourMoveBody", { metaGame }),
-          url: `/move/${game.metaGame}/0/${game.id}`,
+        userId: player.id,
+        topic: "yourturn",
+        title: i18n.t("PUSH.titles.yourturn"),
+        body: i18n.t("YourMoveBody", { metaGame }),
+        url: `/move/${game.metaGame}/0/${game.id}`,
       }));
     }
   } else {
@@ -3924,57 +4386,57 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
       throw new Error(`Unknown metaGame ${game.metaGame}`);
     const scores = [];
     if (gameinfo.get(game.metaGame).flags.includes("scores")) {
-        for (let p = 1; p <= engine.numplayers; p++) {
-            scores.push(engine.getPlayerScore(p));
-        }
+      for (let p = 1; p <= engine.numplayers; p++) {
+        scores.push(engine.getPlayerScore(p));
+      }
     }
 
     for (const [ind, player] of players.entries()) {
-        await changeLanguageForPlayer(player);
-        // The Game Over email has a few components:
-        const body = [];
-        //   - Initial line
-        body.push(i18n.t("GameOverBody", {metaGame}));
-        //   - Winner statement
-        let result = "lose";
-        if (engine.winner.length > 1) {
-            result = "draw";
-        } else if (engine.winner.length === 1) {
-            const winner = playerIds[engine.winner[0] - 1];
-            if (winner === player.id) {
-                result = "win";
-            }
+      await changeLanguageForPlayer(player);
+      // The Game Over email has a few components:
+      const body = [];
+      //   - Initial line
+      body.push(i18n.t("GameOverBody", { metaGame }));
+      //   - Winner statement
+      let result = "lose";
+      if (engine.winner.length > 1) {
+        result = "draw";
+      } else if (engine.winner.length === 1) {
+        const winner = playerIds[engine.winner[0] - 1];
+        if (winner === player.id) {
+          result = "win";
         }
-        body.push(i18n.t("GameOverResult", {context: result}));
-        //   - Rating, if applicable
-        if (newRatings != null) {
-            body.push(i18n.t("GameOverRating", {"rating" : `${Math.round(newRatings[ind][game.metaGame].rating)}` }));
-        }
-        //   - Final scores, if applicable
-        if (scores.length > 0) {
-            body.push(i18n.t("GameOverScores", {scores: scores.join(", ")}))
-        }
-        //   - Direct link to game
-        body.push(i18n.t("GameOverLink", {metaGame: game.metaGame, gameID: game.id}));
+      }
+      body.push(i18n.t("GameOverResult", { context: result }));
+      //   - Rating, if applicable
+      if (newRatings != null) {
+        body.push(i18n.t("GameOverRating", { "rating": `${Math.round(newRatings[ind][game.metaGame].rating)}` }));
+      }
+      //   - Final scores, if applicable
+      if (scores.length > 0) {
+        body.push(i18n.t("GameOverScores", { scores: scores.join(", ") }))
+      }
+      //   - Direct link to game
+      body.push(i18n.t("GameOverLink", { metaGame: game.metaGame, gameID: game.id }));
 
-        if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-            if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameEnd) ) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), body.join(" "));
-                work.push(sesClient.send(comm));
-            } else {
-                console.log(`Player ${player.name} (${player.id}) has elected to not receive game end notifications.`);
-            }
+      if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
+        if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameEnd)) {
+          const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), body.join(" "));
+          work.push(sesClient.send(comm));
         } else {
-            console.log(`No verified email address found for ${player.name} (${player.id})`);
+          console.log(`Player ${player.name} (${player.id}) has elected to not receive game end notifications.`);
         }
-        // push notifications are sent no matter what
-        work.push(sendPush({
-            userId: player.id,
-            topic: "ended",
-            title: i18n.t("PUSH.titles.ended"),
-            body: body.join(" "),
-            url: `/move/${game.metaGame}/1/${game.id}`,
-        }));
+      } else {
+        console.log(`No verified email address found for ${player.name} (${player.id})`);
+      }
+      // push notifications are sent no matter what
+      work.push(sendPush({
+        userId: player.id,
+        topic: "ended",
+        title: i18n.t("PUSH.titles.ended"),
+        body: body.join(" "),
+        url: `/move/${game.metaGame}/1/${game.id}`,
+      }));
     }
   }
   return Promise.all(work);
@@ -3995,14 +4457,14 @@ function resign(userid: any, engine: GameBase, game: FullGame) {
     const flags = gameinfo.get(game.metaGame).flags;
     const simultaneous = flags !== undefined && flags.includes('simultaneous');
     if (simultaneous) {
-        applySimultaneousMove(userid, "resign", engine as GameBaseSimultaneous, game);
+      applySimultaneousMove(userid, "resign", engine as GameBaseSimultaneous, game);
     } else {
-        applyMove(userid, "resign", -1, engine, game, flags);
+      applyMove(userid, "resign", -1, engine, game, flags);
     }
   }
 }
 
-function timeout(userid: string, engine: GameBase|GameBaseSimultaneous, game: FullGame) {
+function timeout(userid: string, engine: GameBase | GameBaseSimultaneous, game: FullGame) {
   if (game.toMove === '')
     throw new Error("Can't timeout a game that has already ended");
   // Find player that timed out
@@ -4015,7 +4477,8 @@ function timeout(userid: string, engine: GameBase|GameBaseSimultaneous, game: Fu
       if (p && game.players[i].time! - elapsed < minTime) {
         minTime = game.players[i].time! - elapsed;
         minIndex = i;
-      }});
+      }
+    });
     if (minIndex !== -1) {
       loser = minIndex;
     } else {
@@ -4039,9 +4502,9 @@ function timeout(userid: string, engine: GameBase|GameBaseSimultaneous, game: Fu
     const flags = gameinfo.get(game.metaGame).flags;
     const simultaneous = flags !== undefined && flags.includes('simultaneous');
     if (simultaneous) {
-        applySimultaneousMove(loserid, "timeout", engine as GameBaseSimultaneous, game);
+      applySimultaneousMove(loserid, "timeout", engine as GameBaseSimultaneous, game);
     } else {
-        applyMove(loserid, "timeout", -1, engine, game, flags);
+      applyMove(loserid, "timeout", -1, engine, game, flags);
     }
   }
 }
@@ -4093,7 +4556,8 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
         if (p && game.players[i].time! - elapsed < minTime) {
           minTime = game.players[i].time! - elapsed;
           minIndex = i;
-        }});
+        }
+      });
       if (minIndex !== -1) {
         player = minIndex;
       } else {
@@ -4145,7 +4609,7 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
     new DeleteCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: {
-        "pk":"GAME",
+        "pk": "GAME",
         "sk": game.sk
       }
     })
@@ -4155,15 +4619,16 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
 
   work.push(ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: game
-    })));
+    Item: game
+  })));
 
-  const newRatings = updateRatings(game, players);
+  const newRatings = updateRatings(game, players as unknown as FullUser[]);
 
   // Update players
-  players.forEach((player, ind) => {
+  for (let ind = 0; ind < players.length; ind++) {
+    const player = players[ind];
     const games: Game[] = [];
-    player.games.forEach(g => {
+    (player.games ?? []).forEach(g => {
       if (g.id === playerGame.id)
         games.push(playerGame);
       else
@@ -4171,42 +4636,16 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
     });
     const updatedGameIds = [playerGame.id];
     work.push(updateUserGames(player.id, player.gamesUpdate, updatedGameIds, games));
-    if (newRatings !== null) {
-      work.push(ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USER", "sk": player.id },
-        ExpressionAttributeValues: { ":rs": newRatings[ind] },
-        UpdateExpression: "set ratings = :rs"
-      })));
-
-      work.push(ddbDocClient.send(new PutCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: {
-          "pk": "RATINGS#" + game.metaGame,
-          "sk": player.id,
-          "id": player.id,
-          "name": player.name,
-          "rating": newRatings[ind][game.metaGame]
-        }
-      })));
-
-      work.push(ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-        ExpressionAttributeNames: { "#gr": game.metaGame + "_ratings" },
-        ExpressionAttributeValues: {":p": new Set([player.id])},
-        UpdateExpression: "add #gr :p",
-      })));
-    }
-  });
+    await scheduleRatingUpdates(game, player, ind, newRatings, work);
+  }
   if (game.tournament !== undefined) {
-    work.push(tournamentUpdates(game, players, player));
+    work.push(tournamentUpdates(game, players as unknown as FullUser[], player));
   }
   await Promise.all(work);
   return game;
 }
 
-async function checkForAbandonedGame(userid: string, pars: { id: string, metaGame: string}) {
+async function checkForAbandonedGame(userid: string, pars: { id: string, metaGame: string }) {
   let data: any;
   try {
     data = await ddbDocClient.send(
@@ -4275,7 +4714,7 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
       new DeleteCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: {
-          "pk":"GAME",
+          "pk": "GAME",
           "sk": game.sk
         }
       })
@@ -4285,13 +4724,13 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
 
     work.push(ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: game
-      })));
+      Item: game
+    })));
 
     // Update players
-    players.forEach((player, ind) => {
+    for (const player of players) {
       const games: Game[] = [];
-      player.games.forEach(g => {
+      (player.games ?? []).forEach(g => {
         if (g.id === playerGame.id)
           games.push(playerGame);
         else
@@ -4299,7 +4738,7 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
       });
       const updatedGameIds = [playerGame.id];
       work.push(updateUserGames(player.id, player.gamesUpdate, updatedGameIds, games));
-    });
+    }
     await Promise.all(work);
     return {
       statusCode: 200,
@@ -4313,7 +4752,7 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
   }
 }
 
-async function checkForTimeloss(userid: string, pars: { id: string, metaGame: string}) {
+async function checkForTimeloss(userid: string, pars: { id: string, metaGame: string }) {
   try {
     const game = await timeloss(true, -1, pars.id, pars.metaGame, Date.now());
     return {
@@ -4353,7 +4792,7 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBaseSim
     // check if current player is eliminated and insert a blank move
     // all simultaneous games should accept the character U+0091 as a blank move for eliminated players
     if (engine.isEliminated(i + 1)) {
-        moves[i] = '\u0091';
+      moves[i] = '\u0091';
     }
     if (moves[i] !== '')
       cnt++;
@@ -4365,7 +4804,7 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBaseSim
     // not a complete "turn" yet, just validate and save the new partial move
     game.partialMove = moves.join(',');
     console.log(game.partialMove);
-    engine.move(game.partialMove, {partial: true});
+    engine.move(game.partialMove, { partial: true });
   }
   else {
     // full move.
@@ -4378,7 +4817,7 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBaseSim
       game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
     }
     else {
-        game.toMove = game.players.map((p, i) => ! engine.isEliminated(i + 1));
+      game.toMove = game.players.map((p, i) => !engine.isEliminated(i + 1));
     }
   }
 }
@@ -4432,7 +4871,7 @@ function applyMove(
   flags: string[],
   opponentExploration: Exploration[] | null = null,
   myExploration: Exploration[] | null = null
-): {autoMoves: number, autoMovesPerPlayer: number[], work: Promise<any>[]} {
+): { autoMoves: number, autoMovesPerPlayer: number[], work: Promise<any>[] } {
   // non simultaneous move game.
   if (game.players[parseInt(game.toMove as string)].id !== userid) {
     throw new Error('It is not your turn!');
@@ -4493,29 +4932,29 @@ function applyMove(
       // save back the updated exploration for player 0
       work.push(sendCommandWithRetry<PutCommandOutput>(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Item: {
-            "pk": "GAMEEXPLORATION#" + game.id,
-            "sk": game.players[0].id + "#" + (moveNumber + 1 + autoMoves),
-            "user": game.players[0].id,
-            "game": game.id,
-            "move": (moveNumber + 1 + autoMoves),
-            "tree": JSON.stringify(explorations[0])
-          }
-        })));
+        Item: {
+          "pk": "GAMEEXPLORATION#" + game.id,
+          "sk": game.players[0].id + "#" + (moveNumber + 1 + autoMoves),
+          "user": game.players[0].id,
+          "game": game.id,
+          "move": (moveNumber + 1 + autoMoves),
+          "tree": JSON.stringify(explorations[0])
+        }
+      })));
     }
     if (explorations[1] && explorations[1].length > 0) {
       // save back the updated exploration for player 1
       work.push(sendCommandWithRetry<PutCommandOutput>(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Item: {
-            "pk": "GAMEEXPLORATION#" + game.id,
-            "sk": game.players[1].id + "#" + (moveNumber + 1 + autoMoves),
-            "user": game.players[1].id,
-            "game": game.id,
-            "move": (moveNumber + 1 + autoMoves),
-            "tree": JSON.stringify(explorations[1])
-          }
-        })));
+        Item: {
+          "pk": "GAMEEXPLORATION#" + game.id,
+          "sk": game.players[1].id + "#" + (moveNumber + 1 + autoMoves),
+          "user": game.players[1].id,
+          "game": game.id,
+          "move": (moveNumber + 1 + autoMoves),
+          "tree": JSON.stringify(explorations[1])
+        }
+      })));
     }
   }
 
@@ -4525,12 +4964,12 @@ function applyMove(
     game.winner = engine.winner;
     game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   } else {
-    if ( (! ("currplayer" in engine)) || (engine.currplayer === undefined) || (engine.currplayer === null) || (typeof engine.currplayer !== "number") ) {
-        throw new Error("The engine must provide a current player for `applyMove()` to be able to function.");
+    if ((!("currplayer" in engine)) || (engine.currplayer === undefined) || (engine.currplayer === null) || (typeof engine.currplayer !== "number")) {
+      throw new Error("The engine must provide a current player for `applyMove()` to be able to function.");
     }
     game.toMove = `${engine.currplayer - 1}`;
   }
-  return {autoMoves, autoMovesPerPlayer, work};
+  return { autoMoves, autoMovesPerPlayer, work };
 }
 
 function isInterestingComment(comment: string): boolean {
@@ -4583,7 +5022,7 @@ function isInterestingComment(comment: string): boolean {
 async function updateLastChatForPlayers(
   gameId: string,
   metaGame: string,
-  players: {[k: string]: any; id: string}[],
+  players: { [k: string]: any; id: string }[],
   currentUserId: string,
   allowReAdd = false  // Only true for completed games via saveExploration
 ) {
@@ -4596,6 +5035,9 @@ async function updateLastChatForPlayers(
   const now = Date.now();
 
   for (const pid of players.map(p => p.id)) {
+    if (await isBotId(pid)) {
+      continue;
+    }
     let data: any;
     let user: FullUser | undefined;
     try {
@@ -4693,9 +5135,9 @@ async function updateLastChatForPlayers(
   }
 }
 
-async function submitComment(userid: string, pars: { id: string; players?: {[k: string]: any; id: string}[]; metaGame?: string, comment: string; moveNumber: number; }) {
+async function submitComment(userid: string, pars: { id: string; players?: { [k: string]: any; id: string }[]; metaGame?: string, comment: string; moveNumber: number; }) {
   // reject empty comments
-  if ( (pars.comment.length === 0) || (/^\s*$/.test(pars.comment) ) ) {
+  if ((pars.comment.length === 0) || (/^\s*$/.test(pars.comment))) {
     return formatReturnError(`Refusing to accept blank comment.`);
   }
   let data: any;
@@ -4718,24 +5160,24 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
   console.log(commentsData);
   let comments: Comment[];
   if (commentsData === undefined)
-    comments= []
+    comments = []
   else
     comments = commentsData.comments;
 
   // Check if there were any interesting comments before adding the new one
   const hadInterestingCommentBefore = comments.some(c => isInterestingComment(c.comment));
 
-  if (comments.reduce((s: number, a: Comment) => s + 110 + Buffer.byteLength(a.comment,'utf8'), 0) < 360000) {
-    const comment: Comment = {"comment": pars.comment.substring(0, 4000), "userId": userid, "moveNumber": pars.moveNumber, "timeStamp": Date.now()};
+  if (comments.reduce((s: number, a: Comment) => s + 110 + Buffer.byteLength(a.comment, 'utf8'), 0) < 360000) {
+    const comment: Comment = { "comment": pars.comment.substring(0, 4000), "userId": userid, "moveNumber": pars.moveNumber, "timeStamp": Date.now() };
     comments.push(comment);
     await ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: {
-          "pk": "GAMECOMMENTS",
-          "sk": pars.id,
-          "comments": comments
-        }
-      }));
+      Item: {
+        "pk": "GAMECOMMENTS",
+        "sk": pars.id,
+        "comments": comments
+      }
+    }));
 
     // Check if the new comment is interesting
     const newCommentIsInteresting = isInterestingComment(comment.comment);
@@ -4776,11 +5218,11 @@ async function submitComment(userid: string, pars: { id: string; players?: {[k: 
 
   if (pars.metaGame) {
     // broadcasting that state has updated
-    await wsBroadcast("game", {"meta": pars.metaGame, "id": pars.id}, [userid]);
+    await wsBroadcast("game", { "meta": pars.metaGame, "id": pars.id }, [userid]);
   }
 }
 
-async function saveExploration(userid: string, pars: { public: boolean, game: string; metaGame: string; move: number; version: number; tree: Exploration; updateCommentedFlag?: number; gameEnded?: number; updateLastChat?: boolean; players?: {[k: string]: any; id: string}[]; }) {
+async function saveExploration(userid: string, pars: { public: boolean, game: string; metaGame: string; move: number; version: number; tree: Exploration; updateCommentedFlag?: number; gameEnded?: number; updateLastChat?: boolean; players?: { [k: string]: any; id: string }[]; }) {
   // If we need to update the commented flag for a completed game
   if (pars.updateCommentedFlag !== undefined && pars.public && pars.gameEnded !== undefined) {
     // Update the commented flag in COMPLETEDGAMES
@@ -4816,15 +5258,15 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
   if (!pars.public) {
     await ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: {
-          "pk": "GAMEEXPLORATION#" + pars.game,
-          "sk": userid + "#" + pars.move,
-          "user": userid,
-          "game": pars.game,
-          "move": pars.move,
-          "tree": JSON.stringify(pars.tree)
-        }
-      }));
+      Item: {
+        "pk": "GAMEEXPLORATION#" + pars.game,
+        "sk": userid + "#" + pars.move,
+        "user": userid,
+        "game": pars.game,
+        "move": pars.move,
+        "tree": JSON.stringify(pars.tree)
+      }
+    }));
   } else {
     try {
       console.log("Trying to update public exploration at key " + JSON.stringify({ "pk": "PUBLICEXPLORATION#" + pars.game, "sk": `${pars.move}` }));
@@ -4915,7 +5357,7 @@ async function getExploration(userid: string, pars: { game: string; move: number
         Key: {
           "pk": "GAMEEXPLORATION#" + pars.game,
           "sk": userid + "#" + pars.move
-          },
+        },
       })
     );
   }
@@ -4923,7 +5365,7 @@ async function getExploration(userid: string, pars: { game: string; move: number
     logGetItemError(error);
     return formatReturnError(`Unable to get exploration data for game ${pars.game} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
-  const trees = [exploration.Item,,]; // return as an array as was done in the past. Not really needed, but makes transition safer.
+  const trees = [exploration.Item, ,]; // return as an array as was done in the past. Not really needed, but makes transition safer.
   return {
     statusCode: 200,
     body: JSON.stringify(trees),
@@ -4998,7 +5440,7 @@ async function getPublicExploration(pars: { game: string }) {
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         KeyConditionExpression: "#pk = :pk",
         ExpressionAttributeValues: { ":pk": "PUBLICEXPLORATION#" + pars.game },
-        ExpressionAttributeNames: { "#pk": "pk"}
+        ExpressionAttributeNames: { "#pk": "pk" }
       }));
   }
   catch (error) {
@@ -5009,7 +5451,7 @@ async function getPublicExploration(pars: { game: string }) {
     return;
   }
   console.log("Got public exploration data", data.Items);
-  const trees = data.Items.map((d: any) => {return {move: d.sk, version: d.version, tree: d.tree}});
+  const trees = data.Items.map((d: any) => { return { move: d.sk, version: d.version, tree: d.tree } });
   return {
     statusCode: 200,
     body: JSON.stringify(trees),
@@ -5017,66 +5459,108 @@ async function getPublicExploration(pars: { game: string }) {
   };
 }
 
-async function botMove(pars: {uid: string, token: string, metaGame: string, gameid: string, move: string}) {
-    // validate token
-    try {
-        if (! validateToken(process.env.TOTP_KEY as string, pars.token, 2)) {
-            return formatReturnError(`Invalid token provided: ${JSON.stringify(pars)}`);
-        }
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Something went wrong while validating the token: ${JSON.stringify(pars)}`);
+async function botMove(pars: { uid: string, token: string, metaGame: string, gameid: string, move: string }) {
+  // validate token
+  try {
+    if (!validateToken(process.env.TOTP_KEY as string, pars.token, 2)) {
+      return formatReturnError(`Invalid token provided: ${JSON.stringify(pars)}`);
+    }
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Something went wrong while validating the token: ${JSON.stringify(pars)}`);
+  }
+
+  // fetch game record and state
+  let game: FullGame | undefined;
+  try {
+    const data = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "GAME",
+          "sk": pars.metaGame + "#0#" + pars.gameid
+        },
+      }));
+    if (!data.Item)
+      throw new Error(`No game ${pars.metaGame + "#0#" + pars.gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    game = data.Item as FullGame;
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to load game ${pars.gameid} to make a bot move`);
+  }
+
+  // instantiate game object
+  if (game === undefined) {
+    throw new Error("Unable to load game object");
+  }
+  const engine = GameFactory(pars.metaGame, game.state);
+  if (!engine)
+    throw new Error(`Unknown metaGame ${pars.metaGame}`);
+
+  // check for pie
+  if (pars.move === "Swap") {
+    return await invokePie(pars.uid, { id: pars.gameid, metaGame: pars.metaGame, cbit: 0 });
+  }
+  // check for triggered resignations (to clean up bot games)
+  else if (pars.move === "resign") {
+    return await submitMove(pars.uid, { id: pars.gameid, move: pars.move, metaGame: pars.metaGame, cbit: 0, draw: "" });
+  }
+  // all other moves
+  else {
+    // translate move
+    const realmove = engine.translateAiai(pars.move);
+
+    if (realmove === "Swap") {
+      return await invokePie(pars.uid, { id: pars.gameid, metaGame: pars.metaGame, cbit: 0 });
     }
 
-    // fetch game record and state
-    let game: FullGame|undefined;
-    try {
-        const data = await ddbDocClient.send(
-          new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": "GAME",
-              "sk": pars.metaGame + "#0#" + pars.gameid
-            },
-          }));
-        if (!data.Item)
-          throw new Error(`No game ${pars.metaGame + "#0#" + pars.gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
-        game = data.Item as FullGame;
-    }
-    catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to load game ${pars.gameid} to make a bot move`);
-    }
+    // apply move
+    return await submitMove(pars.uid, { id: pars.gameid, move: realmove, metaGame: pars.metaGame, cbit: 0, draw: "" });
+  }
 
-    // instantiate game object
-    if (game === undefined) {
-        throw new Error("Unable to load game object");
-    }
-    const engine = GameFactory(pars.metaGame, game.state);
-    if (!engine)
-      throw new Error(`Unknown metaGame ${pars.metaGame}`);
+}
 
-    // check for pie
-    if (pars.move === "Swap") {
-        return await invokePie(pars.uid, {id: pars.gameid, metaGame: pars.metaGame, cbit: 0});
-    }
-    // check for triggered resignations (to clean up bot games)
-    else if (pars.move === "resign") {
-        return await submitMove(pars.uid, {id: pars.gameid, move: pars.move, metaGame: pars.metaGame, cbit: 0, draw: ""});
-    }
-    // all other moves
-    else {
-        // translate move
-        const realmove = engine.translateAiai(pars.move);
+async function handleMove(claims: PartialClaims, pars: { gameid: string; move: string; metaGame: string; }) {
+  const botId = claims.sub;
+  console.log(`handleMove: Bot ${botId} is making move ${pars.move} in game ${pars.gameid}`);
 
-        if (realmove === "Swap") {
-            return await invokePie(pars.uid, {id: pars.gameid, metaGame: pars.metaGame, cbit: 0});
-        }
+  if (!pars.metaGame) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: "metaGame is required" }),
+      headers
+    };
+  }
 
-        // apply move
-        return await submitMove(pars.uid, {id: pars.gameid, move: realmove, metaGame: pars.metaGame, cbit: 0, draw: ""});
-    }
+  const bot = await getBotRecord(botId);
+  if (!bot) {
+    return formatReturnError(`Unknown bot ${botId}`);
+  }
 
+  const game = await loadGameRecord(pars.metaGame, pars.gameid);
+  if (!game) {
+    return formatReturnError(`Unable to load game ${pars.gameid}`);
+  }
+
+  if (!game.players.some(p => p.id === botId)) {
+    return formatReturnError(`Bot ${botId} is not a player in game ${pars.gameid}`);
+  }
+
+  const info = gameinfo.get(pars.metaGame);
+  const simultaneous = info.flags !== undefined && info.flags.includes('simultaneous');
+  const toMoveIds = getToMovePlayerIds(game, simultaneous);
+  if (!toMoveIds.includes(botId)) {
+    return formatReturnError(`It is not bot ${botId}'s turn in game ${pars.gameid}`);
+  }
+
+  return submitMove(botId, {
+    id: pars.gameid,
+    move: pars.move,
+    metaGame: pars.metaGame,
+    cbit: 0,
+    draw: "",
+  });
 }
 
 async function newTournament(userid: string, pars: { metaGame: string, variants: string[] }) {
@@ -5086,13 +5570,13 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
   let available = true;
   try {
     const tournamentNumber = await ddbDocClient.send(
-        new GetCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "TOURNAMENTSCOUNTER",
-            "sk": sk
-          },
-        })
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "TOURNAMENTSCOUNTER",
+          "sk": sk
+        },
+      })
     );
     if (tournamentNumber.Item !== undefined) {
       tournamentN = tournamentNumber.Item.count;
@@ -5112,7 +5596,7 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "TOURNAMENTSCOUNTER", "sk": sk },
       ExpressionAttributeValues: { ":val": tournamentN, ":inc": 1, ":zero": 0, ":f": false },
-      ExpressionAttributeNames: { "#count": "count", "#over": "over"},
+      ExpressionAttributeNames: { "#count": "count", "#over": "over" },
       ConditionExpression: "attribute_not_exists(#count) OR #count = :val",
       UpdateExpression: "set #count = if_not_exists(#count, :zero) + :inc, #over = :f"
     }));
@@ -5122,7 +5606,7 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
       console.log(`Failed to update TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
       return;
     }
-    handleCommonErrors(err as {code: any; message: any});
+    handleCommonErrors(err as { code: any; message: any });
     console.log(err);
     return formatReturnError(`Unable to update TOURNAMENTSCOUNTER for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   }
@@ -5145,10 +5629,10 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
       Item: data
     }));
   } catch (err) {
-    handleCommonErrors(err as {code: any; message: any});
+    handleCommonErrors(err as { code: any; message: any });
     return formatReturnError(`Unable to insert tournament for '${pars.metaGame}#${variantsKey}', count ${tournamentN} + 1`);
   }
-  const ret = await joinTournament(userid, {tournamentid: tournamentid});
+  const ret = await joinTournament(userid, { tournamentid: tournamentid });
   if (ret === undefined) {
     return {
       statusCode: 200,
@@ -5271,7 +5755,7 @@ async function getTournaments() {
     const [tournamentsData, tournamentPlayersData] = await Promise.all([tournamentsDataPromise, tournamentPlayersDataPromise]);
     return {
       statusCode: 200,
-      body: JSON.stringify({tournaments: tournamentsData.Items, tournamentPlayers: tournamentPlayersData.Items}),
+      body: JSON.stringify({ tournaments: tournamentsData.Items, tournamentPlayers: tournamentPlayersData.Items }),
       headers
     };
   }
@@ -5292,7 +5776,7 @@ async function getOldTournaments(pars: { metaGame: string }) {
       }));
     return {
       statusCode: 200,
-      body: JSON.stringify({tournaments: tournamentsData.Items}),
+      body: JSON.stringify({ tournaments: tournamentsData.Items }),
       headers
     };
   }
@@ -5337,7 +5821,7 @@ async function archiveTournaments() {
     await Promise.all(work);
     return {
       statusCode: 200,
-      body: JSON.stringify({message: "Archived old tournaments: " + list.join(", ")}),
+      body: JSON.stringify({ message: "Archived old tournaments: " + list.join(", ") }),
       headers
     };
   }
@@ -5378,8 +5862,8 @@ async function archiveTournament(tournament: Tournament) {
     const work: Promise<any>[] = [];
     work.push(ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: tournament
-      })));
+      Item: tournament
+    })));
 
     // Update all games to reference the new archived tournament format
     const newTournamentRef = tournament.metaGame + "#" + tournament.id;
@@ -5553,13 +6037,13 @@ async function startTournaments() {
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         KeyConditionExpression: "#pk = :pk",
         ExpressionAttributeValues: { ":pk": "USERS" },
-        ExpressionAttributeNames: { "#pk": "pk", "#name": "name"},
+        ExpressionAttributeNames: { "#pk": "pk", "#name": "name" },
         ProjectionExpression: "sk, #name, lastSeen"
       }));
 
     let users: UserLastSeen[] = [];
     if (data.Items)
-      users = data.Items?.map(u => ({"id": u.sk, "name": u.name, "lastSeen": u.lastSeen}));
+      users = data.Items?.map(u => ({ "id": u.sk, "name": u.name, "lastSeen": u.lastSeen }));
     const now = Date.now();
     const oneWeek = 1000 * 60 * 60 * 24 * 7;
     const twoWeeks = oneWeek * 2;
@@ -5567,7 +6051,7 @@ async function startTournaments() {
     for (const tournament of tournaments) {
       if (
         !tournament.started && now > tournament.dateCreated + twoWeeks
-        && (tournament.datePreviousEnded === 0 || now > tournament.datePreviousEnded + oneWeek )
+        && (tournament.datePreviousEnded === 0 || now > tournament.datePreviousEnded + oneWeek)
       ) {
         console.log(`Starting tournament ${tournament.id}`);
         const status = await startTournament(users, tournament);
@@ -5640,7 +6124,7 @@ async function startATournament(userId: string, pars: { tournamentid: string }) 
   const twoWeeks = oneWeek * 2;
   if (
     !tournament.started && now > tournament.dateCreated + twoWeeks
-    && (tournament.datePreviousEnded === 0 || now > tournament.datePreviousEnded + oneWeek )
+    && (tournament.datePreviousEnded === 0 || now > tournament.datePreviousEnded + oneWeek)
   ) {
     console.log("Getting USERS");
     const data = await ddbDocClient.send(
@@ -5648,13 +6132,13 @@ async function startATournament(userId: string, pars: { tournamentid: string }) 
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         KeyConditionExpression: "#pk = :pk",
         ExpressionAttributeValues: { ":pk": "USERS" },
-        ExpressionAttributeNames: { "#pk": "pk", "#name": "name"},
+        ExpressionAttributeNames: { "#pk": "pk", "#name": "name" },
         ProjectionExpression: "sk, #name, lastSeen"
       }));
 
     let users: UserLastSeen[] = [];
     if (data.Items)
-      users = data.Items?.map(u => ({"id": u.sk, "name": u.name, "lastSeen": u.lastSeen}));
+      users = data.Items?.map(u => ({ "id": u.sk, "name": u.name, "lastSeen": u.lastSeen }));
     console.log(`Starting tournament ${tournament.id}`);
     if (await startTournament(users, tournament)) {
       return {
@@ -5705,9 +6189,9 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     // If the player timed out in their last tournament game, and they haven't been seen in 30 days, remove them from the tournament.
     // Unless the tournament is in waiting status, then not seen in 30 days is enough to be removed.
     if (
-        users?.find(u => u.id === player.playerid)?.lastSeen! < Date.now() - 1000 * 60 * 60 * 24 * 30
-        && (tournament.waiting === true || player.timeout === true)
-      ) {
+      users?.find(u => u.id === player.playerid)?.lastSeen! < Date.now() - 1000 * 60 * 60 * 24 * 30
+      && (tournament.waiting === true || player.timeout === true)
+    ) {
       remove.push(player);
       if (player.timeout === true)
         console.log(`Removing player ${player.playerid} from tournament ${tournament.id} because of timeout`);
@@ -5734,9 +6218,9 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
       await ddbDocClient.send(
         new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {"pk": "TOURNAMENTSCOUNTER", "sk": sk},
+          Key: { "pk": "TOURNAMENTSCOUNTER", "sk": sk },
           ExpressionAttributeValues: { ":t": true },
-          ExpressionAttributeNames: {"#o": "over"},
+          ExpressionAttributeNames: { "#o": "over" },
           UpdateExpression: "set #o = :t"
         }));
     }
@@ -5812,7 +6296,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
       players[i].score = 0;
     }
     players.sort((a, b) => b.rating! - a.rating!);
-    const allGamePlayers = players.map(p => {return {id: p.playerid, name: p.playername, time: clockStart * 3600000} as User});
+    const allGamePlayers = players.map(p => { return { id: p.playerid, name: p.playername, time: clockStart * 3600000 } as User });
     // Sort playersFull in the same order as players
     const playersFull2: FullUser[] = [];
     for (const player of players)
@@ -5869,9 +6353,9 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
       if (playersFull2[i].games === undefined)
         playersFull2[i].games = [];
     }
-    const divisions: { [division: number]: {numGames: number, numCompleted: number, processed: boolean} } = {};
+    const divisions: { [division: number]: { numGames: number, numCompleted: number, processed: boolean } } = {};
     for (let division = 1; division <= numDivisions; division++) {
-      divisions[division] = {numGames: 0, numCompleted: 0, processed: false};
+      divisions[division] = { numGames: 0, numCompleted: 0, processed: false };
       for (let i = 0; i < (division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall); i++) {
         for (let j = i + 1; j < (division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall); j++) {
           divisions[division].numGames += 1;
@@ -5904,29 +6388,29 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
             console.log(`Creating game ${gameId} for tournament ${tournament.id} with division ${division}`);
             await ddbDocClient.send(new PutCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item: {
-                  "pk": "GAME",
-                  "sk": tournament.metaGame + "#0#" + gameId,
-                  "id": gameId,
-                  "metaGame": tournament.metaGame,
-                  "numPlayers": 2,
-                  "rated": true,
-                  "players": info.flags !== undefined && info.flags.includes('perspective') ?
-                    gamePlayers.map((p, ind) => {return (ind === 0 ? p : {...p, settings: {"rotate": 180}})})
-                    : gamePlayers,
-                  "clockStart": clockStart,
-                  "clockInc": clockInc,
-                  "clockMax": clockMax,
-                  "clockHard": true,
-                  "state": state,
-                  "toMove": whoseTurn,
-                  "lastMoveTime": now,
-                  "gameStarted": now,
-                  "variants": engine.variants,
-                  "tournament": tournament.id,
-                  "division": division
-                }
-              }));
+              Item: {
+                "pk": "GAME",
+                "sk": tournament.metaGame + "#0#" + gameId,
+                "id": gameId,
+                "metaGame": tournament.metaGame,
+                "numPlayers": 2,
+                "rated": true,
+                "players": info.flags !== undefined && info.flags.includes('perspective') ?
+                  gamePlayers.map((p, ind) => { return (ind === 0 ? p : { ...p, settings: { "rotate": 180 } }) })
+                  : gamePlayers,
+                "clockStart": clockStart,
+                "clockInc": clockInc,
+                "clockMax": clockMax,
+                "clockHard": true,
+                "state": state,
+                "toMove": whoseTurn,
+                "lastMoveTime": now,
+                "gameStarted": now,
+                "variants": engine.variants,
+                "tournament": tournament.id,
+                "division": division
+              }
+            }));
           }
           catch (error) {
             logGetItemError(error);
@@ -6022,20 +6506,20 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
       if (!once) {
         const sk = `${newTournamentid}#1#${player.playerid}`;
         const playerdata: TournamentPlayer = {
-            "pk": "TOURNAMENTPLAYER",
-            "sk": sk,
-            "playername": player.playername,
-            "playerid": player.playerid,
+          "pk": "TOURNAMENTPLAYER",
+          "sk": sk,
+          "playername": player.playername,
+          "playerid": player.playerid,
         };
         try {
-            console.log(`Adding player ${player.playerid} to new tournament ${newTournamentid}`);
-            await ddbDocClient.send(new PutCommand({
+          console.log(`Adding player ${player.playerid} to new tournament ${newTournamentid}`);
+          await ddbDocClient.send(new PutCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Item: playerdata
-            }));
+          }));
         } catch (err) {
-            logGetItemError(err);
-            return formatReturnError(`Unable to add player ${player.playerid} to tournament ${newTournamentid}`);
+          logGetItemError(err);
+          return formatReturnError(`Unable to add player ${player.playerid} to tournament ${newTournamentid}`);
         }
       }
     }
@@ -6043,21 +6527,21 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     await initi18n('en');
     const metaGameName = gameinfo.get(tournament.metaGame)?.name;
     for (const player of playersFull2) {
-        console.log(`Determining whether to send tournamentStart email to the following player:\n${JSON.stringify(player)}`);
-        // eslint-disable-next-line no-prototype-builtins
-        if ( (player.settings?.all?.notifications === undefined) || (!player.settings.all.notifications.hasOwnProperty("tournamentStart")) || (player.settings.all.notifications.tournamentStart) ) {
-            console.log("Sending email");
-            await changeLanguageForPlayer(player);
-            let body = '';
-            if (tournament.variants.length === 0)
-                body = i18n.t("TournamentStartBody", { "metaGame": metaGameName, "number": tournament.number });
-            else
-                body = i18n.t("TournamentStartBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
-            if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentStartSubject", { "metaGame": metaGameName }), body);
-                await sesClient.send(comm);
-            }
+      console.log(`Determining whether to send tournamentStart email to the following player:\n${JSON.stringify(player)}`);
+      // eslint-disable-next-line no-prototype-builtins
+      if ((player.settings?.all?.notifications === undefined) || (!player.settings.all.notifications.hasOwnProperty("tournamentStart")) || (player.settings.all.notifications.tournamentStart)) {
+        console.log("Sending email");
+        await changeLanguageForPlayer(player);
+        let body = '';
+        if (tournament.variants.length === 0)
+          body = i18n.t("TournamentStartBody", { "metaGame": metaGameName, "number": tournament.number });
+        else
+          body = i18n.t("TournamentStartBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
+        if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
+          const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentStartSubject", { "metaGame": metaGameName }), body);
+          await sesClient.send(comm);
         }
+      }
     }
     returnvalue = 1;
   }
@@ -6092,7 +6576,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
           body = i18n.t("TournamentRemoveBody", { "metaGame": metaGameName, "number": tournament.number });
         else
           body = i18n.t("TournamentRemoveBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
-        if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
+        if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
           const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentRemoveSubject", { "metaGame": metaGameName }), body);
           await sesClient.send(comm);
         }
@@ -6304,18 +6788,18 @@ async function endTournament(tournament: Tournament) {
           for (const player of playersFull) {
             console.log(`Determining whether to send tournamentEnd email to the following player:\n${JSON.stringify(player)}`);
             // eslint-disable-next-line no-prototype-builtins
-            if ( (player.settings?.all?.notifications === undefined) || (!player.settings.all.notifications.hasOwnProperty("tournamentEnd")) || (player.settings.all.notifications.tournamentEnd) ) {
-                console.log("Sending email");
-                await changeLanguageForPlayer(player);
-                let body = '';
-                if (tournament.variants.length === 0)
-                    body = i18n.t("TournamentEndBody", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id });
-                else
-                    body = i18n.t("TournamentEndBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id, "variants": tournament.variants.join(", ") });
-                if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-                    const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName, }), body);
-                    work.push(sesClient.send(comm));
-                }
+            if ((player.settings?.all?.notifications === undefined) || (!player.settings.all.notifications.hasOwnProperty("tournamentEnd")) || (player.settings.all.notifications.tournamentEnd)) {
+              console.log("Sending email");
+              await changeLanguageForPlayer(player);
+              let body = '';
+              if (tournament.variants.length === 0)
+                body = i18n.t("TournamentEndBody", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id });
+              else
+                body = i18n.t("TournamentEndBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id, "variants": tournament.variants.join(", ") });
+              if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName, }), body);
+                work.push(sesClient.send(comm));
+              }
             }
           }
         }
@@ -6334,1314 +6818,1314 @@ async function endTournament(tournament: Tournament) {
 }
 
 // ORGANIZED EVENTS
-async function eventGetEvent(pars: {eventid: string}) {
-    try {
-        const event = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (event.Item === undefined) {
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
+async function eventGetEvent(pars: { eventid: string }) {
+  try {
+    const event = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (event.Item === undefined) {
+      return {
+        statusCode: 404,
+        headers,
+      };
+    }
 
-        const players = await ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-                ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
-                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        }));
-        const games = await ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-                ExpressionAttributeValues: { ":pk": "ORGEVENTGAME", ":sk": pars.eventid },
-                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        }));
+    const players = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      }));
+    const games = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        ExpressionAttributeValues: { ":pk": "ORGEVENTGAME", ":sk": pars.eventid },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      }));
 
-        return {
-            statusCode: 200,
-            body: JSON.stringify({event: event.Item, players: players.Items, games: games.Items}),
-            headers
-        };
-      }
-      catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to get organized event ${pars.eventid}. Error: ${error}`);
-      }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ event: event.Item, players: players.Items, games: games.Items }),
+      headers
+    };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get organized event ${pars.eventid}. Error: ${error}`);
+  }
 }
 
 async function eventGetEvents() {
-    try {
-        const work: Promise<any>[] = [];
-        work.push(ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk",
-                ExpressionAttributeValues: { ":pk": "ORGEVENT" },
-                ExpressionAttributeNames: { "#pk": "pk"},
-        })));
-        work.push(ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk",
-                ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER" },
-                ExpressionAttributeNames: { "#pk": "pk"},
-        })));
-        work.push(ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk",
-                ExpressionAttributeValues: { ":pk": "ORGEVENTGAME" },
-                ExpressionAttributeNames: { "#pk": "pk"},
-        })));
-        const data = await Promise.all(work);
+  try {
+    const work: Promise<any>[] = [];
+    work.push(ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "ORGEVENT" },
+        ExpressionAttributeNames: { "#pk": "pk" },
+      })));
+    work.push(ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER" },
+        ExpressionAttributeNames: { "#pk": "pk" },
+      })));
+    work.push(ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "ORGEVENTGAME" },
+        ExpressionAttributeNames: { "#pk": "pk" },
+      })));
+    const data = await Promise.all(work);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ events: data[0].Items, players: data[1].Items, games: data[2].Items }),
+      headers
+    };
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get organized events. Error: ${error}`);
+  }
+}
+
+async function eventCreate(userid: string, pars: { name: string, date: number, description: string, maxPlayers: number }) {
+  // authorize first
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userid
+        },
+      }));
+    if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+  }
+  try {
+    const eventid = uuid();
+    const eventRec: OrgEvent = {
+      pk: "ORGEVENT",
+      sk: eventid,
+      name: pars.name,
+      description: pars.description,
+      organizer: userid,
+      dateStart: pars.date,
+      visible: false,
+      invited: [],
+      blocked: [],
+      maxPlayers: pars.maxPlayers,
+    };
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: eventRec,
+      })
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ eventid }),
+      headers
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to create event. Error: ${error}`);
+  }
+}
+
+async function eventPublish(userid: string, pars: { eventid: string }) {
+  // authorize first
+  let userRec: FullUser | undefined;
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userid
+        },
+      }));
+    if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+      return {
+        statusCode: 401,
+        headers
+      };
+    }
+    userRec = user.Item as FullUser;
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+  }
+  try {
+    const event = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (event.Item === undefined) {
+      return {
+        statusCode: 404,
+        headers,
+      };
+    }
+    const eventRec = event.Item as OrgEvent;
+    if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
+      return {
+        statusCode: 401,
+        headers
+      };
+    }
+    // must be in the future and have nonempty description
+    if (eventRec.dateStart <= Date.now() || /^\s*$/.test(eventRec.description)) {
+      return {
+        statusCode: 400,
+        body: "The start date must be in the future and the description may not be empty.",
+        headers,
+      };
+    }
+    eventRec.visible = true;
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: eventRec,
+      })
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify(eventRec),
+      headers
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to publish event ${pars.eventid}. Error: ${error}`);
+  }
+}
+
+async function eventDelete(userid: string, pars: { eventid: string }) {
+  // authorize first
+  let userRec: FullUser | undefined;
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userid
+        },
+      }));
+    if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+      return {
+        statusCode: 401,
+        headers
+      };
+    }
+    userRec = user.Item as FullUser;
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+  }
+  try {
+    const event = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (event.Item === undefined) {
+      return {
+        statusCode: 404,
+        headers,
+      };
+    }
+    const eventRec = event.Item as OrgEvent;
+    if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
+      return {
+        statusCode: 401,
+        headers
+      };
+    }
+    // get associated players and games
+    const players = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      }));
+    const games = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        ExpressionAttributeValues: { ":pk": "ORGEVENTGAME", ":sk": pars.eventid },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      }));
+
+    // the event must not be over and there must not be any associated games
+    if (eventRec.dateEnd !== undefined || (games.Items !== undefined && games.Items.length > 0)) {
+      return {
+        statusCode: 400,
+        body: "You cannot delete events that are over or that have associated games.",
+        headers,
+      };
+    }
+
+    // delete associated player records
+    if (players.Items !== undefined && players.Items.length > 0) {
+      for (const { playerid } of players.Items as OrgEventPlayer[]) {
+        await ddbDocClient.send(
+          new DeleteCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              "pk": "ORGEVENTPLAYER",
+              "sk": `${pars.eventid}#${playerid}`
+            },
+          })
+        );
+      }
+    }
+
+    // now delete the event itself
+    await ddbDocClient.send(
+      new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid,
+        },
+      })
+    );
+    return {
+      statusCode: 200,
+      headers
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to delete event ${pars.eventid}. Error: ${error}`);
+  }
+}
+
+async function eventRegister(userid: string, pars: { eventid: string }) {
+  try {
+    const event = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (event.Item === undefined) {
+      return {
+        statusCode: 404,
+        headers,
+      };
+    }
+    const eventRec = event.Item as OrgEvent;
+    // must be open for registration
+    if (!eventRec.visible || eventRec.dateStart < Date.now() || eventRec.dateEnd !== undefined) {
+      return {
+        statusCode: 400,
+        body: "You may only register for events that are open for registration.",
+        headers,
+      };
+    }
+    if (eventRec.blocked !== undefined && eventRec.blocked.includes(userid)) {
+      return {
+        statusCode: 400,
+        body: "You are blocked from registering for this event.",
+        headers,
+      };
+    }
+    if (eventRec.invited !== undefined && eventRec.invited.length > 0 && !eventRec.invited.includes(userid)) {
+      return {
+        statusCode: 400,
+        body: "This event is by invitation only.",
+        headers,
+      };
+    }
+    if (eventRec.maxPlayers > 0) {
+      const players = await ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+          ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+          Select: "COUNT"
+        }));
+      if (players.Count !== undefined && players.Count >= eventRec.maxPlayers) {
         return {
-            statusCode: 200,
-            body: JSON.stringify({events: data[0].Items, players: data[1].Items, games: data[2].Items}),
-            headers
+          statusCode: 400,
+          body: "This event is full.",
+          headers,
         };
       }
-      catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to get organized events. Error: ${error}`);
-      }
+    }
+    const newRec: OrgEventPlayer = {
+      pk: "ORGEVENTPLAYER",
+      sk: `${pars.eventid}#${userid}`,
+      playerid: userid,
+    }
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: newRec,
+      })
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify(newRec),
+      headers
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to register for event ${pars.eventid}. Error: ${error}`);
+  }
 }
 
-async function eventCreate(userid: string, pars: {name: string, date: number, description: string, maxPlayers: number}) {
-    // authorize first
-    try {
-        const user = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "USER",
-            "sk": userid
-            },
-        }));
-        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
-            return {
-                statusCode: 200,
-                body: JSON.stringify({}),
-                headers
-            };
-        }
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+async function eventWithdraw(userid: string, pars: { eventid: string }) {
+  try {
+    const event = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (event.Item === undefined) {
+      return {
+        statusCode: 404,
+        headers,
+      };
     }
-    try {
-        const eventid = uuid();
-        const eventRec: OrgEvent = {
-            pk: "ORGEVENT",
-            sk: eventid,
-            name: pars.name,
-            description: pars.description,
-            organizer: userid,
-            dateStart: pars.date,
-            visible: false,
-            invited: [],
-            blocked: [],
-            maxPlayers: pars.maxPlayers,
-        };
-        await ddbDocClient.send(
-            new PutCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item: eventRec,
-              })
-          );
-          return {
-            statusCode: 200,
-            body: JSON.stringify({eventid}),
-            headers
-        };
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to create event. Error: ${error}`);
+    const eventRec = event.Item as OrgEvent;
+    // must be open for registration
+    if (!eventRec.visible || eventRec.dateStart < Date.now() || eventRec.dateEnd !== undefined) {
+      return {
+        statusCode: 400,
+        body: "You may only withdraw from events that are open for registration.",
+        headers,
+      };
     }
+    await ddbDocClient.send(
+      new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENTPLAYER",
+          "sk": `${pars.eventid}#${userid}`
+        },
+      })
+    );
+    return {
+      statusCode: 200,
+      headers
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to withdraw from event ${pars.eventid}. Error: ${error}`);
+  }
 }
 
-async function eventPublish(userid: string, pars: {eventid: string}) {
-    // authorize first
-    let userRec: FullUser|undefined;
-    try {
-        const user = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "USER",
-            "sk": userid
-            },
-        }));
-        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        userRec = user.Item as FullUser;
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+async function eventUpdateStart(userid: string, pars: { eventid: string, newDate: number }) {
+  // authorize first
+  let userRec: FullUser | undefined;
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userid
+        },
+      }));
+    if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+      return {
+        statusCode: 401,
+        headers
+      };
     }
-    try {
-        const event = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (event.Item === undefined) {
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
-        const eventRec = event.Item as OrgEvent;
-        if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        // must be in the future and have nonempty description
-        if (eventRec.dateStart <= Date.now() || /^\s*$/.test(eventRec.description)) {
-            return {
-                statusCode: 400,
-                body: "The start date must be in the future and the description may not be empty.",
-                headers,
-            };
-        }
-        eventRec.visible = true;
-        await ddbDocClient.send(
-            new PutCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item: eventRec,
-              })
-          );
-        return {
-            statusCode: 200,
-            body: JSON.stringify(eventRec),
-            headers
-        };
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to publish event ${pars.eventid}. Error: ${error}`);
+    userRec = user.Item as FullUser;
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+  }
+  try {
+    const event = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (event.Item === undefined) {
+      return {
+        statusCode: 404,
+        headers,
+      };
     }
+    const eventRec = event.Item as OrgEvent;
+    if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
+      return {
+        statusCode: 401,
+        headers
+      };
+    }
+    eventRec.dateStart = pars.newDate;
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: eventRec,
+      })
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify(eventRec),
+      headers
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to update event start date. Error: ${error}`);
+  }
 }
 
-async function eventDelete(userid: string, pars: {eventid: string}) {
-    // authorize first
-    let userRec: FullUser|undefined;
-    try {
-        const user = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "USER",
-            "sk": userid
-            },
-        }));
-        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        userRec = user.Item as FullUser;
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+async function eventUpdateName(userid: string, pars: { eventid: string, name: string }) {
+  // authorize first
+  let userRec: FullUser | undefined;
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userid
+        },
+      }));
+    if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+      return {
+        statusCode: 401,
+        headers
+      };
     }
-    try {
-        const event = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (event.Item === undefined) {
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
-        const eventRec = event.Item as OrgEvent;
-        if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        // get associated players and games
-        const players = await ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-                ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
-                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        }));
-        const games = await ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-                ExpressionAttributeValues: { ":pk": "ORGEVENTGAME", ":sk": pars.eventid },
-                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        }));
-
-        // the event must not be over and there must not be any associated games
-        if (eventRec.dateEnd !== undefined || (games.Items !== undefined && games.Items.length > 0)) {
-            return {
-                statusCode: 400,
-                body: "You cannot delete events that are over or that have associated games.",
-                headers,
-            };
-        }
-
-        // delete associated player records
-        if (players.Items !== undefined && players.Items.length > 0) {
-            for (const {playerid} of players.Items as OrgEventPlayer[]) {
-                await ddbDocClient.send(
-                    new DeleteCommand({
-                        TableName: process.env.ABSTRACT_PLAY_TABLE,
-                        Key: {
-                          "pk": "ORGEVENTPLAYER",
-                          "sk": `${pars.eventid}#${playerid}`
-                        },
-                    })
-                );
-            }
-        }
-
-        // now delete the event itself
-        await ddbDocClient.send(
-            new DeleteCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                    "pk": "ORGEVENT",
-                    "sk": pars.eventid,
-                },
-            })
-        );
-        return {
-            statusCode: 200,
-            headers
-        };
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to delete event ${pars.eventid}. Error: ${error}`);
+    userRec = user.Item as FullUser;
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+  }
+  try {
+    const event = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (event.Item === undefined) {
+      return {
+        statusCode: 404,
+        headers,
+      };
     }
+    const eventRec = event.Item as OrgEvent;
+    if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
+      return {
+        statusCode: 401,
+        headers
+      };
+    }
+    eventRec.name = pars.name;
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: eventRec,
+      })
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify(eventRec),
+      headers
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to update event start date. Error: ${error}`);
+  }
 }
 
-async function eventRegister(userid: string, pars: {eventid: string}) {
-    try {
-        const event = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (event.Item === undefined) {
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
-        const eventRec = event.Item as OrgEvent;
-        // must be open for registration
-        if (!eventRec.visible || eventRec.dateStart < Date.now() || eventRec.dateEnd !== undefined) {
-            return {
-                statusCode: 400,
-                body: "You may only register for events that are open for registration.",
-                headers,
-            };
-        }
-        if (eventRec.blocked !== undefined && eventRec.blocked.includes(userid)) {
-            return {
-                statusCode: 400,
-                body: "You are blocked from registering for this event.",
-                headers,
-            };
-        }
-        if (eventRec.invited !== undefined && eventRec.invited.length > 0 && !eventRec.invited.includes(userid)) {
-            return {
-                statusCode: 400,
-                body: "This event is by invitation only.",
-                headers,
-            };
-        }
-        if (eventRec.maxPlayers > 0) {
-            const players = await ddbDocClient.send(
-                new QueryCommand({
-                    TableName: process.env.ABSTRACT_PLAY_TABLE,
-                    KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-                    ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
-                    ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-                    Select: "COUNT"
-            }));
-            if (players.Count !== undefined && players.Count >= eventRec.maxPlayers) {
-                return {
-                    statusCode: 400,
-                    body: "This event is full.",
-                    headers,
-                };
-            }
-        }
-        const newRec: OrgEventPlayer = {
-            pk: "ORGEVENTPLAYER",
-            sk: `${pars.eventid}#${userid}`,
-            playerid: userid,
-        }
-        await ddbDocClient.send(
-            new PutCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item: newRec,
-            })
-          );
-        return {
-            statusCode: 200,
-            body: JSON.stringify(newRec),
-            headers
-        };
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to register for event ${pars.eventid}. Error: ${error}`);
+async function eventUpdateDesc(userid: string, pars: { eventid: string, description: string }) {
+  // authorize first
+  let userRec: FullUser | undefined;
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userid
+        },
+      }));
+    if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+      return {
+        statusCode: 401,
+        headers
+      };
     }
+    userRec = user.Item as FullUser;
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+  }
+  try {
+    const event = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (event.Item === undefined) {
+      return {
+        statusCode: 404,
+        headers,
+      };
+    }
+    const eventRec = event.Item as OrgEvent;
+    if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
+      return {
+        statusCode: 401,
+        headers
+      };
+    }
+    eventRec.description = pars.description;
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: eventRec,
+      })
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify(eventRec),
+      headers
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to update event start date. Error: ${error}`);
+  }
 }
 
-async function eventWithdraw(userid: string, pars: {eventid: string}) {
-    try {
-        const event = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (event.Item === undefined) {
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
-        const eventRec = event.Item as OrgEvent;
-        // must be open for registration
-        if (!eventRec.visible || eventRec.dateStart < Date.now() || eventRec.dateEnd !== undefined) {
-            return {
-                statusCode: 400,
-                body: "You may only withdraw from events that are open for registration.",
-                headers,
-            };
-        }
-        await ddbDocClient.send(
-            new DeleteCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                  "pk": "ORGEVENTPLAYER",
-                  "sk": `${pars.eventid}#${userid}`
-                },
-            })
-        );
-        return {
-            statusCode: 200,
-            headers
-        };
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to withdraw from event ${pars.eventid}. Error: ${error}`);
+async function eventUpdateInvites(userid: string, pars: { eventid: string, invited: string[], blocked: string[] }) {
+  // authorize first
+  let userRec: FullUser | undefined;
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userid
+        },
+      }));
+    if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+      return {
+        statusCode: 401,
+        headers
+      };
     }
-}
-
-async function eventUpdateStart(userid: string, pars: {eventid: string, newDate: number}) {
-    // authorize first
-    let userRec: FullUser|undefined;
-    try {
-        const user = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "USER",
-            "sk": userid
-            },
-        }));
-        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        userRec = user.Item as FullUser;
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
+    userRec = user.Item as FullUser;
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`eventUpdateInvites: Unable to load user record to authorize ${userid}`);
+  }
+  try {
+    const event = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (event.Item === undefined) {
+      return {
+        statusCode: 404,
+        headers,
+      };
     }
-    try {
-        const event = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (event.Item === undefined) {
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
-        const eventRec = event.Item as OrgEvent;
-        if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        eventRec.dateStart = pars.newDate;
-        await ddbDocClient.send(
-            new PutCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item: eventRec,
-              })
-          );
-        return {
-            statusCode: 200,
-            body: JSON.stringify(eventRec),
-            headers
-        };
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to update event start date. Error: ${error}`);
+    const eventRec = event.Item as OrgEvent;
+    if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
+      return {
+        statusCode: 401,
+        headers
+      };
     }
-}
-
-async function eventUpdateName(userid: string, pars: {eventid: string, name: string}) {
-    // authorize first
-    let userRec: FullUser|undefined;
-    try {
-        const user = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "USER",
-            "sk": userid
-            },
-        }));
-        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        userRec = user.Item as FullUser;
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
-    }
-    try {
-        const event = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (event.Item === undefined) {
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
-        const eventRec = event.Item as OrgEvent;
-        if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        eventRec.name = pars.name;
-        await ddbDocClient.send(
-            new PutCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item: eventRec,
-              })
-          );
-        return {
-            statusCode: 200,
-            body: JSON.stringify(eventRec),
-            headers
-        };
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to update event start date. Error: ${error}`);
-    }
-}
-
-async function eventUpdateDesc(userid: string, pars: {eventid: string, description: string}) {
-    // authorize first
-    let userRec: FullUser|undefined;
-    try {
-        const user = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "USER",
-            "sk": userid
-            },
-        }));
-        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        userRec = user.Item as FullUser;
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`createEvent: Unable to load user record to authorize ${userid}`);
-    }
-    try {
-        const event = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (event.Item === undefined) {
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
-        const eventRec = event.Item as OrgEvent;
-        if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        eventRec.description = pars.description;
-        await ddbDocClient.send(
-            new PutCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item: eventRec,
-              })
-          );
-        return {
-            statusCode: 200,
-            body: JSON.stringify(eventRec),
-            headers
-        };
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to update event start date. Error: ${error}`);
-    }
-}
-
-async function eventUpdateInvites(userid: string, pars: {eventid: string, invited: string[], blocked: string[]}) {
-    // authorize first
-    let userRec: FullUser|undefined;
-    try {
-        const user = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "USER",
-            "sk": userid
-            },
-        }));
-        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        userRec = user.Item as FullUser;
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`eventUpdateInvites: Unable to load user record to authorize ${userid}`);
-    }
-    try {
-        const event = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (event.Item === undefined) {
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
-        const eventRec = event.Item as OrgEvent;
-        if (userRec === undefined || (userRec.admin !== true && eventRec.organizer !== userid)) {
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        eventRec.invited = pars.invited;
-        eventRec.blocked = pars.blocked;
-        await ddbDocClient.send(
-            new PutCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item: eventRec,
-              })
-          );
-        return {
-            statusCode: 200,
-            body: JSON.stringify(eventRec),
-            headers
-        };
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`Unable to update event invites. Error: ${error}`);
-    }
+    eventRec.invited = pars.invited;
+    eventRec.blocked = pars.blocked;
+    await ddbDocClient.send(
+      new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: eventRec,
+      })
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify(eventRec),
+      headers
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to update event invites. Error: ${error}`);
+  }
 }
 
 type PairingPlayer = {
-    id: string;
-    name: string;
-    country: string;
-    stars: string[];
-    lastSeen: number;
+  id: string;
+  name: string;
+  country: string;
+  stars: string[];
+  lastSeen: number;
 };
 type Pairing = {
-    round: number;
-    metagame: string;
-    variants: string[];
-    clockStart: number;
-    clockInc: number;
-    clockMax: number;
-    p1: PairingPlayer;
-    p2: PairingPlayer
+  round: number;
+  metagame: string;
+  variants: string[];
+  clockStart: number;
+  clockInc: number;
+  clockMax: number;
+  p1: PairingPlayer;
+  p2: PairingPlayer
 };
 
-async function eventUpdateResult(userid: string, pars: {eventid: string, gameid: string, result: string[]}) {
-    // load event and authorize requester
-    let userRec: FullUser|undefined;
-    try {
-        const user = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "USER",
-            "sk": userid
-            },
-        }));
-        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
-            console.log(`Error 401`);
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        userRec = user.Item as FullUser;
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`eventCreateGames: Unable to load user record to authorize ${userid}`);
+async function eventUpdateResult(userid: string, pars: { eventid: string, gameid: string, result: string[] }) {
+  // load event and authorize requester
+  let userRec: FullUser | undefined;
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userid
+        },
+      }));
+    if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+      console.log(`Error 401`);
+      return {
+        statusCode: 401,
+        headers
+      };
     }
-    let event: OrgEvent;
-    try {
-        const eventRec = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (eventRec.Item === undefined) {
-            console.log(`Error 404`);
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
-        event = eventRec.Item as OrgEvent;
-        if (userRec === undefined || (userRec.admin !== true && event.organizer !== userid)) {
-            console.log(`Error 401`);
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`eventCreateGames: Unable to load/validate the event record for event ${pars.eventid}. Error: ${error}`);
+    userRec = user.Item as FullUser;
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`eventCreateGames: Unable to load user record to authorize ${userid}`);
+  }
+  let event: OrgEvent;
+  try {
+    const eventRec = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (eventRec.Item === undefined) {
+      console.log(`Error 404`);
+      return {
+        statusCode: 404,
+        headers,
+      };
     }
-    // update game record
-    try {
-        await ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "ORGEVENTGAME", "sk": `${pars.eventid}#${pars.gameid}` },
-            ExpressionAttributeValues: { ":win": pars.result, ":arb": true},
-            UpdateExpression: "set winner = :win, arbitrated = :arb",
-        }));
-        return {
-            statusCode: 200,
-            headers
-        };
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`eventUpdateResult: Unable to set result ${pars.result} for ${pars.eventid}#${pars.gameid}`);
+    event = eventRec.Item as OrgEvent;
+    if (userRec === undefined || (userRec.admin !== true && event.organizer !== userid)) {
+      console.log(`Error 401`);
+      return {
+        statusCode: 401,
+        headers
+      };
     }
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`eventCreateGames: Unable to load/validate the event record for event ${pars.eventid}. Error: ${error}`);
+  }
+  // update game record
+  try {
+    await ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "ORGEVENTGAME", "sk": `${pars.eventid}#${pars.gameid}` },
+      ExpressionAttributeValues: { ":win": pars.result, ":arb": true },
+      UpdateExpression: "set winner = :win, arbitrated = :arb",
+    }));
+    return {
+      statusCode: 200,
+      headers
+    };
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`eventUpdateResult: Unable to set result ${pars.result} for ${pars.eventid}#${pars.gameid}`);
+  }
 }
 
 type DivisionTable = string[][];
-async function eventUpdateDivisions(userid: string, pars: {eventid: string; divisions: DivisionTable}) {
-    // (Do as much validation as possible before creating games and abort if anything's wrong.)
-    console.log(`About to try updating division assignments for event ${pars.eventid}:\n${JSON.stringify(pars.divisions, null, 2)}`);
-    // load event and authorize requester
-    let userRec: FullUser|undefined;
-    try {
-        const user = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "USER",
-            "sk": userid
-            },
+async function eventUpdateDivisions(userid: string, pars: { eventid: string; divisions: DivisionTable }) {
+  // (Do as much validation as possible before creating games and abort if anything's wrong.)
+  console.log(`About to try updating division assignments for event ${pars.eventid}:\n${JSON.stringify(pars.divisions, null, 2)}`);
+  // load event and authorize requester
+  let userRec: FullUser | undefined;
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userid
+        },
+      }));
+    if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+      console.log(`Error 401`);
+      return {
+        statusCode: 401,
+        headers
+      };
+    }
+    userRec = user.Item as FullUser;
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`eventCreateGames: Unable to load user record to authorize ${userid}`);
+  }
+  let event: OrgEvent;
+  try {
+    const eventRec = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (eventRec.Item === undefined) {
+      console.log(`Error 404`);
+      return {
+        statusCode: 404,
+        headers,
+      };
+    }
+    event = eventRec.Item as OrgEvent;
+    if (userRec === undefined || (userRec.admin !== true && event.organizer !== userid)) {
+      console.log(`Error 401`);
+      return {
+        statusCode: 401,
+        headers
+      };
+    }
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`eventCreateGames: Unable to load/validate the event record for event ${pars.eventid}. Error: ${error}`);
+  }
+  // get list of registered players
+  let eventPlayers: OrgEventPlayer[];
+  try {
+    const pRecs = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      }));
+    if (pRecs.Items === undefined || pRecs.Items.length === 0) {
+      console.log(`Error 400: No players`);
+      return {
+        statusCode: 400,
+        body: "This event has no registered players!",
+        headers
+      };
+    }
+    eventPlayers = pRecs.Items as OrgEventPlayer[];
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`eventCreateGames: Unable to load registered players for event ${pars.eventid}. Error: ${error}`);
+  }
+
+  // ensure there are at least 2 divisions
+  if (pars.divisions.length < 2) {
+    console.log(`Error 400: Too few divisions`);
+    return {
+      statusCode: 400,
+      body: `There must be at least two divisions.`,
+      headers
+    };
+  }
+
+  // ensure that each division has at least 2 players assigned
+  if (Math.min(...pars.divisions.map(d => d.length)) < 2) {
+    console.log(`Error 400: Too-small division`);
+    return {
+      statusCode: 400,
+      body: `Each division must have at least two players assigned.`,
+      headers
+    };
+  }
+
+  // ensure that all assigned players are registered or abort
+  const idsRegistered = eventPlayers.map(p => p.playerid);
+  for (const uid of pars.divisions.flat()) {
+    if (!idsRegistered.includes(uid)) {
+      console.log(`Error 400: Unregistered player`);
+      return {
+        statusCode: 400,
+        body: `You may not assign divisions to players not registered for this event.`,
+        headers
+      };
+    }
+  }
+
+  // ensure that all participating players have been assigned or abort
+  const setRegistrants = new Set<string>(idsRegistered);
+  for (const uid of pars.divisions.flat()) {
+    setRegistrants.delete(uid);
+  }
+  if (setRegistrants.size > 0) {
+    console.log(`Error 400: Not all players assigned`);
+    return {
+      statusCode: 400,
+      body: `All registered players must be assigned to a division.`,
+      headers
+    };
+  }
+
+  // ensure there are no duplicates anywhere
+  const seen = new Set<string>(pars.divisions.flat());
+  if (seen.size < pars.divisions.flat().length) {
+    console.log(`Error 400: Duplicates`);
+    return {
+      statusCode: 400,
+      body: `Players must only be assigned to one division. No duplicates allowed.`,
+      headers
+    };
+  }
+
+  const list: Promise<any>[] = [];
+  try {
+    // for each division
+    for (let d = 0; d < pars.divisions.length; d++) {
+      const division = pars.divisions[d];
+      for (const pid of division) {
+        const cmd = ddbDocClient.send(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { "pk": "ORGEVENTPLAYER", "sk": `${pars.eventid}#${pid}` },
+          ExpressionAttributeValues: { ":div": d + 1 },
+          UpdateExpression: "set division = :div",
         }));
-        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
-            console.log(`Error 401`);
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        userRec = user.Item as FullUser;
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`eventCreateGames: Unable to load user record to authorize ${userid}`);
+        list.push(cmd);
+      }
     }
-    let event: OrgEvent;
-    try {
-        const eventRec = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (eventRec.Item === undefined) {
-            console.log(`Error 404`);
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
-        event = eventRec.Item as OrgEvent;
-        if (userRec === undefined || (userRec.admin !== true && event.organizer !== userid)) {
-            console.log(`Error 401`);
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`eventCreateGames: Unable to load/validate the event record for event ${pars.eventid}. Error: ${error}`);
-    }
-    // get list of registered players
-    let eventPlayers: OrgEventPlayer[];
-    try {
-        const pRecs = await ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-                ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
-                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        }));
-        if (pRecs.Items === undefined || pRecs.Items.length === 0) {
-            console.log(`Error 400: No players`);
-            return {
-                statusCode: 400,
-                body: "This event has no registered players!",
-                headers
-            };
-        }
-        eventPlayers = pRecs.Items as OrgEventPlayer[];
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`eventCreateGames: Unable to load registered players for event ${pars.eventid}. Error: ${error}`);
-    }
-
-    // ensure there are at least 2 divisions
-    if (pars.divisions.length < 2) {
-        console.log(`Error 400: Too few divisions`);
-        return {
-            statusCode: 400,
-            body: `There must be at least two divisions.`,
-            headers
-        };
-    }
-
-    // ensure that each division has at least 2 players assigned
-    if (Math.min(...pars.divisions.map(d => d.length)) < 2) {
-        console.log(`Error 400: Too-small division`);
-        return {
-            statusCode: 400,
-            body: `Each division must have at least two players assigned.`,
-            headers
-        };
-    }
-
-    // ensure that all assigned players are registered or abort
-    const idsRegistered = eventPlayers.map(p => p.playerid);
-    for (const uid of pars.divisions.flat()) {
-        if (!idsRegistered.includes(uid)) {
-            console.log(`Error 400: Unregistered player`);
-            return {
-                statusCode: 400,
-                body: `You may not assign divisions to players not registered for this event.`,
-                headers
-            };
-        }
-    }
-
-    // ensure that all participating players have been assigned or abort
-    const setRegistrants = new Set<string>(idsRegistered);
-    for (const uid of pars.divisions.flat()) {
-        setRegistrants.delete(uid);
-    }
-    if (setRegistrants.size > 0) {
-        console.log(`Error 400: Not all players assigned`);
-        return {
-            statusCode: 400,
-            body: `All registered players must be assigned to a division.`,
-            headers
-        };
-    }
-
-    // ensure there are no duplicates anywhere
-    const seen = new Set<string>(pars.divisions.flat());
-    if (seen.size < pars.divisions.flat().length) {
-        console.log(`Error 400: Duplicates`);
-        return {
-            statusCode: 400,
-            body: `Players must only be assigned to one division. No duplicates allowed.`,
-            headers
-        };
-    }
-
-    const list: Promise<any>[] = [];
-    try {
-        // for each division
-        for (let d = 0; d < pars.divisions.length; d++) {
-            const division = pars.divisions[d];
-            for (const pid of division) {
-                const cmd = ddbDocClient.send(new UpdateCommand({
-                    TableName: process.env.ABSTRACT_PLAY_TABLE,
-                    Key: { "pk": "ORGEVENTPLAYER", "sk": `${pars.eventid}#${pid}` },
-                    ExpressionAttributeValues: { ":div": d+1 },
-                    UpdateExpression: "set division = :div",
-                }));
-                list.push(cmd);
-            }
-        }
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`eventUpdateDivisions: Something went wrong assigning divisions for event ${pars.eventid}. Error: ${error}`);
-    }
-    // execute all updates
-    try {
-        await Promise.all(list);
-        return {
-            statusCode: 200,
-            headers
-        };
-    } catch (error) {
-        logGetItemError(error);
-        throw new Error(`Something terrible happened while trying to assign divisions for event ${pars.eventid}`);
-    }
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`eventUpdateDivisions: Something went wrong assigning divisions for event ${pars.eventid}. Error: ${error}`);
+  }
+  // execute all updates
+  try {
+    await Promise.all(list);
+    return {
+      statusCode: 200,
+      headers
+    };
+  } catch (error) {
+    logGetItemError(error);
+    throw new Error(`Something terrible happened while trying to assign divisions for event ${pars.eventid}`);
+  }
 }
 
-async function eventCreateGames(userid: string, pars: {eventid: string; pairs: Pairing[]}) {
-    // (Do as much validation as possible before creating games and abort if anything's wrong.)
-    console.log(`About to try creating the following pairings for event ${pars.eventid}:\n${JSON.stringify(pars.pairs, null, 2)}`);
-    // load event and authorize requester
-    let userRec: FullUser|undefined;
-    try {
-        const user = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "USER",
-            "sk": userid
-            },
-        }));
-        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
-            console.log(`Error 401`);
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-        userRec = user.Item as FullUser;
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`eventCreateGames: Unable to load user record to authorize ${userid}`);
+async function eventCreateGames(userid: string, pars: { eventid: string; pairs: Pairing[] }) {
+  // (Do as much validation as possible before creating games and abort if anything's wrong.)
+  console.log(`About to try creating the following pairings for event ${pars.eventid}:\n${JSON.stringify(pars.pairs, null, 2)}`);
+  // load event and authorize requester
+  let userRec: FullUser | undefined;
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userid
+        },
+      }));
+    if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+      console.log(`Error 401`);
+      return {
+        statusCode: 401,
+        headers
+      };
     }
-    let event: OrgEvent;
-    try {
-        const eventRec = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (eventRec.Item === undefined) {
-            console.log(`Error 404`);
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
-        event = eventRec.Item as OrgEvent;
-        if (userRec === undefined || (userRec.admin !== true && event.organizer !== userid)) {
-            console.log(`Error 401`);
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`eventCreateGames: Unable to load/validate the event record for event ${pars.eventid}. Error: ${error}`);
+    userRec = user.Item as FullUser;
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`eventCreateGames: Unable to load user record to authorize ${userid}`);
+  }
+  let event: OrgEvent;
+  try {
+    const eventRec = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (eventRec.Item === undefined) {
+      console.log(`Error 404`);
+      return {
+        statusCode: 404,
+        headers,
+      };
     }
-    // get list of registered players
-    let eventPlayers: OrgEventPlayer[];
-    try {
-        const pRecs = await ddbDocClient.send(
-            new QueryCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-                ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
-                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        }));
-        if (pRecs.Items === undefined || pRecs.Items.length === 0) {
-            console.log(`Error 400: No players`);
-            return {
-                statusCode: 400,
-                body: "This event has no registered players!",
-                headers
-            };
-        }
-        eventPlayers = pRecs.Items as OrgEventPlayer[];
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`eventCreateGames: Unable to load registered players for event ${pars.eventid}. Error: ${error}`);
+    event = eventRec.Item as OrgEvent;
+    if (userRec === undefined || (userRec.admin !== true && event.organizer !== userid)) {
+      console.log(`Error 401`);
+      return {
+        statusCode: 401,
+        headers
+      };
     }
-    // ensure that all paired players are registered or abort
-    const idsRegistered = eventPlayers.map(p => p.playerid);
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`eventCreateGames: Unable to load/validate the event record for event ${pars.eventid}. Error: ${error}`);
+  }
+  // get list of registered players
+  let eventPlayers: OrgEventPlayer[];
+  try {
+    const pRecs = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        ExpressionAttributeValues: { ":pk": "ORGEVENTPLAYER", ":sk": pars.eventid },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      }));
+    if (pRecs.Items === undefined || pRecs.Items.length === 0) {
+      console.log(`Error 400: No players`);
+      return {
+        statusCode: 400,
+        body: "This event has no registered players!",
+        headers
+      };
+    }
+    eventPlayers = pRecs.Items as OrgEventPlayer[];
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`eventCreateGames: Unable to load registered players for event ${pars.eventid}. Error: ${error}`);
+  }
+  // ensure that all paired players are registered or abort
+  const idsRegistered = eventPlayers.map(p => p.playerid);
+  for (const pair of pars.pairs) {
+    if (!idsRegistered.includes(pair.p1.id) || !idsRegistered.includes(pair.p2.id)) {
+      console.log(`Error 400: Unregistered player`);
+      return {
+        statusCode: 400,
+        body: `You may not create games for players not registered for this event.`,
+        headers
+      };
+    }
+  }
+  // load all player records to be paired
+  const idsPaired = new Set<string>();
+  for (const pair of pars.pairs) {
+    idsPaired.add(pair.p1.id);
+    idsPaired.add(pair.p2.id);
+  }
+  let players: FullUser[];
+  try {
+    players = await getPlayers([...idsPaired.values()]);
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`eventCreateGames: Unable to load full player records for registered players for event ${pars.eventid}. Error: ${error}`);
+  }
+  // try to initialize all requested metagame/variant combos to make sure they're valid
+  try {
+    const tried = new Set<string>();
     for (const pair of pars.pairs) {
-        if (!idsRegistered.includes(pair.p1.id) || !idsRegistered.includes(pair.p2.id)) {
-            console.log(`Error 400: Unregistered player`);
-            return {
-                statusCode: 400,
-                body: `You may not create games for players not registered for this event.`,
-                headers
-            };
-        }
+      const id = [pair.metagame, ...pair.variants].join("|");
+      if (tried.has(id)) {
+        continue;
+      } else {
+        tried.add(id);
+      }
+      const info = gameinfo.get(pair.metagame);
+      let engine;
+      if (info.playercounts.length > 1)
+        engine = GameFactory(pair.metagame, 2, pair.variants);
+      else
+        engine = GameFactory(pair.metagame, undefined, pair.variants);
+      if (!engine) {
+        console.log(`Error 400: No engine`);
+        return {
+          statusCode: 400,
+          body: `The game engine could not be initialized for the game ${pair.metagame} and the variants "${pair.variants.join(", ")}".`,
+          headers
+        };
+      }
+      const varsReqd = [...pair.variants];
+      varsReqd.sort((a, b) => a.localeCompare(b));
+      const varsEngine = [...engine.variants];
+      varsEngine.sort((a, b) => a.localeCompare(b));
+      if (varsReqd.join("|") !== varsEngine.join("|")) {
+        console.log(`Error 400: Missing variants`);
+        return {
+          statusCode: 400,
+          body: `The variants requested (${JSON.stringify(varsReqd)}) do not match the variants asserted by the game engine (${JSON.stringify(varsEngine)}).`,
+          headers
+        };
+      }
     }
-    // load all player records to be paired
-    const idsPaired = new Set<string>();
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`eventCreateGames: Unable to validate metagame/variant combos for event ${pars.eventid}. Error: ${error}`);
+  }
+
+  const list: Promise<any>[] = [];
+  try {
+    // for each pairing
+    const updatedGames = new Map<string, Game[]>();
     for (const pair of pars.pairs) {
-        idsPaired.add(pair.p1.id);
-        idsPaired.add(pair.p2.id);
-    }
-    let players: FullUser[];
-    try {
-        players = await getPlayers([...idsPaired.values()]);
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`eventCreateGames: Unable to load full player records for registered players for event ${pars.eventid}. Error: ${error}`);
-    }
-    // try to initialize all requested metagame/variant combos to make sure they're valid
-    try {
-        const tried = new Set<string>();
-        for (const pair of pars.pairs) {
-            const id = [pair.metagame, ...pair.variants].join("|");
-            if (tried.has(id)) {
-                continue;
-            } else {
-                tried.add(id);
-            }
-            const info = gameinfo.get(pair.metagame);
-            let engine;
-            if (info.playercounts.length > 1)
-              engine = GameFactory(pair.metagame, 2, pair.variants);
-            else
-              engine = GameFactory(pair.metagame, undefined, pair.variants);
-            if (!engine) {
-                console.log(`Error 400: No engine`);
-                return {
-                    statusCode: 400,
-                    body: `The game engine could not be initialized for the game ${pair.metagame} and the variants "${pair.variants.join(", ")}".`,
-                    headers
-                };
-            }
-            const varsReqd = [...pair.variants];
-            varsReqd.sort((a,b) => a.localeCompare(b));
-            const varsEngine = [...engine.variants];
-            varsEngine.sort((a,b) => a.localeCompare(b));
-            if (varsReqd.join("|") !== varsEngine.join("|")) {
-                console.log(`Error 400: Missing variants`);
-                return {
-                    statusCode: 400,
-                    body: `The variants requested (${JSON.stringify(varsReqd)}) do not match the variants asserted by the game engine (${JSON.stringify(varsEngine)}).`,
-                    headers
-                };
-            }
+      // create game record
+      const gameId = uuid();
+      const playerIDs = [pair.p1.id, pair.p2.id];
+      let whoseTurn: string | boolean[] = "0";
+      const info = gameinfo.get(pair.metagame);
+      if (info.flags !== undefined && info.flags.includes('simultaneous')) {
+        whoseTurn = playerIDs.map(() => true);
+      }
+      let engine: GameBase | GameBaseSimultaneous;
+      if (info.playercounts.length > 1) {
+        engine = GameFactory(pair.metagame, 2, pair.variants)!;
+      } else {
+        engine = GameFactory(pair.metagame, undefined, pair.variants)!;
+      }
+      const state = engine.serialize();
+      const now = Date.now();
+      const pInvolved = [players.find(p => p.id === pair.p1.id)!, players.find(p => p.id === pair.p2.id)!];
+      // @ts-ignore
+      if (pInvolved.includes(undefined)) {
+        throw new Error("Could not find one of the players! This should never happen!");
+      }
+      const gamePlayers = pInvolved.map(p => { return { "id": p.id, "name": p.name, "time": pair.clockStart * 3600000 } }) as User[];
+      if (info.flags !== undefined && info.flags.includes('perspective')) {
+        let rot = 180;
+        if (playerIDs.length > 2 && info.flags !== undefined && info.flags.includes('rotate90')) {
+          rot = -90;
         }
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`eventCreateGames: Unable to validate metagame/variant combos for event ${pars.eventid}. Error: ${error}`);
-    }
-
-    const list: Promise<any>[] = [];
-    try {
-        // for each pairing
-        const updatedGames = new Map<string, Game[]>();
-        for (const pair of pars.pairs) {
-            // create game record
-            const gameId = uuid();
-            const playerIDs = [pair.p1.id, pair.p2.id];
-            let whoseTurn: string | boolean[] = "0";
-            const info = gameinfo.get(pair.metagame);
-            if (info.flags !== undefined && info.flags.includes('simultaneous')) {
-              whoseTurn = playerIDs.map(() => true);
-            }
-            let engine: GameBase|GameBaseSimultaneous;
-            if (info.playercounts.length > 1) {
-                engine = GameFactory(pair.metagame, 2, pair.variants)!;
-            } else {
-                engine = GameFactory(pair.metagame, undefined, pair.variants)!;
-            }
-            const state = engine.serialize();
-            const now = Date.now();
-            const pInvolved = [players.find(p => p.id === pair.p1.id)!, players.find(p => p.id === pair.p2.id)!];
-            // @ts-ignore
-            if (pInvolved.includes(undefined)) {
-                throw new Error("Could not find one of the players! This should never happen!");
-            }
-            const gamePlayers = pInvolved.map(p => { return {"id": p.id, "name": p.name, "time": pair.clockStart * 3600000 }}) as User[];
-            if (info.flags !== undefined && info.flags.includes('perspective')) {
-                let rot = 180;
-                if (playerIDs.length > 2 && info.flags !== undefined && info.flags.includes('rotate90')) {
-                  rot = -90;
-                }
-                for (let i = 1; i < playerIDs.length; i++) {
-                  gamePlayers[i].settings = {"rotate": i * rot};
-                }
-            }
-            // queue for update
-            const addGame = sendCommandWithRetry(new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Item: {
-                    "pk": "GAME",
-                    "sk": pair.metagame + "#0#" + gameId,
-                    "id": gameId,
-                    "metaGame": pair.metagame,
-                    "numPlayers": 2,
-                    "rated": true,
-                    "players": gamePlayers,
-                    "clockStart": pair.clockStart,
-                    "clockInc": pair.clockInc,
-                    "clockMax": pair.clockMax,
-                    "clockHard": true,
-                    "noExplore": false,
-                    "state": state,
-                    "toMove": whoseTurn,
-                    "lastMoveTime": now,
-                    "gameStarted": now,
-                    "variants": engine.variants,
-                    "event": pars.eventid,
-                  } as FullGame
-            }));
-            list.push(addGame);
-            // this should be all the info we want to show on the "my games" summary page.
-            const game = {
-                "id": gameId,
-                "metaGame": pair.metagame,
-                "players": pInvolved.map(p => {return {"id": p.id, "name": p.name, "time": pair.clockStart * 3600000}}),
-                "clockHard": true,
-                "noExplore": false,
-                "toMove": whoseTurn,
-                "lastMoveTime": now,
-                "variants": engine.variants,
-            } as Game;
-            list.push(addToGameLists("CURRENTGAMES", game, now, false));
-            // prepare to update player records and queue updates after the loop
-            pInvolved.forEach(player => {
-                let lst: Game[] = [];
-                if (updatedGames.has(player.id)) {
-                    lst = updatedGames.get(player.id)!;
-                }
-                lst.push(game);
-                updatedGames.set(player.id, lst);
-            });
-            // Create an OrgEventGame record to link this game to the event
-            const eventGame: OrgEventGame = {
-                pk: "ORGEVENTGAME",
-                sk: [pars.eventid, gameId].join("#"),
-                metaGame: pair.metagame,
-                variants: engine.variants,
-                round: pair.round,
-                gameid: gameId,
-                player1: pair.p1.id,
-                player2: pair.p2.id,
-            };
-            list.push(
-                sendCommandWithRetry(new PutCommand({
-                    TableName: process.env.ABSTRACT_PLAY_TABLE,
-                      Item: eventGame,
-                }))
-            );
+        for (let i = 1; i < playerIDs.length; i++) {
+          gamePlayers[i].settings = { "rotate": i * rot };
         }
-        // queue all player updates one time
-        players.forEach(player => {
-            let games = player.games;
-            if (games === undefined) {
-                games = [];
-            }
-            const updated = updatedGames.get(player.id);
-            if (updated !== undefined) {
-                const updatedGameIDs: string[] = [];
-                for (const game of updated) {
-                    games.push(game);
-                    updatedGameIDs.push(game.id);
-
-                }
-                list.push(updateUserGames(player.id, player.gamesUpdate, updatedGameIDs, games));
-            }
-        });
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`eventCreateGames: Something went wrong generating pairings for event ${pars.eventid}. Error: ${error}`);
-    }
-    // execute all updates
-    try {
-        await Promise.all(list);
-        return {
-            statusCode: 200,
-            headers
-        };
-    } catch (error) {
-        logGetItemError(error);
-        throw new Error(`Something terrible happened while trying to create paired games for event ${pars.eventid}`);
-    }
-}
-
-async function eventClose(userid: string, pars: {eventid: string, winner: string[]}) {
-    // load event and authorize requester
-    let userRec: FullUser|undefined;
-    try {
-        const user = await ddbDocClient.send(
-        new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-            "pk": "USER",
-            "sk": userid
-            },
-        }));
-        if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
-            console.log(`Error 401`);
-            return {
-                statusCode: 401,
-                headers
-            };
+      }
+      // queue for update
+      const addGame = sendCommandWithRetry(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: {
+          "pk": "GAME",
+          "sk": pair.metagame + "#0#" + gameId,
+          "id": gameId,
+          "metaGame": pair.metagame,
+          "numPlayers": 2,
+          "rated": true,
+          "players": gamePlayers,
+          "clockStart": pair.clockStart,
+          "clockInc": pair.clockInc,
+          "clockMax": pair.clockMax,
+          "clockHard": true,
+          "noExplore": false,
+          "state": state,
+          "toMove": whoseTurn,
+          "lastMoveTime": now,
+          "gameStarted": now,
+          "variants": engine.variants,
+          "event": pars.eventid,
+        } as FullGame
+      }));
+      list.push(addGame);
+      // this should be all the info we want to show on the "my games" summary page.
+      const game = {
+        "id": gameId,
+        "metaGame": pair.metagame,
+        "players": pInvolved.map(p => { return { "id": p.id, "name": p.name, "time": pair.clockStart * 3600000 } }),
+        "clockHard": true,
+        "noExplore": false,
+        "toMove": whoseTurn,
+        "lastMoveTime": now,
+        "variants": engine.variants,
+      } as Game;
+      list.push(addToGameLists("CURRENTGAMES", game, now, false));
+      // prepare to update player records and queue updates after the loop
+      pInvolved.forEach(player => {
+        let lst: Game[] = [];
+        if (updatedGames.has(player.id)) {
+          lst = updatedGames.get(player.id)!;
         }
-        userRec = user.Item as FullUser;
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`eventClose: Unable to load user record to authorize ${userid}`);
-    }
-    let event: OrgEvent;
-    try {
-        const eventRec = await ddbDocClient.send(
-            new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                "pk": "ORGEVENT",
-                "sk": pars.eventid
-                },
-        }));
-        if (eventRec.Item === undefined) {
-            console.log(`Error 404`);
-            return {
-                statusCode: 404,
-                headers,
-            };
-        }
-        event = eventRec.Item as OrgEvent;
-        if (userRec === undefined || (userRec.admin !== true && event.organizer !== userid)) {
-            console.log(`Error 401`);
-            return {
-                statusCode: 401,
-                headers
-            };
-        }
-    } catch (error) {
-        logGetItemError(error);
-        return formatReturnError(`eventClose: Unable to load/validate the event record for event ${pars.eventid}. Error: ${error}`);
-    }
-    // update event record
-    try {
-        if (event.dateEnd === undefined) {
-            event.dateEnd = Date.now();
-        }
-        event.winner = pars.winner;
-        await ddbDocClient.send(new PutCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Item: event
-            })
-        );
-        return {
-            statusCode: 200,
-            headers
-        };
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`eventClose: Unable to close event ${pars.eventid}`);
-    }
-}
-
-async function eventUpdates(pars: {eventid: string, gameid: string, winner: string[]}): Promise<any[]> {
-    const work: Promise<any>[] = [];
-    work.push(
-        sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "ORGEVENTGAME", "sk": `${pars.eventid}#${pars.gameid}` },
-            ExpressionAttributeValues: { ":win": pars.winner, ":arb": false},
-            UpdateExpression: "set winner = :win, arbitrated = :arb",
+        lst.push(game);
+        updatedGames.set(player.id, lst);
+      });
+      // Create an OrgEventGame record to link this game to the event
+      const eventGame: OrgEventGame = {
+        pk: "ORGEVENTGAME",
+        sk: [pars.eventid, gameId].join("#"),
+        metaGame: pair.metagame,
+        variants: engine.variants,
+        round: pair.round,
+        gameid: gameId,
+        player1: pair.p1.id,
+        player2: pair.p2.id,
+      };
+      list.push(
+        sendCommandWithRetry(new PutCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Item: eventGame,
         }))
+      );
+    }
+    // queue all player updates one time
+    players.forEach(player => {
+      let games = player.games;
+      if (games === undefined) {
+        games = [];
+      }
+      const updated = updatedGames.get(player.id);
+      if (updated !== undefined) {
+        const updatedGameIDs: string[] = [];
+        for (const game of updated) {
+          games.push(game);
+          updatedGameIDs.push(game.id);
+
+        }
+        list.push(updateUserGames(player.id, player.gamesUpdate, updatedGameIDs, games));
+      }
+    });
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`eventCreateGames: Something went wrong generating pairings for event ${pars.eventid}. Error: ${error}`);
+  }
+  // execute all updates
+  try {
+    await Promise.all(list);
+    return {
+      statusCode: 200,
+      headers
+    };
+  } catch (error) {
+    logGetItemError(error);
+    throw new Error(`Something terrible happened while trying to create paired games for event ${pars.eventid}`);
+  }
+}
+
+async function eventClose(userid: string, pars: { eventid: string, winner: string[] }) {
+  // load event and authorize requester
+  let userRec: FullUser | undefined;
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userid
+        },
+      }));
+    if (user.Item === undefined || (user.Item.admin !== true && user.Item.organizer !== true)) {
+      console.log(`Error 401`);
+      return {
+        statusCode: 401,
+        headers
+      };
+    }
+    userRec = user.Item as FullUser;
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`eventClose: Unable to load user record to authorize ${userid}`);
+  }
+  let event: OrgEvent;
+  try {
+    const eventRec = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "ORGEVENT",
+          "sk": pars.eventid
+        },
+      }));
+    if (eventRec.Item === undefined) {
+      console.log(`Error 404`);
+      return {
+        statusCode: 404,
+        headers,
+      };
+    }
+    event = eventRec.Item as OrgEvent;
+    if (userRec === undefined || (userRec.admin !== true && event.organizer !== userid)) {
+      console.log(`Error 401`);
+      return {
+        statusCode: 401,
+        headers
+      };
+    }
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`eventClose: Unable to load/validate the event record for event ${pars.eventid}. Error: ${error}`);
+  }
+  // update event record
+  try {
+    if (event.dateEnd === undefined) {
+      event.dateEnd = Date.now();
+    }
+    event.winner = pars.winner;
+    await ddbDocClient.send(new PutCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Item: event
+    })
     );
-    return Promise.all(work);
+    return {
+      statusCode: 200,
+      headers
+    };
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`eventClose: Unable to close event ${pars.eventid}`);
+  }
+}
+
+async function eventUpdates(pars: { eventid: string, gameid: string, winner: string[] }): Promise<any[]> {
+  const work: Promise<any>[] = [];
+  work.push(
+    sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "ORGEVENTGAME", "sk": `${pars.eventid}#${pars.gameid}` },
+      ExpressionAttributeValues: { ":win": pars.winner, ":arb": false },
+      UpdateExpression: "set winner = :win, arbitrated = :arb",
+    }))
+  );
+  return Promise.all(work);
 }
 
 // Delete every trace of a list of games. Only for admins and probably only for dev!
@@ -7683,10 +8167,10 @@ async function deleteGames(userId: string, pars: { metaGame: string, cbit: numbe
       ));
       work2.push(ddbDocClient.send(
         new QueryCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            KeyConditionExpression: "#pk = :pk",
-            ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + gameid },
-            ExpressionAttributeNames: { "#pk": "pk" },
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "#pk = :pk",
+          ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + gameid },
+          ExpressionAttributeNames: { "#pk": "pk" },
         })));
       if (pars.cbit === 1) {
         work2.push(ddbDocClient.send(
@@ -7706,7 +8190,7 @@ async function deleteGames(userId: string, pars: { metaGame: string, cbit: numbe
     for (const game of games) {
       for (const player of game.players) {
         if (!playersGameIDs.has(player.id))
-        playersGameIDs.set(player.id, []);
+          playersGameIDs.set(player.id, []);
         playersGameIDs.get(player.id)!.push(game.id);
       }
     }
@@ -7794,15 +8278,14 @@ async function deleteGames(userId: string, pars: { metaGame: string, cbit: numbe
   }
 }
 
-async function reportProblem(pars: { error: string })
-{
+async function reportProblem(pars: { error: string }) {
   console.log("Reported problem:", pars.error);
   const data = await ddbDocClient.send(
     new QueryCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       KeyConditionExpression: "#pk = :pk",
       ExpressionAttributeValues: { ":pk": "USERS" },
-      ExpressionAttributeNames: { "#pk": "pk", "#name": "name"},
+      ExpressionAttributeNames: { "#pk": "pk", "#name": "name" },
       ProjectionExpression: "sk, #name, lastSeen, country, stars",
       ReturnConsumedCapacity: "INDEXES"
     }));
@@ -7852,457 +8335,458 @@ async function reportProblem(pars: { error: string })
 }
 
 async function sendPush(opts: PushOptions) {
-    console.log(`Sending push: ${JSON.stringify(opts)}`);
-    const {userId, body, title, topic, url} = opts;
-    let subscription: PushCredentials|undefined;
+  console.log(`Sending push: ${JSON.stringify(opts)}`);
+  const { userId, body, title, topic, url } = opts;
+  let subscription: PushCredentials | undefined;
+  try {
+    const push = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "PUSH",
+          "sk": userId
+        },
+      })
+    );
+    if (push.Item !== undefined) {
+      subscription = push.Item as PushCredentials;
+    }
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to fetch push credentials for ${userId}`);
+  }
+
+  if (subscription !== undefined) {
+    // treat both 410 and 404 as permanent. There are a LOT of 404 web push errors in the logs and apparently these are because since June 2024 the Chrome/FCM push service has changed the way it reports stale or deleted web‑push registrations.
+    const PERMANENT_FAILURES = new Set([404, 410]);
+
+    let subject = "https://play.abstractplay.com";
+    if (process.env.WEBSOCKET_STAGE === "dev") {
+      subject = "https://play.dev.abstractplay.com";
+    }
     try {
-      const push = await ddbDocClient.send(
-          new GetCommand({
+      const options: RequestOptions = {
+        vapidDetails: {
+          subject,
+          publicKey: process.env.VAPID_PUBLIC_KEY as string,
+          privateKey: process.env.VAPID_PRIVATE_KEY as string,
+        },
+        // @ts-ignore
+        topic,
+      };
+      const payload = { title, body, url, topic };
+      const result = await webpush.sendNotification(subscription.payload, JSON.stringify(payload), options);
+      console.log(`Result of webpush:`);
+      console.log(result);
+    } catch (err: any) {
+      if (("statusCode" in err) && PERMANENT_FAILURES.has(err.statusCode)) {
+        await ddbDocClient.send(
+          new DeleteCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: {
               "pk": "PUSH",
               "sk": userId
             },
           })
-      );
-      if (push.Item !== undefined) {
-          subscription = push.Item as PushCredentials;
+        );
+      } else {
+        logGetItemError(err);
       }
-    } catch (err) {
-      logGetItemError(err);
-      return formatReturnError(`Unable to fetch push credentials for ${userId}`);
+      return formatReturnError(`Unable to send push notification: ${err}`);
     }
-
-    if(subscription !== undefined) {
-      // treat both 410 and 404 as permanent. There are a LOT of 404 web push errors in the logs and apparently these are because since June 2024 the Chrome/FCM push service has changed the way it reports stale or deleted web‑push registrations.
-      const PERMANENT_FAILURES = new Set([404, 410]);
-
-      let subject = "https://play.abstractplay.com";
-      if (process.env.WEBSOCKET_STAGE === "dev") {
-        subject = "https://play.dev.abstractplay.com";
-      }
-      try {
-          const options: RequestOptions = {
-            vapidDetails: {
-              subject,
-              publicKey: process.env.VAPID_PUBLIC_KEY as string,
-              privateKey: process.env.VAPID_PRIVATE_KEY as string,
-            },
-            // @ts-ignore
-            topic,
-          };
-          const payload = {title, body, url, topic};
-          const result = await webpush.sendNotification(subscription.payload, JSON.stringify(payload), options);
-          console.log(`Result of webpush:`);
-          console.log(result);
-      } catch (err: any) {
-          if ( ("statusCode" in err) && PERMANENT_FAILURES.has(err.statusCode)) {
-            await ddbDocClient.send(
-                new DeleteCommand({
-                  TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Key: {
-                    "pk": "PUSH",
-                    "sk": userId
-                  },
-                })
-            );
-          } else {
-            logGetItemError(err);
-          }
-          return formatReturnError(`Unable to send push notification: ${err}`);
-      }
-    }
+  }
 }
 
 
-async function invokePie(userid: string, pars: {id: string, metaGame: string, cbit: number}) {
-    if (pars.cbit !== 0) {
-      return formatReturnError("cbit must be 0");
+async function invokePie(userid: string, pars: { id: string, metaGame: string, cbit: number }) {
+  if (pars.cbit !== 0) {
+    return formatReturnError("cbit must be 0");
+  }
+  let data: any;
+  try {
+    data = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "GAME",
+          "sk": pars.metaGame + "#0#" + pars.id
+        },
+      }));
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+  if (!data.Item)
+    throw new Error(`No game ${pars.id} in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  try {
+    const game = data.Item as FullGame;
+    console.log("got game in invokePie:");
+    console.log(game);
+    if (("pieInvoked" in game) && (game.pieInvoked === true)) {
+      console.log("Double pie detected! Aborting!");
+      return {
+        statusCode: 200,
+        body: JSON.stringify(game),
+        headers
+      };
+    } else {
+      const engine = GameFactory(game.metaGame, game.state);
+      if (!engine)
+        throw new Error(`Unknown metaGame ${game.metaGame}`);
+      const flags = gameinfo.get(game.metaGame).flags;
+      if ((flags === undefined) || ((!flags.includes("pie")) && (!flags.includes("pie-even")))) {
+        throw new Error(`Metagame ${pars.metaGame} does not have the "pie" flag. Aborting.`);
+      }
+      const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+
+      const player = game.players.find(p => p.id === userid);
+      if (!player)
+        throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
+
+      const timestamp = Date.now();
+      const timeUsed = timestamp - lastMoveTime;
+      // console.log("timeUsed", timeUsed);
+      // console.log("player", player);
+      if (player.time! - timeUsed < 0)
+        player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
+      else
+        player.time = player.time! - timeUsed + game.clockInc * 3600000;
+      if (player.time > game.clockMax * 3600000) player.time = game.clockMax * 3600000;
+      const playerIDs = game.players.map((p: { id: any; }) => p.id);
+      // TODO: We are updating players and their games. This should be put in some kind of critical section!
+      const players = await getPlayers(playerIDs);
+      console.log(`Current player list: ${JSON.stringify(game.players)}`);
+      const reversed = [...game.players].reverse();
+      console.log(`Reversed: ${JSON.stringify(reversed)}`);
+      game.players = [...reversed];
+      game.pieInvoked = true;
+
+      // if flag is `pie-even`, issue a "pass" command
+      if (flags.includes("pie-even")) {
+        try {
+          engine.move("pass")
+          game.state = engine.serialize();
+          game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
+          game.toMove = `${engine.currplayer! - 1}`;
+        } catch (err) {
+          logGetItemError(err);
+          return formatReturnError('Error passing while invoking "pie-even"');
+        }
+      } else {
+        // the other player needs to be given `timeUsed` back on their clock to account
+        // for the fact that the game state is not changing (`lastMoveTime` isn't going
+        // to change)
+        const otherPlayer = game.players.find(p => p.id !== userid)!;
+        otherPlayer.time = otherPlayer.time! + timeUsed;
+      }
+
+      // this should be all the info we want to show on the "my games" summary page.
+      const playerGame = {
+        "id": game.id,
+        "metaGame": game.metaGame,
+        // reverse the list of players
+        "players": [...reversed],
+        "clockHard": game.clockHard,
+        "noExplore": game.noExplore || false,
+        "toMove": game.toMove,
+        "lastMoveTime": timestamp
+      } as Game;
+      const myGame = {
+        "id": game.id,
+        "metaGame": game.metaGame,
+        // reverse the list of players
+        "players": [...reversed],
+        "clockHard": game.clockHard,
+        "noExplore": game.noExplore || false,
+        "toMove": game.toMove,
+        "lastMoveTime": timestamp
+      } as Game;
+      const list: Promise<any>[] = [];
+      game.lastMoveTime = timestamp;
+      const updateGame = ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: game
+      }));
+      list.push(updateGame);
+      console.log("Scheduled update to game");
+      // Update players
+      for (const player of players) {
+        const games: Game[] = [];
+        (player.games ?? []).forEach(g => {
+          if (g.id === playerGame.id) {
+            if (player.id === userid)
+              games.push(myGame);
+            else
+              games.push(playerGame);
+          }
+          else
+            games.push(g)
+        });
+        list.push(updateUserGames(player.id, player.gamesUpdate, [playerGame.id], games));
+        console.log(`Scheduled update to player ${player.id}, ${player.name}, with games`, games);
+      }
+
+      // insert a comment into the game log
+      const thisPlayer = players.find(p => p.id === userid)!;
+      list.push(submitComment("", { id: game.id, comment: `${thisPlayer.name} elected to switch seats. As a result, the game record for ply 1 has been retroactively changed to look as if ${thisPlayer.name} made that move.`, moveNumber: 2 }));
+
+      list.push(sendSubmittedMoveEmails(game, players.filter(p => p.email) as FullUser[], false, []));
+      console.log("Scheduled emails");
+      await Promise.all(list);
+      console.log("All updates complete");
+      // if bot is involved, trigger ping
+      if (players.map(p => p.id).includes(process.env.AIAI_USERID!)) {
+        await realPingBot(pars.metaGame, pars.id);
+      }
+      await notifyRegisteredBotsTurn(pars.metaGame, pars.id, game);
+      return {
+        statusCode: 200,
+        body: JSON.stringify(game),
+        headers
+      };
     }
-    let data: any;
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError('Unable to process invoke pie');
+  }
+}
+
+async function updateNote(userId: string, pars: { gameId: string; note?: string; }) {
+  // if note is empty, delete the record
+  if ((pars.note === undefined) || (pars.note === null) || (pars.note.length === 0)) {
     try {
-      data = await ddbDocClient.send(
-        new GetCommand({
+      await ddbDocClient.send(
+        new DeleteCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
-            "pk": "GAME",
-            "sk": pars.metaGame + "#0#" + pars.id
+            "pk": "NOTE", "sk": `${pars.gameId}#${userId}`,
           },
-        }));
+        })
+      )
+    } catch (err) {
+      logGetItemError(err);
+      return formatReturnError(`Unable to updateNote (delete, actually) ${userId}`);
     }
-    catch (error) {
-      logGetItemError(error);
-      return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-    }
-    if (!data.Item)
-      throw new Error(`No game ${pars.id} in table ${process.env.ABSTRACT_PLAY_TABLE}`);
-    try {
-      const game = data.Item as FullGame;
-      console.log("got game in invokePie:");
-      console.log(game);
-      if ( ("pieInvoked" in game) && (game.pieInvoked === true) ) {
-        console.log("Double pie detected! Aborting!");
-        return {
-            statusCode: 200,
-            body: JSON.stringify(game),
-            headers
-        };
-      } else {
-        const engine = GameFactory(game.metaGame, game.state);
-        if (!engine)
-          throw new Error(`Unknown metaGame ${game.metaGame}`);
-        const flags = gameinfo.get(game.metaGame).flags;
-        if ( (flags === undefined) || ( (! flags.includes("pie")) && (! flags.includes("pie-even")) ) ) {
-          throw new Error(`Metagame ${pars.metaGame} does not have the "pie" flag. Aborting.`);
-        }
-        const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
-
-        const player = game.players.find(p => p.id === userid);
-        if (!player)
-          throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
-
-        const timestamp = Date.now();
-        const timeUsed = timestamp - lastMoveTime;
-        // console.log("timeUsed", timeUsed);
-        // console.log("player", player);
-        if (player.time! - timeUsed < 0)
-          player.time = game.clockInc * 3600000; // If the opponent didn't claim a timeout win, and player moved, pretend his remaining time was zero.
-        else
-          player.time = player.time! - timeUsed + game.clockInc * 3600000;
-        if (player.time > game.clockMax  * 3600000) player.time = game.clockMax * 3600000;
-        const playerIDs = game.players.map((p: { id: any; }) => p.id);
-        // TODO: We are updating players and their games. This should be put in some kind of critical section!
-        const players = await getPlayers(playerIDs);
-        console.log(`Current player list: ${JSON.stringify(game.players)}`);
-        const reversed = [...game.players].reverse();
-        console.log(`Reversed: ${JSON.stringify(reversed)}`);
-        game.players = [...reversed];
-        game.pieInvoked = true;
-
-        // if flag is `pie-even`, issue a "pass" command
-        if (flags.includes("pie-even")) {
-          try {
-              engine.move("pass")
-              game.state = engine.serialize();
-              game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
-              game.toMove = `${engine.currplayer! - 1}`;
-          } catch (err) {
-              logGetItemError(err);
-              return formatReturnError('Error passing while invoking "pie-even"');
-          }
-        } else {
-            // the other player needs to be given `timeUsed` back on their clock to account
-            // for the fact that the game state is not changing (`lastMoveTime` isn't going
-            // to change)
-            const otherPlayer = game.players.find(p => p.id !== userid)!;
-            otherPlayer.time = otherPlayer.time! + timeUsed;
-        }
-
-        // this should be all the info we want to show on the "my games" summary page.
-        const playerGame = {
-          "id": game.id,
-          "metaGame": game.metaGame,
-          // reverse the list of players
-          "players": [...reversed],
-          "clockHard": game.clockHard,
-          "noExplore": game.noExplore || false,
-          "toMove": game.toMove,
-          "lastMoveTime": timestamp
-        } as Game;
-        const myGame = {
-          "id": game.id,
-          "metaGame": game.metaGame,
-          // reverse the list of players
-          "players": [...reversed],
-          "clockHard": game.clockHard,
-          "noExplore": game.noExplore || false,
-          "toMove": game.toMove,
-          "lastMoveTime": timestamp
-        } as Game;
-        const list: Promise<any>[] = [];
-        game.lastMoveTime = timestamp;
-        const updateGame = ddbDocClient.send(new PutCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Item: game
-          }));
-        list.push(updateGame);
-        console.log("Scheduled update to game");
-        // Update players
-        players.forEach((player) => {
-          const games: Game[] = [];
-          player.games.forEach(g => {
-            if (g.id === playerGame.id) {
-              if (player.id === userid)
-                games.push(myGame);
-              else
-                games.push(playerGame);
-            }
-            else
-              games.push(g)
-          });
-          list.push(updateUserGames(player.id, player.gamesUpdate, [playerGame.id], games));
-          console.log(`Scheduled update to player ${player.id}, ${player.name}, with games`, games);
-        });
-
-        // insert a comment into the game log
-        const thisPlayer = players.find(p => p.id === userid)!;
-        list.push(submitComment("", {id: game.id, comment: `${thisPlayer.name} elected to switch seats. As a result, the game record for ply 1 has been retroactively changed to look as if ${thisPlayer.name} made that move.`, moveNumber: 2}));
-
-        list.push(sendSubmittedMoveEmails(game, players, false, []));
-        console.log("Scheduled emails");
-        await Promise.all(list);
-        console.log("All updates complete");
-        // if bot is involved, trigger ping
-        if (players.map(p => p.id).includes(process.env.AIAI_USERID!)) {
-          await realPingBot(pars.metaGame, pars.id);
-        }
-        return {
-          statusCode: 200,
-          body: JSON.stringify(game),
-          headers
-        };
-      }
-    }
-    catch (error) {
-      logGetItemError(error);
-      return formatReturnError('Unable to process invoke pie');
-    }
-}
-
-async function updateNote(userId: string, pars: {gameId: string; note?: string;}) {
-    // if note is empty, delete the record
-    if ( (pars.note === undefined) || (pars.note === null) || (pars.note.length === 0) ) {
-        try {
-            await ddbDocClient.send(
-                new DeleteCommand({
-                  TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Key: {
-                    "pk": "NOTE", "sk": `${pars.gameId}#${userId}`,
-                  },
-                })
-            )
-        } catch (err) {
-            logGetItemError(err);
-            return formatReturnError(`Unable to updateNote (delete, actually) ${userId}`);
-        }
     // otherwise, just PUT it!
-    } else {
-        const note: Note = {
-            pk: "NOTE",
-            sk: `${pars.gameId}#${userId}`,
-            note: pars.note,
-        }
-        console.log(`Setting note for user ${userId}, game ${pars.gameId}.`);
-        try {
-            await ddbDocClient.send(new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item: note
-            }));
-        } catch (err) {
-            logGetItemError(err);
-            return formatReturnError(`Unable to updateNote ${userId}`);
-        }
-   }
-   return {
-     statusCode: 200,
-     body: "",
-     headers
-   };
+  } else {
+    const note: Note = {
+      pk: "NOTE",
+      sk: `${pars.gameId}#${userId}`,
+      note: pars.note,
+    }
+    console.log(`Setting note for user ${userId}, game ${pars.gameId}.`);
+    try {
+      await ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: note
+      }));
+    } catch (err) {
+      logGetItemError(err);
+      return formatReturnError(`Unable to updateNote ${userId}`);
+    }
+  }
+  return {
+    statusCode: 200,
+    body: "",
+    headers
+  };
 }
 
-async function updateCommented(userId: string, pars: {id: string; metaGame: string; cbit: number; commented: number; gameEnded?: number;}) {
-    console.log(`Updating commented flag for game ${pars.id} to ${pars.commented}, cbit=${pars.cbit}, gameEnded=${pars.gameEnded}`);
-    try {
-        if (pars.cbit === 1 && pars.gameEnded !== undefined) {
-            // For completed games, update COMPLETEDGAMES table
-            await ddbDocClient.send(new UpdateCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                    "pk": "COMPLETEDGAMES#" + pars.metaGame,
-                    "sk": pars.gameEnded + "#" + pars.id
-                },
-                ExpressionAttributeValues: { ":c": pars.commented },
-                UpdateExpression: "set commented = :c",
-                ConditionExpression: "attribute_exists(pk) AND attribute_exists(sk)"
-            }));
-            console.log(`Successfully updated commented flag in COMPLETEDGAMES for game ${pars.id} to ${pars.commented}`);
-        } else if (pars.cbit === 0) {
-            // For current games, update GAME table
-            await ddbDocClient.send(new UpdateCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                    "pk": "GAME",
-                    "sk": pars.metaGame + "#0#" + pars.id
-                },
-                ExpressionAttributeValues: { ":c": pars.commented },
-                UpdateExpression: "set commented = :c",
-                ConditionExpression: "attribute_exists(pk) AND attribute_exists(sk)"
-            }));
-            console.log(`Successfully updated commented flag in GAME for game ${pars.id} to ${pars.commented}`);
-        }
+async function updateCommented(userId: string, pars: { id: string; metaGame: string; cbit: number; commented: number; gameEnded?: number; }) {
+  console.log(`Updating commented flag for game ${pars.id} to ${pars.commented}, cbit=${pars.cbit}, gameEnded=${pars.gameEnded}`);
+  try {
+    if (pars.cbit === 1 && pars.gameEnded !== undefined) {
+      // For completed games, update COMPLETEDGAMES table
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "COMPLETEDGAMES#" + pars.metaGame,
+          "sk": pars.gameEnded + "#" + pars.id
+        },
+        ExpressionAttributeValues: { ":c": pars.commented },
+        UpdateExpression: "set commented = :c",
+        ConditionExpression: "attribute_exists(pk) AND attribute_exists(sk)"
+      }));
+      console.log(`Successfully updated commented flag in COMPLETEDGAMES for game ${pars.id} to ${pars.commented}`);
+    } else if (pars.cbit === 0) {
+      // For current games, update GAME table
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "GAME",
+          "sk": pars.metaGame + "#0#" + pars.id
+        },
+        ExpressionAttributeValues: { ":c": pars.commented },
+        UpdateExpression: "set commented = :c",
+        ConditionExpression: "attribute_exists(pk) AND attribute_exists(sk)"
+      }));
+      console.log(`Successfully updated commented flag in GAME for game ${pars.id} to ${pars.commented}`);
+    }
 
-        return {
-            statusCode: 200,
-            body: JSON.stringify({ success: true }),
-            headers
-        };
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`Unable to update commented flag for game ${pars.id}: ${err}`);
-    }
-}
-
-async function setLastSeen(userId: string, pars: {gameId: string; interval?: number;}) {
-    // get USER rec
-    let user: FullUser|undefined;
-    try {
-        const data = await ddbDocClient.send(
-          new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": "USER",
-              "sk": userId
-            },
-          })
-        );
-        if (data.Item !== undefined) {
-            user = data.Item as FullUser;
-        }
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`Unable to setLastSeen ${userId}`);
-    }
-    if (user !== undefined) {
-        // find matching game
-        const game = user.games.find(g => g.id === pars.gameId);
-        if (game !== undefined) {
-            // set lastSeen to "now" + interval
-            let interval = 8;
-            if (pars.interval !== undefined) {
-                interval = pars.interval;
-            }
-            const now = new Date();
-            const then = new Date();
-            then.setDate(now.getDate() - interval);
-            game.seen = then.getTime();
-            console.log(`Setting lastSeen for ${game.id} to ${then.getTime()} (${then.toUTCString()}). It is currently ${new Date().toUTCString()}`);
-            // you need to set `lastChat` as well or chats near the end of the game will be flagged
-            game.lastChat = then.getTime();
-            // save USER rec
-            await ddbDocClient.send(new PutCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Item: user
-            }));
-            return {
-                statusCode: 200,
-                body: "",
-                headers
-            };
-        }
-    }
     return {
-        statusCode: 406,
+      statusCode: 200,
+      body: JSON.stringify({ success: true }),
+      headers
+    };
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to update commented flag for game ${pars.id}: ${err}`);
+  }
+}
+
+async function setLastSeen(userId: string, pars: { gameId: string; interval?: number; }) {
+  // get USER rec
+  let user: FullUser | undefined;
+  try {
+    const data = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      })
+    );
+    if (data.Item !== undefined) {
+      user = data.Item as FullUser;
+    }
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to setLastSeen ${userId}`);
+  }
+  if (user !== undefined) {
+    // find matching game
+    const game = user.games.find(g => g.id === pars.gameId);
+    if (game !== undefined) {
+      // set lastSeen to "now" + interval
+      let interval = 8;
+      if (pars.interval !== undefined) {
+        interval = pars.interval;
+      }
+      const now = new Date();
+      const then = new Date();
+      then.setDate(now.getDate() - interval);
+      game.seen = then.getTime();
+      console.log(`Setting lastSeen for ${game.id} to ${then.getTime()} (${then.toUTCString()}). It is currently ${new Date().toUTCString()}`);
+      // you need to set `lastChat` as well or chats near the end of the game will be flagged
+      game.lastChat = then.getTime();
+      // save USER rec
+      await ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: user
+      }));
+      return {
+        statusCode: 200,
         body: "",
         headers
-    };
+      };
+    }
+  }
+  return {
+    statusCode: 406,
+    body: "",
+    headers
+  };
 }
 
 async function botManageChallenges() {
-    const userId = process.env.AIAI_USERID;
-    try {
-      console.log(`Getting USER record`);
-      const userData = await ddbDocClient.send(
-        new GetCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "USER",
-            "sk": userId
-          },
-        }));
-      if (userData.Item === undefined) {
-        throw new Error("Could not find a USER record for the AiAi bot");
-      }
-      const user = userData.Item as FullUser;
-      let games = user.games;
-      if (games === undefined)
-        games= [];
-
-      console.log(`Fetching challenges`);
-      const challengesReceivedIDs: string[] = Array.from(user?.challenges_received ?? new Set());
-      const data = await getChallenges(challengesReceivedIDs);
-      const challengesReceived = data.map(r => r.Item as FullChallenge);
-      console.log(`Got the following challenges:\n${JSON.stringify(challengesReceived, null, 2)}`);
-
-      // process each challenge and accept/reject as appropriate
-      for (const challenge of challengesReceived) {
-        let accepted = false;
-        // the overall meta must be supported
-        const info = gameinfo.get(challenge.metaGame);
-        if (info?.flags.includes("aiai")) {
-          accepted = true;
-        }
-        // add any variant exceptions here too
-        if (challenge.metaGame === "tumbleweed") {
-          if (challenge.variants.includes("free-neutral") || challenge.variants.includes("capture-delay")) {
-            accepted = false;
-          }
-        }
-
-        // accept/reject challenge
-        console.log(`About to ${accepted ? "accept" : "deny"} challenge ${challenge.sk}`)
-        await respondedChallenge(process.env.AIAI_USERID!, {response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame, comment: "Let's play!"});
-      }
-    } catch (err) {
-      logGetItemError(err);
-      return formatReturnError(`Unable to manage bot challenges: ${err}`);
+  const userId = process.env.AIAI_USERID;
+  try {
+    console.log(`Getting USER record`);
+    const userData = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      }));
+    if (userData.Item === undefined) {
+      throw new Error("Could not find a USER record for the AiAi bot");
     }
+    const user = userData.Item as FullUser;
+    let games = user.games;
+    if (games === undefined)
+      games = [];
 
-    // now get list of games where it's your turn and make moves
-    // have to refetch, sadly!
-    // but check for bot's turn early to avoid unnecessary refetches
-    try {
-      console.log(`Getting USER record`);
-      const userData = await ddbDocClient.send(
-        new GetCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "USER",
-            "sk": userId
-          },
-        }));
-      if (userData.Item === undefined) {
-        throw new Error("Could not find a USER record for the AiAi bot");
+    console.log(`Fetching challenges`);
+    const challengesReceivedIDs: string[] = Array.from(user?.challenges_received ?? new Set());
+    const data = await getChallenges(challengesReceivedIDs);
+    const challengesReceived = data.map(r => r.Item as FullChallenge);
+    console.log(`Got the following challenges:\n${JSON.stringify(challengesReceived, null, 2)}`);
+
+    // process each challenge and accept/reject as appropriate
+    for (const challenge of challengesReceived) {
+      let accepted = false;
+      // the overall meta must be supported
+      const info = gameinfo.get(challenge.metaGame);
+      if (info?.flags.includes("aiai")) {
+        accepted = true;
       }
-      const user = userData.Item as FullUser;
-      let games: Game[] = user.games;
-      if (games === undefined)
-        games= [];
+      // add any variant exceptions here too
+      if (challenge.metaGame === "tumbleweed") {
+        if (challenge.variants.includes("free-neutral") || challenge.variants.includes("capture-delay")) {
+          accepted = false;
+        }
+      }
 
-      for (const game of games) {
-        const info = gameinfo.get(game.metaGame);
-        if (game.toMove !== null && game.toMove !== "") {
-          const ids: string[] = [];
-          if (info.flags.includes("simultaneous")) {
-            const toMove = game.toMove as boolean[];
-            if (toMove) {
-              for (let i = 0; i < toMove.length; i++) {
-                if (toMove[i]) {
-                    ids.push(game.players[i].id);
-                }
+      // accept/reject challenge
+      console.log(`About to ${accepted ? "accept" : "deny"} challenge ${challenge.sk}`)
+      await respondedChallenge(process.env.AIAI_USERID!, { response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame, comment: "Let's play!" });
+    }
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to manage bot challenges: ${err}`);
+  }
+
+  // now get list of games where it's your turn and make moves
+  // have to refetch, sadly!
+  // but check for bot's turn early to avoid unnecessary refetches
+  try {
+    console.log(`Getting USER record`);
+    const userData = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      }));
+    if (userData.Item === undefined) {
+      throw new Error("Could not find a USER record for the AiAi bot");
+    }
+    const user = userData.Item as FullUser;
+    let games: Game[] = user.games;
+    if (games === undefined)
+      games = [];
+
+    for (const game of games) {
+      const info = gameinfo.get(game.metaGame);
+      if (game.toMove !== null && game.toMove !== "") {
+        const ids: string[] = [];
+        if (info.flags.includes("simultaneous")) {
+          const toMove = game.toMove as boolean[];
+          if (toMove) {
+            for (let i = 0; i < toMove.length; i++) {
+              if (toMove[i]) {
+                ids.push(game.players[i].id);
               }
             }
-          } else {
-            ids.push(game.players[parseInt(game.toMove as string, 10)].id);
           }
-          if (ids.includes(process.env.AIAI_USERID!)) {
-            await realPingBot(game.metaGame, game.id);
-          }
+        } else {
+          ids.push(game.players[parseInt(game.toMove as string, 10)].id);
+        }
+        if (ids.includes(process.env.AIAI_USERID!)) {
+          await realPingBot(game.metaGame, game.id);
         }
       }
-    } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`Unable to manage bot challenges: ${err}`);
     }
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to manage bot challenges: ${err}`);
+  }
 }
 
 async function onetimeFix(userId: string) {
@@ -8325,8 +8809,8 @@ async function onetimeFix(userId: string) {
       };
     }
   } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`Unable to onetimeFix ${userId}`);
+    logGetItemError(err);
+    return formatReturnError(`Unable to onetimeFix ${userId}`);
   }
 
   let totalUnits = 0;
@@ -8335,22 +8819,22 @@ async function onetimeFix(userId: string) {
   let users: FullUser[] = [];
   try {
     data = await ddbDocClient.send(
-        new QueryCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            KeyConditionExpression: "#pk = :pk",
-            ExpressionAttributeValues: { ":pk": "USER" },
-            ExpressionAttributeNames: { "#pk": "pk" },
-            ReturnConsumedCapacity: "INDEXES",
-        })
-      )
-      if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
-        totalUnits += data.ConsumedCapacity.CapacityUnits;
-      } else {
-        console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
-      }
-      users = data?.Items as FullUser[];
-      console.log(JSON.stringify(users, null, 2));
-      console.log(`Total units used: ${totalUnits}`);
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "USER" },
+        ExpressionAttributeNames: { "#pk": "pk" },
+        ReturnConsumedCapacity: "INDEXES",
+      })
+    )
+    if ((data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined)) {
+      totalUnits += data.ConsumedCapacity.CapacityUnits;
+    } else {
+      console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+    }
+    users = data?.Items as FullUser[];
+    console.log(JSON.stringify(users, null, 2));
+    console.log(`Total units used: ${totalUnits}`);
   } catch (err) {
     logGetItemError(err);
     return formatReturnError(`Unable to onetimeFix get all users`);
@@ -8359,126 +8843,126 @@ async function onetimeFix(userId: string) {
   const work: Promise<any>[] = [];
   for (const user of users) {
     work.push(
-        ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USERS", "sk": user.id },
-            ExpressionAttributeValues: { ":ss": user.stars || [], ":ls": user.lastSeen || 0, ":country": user.country },
-            UpdateExpression: "set stars = :ss, lastSeen = :ls, country = :country",
-        }))
+      ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USERS", "sk": user.id },
+        ExpressionAttributeValues: { ":ss": user.stars || [], ":ls": user.lastSeen || 0, ":country": user.country },
+        UpdateExpression: "set stars = :ss, lastSeen = :ls, country = :country",
+      }))
     );
   }
   return Promise.all(work);
-//   const memoGame = new Map<string, FullGame>();
-//   const memoComments = new Map<string, Comment[]>();
-//   // foreach USER
-//   for (const user of users) {
-//     // foreach game in USER.games
-//     for (const game of user.games) {
-//         // check if game is already loaded
-//         if (! memoGame.has(game.id)) {
-//             // load and memoize
-//             let data: any;
-//             let cbit = "0";
-//             if ( (game.toMove === "") || (game.toMove === undefined) || ( (Array.isArray(game.toMove)) && (game.toMove.length === 0) ) ) {
-//                 cbit = "1";
-//             }
-//             try {
-//               data = await ddbDocClient.send(
-//                 new GetCommand({
-//                   TableName: process.env.ABSTRACT_PLAY_TABLE,
-//                   Key: {
-//                     "pk": "GAME",
-//                     "sk": `${game.metaGame}#${cbit}#${game.id}`
-//                   },
-//                   ReturnConsumedCapacity: "INDEXES",
-//                 }));
-//             } catch (error) {
-//               logGetItemError(error);
-//               return formatReturnError(`Unable to get comments for game ${game.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-//             }
-//             if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
-//                 totalUnits += data.ConsumedCapacity.CapacityUnits;
-//             } else {
-//               console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
-//             }
-//             const gameData = data.Item as FullGame;
-//             console.log("got game in onetimeFix:");
-//             console.log(gameData);
-//             memoGame.set(game.id, gameData);
-//         }
-//         const gameObj = memoGame.get(game.id);
-//         // check if comments already loaded
-//         if (! memoComments.has(game.id)) {
-//             // load and memoize
-//             let data: any;
-//             try {
-//               data = await ddbDocClient.send(
-//                 new GetCommand({
-//                   TableName: process.env.ABSTRACT_PLAY_TABLE,
-//                   Key: {
-//                     "pk": "GAMECOMMENTS",
-//                     "sk": game.id
-//                   },
-//                   ReturnConsumedCapacity: "INDEXES",
-//                 }));
-//             } catch (error) {
-//               logGetItemError(error);
-//               return formatReturnError(`Unable to get comments for game ${game.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-//             }
-//             if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
-//                 totalUnits += data.ConsumedCapacity.CapacityUnits;
-//             } else {
-//               console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
-//             }
-//             const commentsData = data.Item;
-//             console.log("got comments in onetimeFix:");
-//             console.log(commentsData);
-//             let comments: Comment[];
-//             if (commentsData === undefined)
-//               comments= []
-//             else
-//               comments = commentsData.comments;
-//             memoComments.set(game.id, comments);
-//         }
-//         const comments = memoComments.get(game.id)!;
-//         // if for some reason the game ID doesn't match a record, skip entirely
-//         if (gameObj === undefined) {
-//             console.log(`Could not find a full game record for the following: ${JSON.stringify(game)}`);
-//             continue;
-//         }
-//         let engine: GameBase|GameBaseSimultaneous|undefined;
-//         try {
-//             engine = GameFactory(gameObj.metaGame, gameObj.state);
-//         } catch (err) {
-//             console.log(`An error occured when trying to hydrate the following game: ${JSON.stringify(game)}`);
-//             console.log(err);
-//             continue;
-//         }
-//         if (engine === undefined) {
-//             return formatReturnError(`Unable to get engine for ${gameObj.metaGame} with state ${gameObj.state}`);
-//         }
-//         // add gameStarted
-//         game.gameStarted = new Date(engine.stack[0]._timestamp).getTime();
-//         // add gameEnded, if applicable
-//         if (engine.gameover) {
-//             game.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
-//         }
-//         // add lastChat, if applicable
-//         if (comments.length > 0) {
-//             game.lastChat = Math.max(...comments.map(c => c.timeStamp));
-//         }
-//     }
-//     console.log(`About to save updated USER record: ${JSON.stringify(user)}`);
-//     // save updated USER record
-//     await ddbDocClient.send(new PutCommand({
-//         TableName: process.env.ABSTRACT_PLAY_TABLE,
-//           Item: user
-//     }));
-//   }
-//   console.log(`All done! Total units used: ${totalUnits}`);
+  //   const memoGame = new Map<string, FullGame>();
+  //   const memoComments = new Map<string, Comment[]>();
+  //   // foreach USER
+  //   for (const user of users) {
+  //     // foreach game in USER.games
+  //     for (const game of user.games) {
+  //         // check if game is already loaded
+  //         if (! memoGame.has(game.id)) {
+  //             // load and memoize
+  //             let data: any;
+  //             let cbit = "0";
+  //             if ( (game.toMove === "") || (game.toMove === undefined) || ( (Array.isArray(game.toMove)) && (game.toMove.length === 0) ) ) {
+  //                 cbit = "1";
+  //             }
+  //             try {
+  //               data = await ddbDocClient.send(
+  //                 new GetCommand({
+  //                   TableName: process.env.ABSTRACT_PLAY_TABLE,
+  //                   Key: {
+  //                     "pk": "GAME",
+  //                     "sk": `${game.metaGame}#${cbit}#${game.id}`
+  //                   },
+  //                   ReturnConsumedCapacity: "INDEXES",
+  //                 }));
+  //             } catch (error) {
+  //               logGetItemError(error);
+  //               return formatReturnError(`Unable to get comments for game ${game.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  //             }
+  //             if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
+  //                 totalUnits += data.ConsumedCapacity.CapacityUnits;
+  //             } else {
+  //               console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+  //             }
+  //             const gameData = data.Item as FullGame;
+  //             console.log("got game in onetimeFix:");
+  //             console.log(gameData);
+  //             memoGame.set(game.id, gameData);
+  //         }
+  //         const gameObj = memoGame.get(game.id);
+  //         // check if comments already loaded
+  //         if (! memoComments.has(game.id)) {
+  //             // load and memoize
+  //             let data: any;
+  //             try {
+  //               data = await ddbDocClient.send(
+  //                 new GetCommand({
+  //                   TableName: process.env.ABSTRACT_PLAY_TABLE,
+  //                   Key: {
+  //                     "pk": "GAMECOMMENTS",
+  //                     "sk": game.id
+  //                   },
+  //                   ReturnConsumedCapacity: "INDEXES",
+  //                 }));
+  //             } catch (error) {
+  //               logGetItemError(error);
+  //               return formatReturnError(`Unable to get comments for game ${game.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  //             }
+  //             if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
+  //                 totalUnits += data.ConsumedCapacity.CapacityUnits;
+  //             } else {
+  //               console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
+  //             }
+  //             const commentsData = data.Item;
+  //             console.log("got comments in onetimeFix:");
+  //             console.log(commentsData);
+  //             let comments: Comment[];
+  //             if (commentsData === undefined)
+  //               comments= []
+  //             else
+  //               comments = commentsData.comments;
+  //             memoComments.set(game.id, comments);
+  //         }
+  //         const comments = memoComments.get(game.id)!;
+  //         // if for some reason the game ID doesn't match a record, skip entirely
+  //         if (gameObj === undefined) {
+  //             console.log(`Could not find a full game record for the following: ${JSON.stringify(game)}`);
+  //             continue;
+  //         }
+  //         let engine: GameBase|GameBaseSimultaneous|undefined;
+  //         try {
+  //             engine = GameFactory(gameObj.metaGame, gameObj.state);
+  //         } catch (err) {
+  //             console.log(`An error occured when trying to hydrate the following game: ${JSON.stringify(game)}`);
+  //             console.log(err);
+  //             continue;
+  //         }
+  //         if (engine === undefined) {
+  //             return formatReturnError(`Unable to get engine for ${gameObj.metaGame} with state ${gameObj.state}`);
+  //         }
+  //         // add gameStarted
+  //         game.gameStarted = new Date(engine.stack[0]._timestamp).getTime();
+  //         // add gameEnded, if applicable
+  //         if (engine.gameover) {
+  //             game.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
+  //         }
+  //         // add lastChat, if applicable
+  //         if (comments.length > 0) {
+  //             game.lastChat = Math.max(...comments.map(c => c.timeStamp));
+  //         }
+  //     }
+  //     console.log(`About to save updated USER record: ${JSON.stringify(user)}`);
+  //     // save updated USER record
+  //     await ddbDocClient.send(new PutCommand({
+  //         TableName: process.env.ABSTRACT_PLAY_TABLE,
+  //           Item: user
+  //     }));
+  //   }
+  //   console.log(`All done! Total units used: ${totalUnits}`);
 }
 
-async function fixGames(userId: string, pars: {targetId: string}) {
+async function fixGames(userId: string, pars: { targetId: string }) {
   // Make sure people aren't getting clever
   try {
     const user = await ddbDocClient.send(
@@ -8498,27 +8982,27 @@ async function fixGames(userId: string, pars: {targetId: string}) {
       };
     }
   } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`Unable to onetimeFix ${userId}`);
+    logGetItemError(err);
+    return formatReturnError(`Unable to onetimeFix ${userId}`);
   }
 
   try {
     const games = await getGamesForUser(pars.targetId);
     console.log(`Trying to set the following games:`, games);
     await ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USER", "sk": pars.targetId },
-        ExpressionAttributeValues: { ":games": games || [] },
-        UpdateExpression: "set games = :games",
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "USER", "sk": pars.targetId },
+      ExpressionAttributeValues: { ":games": games || [] },
+      UpdateExpression: "set games = :games",
     }));
     return {
       statusCode: 200,
-      body: JSON.stringify({message: `Rebuilt games for ${pars.targetId}`}),
+      body: JSON.stringify({ message: `Rebuilt games for ${pars.targetId}` }),
       headers
     };
   } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`Unable to fix_games for ${pars.targetId}`);
+    logGetItemError(err);
+    return formatReturnError(`Unable to fix_games for ${pars.targetId}`);
   }
 }
 
@@ -8542,8 +9026,8 @@ async function testPush(userId: string) {
       };
     }
   } catch (err) {
-        logGetItemError(err);
-        return formatReturnError(`Unable to testPush ${userId}`);
+    logGetItemError(err);
+    return formatReturnError(`Unable to testPush ${userId}`);
   }
 
   await sendPush({
@@ -8586,7 +9070,7 @@ async function testAsync(userId: string, pars: { N: number; }) {
     console.log('Done calling makeWork');
     return {
       statusCode: 200,
-      body: JSON.stringify({"n": pars.N}),
+      body: JSON.stringify({ "n": pars.N }),
       headers
     };
   } catch (err) {
@@ -8595,103 +9079,103 @@ async function testAsync(userId: string, pars: { N: number; }) {
   }
 }
 
-async function pingBot(userId: string, pars: {metaGame: string, gameid: string}) {
-    // Make sure people aren't getting clever
-    try {
-      const user = await ddbDocClient.send(
-        new GetCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "USER",
-            "sk": userId
-          },
-        })
-      );
-      if (user.Item === undefined || user.Item.admin !== true) {
-        return {
-          statusCode: 200,
-          body: JSON.stringify({}),
-          headers
-        };
-      }
-    } catch (err) {
-          logGetItemError(err);
-          return formatReturnError(`Unable to testPush ${userId}`);
-    }
-
-    await realPingBot(pars.metaGame, pars.gameid);
-
-    return {
+async function pingBot(userId: string, pars: { metaGame: string, gameid: string }) {
+  // Make sure people aren't getting clever
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      })
+    );
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
         statusCode: 200,
         body: JSON.stringify({}),
         headers
-    };
+      };
+    }
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to testPush ${userId}`);
+  }
+
+  await realPingBot(pars.metaGame, pars.gameid);
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({}),
+    headers
+  };
 }
 
 async function realPingBot(metaGame: string, gameid: string, game?: FullGame) {
-    // fetch game record and state
-    if (game === undefined) {
-        try {
-            const data = await ddbDocClient.send(
-              new GetCommand({
-                TableName: process.env.ABSTRACT_PLAY_TABLE,
-                Key: {
-                  "pk": "GAME",
-                  "sk": metaGame + "#0#" + gameid
-                },
-              }));
-            if (!data.Item)
-              throw new Error(`No game ${metaGame + "#0#" + gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
-            game = data.Item as FullGame;
-        }
-        catch (error) {
-            logGetItemError(error);
-            return formatReturnError(`Unable to load game ${gameid} to make a bot move`);
-        }
+  // fetch game record and state
+  if (game === undefined) {
+    try {
+      const data = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "GAME",
+            "sk": metaGame + "#0#" + gameid
+          },
+        }));
+      if (!data.Item)
+        throw new Error(`No game ${metaGame + "#0#" + gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+      game = data.Item as FullGame;
     }
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to load game ${gameid} to make a bot move`);
+    }
+  }
 
-    // instantiate game object
-    if (game === undefined) {
-        throw new Error("Unable to load game object");
-    }
-    const engine = GameFactory(metaGame, game.state);
-    if (!engine)
-      throw new Error(`Unknown metaGame ${metaGame}`);
-    const info = gameinfo.get(metaGame);
+  // instantiate game object
+  if (game === undefined) {
+    throw new Error("Unable to load game object");
+  }
+  const engine = GameFactory(metaGame, game.state);
+  if (!engine)
+    throw new Error(`Unknown metaGame ${metaGame}`);
+  const info = gameinfo.get(metaGame);
 
-    // notify AiAi bot, if necessary
-    // get list of userIDs whose turn it is
-    if (! engine.gameover) {
-        const ids: string[] = [];
-        if (info.flags.includes("simultaneous")) {
-            for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
-                if (game.toMove[i]) {
-                    ids.push(game.players[i].id);
-                }
-            }
-        } else {
-            ids.push(game.players[parseInt(game.toMove as string, 10)].id);
+  // notify AiAi bot, if necessary
+  // get list of userIDs whose turn it is
+  if (!engine.gameover) {
+    const ids: string[] = [];
+    if (info.flags.includes("simultaneous")) {
+      for (let i = 0; i < (game.toMove as boolean[]).length; i++) {
+        if (game.toMove[i]) {
+          ids.push(game.players[i].id);
         }
-        if (ids.includes(process.env.AIAI_USERID!)) {
-            // construct message
-            const body = {
-                meta: metaGame,
-                mgl: engine.aiaiMgl(),
-                gameid: gameid,
-                history: engine.state2aiai(),
-            }
-            const input: SendMessageRequest = {
-                QueueUrl: process.env.SQS_URL,
-                MessageBody: JSON.stringify(body),
-            }
-            const cmd = new SendMessageCommand(input);
-            await sqsClient.send(cmd);
-        }
+      }
+    } else {
+      ids.push(game.players[parseInt(game.toMove as string, 10)].id);
     }
+    if (ids.includes(process.env.AIAI_USERID!)) {
+      // construct message
+      const body = {
+        meta: metaGame,
+        mgl: engine.aiaiMgl(),
+        gameid: gameid,
+        history: engine.state2aiai(),
+      }
+      const input: SendMessageRequest = {
+        QueueUrl: process.env.SQS_URL,
+        MessageBody: JSON.stringify(body),
+      }
+      const cmd = new SendMessageCommand(input);
+      await sqsClient.send(cmd);
+    }
+  }
 }
 
 function makeWork() {
-  return new Promise(function(resolve) {
+  return new Promise(function (resolve) {
     console.log("In makeWork");
     setTimeout(() => {
       console.log("End makeWork");
@@ -8708,7 +9192,7 @@ function Set_toJSON(key: any, value: any) {
 }
 
 function shuffle(array: any[]) {
-  let i = array.length,  j;
+  let i = array.length, j;
 
   while (i > 1) {
     j = Math.floor(Math.random() * i);
@@ -8731,7 +9215,7 @@ export async function changeLanguageForPlayer(player: { language: string | undef
 
 export function createSendEmailCommand(toAddress: string, player: any, subject: any, body: string) {
   console.log("toAddress", toAddress, "player", player, "body", body);
-  const fullbody =  i18n.t("DearPlayer", { player }) + '\r\n\r\n' + body + "\r\n\r\n" + i18n.t("EmailOut");
+  const fullbody = i18n.t("DearPlayer", { player }) + '\r\n\r\n' + body + "\r\n\r\n" + i18n.t("EmailOut");
   return new SendEmailCommand({
     Destination: {
       ToAddresses: [
@@ -8836,16 +9320,16 @@ export function handleCommonErrors(err: { code: any; message: any; }) {
   }
 }
 
-async function *queryItemsGenerator(queryInput: QueryCommandInput): AsyncGenerator<unknown> {
-    let lastEvaluatedKey: Record<string, any> | undefined
-    do {
-      const { Items, LastEvaluatedKey } = await ddbDocClient
-        .send(new QueryCommand({ ...queryInput, ExclusiveStartKey: lastEvaluatedKey }));
-      lastEvaluatedKey = LastEvaluatedKey
-      if (Items !== undefined) {
-        yield Items
-      }
-    } while (lastEvaluatedKey !== undefined)
+async function* queryItemsGenerator(queryInput: QueryCommandInput): AsyncGenerator<unknown> {
+  let lastEvaluatedKey: Record<string, any> | undefined
+  do {
+    const { Items, LastEvaluatedKey } = await ddbDocClient
+      .send(new QueryCommand({ ...queryInput, ExclusiveStartKey: lastEvaluatedKey }));
+    lastEvaluatedKey = LastEvaluatedKey
+    if (Items !== undefined) {
+      yield Items
+    }
+  } while (lastEvaluatedKey !== undefined)
 }
 
 async function updateMetaGameCounts(userId: string) {
@@ -8918,16 +9402,16 @@ async function updateMetaGameCounts(userId: string) {
     console.log(JSON.stringify(players.map(p => p.name)));
     const starCounts = new Map<string, number>();
     for (const p of players) {
-        if (p.stars !== undefined) {
-            for (const star of p.stars) {
-                if (starCounts.has(star)) {
-                    const val = starCounts.get(star)!;
-                    starCounts.set(star, val + 1);
-                } else {
-                    starCounts.set(star, 1);
-                }
-            }
+      if (p.stars !== undefined) {
+        for (const star of p.stars) {
+          if (starCounts.has(star)) {
+            const val = starCounts.get(star)!;
+            starCounts.set(star, val + 1);
+          } else {
+            starCounts.set(star, 1);
+          }
         }
+      }
     }
 
     games.forEach((game, ind) => {
@@ -8950,12 +9434,12 @@ async function updateMetaGameCounts(userId: string) {
     await ddbDocClient.send(
       new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Item: {
-            "pk": "METAGAMES",
-            "sk": "COUNTS",
-            ...metaGameCounts
-          }
-        })
+        Item: {
+          "pk": "METAGAMES",
+          "sk": "COUNTS",
+          ...metaGameCounts
+        }
+      })
     );
   } catch (err) {
     logGetItemError(err);
@@ -8965,19 +9449,19 @@ async function updateMetaGameCounts(userId: string) {
 
 // Make sure to increase the lamda timeout (from 6s) when you want to process all users. Just getting all users already takes about 2s.
 const getAllUsers = async (): Promise<FullUser[]> => {
-    const result: FullUser[] = []
-    const queryInput: QueryCommandInput = {
-      KeyConditionExpression: '#pk = :pk',
-      ExpressionAttributeNames: {
-        '#pk': 'pk',
-      },
-      ExpressionAttributeValues: {
-        ':pk': 'USER',
-      },
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-    }
-    for await (const page of queryItemsGenerator(queryInput)) {
-      result.push(...page as FullUser[]);
-    }
-    return result
+  const result: FullUser[] = []
+  const queryInput: QueryCommandInput = {
+    KeyConditionExpression: '#pk = :pk',
+    ExpressionAttributeNames: {
+      '#pk': 'pk',
+    },
+    ExpressionAttributeValues: {
+      ':pk': 'USER',
+    },
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+  }
+  for await (const page of queryItemsGenerator(queryInput)) {
+    result.push(...page as FullUser[]);
+  }
+  return result
 }

@@ -39,6 +39,9 @@ custom:
         - Ref: AWS::Region
         - ".amazonaws.com"
 
+  botpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_nEKyig64I
+  botpoolId: us-east-1_nEKyig64I
+
   stageConfig:
     dev:
       profile: AbstractPlayDev
@@ -82,6 +85,7 @@ provider:
     userpool: ${self:custom.stageConfig.${self:provider.stage}.userpool}
     userpoolId: ${self:custom.stageConfig.${self:provider.stage}.userpoolId}
     userpoolClient: ${self:custom.stageConfig.${self:provider.stage}.userpoolClient}
+    BOTPOOL_ID: ${self:custom.botpoolId}
     SQS_URL: ${self:custom.stageConfig.${self:provider.stage}.sqsurl}
     AIAI_USERID: SkQfHAjeDxs8eeEnScuYA
     WEBSOCKET_DOMAIN: ${self:custom.stageConfig.${self:provider.stage}.wsDomain}
@@ -90,6 +94,9 @@ provider:
     TOTP_KEY: ${env:TOTP_KEY}
     VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
     VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
+    OPENSSH_PRIVATE_KEY: ${env:OPENSSH_PRIVATE_KEY}
+    BOT_OUTBOUND_QUEUE_URL:
+      Ref: BotOutboundQueue
     # TOTP_KEY: ${file(../apsecrets.yml):totp_key}
     # VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
     # VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
@@ -124,6 +131,13 @@ provider:
           Resource:
             - 'arn:aws:s3:::abstractplay-db-dump/*'
             - 'arn:aws:s3:::records.abstractplay.com/*'
+        - Effect: Allow
+          Action:
+            - cognito-idp:AdminCreateUser
+            - cognito-idp:AdminDeleteUser
+            - cognito-idp:CreateUserPoolClient
+            - cognito-idp:DeleteUserPoolClient
+          Resource: ${self:custom.botpool}
 
 resources:
   Resources:
@@ -169,6 +183,13 @@ resources:
         QueueName: abstractplay-ws-messages-${self:provider.stage}
         VisibilityTimeout: 900   # match your consumer Lambda timeout
         MessageRetentionPeriod: 86400  # 1 day, adjust as needed
+
+    BotOutboundQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: abstractplay-bot-outbound-${self:provider.stage}
+        VisibilityTimeout: 60
+        MessageRetentionPeriod: 86400
 
     # Apparently this is explicitly needed (which makes no sense to me, but there it is)
     ConnectLambdaPermission:
@@ -258,6 +279,20 @@ functions:
             claims:
               - email
               - 'cognito:username'
+  botQuery:
+    handler: api/abstractplay.botQuery
+    memorySize: 1024
+    description: Abstract Play queries for bots.
+    logRetentionInDays: 30
+    events:
+      - http:
+          path: botQuery
+          method: post
+          cors: true
+          integration: lambda
+          authorizer:
+            name: botAuthorizer
+            arn: ${self:custom.botpool}
   query:
     handler: api/abstractplay.query
     memorySize: 256
@@ -319,6 +354,19 @@ functions:
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # Midnight and noon UTC every day
           schedule: cron(0 0,12 * * ? *)
+  bot-outbound:
+    handler: utils/bot-outbound.handler
+    description: Contacts bot HTTPS endpoints for challenges and move notifications
+    timeout: 60
+    memorySize: 512
+    logRetentionInDays: 30
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - BotOutboundQueue
+              - Arn
+          batchSize: 1
 
   # websocket functions
   # wsAuthorizer:
