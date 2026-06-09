@@ -137,6 +137,9 @@ provider:
             - cognito-idp:AdminDeleteUser
             - cognito-idp:CreateUserPoolClient
             - cognito-idp:DeleteUserPoolClient
+            - cognito-idp:ListUserPoolClientSecrets
+            - cognito-idp:AddUserPoolClientSecret
+            - cognito-idp:DeleteUserPoolClientSecret
           Resource: ${self:custom.botpool}
 
 resources:

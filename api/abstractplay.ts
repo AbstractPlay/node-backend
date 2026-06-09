@@ -17,6 +17,10 @@ import it from '../locales/it/apback.json';
 import { wsBroadcast } from '../lib/wsBroadcast';
 import { isBotId, getParticipants, getBotRecord, filterHumanIds, botToFullUserStub } from '../lib/participants';
 import { enqueueBotOutbound, getToMovePlayerIds, loadGameRecord } from '../lib/botOutbound';
+import {
+  beginBotSecretRotation as cognitoBeginBotSecretRotation,
+  finalizeBotSecretRotation as cognitoFinalizeBotSecretRotation,
+} from '../lib/botSecrets';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -697,6 +701,12 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
     case "delete_bot":
     case "deleteBot":
       return await deleteBot(event.cognitoPoolClaims, pars);
+    case "begin_bot_secret_rotation":
+    case "beginBotSecretRotation":
+      return await beginBotSecretRotation(event.cognitoPoolClaims, pars);
+    case "finalize_bot_secret_rotation":
+    case "finalizeBotSecretRotation":
+      return await finalizeBotSecretRotation(event.cognitoPoolClaims, pars);
     case "next_game":
       return await nextGame(event.cognitoPoolClaims.sub);
     case "my_settings":
@@ -1834,6 +1844,167 @@ async function updateBot(
   } catch (error: any) {
     console.error("Error updating bot: ", error);
     return formatReturnError(`Unable to update bot: ${error.message || error}`);
+  }
+}
+
+type OwnedBotRecord = {
+  pk: string;
+  sk: string;
+  owner: string;
+  name: string;
+  endpoint: string;
+  pendingSecretId?: string;
+  pendingSecretCreatedAt?: number;
+};
+
+function mapCognitoBotSecretError(error: any, action: string) {
+  const name = error?.name ?? error?.__type;
+  if (name === 'InvalidParameterException') {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: error.message || 'Invalid parameter' }),
+      headers
+    };
+  }
+  if (name === 'LimitExceededException') {
+    return {
+      statusCode: 409,
+      body: JSON.stringify({ message: error.message || 'Secret limit exceeded' }),
+      headers
+    };
+  }
+  return formatReturnError(`Unable to ${action}: ${error.message || error}`);
+}
+
+async function loadOwnedBot(claim: PartialClaims, clientId: string | undefined) {
+  if (!claim || !claim.sub) {
+    return {
+      response: {
+        statusCode: 401,
+        body: JSON.stringify({ message: "Unauthorized" }),
+        headers
+      }
+    };
+  }
+
+  if (!clientId || clientId.trim().length === 0) {
+    return {
+      response: {
+        statusCode: 400,
+        body: JSON.stringify({ message: "A clientId is required to identify the bot" }),
+        headers
+      }
+    };
+  }
+
+  try {
+    const data = await ddbDocClient.send(new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        pk: "BOT",
+        sk: clientId
+      }
+    }));
+
+    if (!data.Item) {
+      return {
+        response: {
+          statusCode: 404,
+          body: JSON.stringify({ message: `Bot with client ID ${clientId} not found` }),
+          headers
+        }
+      };
+    }
+
+    const bot = data.Item as OwnedBotRecord;
+    if (bot.owner !== claim.sub) {
+      return {
+        response: {
+          statusCode: 403,
+          body: JSON.stringify({ message: "You are not the owner of this bot" }),
+          headers
+        }
+      };
+    }
+
+    return { bot };
+  } catch (error: any) {
+    console.error("Error loading bot: ", error);
+    return { response: formatReturnError(`Unable to load bot: ${error.message || error}`) };
+  }
+}
+
+async function beginBotSecretRotation(claim: PartialClaims, pars: { clientId: string }) {
+  const loaded = await loadOwnedBot(claim, pars?.clientId);
+  if ("response" in loaded) {
+    return loaded.response;
+  }
+
+  const clientId = loaded.bot.sk;
+
+  try {
+    const { clientSecretId, clientSecret } = await cognitoBeginBotSecretRotation(clientId);
+
+    await ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { pk: "BOT", sk: clientId },
+      UpdateExpression: "SET pendingSecretId = :pendingSecretId, pendingSecretCreatedAt = :pendingSecretCreatedAt",
+      ExpressionAttributeValues: {
+        ":pendingSecretId": clientSecretId,
+        ":pendingSecretCreatedAt": Date.now(),
+      },
+    }));
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ clientSecretId, clientSecret }),
+      headers
+    };
+  } catch (error: any) {
+    console.error("Error beginning bot secret rotation: ", error);
+    if (error.message === "No client secrets found") {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ message: error.message }),
+        headers
+      };
+    }
+    return mapCognitoBotSecretError(error, "begin bot secret rotation");
+  }
+}
+
+async function finalizeBotSecretRotation(claim: PartialClaims, pars: { clientId: string }) {
+  const loaded = await loadOwnedBot(claim, pars?.clientId);
+  if ("response" in loaded) {
+    return loaded.response;
+  }
+
+  const clientId = loaded.bot.sk;
+
+  try {
+    await cognitoFinalizeBotSecretRotation(clientId);
+
+    await ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { pk: "BOT", sk: clientId },
+      UpdateExpression: "REMOVE pendingSecretId, pendingSecretCreatedAt",
+    }));
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: "Bot secret rotation finalized successfully" }),
+      headers
+    };
+  } catch (error: any) {
+    console.error("Error finalizing bot secret rotation: ", error);
+    if (error.message === "No secret rotation in progress") {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ message: error.message }),
+        headers
+      };
+    }
+    return mapCognitoBotSecretError(error, "finalize bot secret rotation");
   }
 }
 
