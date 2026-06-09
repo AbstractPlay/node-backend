@@ -21,6 +21,13 @@ import {
   beginBotSecretRotation as cognitoBeginBotSecretRotation,
   finalizeBotSecretRotation as cognitoFinalizeBotSecretRotation,
 } from '../lib/botSecrets';
+import {
+  getOrCreateTestBotState,
+  isTestBotOwner,
+  updateTestBotSettings,
+  TestBotMovePolicy,
+  TestBotSettings,
+} from '../lib/testBotState';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -707,6 +714,10 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
     case "finalize_bot_secret_rotation":
     case "finalizeBotSecretRotation":
       return await finalizeBotSecretRotation(event.cognitoPoolClaims, pars);
+    case "test_bot_status":
+      return await testBotStatus(event.cognitoPoolClaims);
+    case "update_test_bot":
+      return await updateTestBot(event.cognitoPoolClaims, pars);
     case "next_game":
       return await nextGame(event.cognitoPoolClaims.sub);
     case "my_settings":
@@ -1874,6 +1885,126 @@ function mapCognitoBotSecretError(error: any, action: string) {
     };
   }
   return formatReturnError(`Unable to ${action}: ${error.message || error}`);
+}
+
+function testBotForbiddenResponse() {
+  return {
+    statusCode: 403,
+    body: JSON.stringify({ message: 'You are not authorized to access the test bot dashboard' }),
+    headers,
+  };
+}
+
+async function testBotStatus(claim: PartialClaims) {
+  if (!isTestBotOwner(claim?.sub)) {
+    return testBotForbiddenResponse();
+  }
+
+  try {
+    const state = await getOrCreateTestBotState();
+    const clientId = process.env.TEST_BOT_CLIENT_ID?.trim();
+    const apiBase = process.env.API_BASE_URL?.replace(/\/$/, '');
+    const endpointUrl = apiBase ? `${apiBase}/testBot` : undefined;
+
+    let botRecord: {
+      lastseen?: number;
+      operational?: boolean;
+      lastStatusCode?: number;
+      name?: string;
+      endpoint?: string;
+    } | undefined;
+
+    if (clientId) {
+      const bot = await getBotRecord(clientId);
+      if (bot) {
+        botRecord = {
+          lastseen: bot.lastseen,
+          operational: (bot as { operational?: boolean }).operational,
+          lastStatusCode: (bot as { lastStatusCode?: number }).lastStatusCode,
+          name: bot.name,
+          endpoint: bot.endpoint,
+        };
+      }
+    }
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        endpointUrl,
+        clientIdConfigured: Boolean(clientId),
+        clientId: clientId ?? null,
+        settings: state.settings,
+        recentEvents: state.recentEvents ?? [],
+        botRecord: botRecord ?? null,
+      }),
+      headers,
+    };
+  } catch (error: any) {
+    console.error('Error loading test bot status: ', error);
+    return formatReturnError(`Unable to load test bot status: ${error.message || error}`);
+  }
+}
+
+async function updateTestBot(
+  claim: PartialClaims,
+  pars: {
+    acceptChallenges?: boolean;
+    rejectMetaGames?: string[];
+    movePolicy?: TestBotMovePolicy;
+    moveDelayMs?: number;
+  }
+) {
+  if (!isTestBotOwner(claim?.sub)) {
+    return testBotForbiddenResponse();
+  }
+
+  const patch: Partial<TestBotSettings> = {};
+  if (pars.acceptChallenges !== undefined) {
+    patch.acceptChallenges = pars.acceptChallenges;
+  }
+  if (pars.rejectMetaGames !== undefined) {
+    patch.rejectMetaGames = pars.rejectMetaGames;
+  }
+  if (pars.movePolicy !== undefined) {
+    if (pars.movePolicy !== 'pass' && pars.movePolicy !== 'firstLegal') {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ message: "movePolicy must be 'pass' or 'firstLegal'" }),
+        headers,
+      };
+    }
+    patch.movePolicy = pars.movePolicy;
+  }
+  if (pars.moveDelayMs !== undefined) {
+    if (!Number.isFinite(pars.moveDelayMs) || pars.moveDelayMs < 0) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ message: 'moveDelayMs must be a non-negative number' }),
+        headers,
+      };
+    }
+    patch.moveDelayMs = Math.floor(pars.moveDelayMs);
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: 'No test bot settings were provided' }),
+      headers,
+    };
+  }
+
+  try {
+    const settings = await updateTestBotSettings(patch);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ settings }),
+      headers,
+    };
+  } catch (error: any) {
+    console.error('Error updating test bot settings: ', error);
+    return formatReturnError(`Unable to update test bot settings: ${error.message || error}`);
+  }
 }
 
 async function loadOwnedBot(claim: PartialClaims, clientId: string | undefined) {

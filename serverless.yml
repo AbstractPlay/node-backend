@@ -25,6 +25,12 @@ custom:
     prod: true
     dev: false
 
+  testBotEnabled:
+    dev: true
+    prod: false
+
+  botTokenUrl: https://abstractplay-bot.auth.us-east-1.amazoncognito.com/oauth2/token
+
   recbucket:
     prod: "records.abstractplay.com"
     dev: "records.abstractplay.com"
@@ -97,6 +103,28 @@ provider:
     OPENSSH_PRIVATE_KEY: ${env:OPENSSH_PRIVATE_KEY}
     BOT_OUTBOUND_QUEUE_URL:
       Ref: BotOutboundQueue
+    BOT_TOKEN_URL: ${self:custom.botTokenUrl}
+    TEST_BOT_CLIENT_ID: ${env:TEST_BOT_CLIENT_ID, ''}
+    TEST_BOT_CLIENT_SECRET: ${env:TEST_BOT_CLIENT_SECRET, ''}
+    API_BASE_URL:
+      Fn::Join:
+        - ''
+        - - 'https://'
+          - Ref: ApiGatewayRestApi
+          - '.execute-api.'
+          - Ref: AWS::Region
+          - '.amazonaws.com/'
+          - ${self:provider.stage}
+    BOT_QUERY_URL:
+      Fn::Join:
+        - ''
+        - - 'https://'
+          - Ref: ApiGatewayRestApi
+          - '.execute-api.'
+          - Ref: AWS::Region
+          - '.amazonaws.com/'
+          - ${self:provider.stage}
+          - '/botQuery'
     # TOTP_KEY: ${file(../apsecrets.yml):totp_key}
     # VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
     # VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
@@ -357,6 +385,23 @@ functions:
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # Midnight and noon UTC every day
           schedule: cron(0 0,12 * * ? *)
+  testBot:
+    handler: api/testBot.handler
+    memorySize: 256
+    description: Dev-only reference bot for E2E bot framework testing
+    logRetentionInDays: 30
+    events:
+      - http:
+          path: testBot
+          method: get
+          cors: true
+          enabled: ${self:custom.testBotEnabled.${self:provider.stage}}
+      - http:
+          path: testBot
+          method: post
+          cors: true
+          enabled: ${self:custom.testBotEnabled.${self:provider.stage}}
+
   bot-outbound:
     handler: utils/bot-outbound.handler
     description: Contacts bot HTTPS endpoints for challenges and move notifications
