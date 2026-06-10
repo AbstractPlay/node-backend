@@ -171,7 +171,7 @@ export type UsersData = {
 };
 
 type Bot = {
-  pk?: string;
+  pk: "BOT";
   sk: string;
   name: string;
   endpoint: string;

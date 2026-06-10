@@ -29,7 +29,7 @@ custom:
     dev: true
     prod: false
 
-  botTokenUrl: https://abstractplay-bot.auth.us-east-1.amazoncognito.com/oauth2/token
+  botTokenUrl: https://botauth.abstractplay.com/oauth2/token
 
   recbucket:
     prod: "records.abstractplay.com"
