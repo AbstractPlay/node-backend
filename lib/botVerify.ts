@@ -8,16 +8,110 @@ const MAX_SIGNATURE_AGE_SEC = 5 * 60;
 let cachedKey: KeyObject | undefined;
 let fetchPromise: Promise<KeyObject> | undefined;
 
+function stripWrappingQuotes(value: string): string {
+  const key = value.trim();
+  if (
+    (key.startsWith('"') && key.endsWith('"'))
+    || (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    return key.slice(1, -1).trim();
+  }
+  return key;
+}
+
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+function decodePublicKeyEnv(raw: string): string {
+  let key = stripWrappingQuotes(raw);
+
+  if (!key.includes('ssh-') && !key.includes('---- BEGIN')) {
+    const decoded = Buffer.from(key.replace(/\s+/g, ''), 'base64').toString('utf8').trim();
+    if (decoded.includes('ssh-') || decoded.includes('---- BEGIN')) {
+      key = decoded;
+    }
+  }
+
+  return normalizeLineEndings(key);
+}
+
 function parseSsh2PublicKeyFile(text: string): string {
   const lines = text
     .split(/\r?\n/)
     .map(line => line.trim())
     .filter(line => line.length > 0 && !line.startsWith('#') && !line.startsWith('----'));
-  const body = lines.join('');
-  if (body.startsWith('ssh-')) {
-    return body;
+  const base64Body = lines
+    .filter(line => !line.startsWith('Comment:'))
+    .join('');
+  if (base64Body.startsWith('ssh-')) {
+    return base64Body;
   }
-  return `ssh-ed25519 ${body}`;
+  return `ssh-ed25519 ${base64Body}`;
+}
+
+function readLengthPrefixedString(buf: Buffer, offset: number): { value: Buffer; offset: number } {
+  const len = buf.readUInt32BE(offset);
+  offset += 4;
+  return { value: buf.subarray(offset, offset + len), offset: offset + len };
+}
+
+function parseEd25519WireFormat(blob: Buffer): Buffer {
+  let offset = 0;
+  const keyType = readLengthPrefixedString(blob, offset);
+  offset = keyType.offset;
+  if (keyType.value.toString() !== 'ssh-ed25519') {
+    throw new Error(`Unsupported SSH key type ${keyType.value.toString()}`);
+  }
+
+  const publicKey = readLengthPrefixedString(blob, offset);
+  if (publicKey.value.length !== 32) {
+    throw new Error('Invalid Ed25519 public key length');
+  }
+
+  return publicKey.value;
+}
+
+function extractEd25519PublicKeyBytes(keyMaterial: string): Buffer {
+  const trimmed = keyMaterial.trim();
+
+  if (trimmed.includes('---- BEGIN SSH2 PUBLIC KEY ----')) {
+    return extractEd25519PublicKeyBytes(parseSsh2PublicKeyFile(trimmed));
+  }
+
+  const parts = trimmed.split(/\s+/).filter(part => part.length > 0);
+  if (parts[0] === 'ssh-ed25519' && parts[1]) {
+    return parseEd25519WireFormat(Buffer.from(parts[1], 'base64'));
+  }
+
+  if (parts.length === 1) {
+    return parseEd25519WireFormat(Buffer.from(parts[0], 'base64'));
+  }
+
+  throw new Error('Unsupported AP bot public key format');
+}
+
+function createEd25519PublicKey(publicKeyBytes: Buffer): KeyObject {
+  return createPublicKey({
+    key: {
+      kty: 'OKP',
+      crv: 'Ed25519',
+      x: publicKeyBytes.toString('base64url'),
+    },
+    format: 'jwk',
+  });
+}
+
+function loadPublicKeyFromMaterial(keyMaterial: string): KeyObject {
+  if (
+    keyMaterial.includes('ssh-ed25519')
+    || keyMaterial.includes('---- BEGIN SSH2 PUBLIC KEY ----')
+  ) {
+    const publicKeyBytes = extractEd25519PublicKeyBytes(keyMaterial);
+    return createEd25519PublicKey(publicKeyBytes);
+  }
+
+  return createPublicKey({ key: keyMaterial, format: 'pem' });
 }
 
 async function loadPublicKey(): Promise<KeyObject> {
@@ -30,20 +124,22 @@ async function loadPublicKey(): Promise<KeyObject> {
 
   fetchPromise = (async () => {
     const fromEnv = process.env.AP_BOT_PUBLIC_KEY?.trim();
-    let sshKey = fromEnv && fromEnv.length > 0 ? fromEnv : DEFAULT_SSH_PUBLIC_KEY;
+    let keyMaterial = fromEnv && fromEnv.length > 0
+      ? decodePublicKeyEnv(fromEnv)
+      : DEFAULT_SSH_PUBLIC_KEY;
 
     if (!fromEnv) {
       try {
         const response = await fetch(AP_PUBLIC_KEY_URL, { signal: AbortSignal.timeout(10_000) });
         if (response.ok) {
-          sshKey = parseSsh2PublicKeyFile(await response.text());
+          keyMaterial = parseSsh2PublicKeyFile(await response.text());
         }
       } catch (error) {
         console.warn('Unable to fetch AP bot public key; using embedded default', error);
       }
     }
 
-    cachedKey = createPublicKey(sshKey);
+    cachedKey = loadPublicKeyFromMaterial(keyMaterial);
     return cachedKey;
   })();
 
