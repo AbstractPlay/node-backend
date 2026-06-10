@@ -4,15 +4,35 @@ let cachedKey: KeyObject | undefined;
 
 const PEM_BLOCK_RE = /-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----/;
 
-function normalizePrivateKeyMaterial(raw: string): string {
-  let key = raw.trim();
+function stripWrappingQuotes(value: string): string {
+  const key = value.trim();
   if (
     (key.startsWith('"') && key.endsWith('"'))
     || (key.startsWith("'") && key.endsWith("'"))
   ) {
-    key = key.slice(1, -1).trim();
+    return key.slice(1, -1).trim();
+  }
+  return key;
+}
+
+function decodePrivateKeyEnv(raw: string): string {
+  let key = stripWrappingQuotes(raw);
+
+  if (!key.includes('-----BEGIN')) {
+    const decoded = Buffer.from(key.replace(/\s+/g, ''), 'base64').toString('utf8').trim();
+    if (!decoded.includes('-----BEGIN')) {
+      throw new Error(
+        'OPENSSH_PRIVATE_KEY must be PEM text or base64-encoded PEM text'
+      );
+    }
+    key = decoded;
   }
 
+  return key;
+}
+
+function normalizePrivateKeyMaterial(raw: string): string {
+  let key = decodePrivateKeyEnv(raw);
   key = key.replace(/\\n/g, '\n');
 
   const match = PEM_BLOCK_RE.exec(key);
@@ -48,8 +68,8 @@ function loadPrivateKey(keyMaterial: string): KeyObject {
   }
 
   const hint = keyMaterial.includes('BEGIN OPENSSH PRIVATE KEY')
-    ? 'Check that OPENSSH_PRIVATE_KEY is stored with real newlines or literal \\n between PEM lines.'
-    : 'OPENSSH_PRIVATE_KEY must be a PEM or OpenSSH private key.';
+    ? 'Store OPENSSH_PRIVATE_KEY as base64-encoded PEM, or PEM with real newlines.'
+    : 'OPENSSH_PRIVATE_KEY must be PEM or base64-encoded PEM.';
   const message = lastError instanceof Error ? lastError.message : String(lastError);
   throw new Error(`Unable to load OPENSSH_PRIVATE_KEY: ${message}. ${hint}`);
 }
