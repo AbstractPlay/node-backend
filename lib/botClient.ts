@@ -21,6 +21,7 @@ async function fetchAccessToken(clientId: string, clientSecret: string): Promise
     grant_type: 'client_credentials',
     client_id: clientId,
     client_secret: clientSecret,
+    scope: 'default-m2m-resource-server-zssvzy/communicate',
   });
 
   const response = await fetch(tokenUrl, {
