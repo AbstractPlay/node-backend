@@ -15,7 +15,16 @@ import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
 import it from '../locales/it/apback.json';
 import { wsBroadcast } from '../lib/wsBroadcast';
-import { isBotId, getParticipants, getBotRecord, filterHumanIds, botToFullUserStub } from '../lib/participants';
+import {
+  isBotId,
+  getParticipants,
+  getBotRecord,
+  filterHumanIds,
+  botToFullUserStub,
+  toClientBot,
+  ClientBot,
+  BotRecord,
+} from '../lib/participants';
 import { enqueueBotOutbound, getToMovePlayerIds, loadGameRecord } from '../lib/botOutbound';
 import {
   beginBotSecretRotation as cognitoBeginBotSecretRotation,
@@ -170,16 +179,7 @@ export type UsersData = {
   bot: boolean;
 };
 
-type Bot = {
-  pk: "BOT";
-  sk: string;
-  name: string;
-  endpoint: string;
-  owner: string;
-  lastseen: number;
-  description?: string;
-  supported?: { meta: string; variants: string[] }[];
-};
+type Bot = ClientBot;
 
 type MeData = {
   id: string;
@@ -2075,6 +2075,7 @@ async function beginBotSecretRotation(claim: PartialClaims, pars: { clientId: st
 
   try {
     const { clientSecretId, clientSecret } = await cognitoBeginBotSecretRotation(clientId);
+    const pendingSecretCreatedAt = Date.now();
 
     await ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -2082,13 +2083,19 @@ async function beginBotSecretRotation(claim: PartialClaims, pars: { clientId: st
       UpdateExpression: "SET pendingSecretId = :pendingSecretId, pendingSecretCreatedAt = :pendingSecretCreatedAt",
       ExpressionAttributeValues: {
         ":pendingSecretId": clientSecretId,
-        ":pendingSecretCreatedAt": Date.now(),
+        ":pendingSecretCreatedAt": pendingSecretCreatedAt,
       },
     }));
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ clientSecretId, clientSecret }),
+      body: JSON.stringify({
+        clientSecretId,
+        clientSecret,
+        secretRotationPending: true,
+        pendingSecretId: clientSecretId,
+        pendingSecretCreatedAt,
+      }),
       headers
     };
   } catch (error: any) {
@@ -2123,7 +2130,10 @@ async function finalizeBotSecretRotation(claim: PartialClaims, pars: { clientId:
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ message: "Bot secret rotation finalized successfully" }),
+      body: JSON.stringify({
+        message: "Bot secret rotation finalized successfully",
+        secretRotationPending: false,
+      }),
       headers
     };
   } catch (error: any) {
@@ -2473,7 +2483,9 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       customizationData = data[6];
       botData = data[7];
     }
-    const bots = (botData as any[]).map(d => d.Item);
+    const bots = (botData as { Item?: BotRecord }[])
+      .map(d => toClientBot(d.Item))
+      .filter((bot): bot is ClientBot => bot !== undefined);
     let tags: TagList[] = [];
     if (tagData.Item !== undefined) {
       const tagRec = tagData.Item as TagRec;

@@ -10,7 +10,43 @@ export type BotRecord = {
   lastseen?: number;
   description?: string;
   supported?: { meta: string; variants: string[] }[];
+  pendingSecretId?: string;
+  pendingSecretCreatedAt?: number;
 };
+
+export type ClientBot = {
+  pk: 'BOT';
+  sk: string;
+  name: string;
+  endpoint: string;
+  owner: string;
+  lastseen: number;
+  description?: string;
+  supported?: { meta: string; variants: string[] }[];
+  pendingSecretId?: string;
+  pendingSecretCreatedAt?: number;
+  secretRotationPending: boolean;
+};
+
+export function toClientBot(item: BotRecord | undefined): ClientBot | undefined {
+  if (!item) {
+    return undefined;
+  }
+
+  return {
+    pk: 'BOT',
+    sk: item.sk,
+    name: item.name,
+    endpoint: item.endpoint,
+    owner: item.owner,
+    lastseen: item.lastseen ?? 0,
+    description: item.description,
+    supported: item.supported,
+    pendingSecretId: item.pendingSecretId,
+    pendingSecretCreatedAt: item.pendingSecretCreatedAt,
+    secretRotationPending: item.pendingSecretId !== undefined && item.pendingSecretId !== '',
+  };
+}
 
 export type Participant = {
   id: string;
