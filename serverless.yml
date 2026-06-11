@@ -104,6 +104,7 @@ provider:
     BOT_OUTBOUND_QUEUE_URL:
       Ref: BotOutboundQueue
     BOT_TOKEN_URL: ${self:custom.botTokenUrl}
+    BOT_OAUTH_SCOPE: default-m2m-resource-server-zssvzy/communicate
     TEST_BOT_CLIENT_ID: ${env:TEST_BOT_CLIENT_ID, ''}
     TEST_BOT_CLIENT_SECRET: ${env:TEST_BOT_CLIENT_SECRET, ''}
     API_BASE_URL:

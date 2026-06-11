@@ -30,6 +30,15 @@ import {
   beginBotSecretRotation as cognitoBeginBotSecretRotation,
   finalizeBotSecretRotation as cognitoFinalizeBotSecretRotation,
 } from '../lib/botSecrets';
+import { buildCreateBotClientInput } from '../lib/botCognito';
+import {
+  BotNameTakenError,
+  BotNameValidationError,
+  reserveBotDisplayName,
+  releaseBotDisplayName,
+  renameBotDisplayName,
+  validateBotDisplayName,
+} from '../lib/botNames';
 import {
   getOrCreateTestBotState,
   isTestBotOwner,
@@ -1693,6 +1702,24 @@ async function updateUserSettings(userid: string, pars: { settings: any; }) {
   }
 }
 
+function mapBotNameError(error: unknown) {
+  if (error instanceof BotNameTakenError) {
+    return {
+      statusCode: 409,
+      body: JSON.stringify({ message: error.message }),
+      headers
+    };
+  }
+  if (error instanceof BotNameValidationError) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: error.message }),
+      headers
+    };
+  }
+  return undefined;
+}
+
 async function createBot(claim: PartialClaims, pars: { name: string, endpoint: string }) {
   if (!claim || !claim.sub) {
     return {
@@ -1701,16 +1728,20 @@ async function createBot(claim: PartialClaims, pars: { name: string, endpoint: s
       headers
     };
   }
-  const name = pars?.name;
-  if (!name || name.trim().length === 0) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ message: "A name is required for the bot" }),
-      headers
-    };
+
+  let displayName: string;
+  try {
+    displayName = validateBotDisplayName(pars?.name ?? '');
+  } catch (error) {
+    const mapped = mapBotNameError(error);
+    if (mapped) {
+      return mapped;
+    }
+    throw error;
   }
-  const endpoint = pars?.endpoint;
-  if (!endpoint || endpoint.trim().length === 0) {
+
+  const endpoint = pars?.endpoint?.trim();
+  if (!endpoint) {
     return {
       statusCode: 400,
       body: JSON.stringify({ message: "An HTTPS endpoint is required for the bot" }),
@@ -1718,40 +1749,40 @@ async function createBot(claim: PartialClaims, pars: { name: string, endpoint: s
     };
   }
 
+  const userPoolId = process.env.BOTPOOL_ID;
+  if (!userPoolId) {
+    return formatReturnError("BOTPOOL_ID environment variable is not set");
+  }
+
+  let clientId: string | undefined;
+  let nameReserved = false;
+
   try {
-    const userPoolId = process.env.BOTPOOL_ID;
-    if (!userPoolId) {
-      throw new Error("BOTPOOL_ID environment variable is not set");
-    }
-
-    const command = new CreateUserPoolClientCommand({
-      UserPoolId: userPoolId,
-      ClientName: name,
-      GenerateSecret: true,
-    });
-
-    const response = await cognitoClient.send(command);
-    const clientId = response.UserPoolClient?.ClientId;
+    const response = await cognitoClient.send(new CreateUserPoolClientCommand(
+      buildCreateBotClientInput(userPoolId, `bot-${uuid()}`)
+    ));
+    clientId = response.UserPoolClient?.ClientId;
     const clientSecret = response.UserPoolClient?.ClientSecret;
 
     if (!clientId || !clientSecret) {
       throw new Error("Cognito did not return ClientId or ClientSecret");
     }
 
-    // Create DynamoDB record
+    displayName = await reserveBotDisplayName(displayName, clientId, claim.sub);
+    nameReserved = true;
+
     await ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: {
         pk: "BOT",
         sk: clientId,
-        name,
+        name: displayName,
         endpoint,
         lastseen: Date.now(),
         owner: claim.sub
       }
     }));
 
-    // Update owner's USER record
     await ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": claim.sub },
@@ -1767,6 +1798,31 @@ async function createBot(claim: PartialClaims, pars: { name: string, endpoint: s
     };
   } catch (error: any) {
     console.error("Error creating bot: ", error);
+
+    if (nameReserved) {
+      try {
+        await releaseBotDisplayName(displayName);
+      } catch (releaseError) {
+        console.error("Error releasing bot name reservation after failed create: ", releaseError);
+      }
+    }
+
+    if (clientId) {
+      try {
+        await cognitoClient.send(new DeleteUserPoolClientCommand({
+          UserPoolId: userPoolId,
+          ClientId: clientId,
+        }));
+      } catch (deleteError) {
+        console.error("Error deleting Cognito client after failed create: ", deleteError);
+      }
+    }
+
+    const mapped = mapBotNameError(error);
+    if (mapped) {
+      return mapped;
+    }
+
     return formatReturnError(`Unable to create bot: ${error.message || error}`);
   }
 }
@@ -1826,7 +1882,23 @@ async function updateBot(
 
     // Update the values (but never update clientId/sk)
     if (pars.name !== undefined) {
-      bot.name = pars.name;
+      bot.name = await renameBotDisplayName(
+        bot.name as string,
+        pars.name,
+        clientId,
+        claim.sub
+      );
+    }
+    if (pars.endpoint !== undefined) {
+      const trimmedEndpoint = pars.endpoint.trim();
+      if (!trimmedEndpoint) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ message: "An HTTPS endpoint is required for the bot" }),
+          headers
+        };
+      }
+      bot.endpoint = trimmedEndpoint;
     }
     if (pars.description !== undefined) {
       bot.description = pars.description;
@@ -1854,6 +1926,10 @@ async function updateBot(
     };
   } catch (error: any) {
     console.error("Error updating bot: ", error);
+    const mapped = mapBotNameError(error);
+    if (mapped) {
+      return mapped;
+    }
     return formatReturnError(`Unable to update bot: ${error.message || error}`);
   }
 }
@@ -2206,6 +2282,12 @@ async function deleteBot(claim: PartialClaims, pars: { clientId: string }) {
     });
     await cognitoClient.send(command);
 
+    try {
+      await releaseBotDisplayName(bot.name as string);
+    } catch (releaseError) {
+      console.error(`Error releasing bot name for ${clientId}:`, releaseError);
+    }
+
     // 3. Delete BOT record from DynamoDB
     await ddbDocClient.send(new DeleteCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -2231,6 +2313,10 @@ async function deleteBot(claim: PartialClaims, pars: { clientId: string }) {
     };
   } catch (error: any) {
     console.error("Error deleting bot: ", error);
+    const mapped = mapBotNameError(error);
+    if (mapped) {
+      return mapped;
+    }
     return formatReturnError(`Unable to delete bot: ${error.message || error}`);
   }
 }
@@ -2894,7 +2980,7 @@ function processGames(userid: any, result: QueryCommandOutput, games: Game[]) {
   const fullGames = result.Items as FullGame[];
   if (fullGames !== undefined) {
     for (const game of fullGames) {
-      if ("players" in game) {
+      if ("players" in game && game.players !== undefined && game.players.length > 0 && game.players.some(p => p.id === userid)) {
         games.push({ "id": game.id, "metaGame": game.metaGame, "players": game.players, "clockHard": game.clockHard, "toMove": game.toMove, "lastMoveTime": game.lastMoveTime, "noExplore": game.noExplore || false });
       }
     }

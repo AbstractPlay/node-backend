@@ -17,11 +17,16 @@ async function fetchAccessToken(clientId: string, clientSecret: string): Promise
     throw new Error('BOT_TOKEN_URL environment variable is not set');
   }
 
+  const scope = process.env.BOT_OAUTH_SCOPE?.trim();
+  if (!scope) {
+    throw new Error('BOT_OAUTH_SCOPE environment variable is not set');
+  }
+
   const body = new URLSearchParams({
     grant_type: 'client_credentials',
     client_id: clientId,
     client_secret: clientSecret,
-    scope: 'default-m2m-resource-server-zssvzy/communicate',
+    scope,
   });
 
   const response = await fetch(tokenUrl, {
