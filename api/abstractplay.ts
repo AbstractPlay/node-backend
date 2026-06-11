@@ -4518,7 +4518,6 @@ async function submitMove(userid: string, pars: {
     console.log("Scheduled emails");
 
     await realPingBot(game.metaGame, game.id, game);
-    await notifyRegisteredBotsTurn(game.metaGame, game.id, game);
     await Promise.all(list);
 
     // broadcasting that state has updated
@@ -8849,11 +8848,7 @@ async function invokePie(userid: string, pars: { id: string, metaGame: string, c
       console.log("Scheduled emails");
       await Promise.all(list);
       console.log("All updates complete");
-      // if bot is involved, trigger ping
-      if (players.map(p => p.id).includes(process.env.AIAI_USERID!)) {
-        await realPingBot(pars.metaGame, pars.id);
-      }
-      await notifyRegisteredBotsTurn(pars.metaGame, pars.id, game);
+      await realPingBot(pars.metaGame, pars.id, game);
       return {
         statusCode: 200,
         body: JSON.stringify(game),
@@ -9486,6 +9481,8 @@ async function realPingBot(metaGame: string, gameid: string, game?: FullGame) {
       await sqsClient.send(cmd);
     }
   }
+
+  await notifyRegisteredBotsTurn(metaGame, gameid, game);
 }
 
 function makeWork() {
