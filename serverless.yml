@@ -29,9 +29,6 @@ custom:
     dev: true
     prod: false
 
-  botTokenUrl: https://botauth.abstractplay.com/oauth2/token
-  botOAuthScope: default-m2m-resource-server-zssvzy/communicate
-
   recbucket:
     prod: "records.abstractplay.com"
     dev: "records.abstractplay.com"
@@ -46,15 +43,16 @@ custom:
         - Ref: AWS::Region
         - ".amazonaws.com"
 
-  botpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_nEKyig64I
-  botpoolId: us-east-1_nEKyig64I
-
   stageConfig:
     dev:
       profile: AbstractPlayDev
       userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_2zrzbEjoU
       userpoolId: us-east-1_2zrzbEjoU
       userpoolClient: 14mpql1tmvntup4p2anm4jt782
+      botpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_kqlqXHDJ5
+      botpoolId: us-east-1_kqlqXHDJ5
+      botTokenUrl: https://abstract-play-bots-dev.auth.us-east-1.amazoncognito.com/oauth2/token
+      botOAuthScope: default-m2m-resource-server-dev/communicate
       sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue
       wsDomain: qwmw4fb0l6.execute-api.us-east-1.amazonaws.com
       wsSqs: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-ws-messages-dev
@@ -64,6 +62,10 @@ custom:
       userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_YCjgSZHJm
       userpoolId: us-east-1_YCjgSZHJm
       userpoolClient: 2isan3ctk1aabt2v6r6aptlpg
+      botpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_nEKyig64I
+      botpoolId: us-east-1_nEKyig64I
+      botTokenUrl: https://botauth.abstractplay.com/oauth2/token
+      botOAuthScope: default-m2m-resource-server-zssvzy/communicate
       sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-prod-aiai-queue
       wsDomain: qwmw4fb0l6.execute-api.us-east-1.amazonaws.com
       wsSqs: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-ws-messages-prod
@@ -92,7 +94,7 @@ provider:
     userpool: ${self:custom.stageConfig.${self:provider.stage}.userpool}
     userpoolId: ${self:custom.stageConfig.${self:provider.stage}.userpoolId}
     userpoolClient: ${self:custom.stageConfig.${self:provider.stage}.userpoolClient}
-    BOTPOOL_ID: ${self:custom.botpoolId}
+    BOTPOOL_ID: ${self:custom.stageConfig.${self:provider.stage}.botpoolId}
     SQS_URL: ${self:custom.stageConfig.${self:provider.stage}.sqsurl}
     AIAI_USERID: SkQfHAjeDxs8eeEnScuYA
     WEBSOCKET_DOMAIN: ${self:custom.stageConfig.${self:provider.stage}.wsDomain}
@@ -104,8 +106,8 @@ provider:
     OPENSSH_PRIVATE_KEY: ${env:OPENSSH_PRIVATE_KEY}
     BOT_OUTBOUND_QUEUE_URL:
       Ref: BotOutboundQueue
-    BOT_TOKEN_URL: ${self:custom.botTokenUrl}
-    BOT_OAUTH_SCOPE: ${self:custom.botOAuthScope}
+    BOT_TOKEN_URL: ${self:custom.stageConfig.${self:provider.stage}.botTokenUrl}
+    BOT_OAUTH_SCOPE: ${self:custom.stageConfig.${self:provider.stage}.botOAuthScope}
     TEST_BOT_CLIENT_ID: ${env:TEST_BOT_CLIENT_ID, ''}
     TEST_BOT_CLIENT_SECRET: ${env:TEST_BOT_CLIENT_SECRET, ''}
     API_BASE_URL:
@@ -170,7 +172,9 @@ provider:
             - cognito-idp:ListUserPoolClientSecrets
             - cognito-idp:AddUserPoolClientSecret
             - cognito-idp:DeleteUserPoolClientSecret
-          Resource: ${self:custom.botpool}
+          Resource:
+            - ${self:custom.stageConfig.dev.botpool}
+            - ${self:custom.stageConfig.prod.botpool}
 
 resources:
   Resources:
@@ -325,9 +329,9 @@ functions:
           integration: lambda
           authorizer:
             name: botAuthorizer
-            arn: ${self:custom.botpool}
+            arn: ${self:custom.stageConfig.${self:provider.stage}.botpool}
             scopes:
-              - ${self:custom.botOAuthScope}
+              - ${self:custom.stageConfig.${self:provider.stage}.botOAuthScope}
   query:
     handler: api/abstractplay.query
     memorySize: 256

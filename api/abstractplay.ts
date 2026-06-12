@@ -866,6 +866,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
 }
 
 async function userNames() {
+  // Bots are listed from the stage's DynamoDB table (abstract-play-dev vs abstract-play-prod).
+  // Bot Cognito credentials are also per-stage; dev tokens cannot call prod botQuery.
   console.log("userNames: Scanning users.");
   try {
     const [data, botData] = await Promise.all([

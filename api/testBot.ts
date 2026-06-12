@@ -61,6 +61,17 @@
  * Outbound authentication (your bot → AP)
  * ---------------------------------------------------------------------------
  *
+ * Dev and production use **separate** Cognito bot pools, token URLs, OAuth scopes,
+ * DynamoDB tables, and botQuery base URLs. Register and test on dev first; create a
+ * new bot on production when you are ready for wide release (credentials do not transfer).
+ *
+ *   Dev:  BOT_TOKEN_URL → abstract-play-bots-dev.auth…/oauth2/token
+ *         BOT_OAUTH_SCOPE → default-m2m-resource-server-dev/communicate
+ *         botQuery → …/dev/botQuery
+ *   Prod: BOT_TOKEN_URL → https://botauth.abstractplay.com/oauth2/token
+ *         BOT_OAUTH_SCOPE → default-m2m-resource-server-zssvzy/communicate
+ *         botQuery → …/prod/botQuery
+ *
  * 1. POST to BOT_TOKEN_URL with grant_type=client_credentials, client_id,
  *    client_secret, and scope (see lib/botClient.ts).
  * 2. Cache the access_token until shortly before expires_in.
@@ -71,11 +82,11 @@
  * Environment variables (test bot Lambda on dev)
  * ---------------------------------------------------------------------------
  *
- *   TEST_BOT_CLIENT_ID      — Cognito app client id (= bot player id, JWT sub)
- *   TEST_BOT_CLIENT_SECRET  — Cognito client secret for M2M token
- *   BOT_TOKEN_URL           — OAuth token endpoint (set in serverless.yml)
- *   BOT_QUERY_URL           — botQuery API URL
- *   BOT_OAUTH_SCOPE         — OAuth scope required by botQuery authorizer
+ *   TEST_BOT_CLIENT_ID      — Dev-pool Cognito client id (= bot player id, JWT sub)
+ *   TEST_BOT_CLIENT_SECRET  — Dev-pool client secret for M2M token
+ *   BOT_TOKEN_URL           — Dev OAuth token endpoint (serverless stageConfig.dev)
+ *   BOT_QUERY_URL           — Dev botQuery URL (…/dev/botQuery)
+ *   BOT_OAUTH_SCOPE         — Dev OAuth scope (default-m2m-resource-server-dev/communicate)
  *   ABSTRACT_PLAY_TABLE     — DynamoDB table (test bot event log + BOT record)
  *   API_BASE_URL            — Used by dashboard to show this bot's public URL
  *
