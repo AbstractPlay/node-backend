@@ -1,3 +1,7 @@
+/**
+ * OAuth client_credentials + botQuery client for bot → AP communication.
+ * See api/testBot.ts for the reference integration (move submission flow).
+ */
 import {
   isApiGatewayUnauthorized,
   summarizeJwtForLog,

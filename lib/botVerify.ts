@@ -1,3 +1,7 @@
+/**
+ * Verify inbound AP webhook signatures (Ed25519).
+ * See api/testBot.ts for the reference integration (handlePost flow).
+ */
 import { createPublicKey, verify, KeyObject } from 'crypto';
 
 const AP_PUBLIC_KEY_URL = 'https://play.abstractplay.com/ap-public-key.txt';

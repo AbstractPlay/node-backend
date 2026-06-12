@@ -392,7 +392,7 @@ functions:
   testBot:
     handler: api/testBot.handler
     memorySize: 256
-    description: Dev-only reference bot for E2E bot framework testing
+    description: Dev-only reference bot — full source and docs in api/testBot.ts
     logRetentionInDays: 30
     events:
       - http:
