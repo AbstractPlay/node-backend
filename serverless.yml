@@ -30,6 +30,7 @@ custom:
     prod: false
 
   botTokenUrl: https://botauth.abstractplay.com/oauth2/token
+  botOAuthScope: default-m2m-resource-server-zssvzy/communicate
 
   recbucket:
     prod: "records.abstractplay.com"
@@ -104,7 +105,7 @@ provider:
     BOT_OUTBOUND_QUEUE_URL:
       Ref: BotOutboundQueue
     BOT_TOKEN_URL: ${self:custom.botTokenUrl}
-    BOT_OAUTH_SCOPE: default-m2m-resource-server-zssvzy/communicate
+    BOT_OAUTH_SCOPE: ${self:custom.botOAuthScope}
     TEST_BOT_CLIENT_ID: ${env:TEST_BOT_CLIENT_ID, ''}
     TEST_BOT_CLIENT_SECRET: ${env:TEST_BOT_CLIENT_SECRET, ''}
     API_BASE_URL:
@@ -325,6 +326,8 @@ functions:
           authorizer:
             name: botAuthorizer
             arn: ${self:custom.botpool}
+            scopes:
+              - ${self:custom.botOAuthScope}
   query:
     handler: api/abstractplay.query
     memorySize: 256

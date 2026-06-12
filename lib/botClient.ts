@@ -162,7 +162,9 @@ export async function submitBotMove(params: SubmitBotMoveParams): Promise<Submit
     if (likelyApiGatewayAuthFailure) {
       console.warn(
         'botClient: 401 Unauthorized with API Gateway body — botQuery Lambda was likely not invoked. '
-        + 'Check BOT_OAUTH_SCOPE on the Cognito app client, token claims (scope/sub), and BOT_QUERY_URL stage.'
+        + 'If the access token already has the correct scope, ensure API Gateway botAuthorizer declares the same OAuth scope '
+        + '(without scopes, Cognito authorizers expect an ID token, not an M2M access token). '
+        + 'Also verify BOT_OAUTH_SCOPE on the Cognito app client and BOT_QUERY_URL stage.'
       );
     }
 
