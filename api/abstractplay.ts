@@ -667,16 +667,26 @@ module.exports.query = async (event: { queryStringParameters: any; body?: string
   }
 }
 
-module.exports.botQuery = async (event: { body: string; cognitoPoolClaims: PartialClaims; }) => {
+function parseLambdaIntegrationBody(body: string | Record<string, unknown> | undefined): Record<string, unknown> {
+  if (body === undefined || body === null) {
+    throw new Error("Missing request body");
+  }
+  if (typeof body === "string") {
+    return JSON.parse(body) as Record<string, unknown>;
+  }
+  return body;
+}
+
+module.exports.botQuery = async (event: { body: string | Record<string, unknown>; cognitoPoolClaims: PartialClaims; }) => {
   console.log("botQuery: ", event.body);
   console.log("botQuery claims:", {
     sub: event.cognitoPoolClaims?.sub,
     email: event.cognitoPoolClaims?.email,
     email_verified: event.cognitoPoolClaims?.email_verified,
   });
-  let body: any;
+  let body: Record<string, unknown>;
   try {
-    body = JSON.parse(event.body);
+    body = parseLambdaIntegrationBody(event.body);
   } catch (error) {
     return {
       statusCode: 400,
@@ -690,7 +700,7 @@ module.exports.botQuery = async (event: { body: string; cognitoPoolClaims: Parti
   const verb = body.verb;
   switch (verb) {
     case "move":
-      return await handleMove(event.cognitoPoolClaims, body);
+      return await handleMove(event.cognitoPoolClaims, body as { gameid: string; move: string; metaGame: string; });
     default:
       return {
         statusCode: 400,
@@ -5958,7 +5968,7 @@ async function handleMove(claims: PartialClaims, pars: { gameid: string; move: s
     return formatReturnError(`It is not bot ${botId}'s turn in game ${pars.gameid}`);
   }
 
-  return submitMove(botId, {
+  return await submitMove(botId, {
     id: pars.gameid,
     move: pars.move,
     metaGame: pars.metaGame,
