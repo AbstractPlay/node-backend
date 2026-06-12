@@ -669,6 +669,11 @@ module.exports.query = async (event: { queryStringParameters: any; body?: string
 
 module.exports.botQuery = async (event: { body: string; cognitoPoolClaims: PartialClaims; }) => {
   console.log("botQuery: ", event.body);
+  console.log("botQuery claims:", {
+    sub: event.cognitoPoolClaims?.sub,
+    email: event.cognitoPoolClaims?.email,
+    email_verified: event.cognitoPoolClaims?.email_verified,
+  });
   let body: any;
   try {
     body = JSON.parse(event.body);

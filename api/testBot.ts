@@ -201,6 +201,7 @@ async function handleMove(payload: OutMovePayload): Promise<APIGatewayProxyResul
       summary: `submitted ${move}`,
       statusCode: result.statusCode,
       error: result.statusCode >= 300 ? result.body : undefined,
+      detail: result.statusCode >= 300 ? { ...result.debug } : undefined,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

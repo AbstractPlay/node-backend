@@ -1,5 +1,11 @@
-type TokenCache = {
-  accessToken: string;
+import {
+  isApiGatewayUnauthorized,
+  summarizeJwtForLog,
+  summarizeUrlForLog,
+  type JwtLogSummary,
+} from './botClientLog';
+
+type TokenCache = {  accessToken: string;
   expiresAtMs: number;
 };
 
@@ -38,6 +44,13 @@ async function fetchAccessToken(clientId: string, clientSecret: string): Promise
 
   if (!response.ok) {
     const text = await response.text();
+    console.error('botClient: token request failed', {
+      clientId,
+      tokenUrl: summarizeUrlForLog(tokenUrl),
+      scope,
+      statusCode: response.status,
+      body: text.slice(0, 500),
+    });
     throw new Error(`Token request failed (${response.status}): ${text}`);
   }
 
@@ -45,6 +58,14 @@ async function fetchAccessToken(clientId: string, clientSecret: string): Promise
   if (!data.access_token) {
     throw new Error('Token response did not include access_token');
   }
+
+  console.log('botClient: token acquired', {
+    clientId,
+    tokenUrl: summarizeUrlForLog(tokenUrl),
+    scope,
+    expiresIn: data.expires_in,
+    claims: summarizeJwtForLog(data.access_token),
+  });
 
   const expiresInMs = Math.max(60, data.expires_in ?? 3600) * 1000;
   tokenCaches.set(clientId, {
@@ -74,6 +95,13 @@ export type SubmitBotMoveParams = {
 export type SubmitBotMoveResult = {
   statusCode: number;
   body: string;
+  debug: {
+    clientId: string;
+    botQueryUrl: ReturnType<typeof summarizeUrlForLog>;
+    tokenClaims: JwtLogSummary;
+    retriedAuth: boolean;
+    likelyApiGatewayAuthFailure: boolean;
+  };
 };
 
 export async function submitBotMove(params: SubmitBotMoveParams): Promise<SubmitBotMoveResult> {
@@ -82,7 +110,18 @@ export async function submitBotMove(params: SubmitBotMoveParams): Promise<Submit
     throw new Error('BOT_QUERY_URL environment variable is not set');
   }
 
-  const attempt = async (token: string): Promise<SubmitBotMoveResult> => {
+  const attempt = async (token: string, attemptNumber: number): Promise<SubmitBotMoveResult> => {
+    const tokenClaims = summarizeJwtForLog(token);
+    console.log('botClient: botQuery request', {
+      attempt: attemptNumber,
+      clientId: params.clientId,
+      gameid: params.gameid,
+      metaGame: params.metaGame,
+      move: params.move,
+      botQueryUrl: summarizeUrlForLog(botQueryUrl),
+      tokenClaims,
+    });
+
     const response = await fetch(botQueryUrl, {
       method: 'POST',
       headers: {
@@ -98,15 +137,45 @@ export async function submitBotMove(params: SubmitBotMoveParams): Promise<Submit
       signal: AbortSignal.timeout(30_000),
     });
     const body = await response.text();
-    return { statusCode: response.status, body };
+    const likelyApiGatewayAuthFailure = isApiGatewayUnauthorized(response.status, body);
+    const result: SubmitBotMoveResult = {
+      statusCode: response.status,
+      body,
+      debug: {
+        clientId: params.clientId,
+        botQueryUrl: summarizeUrlForLog(botQueryUrl),
+        tokenClaims,
+        retriedAuth: false,
+        likelyApiGatewayAuthFailure,
+      },
+    };
+
+    console.log('botClient: botQuery response', {
+      attempt: attemptNumber,
+      clientId: params.clientId,
+      statusCode: result.statusCode,
+      likelyApiGatewayAuthFailure,
+      body: body.slice(0, 500),
+      tokenClaims,
+    });
+
+    if (likelyApiGatewayAuthFailure) {
+      console.warn(
+        'botClient: 401 Unauthorized with API Gateway body — botQuery Lambda was likely not invoked. '
+        + 'Check BOT_OAUTH_SCOPE on the Cognito app client, token claims (scope/sub), and BOT_QUERY_URL stage.'
+      );
+    }
+
+    return result;
   };
 
   let token = await getBotAccessToken(params.clientId, params.clientSecret);
-  let result = await attempt(token);
+  let result = await attempt(token, 1);
   if (result.statusCode === 401) {
     tokenCaches.delete(params.clientId);
     token = await getBotAccessToken(params.clientId, params.clientSecret);
-    result = await attempt(token);
+    result = await attempt(token, 2);
+    result.debug.retriedAuth = true;
   }
 
   return result;

@@ -23,6 +23,7 @@ export type TestBotEvent = {
   summary: string;
   statusCode?: number;
   error?: string;
+  detail?: Record<string, unknown>;
 };
 
 export type TestBotState = {
