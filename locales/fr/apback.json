@@ -12,7 +12,7 @@
     "GameOverWithRatingBody": "[FR] Your {{metaGame}} game has ended. Your new rating is {{rating}}. Please visit https://play.abstractplay.com/ for more details.",
     "GameStartedBody": "Le challenge {{- metaGame}} a été accépté par tous les joueurs et la partie a commencé.",
     "GameStartedSubject": "AbstractPlay : la partie a commencé",
-    "YourMove": "À vous de jouer.",
+    "YourMove": "C'est votre tour.",
     "YourMoveBatchedBody_one": "C'est à vous de jouer dans {{ count }} partie. Veuillez visiter https://play.abstractplay.com pour jouer votre tour.",
     "YourMoveBatchedBody_many": "C'est à vous de jouer dans {{ count }} parties. Veuillez visiter https://play.abstractplay.com pour jouer vos tours.",
     "YourMoveBatchedBody_other": "C'est à vous de jouer dans {{ count }} parties. Veuillez visiter https://play.abstractplay.com pour jouer vos tours.",
@@ -44,7 +44,7 @@
     "TournamentCancelBodyVariants": "Pas assez de joueurs se sont inscrits pour le tournoi {{number}} de la série {{- metaGame}}, variantes : {{variants}} et le tournoi a dû être annulé.",
     "TournamentCancelSubject": "Votre tournoi de {{- metaGame}} a été annulé",
     "TournamentEndBody": "Le tournoi {{number}} de la série {{- metaGame}} a été annulé. Voir https://play.abstractplay.com/tournaments. Le prochain tournoi de cette série va démarrer dans une semaine.",
-    "TournamentEndBodyVariants": "Le tournoi {{number}} de la série {{- metaGame}}, variantes : {{variants}} est terminé. Voir https://play.abstractplay.com/tournaments. Le prochain tournoi de cette série va démarrer dans une semaine.",
+    "TournamentEndBodyVariants": "Le tournoi {{number}} de la série {{- metaGame}}, variantes : {{variants}} série est terminé. Voir https://play.abstractplay.com/tournament/{{tournamentId}}. Le prochain tournoi de cette série va démarrer dans une semaine.",
     "TournamentEndSubject": "Votre tournoi de {{- metaGame}} est terminé",
     "TournamentRemoveBody": "Votre inscription au tournoi de {{- metaGame}} a été annulée, car ce n'était pas clair si vous êtiez toujours interessé. Si vous voulez tout de même participer, merci de vous ré-inscrire ici : https://play.abstractplay.com/tournaments.",
     "TournamentRemoveBodyVariants": "Votre inscription au tournoi de {{- metaGame}}, variantes : {{variants}} a été annulée, car ce n'était pas clair si vous êtiez toujours interessé. Si vous voulez tout de même participer, merci de vous ré-inscrire ici : https://play.abstractplay.com/tournaments.",
@@ -53,7 +53,7 @@
     "TournamentStartBody": "Le tournoir {{number}} de la série {{- metaGame}} a commencé. Voir https://play.abstractplay.com/tournaments. Vous vous êtes aussi inscrit pour le prochain tournoi dans les séries. Ca commencera une semaine après la fin de ce tournoi.",
     "TournamentStartBodyVariants": "La série du tournoi {{number}} de {{- metaGame}}, variantes : {{variants}} a commencé. Voir https://play.abstractplay.com/tournaments. Vous vous êtes aussi inscrit pour le prochain tournoi de la série. Il commencera une semaine après la fin de ce tournoi.",
     "YourMoveSubjectUrgent": "AbstractPlay : à vous de jouer (urgent)",
-    "YourMoveBatchedBodyUrgent_one": "C'est votre tour dans {{ count }} partie. Il reste au moins 24 heures à jouer pour une partie. Rendez-vous sur https://play.abstractplay.com pour jouer votre tour.",
-    "YourMoveBatchedBodyUrgent_many": "C'est votre tour dans {{ count }} parties. Il reste au moins 24 heures à jouer pour une partie. Rendez-vous sur https://play.abstractplay.com pour jouer votre tour.",
-    "YourMoveBatchedBodyUrgent_other": "C'est votre tour dans {{ count }} parties. Il reste au moins 24 heures à jouer pour une partie. Rendez-vous sur https://play.abstractplay.com pour jouer votre tour."
+    "YourMoveBatchedBodyUrgent_one": "C'est votre tour dans {{ count }} partie. Au moins 1 partie a moins de 24 heures restant sur l'horloge. Rendez-vous sur https://play.abstractplay.com pour jouer votre tour.",
+    "YourMoveBatchedBodyUrgent_many": "C'est votre tour dans {{ count }} parties. Au moins 1 partie a moins de 24 heures restant sur l'horloge. Rendez-vous sur https://play.abstractplay.com pour jouer votre tour.",
+    "YourMoveBatchedBodyUrgent_other": "C'est votre tour dans {{ count }} parties. Au moins 1 partie a moins de 24 heures restant sur l'horloge. Rendez-vous sur https://play.abstractplay.com pour jouer votre tour."
 }
