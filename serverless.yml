@@ -25,6 +25,10 @@ custom:
     prod: true
     dev: false
 
+  testBotEnabled:
+    dev: true
+    prod: false
+
   recbucket:
     prod: "records.abstractplay.com"
     dev: "records.abstractplay.com"
@@ -45,6 +49,10 @@ custom:
       userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_2zrzbEjoU
       userpoolId: us-east-1_2zrzbEjoU
       userpoolClient: 14mpql1tmvntup4p2anm4jt782
+      botpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_kqlqXHDJ5
+      botpoolId: us-east-1_kqlqXHDJ5
+      botTokenUrl: https://abstract-play-bots-dev.auth.us-east-1.amazoncognito.com/oauth2/token
+      botOAuthScope: default-m2m-resource-server-dev/communicate
       sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue
       wsDomain: qwmw4fb0l6.execute-api.us-east-1.amazonaws.com
       wsSqs: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-ws-messages-dev
@@ -54,6 +62,10 @@ custom:
       userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_YCjgSZHJm
       userpoolId: us-east-1_YCjgSZHJm
       userpoolClient: 2isan3ctk1aabt2v6r6aptlpg
+      botpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_nEKyig64I
+      botpoolId: us-east-1_nEKyig64I
+      botTokenUrl: https://botauth.abstractplay.com/oauth2/token
+      botOAuthScope: default-m2m-resource-server-zssvzy/communicate
       sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-prod-aiai-queue
       wsDomain: qwmw4fb0l6.execute-api.us-east-1.amazonaws.com
       wsSqs: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-ws-messages-prod
@@ -82,6 +94,7 @@ provider:
     userpool: ${self:custom.stageConfig.${self:provider.stage}.userpool}
     userpoolId: ${self:custom.stageConfig.${self:provider.stage}.userpoolId}
     userpoolClient: ${self:custom.stageConfig.${self:provider.stage}.userpoolClient}
+    BOTPOOL_ID: ${self:custom.stageConfig.${self:provider.stage}.botpoolId}
     SQS_URL: ${self:custom.stageConfig.${self:provider.stage}.sqsurl}
     AIAI_USERID: SkQfHAjeDxs8eeEnScuYA
     WEBSOCKET_DOMAIN: ${self:custom.stageConfig.${self:provider.stage}.wsDomain}
@@ -90,6 +103,32 @@ provider:
     TOTP_KEY: ${env:TOTP_KEY}
     VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
     VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
+    OPENSSH_PRIVATE_KEY: ${env:OPENSSH_PRIVATE_KEY}
+    BOT_OUTBOUND_QUEUE_URL:
+      Ref: BotOutboundQueue
+    BOT_TOKEN_URL: ${self:custom.stageConfig.${self:provider.stage}.botTokenUrl}
+    BOT_OAUTH_SCOPE: ${self:custom.stageConfig.${self:provider.stage}.botOAuthScope}
+    TEST_BOT_CLIENT_ID: ${env:TEST_BOT_CLIENT_ID, ''}
+    TEST_BOT_CLIENT_SECRET: ${env:TEST_BOT_CLIENT_SECRET, ''}
+    API_BASE_URL:
+      Fn::Join:
+        - ''
+        - - 'https://'
+          - Ref: ApiGatewayRestApi
+          - '.execute-api.'
+          - Ref: AWS::Region
+          - '.amazonaws.com/'
+          - ${self:provider.stage}
+    BOT_QUERY_URL:
+      Fn::Join:
+        - ''
+        - - 'https://'
+          - Ref: ApiGatewayRestApi
+          - '.execute-api.'
+          - Ref: AWS::Region
+          - '.amazonaws.com/'
+          - ${self:provider.stage}
+          - '/botQuery'
     # TOTP_KEY: ${file(../apsecrets.yml):totp_key}
     # VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
     # VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
@@ -124,6 +163,18 @@ provider:
           Resource:
             - 'arn:aws:s3:::abstractplay-db-dump/*'
             - 'arn:aws:s3:::records.abstractplay.com/*'
+        - Effect: Allow
+          Action:
+            - cognito-idp:AdminCreateUser
+            - cognito-idp:AdminDeleteUser
+            - cognito-idp:CreateUserPoolClient
+            - cognito-idp:DeleteUserPoolClient
+            - cognito-idp:ListUserPoolClientSecrets
+            - cognito-idp:AddUserPoolClientSecret
+            - cognito-idp:DeleteUserPoolClientSecret
+          Resource:
+            - ${self:custom.stageConfig.dev.botpool}
+            - ${self:custom.stageConfig.prod.botpool}
 
 resources:
   Resources:
@@ -169,6 +220,13 @@ resources:
         QueueName: abstractplay-ws-messages-${self:provider.stage}
         VisibilityTimeout: 900   # match your consumer Lambda timeout
         MessageRetentionPeriod: 86400  # 1 day, adjust as needed
+
+    BotOutboundQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: abstractplay-bot-outbound-${self:provider.stage}
+        VisibilityTimeout: 60
+        MessageRetentionPeriod: 86400
 
     # Apparently this is explicitly needed (which makes no sense to me, but there it is)
     ConnectLambdaPermission:
@@ -258,6 +316,22 @@ functions:
             claims:
               - email
               - 'cognito:username'
+  botQuery:
+    handler: api/abstractplay.botQuery
+    memorySize: 1024
+    description: Abstract Play queries for bots.
+    logRetentionInDays: 30
+    events:
+      - http:
+          path: botQuery
+          method: post
+          cors: true
+          integration: lambda
+          authorizer:
+            name: botAuthorizer
+            arn: ${self:custom.stageConfig.${self:provider.stage}.botpool}
+            scopes:
+              - ${self:custom.stageConfig.${self:provider.stage}.botOAuthScope}
   query:
     handler: api/abstractplay.query
     memorySize: 256
@@ -272,6 +346,22 @@ functions:
           path: query
           method: post
           cors: true
+  testBot:
+    handler: api/testBot.handler
+    memorySize: 256
+    description: Dev-only reference bot — full source and docs in api/testBot.ts
+    logRetentionInDays: 30
+    events:
+      - http:
+          path: testBot
+          method: get
+          cors: true
+          enabled: ${self:custom.testBotEnabled.${self:provider.stage}}
+      - http:
+          path: testBot
+          method: post
+          cors: true
+          enabled: ${self:custom.testBotEnabled.${self:provider.stage}}
   yourturn:
     handler: utils/yourturn.handler
     description: Sends out "your turn" notifications
@@ -282,43 +372,19 @@ functions:
           description: Send out "your turn" notifications
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           schedule: cron(0 14,22 * * ? *)
-  tournament-data:
-    handler: utils/tournament-data.handler
-    description: Summarizes tournament data
-    timeout: 900
-    memorySize: 10240
+  bot-outbound:
+    handler: utils/bot-outbound.handler
+    description: Contacts bot HTTPS endpoints for challenges and move notifications
+    timeout: 60
+    memorySize: 512
     logRetentionInDays: 30
     events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-tournament-data
-          description: Summarizes tournament data
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # 3am UTC every sunday (giving the dump plenty of time to complete)
-          schedule: cron(0 3 * * ? *)
-  starttournaments:
-    handler: utils/starttournaments.handler
-    description: Checks if any tournaments are ready to start (and starts or cancels them)
-    timeout: 600
-    logRetentionInDays: 30
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-starttournaments
-          description: Checks if any tournaments are ready to start (and starts or cancels them)
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # 10am and 10pm UTC every day
-          schedule: cron(0 10,22 * * ? *)
-  standingchallenges:
-    handler: utils/standingchallenges.handler
-    description: Manages preset standing challenge requests
-    timeout: 600
-    logRetentionInDays: 30
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-standingchallenges
-          description: Manages preset standing challenge requests
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          # Midnight and noon UTC every day
-          schedule: cron(0 0,12 * * ? *)
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - BotOutboundQueue
+              - Arn
+          batchSize: 1
 
   # websocket functions
   # wsAuthorizer:

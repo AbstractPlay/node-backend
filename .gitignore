@@ -6,5 +6,6 @@ jspm_packages
 .serverless
 /api/**/*.js
 /utils/*.js
+/lib/*.js
 .vscode/
 bin/
