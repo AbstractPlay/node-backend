@@ -206,6 +206,7 @@ type MeData = {
   standingChallenges?: FullChallenge[];
   realStanding?: StandingChallenge[];
   customizations?: { [key: string]: any };
+  blocked?: string[];
 }
 
 type Rating = {
@@ -758,6 +759,12 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await deleteCustomization(event.cognitoPoolClaims.sub, pars);
     case "update_standing":
       return await updateStanding(event.cognitoPoolClaims.sub, pars);
+    case "block_player":
+      return await block_player(event.cognitoPoolClaims.sub, pars);
+    case "unblock_player":
+      return await unblock_player(event.cognitoPoolClaims.sub, pars);
+    case "standing_challenges":
+      return await standingChallenges({ ...pars, userId: event.cognitoPoolClaims.sub });
     case "new_challenge":
       return await newChallenge(event.cognitoPoolClaims.sub, pars);
     case "challenge_revoke":
@@ -1073,7 +1080,114 @@ async function ratings(pars: { metaGame: string }) {
   }
 }
 
-async function standingChallenges(pars: { metaGame: string; }) {
+async function getPlayerRelationIds(userId: string, skPrefix: string): Promise<string[]> {
+  const ids: string[] = [];
+  let result = await ddbDocClient.send(
+    new QueryCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :skPrefix)",
+      ExpressionAttributeValues: {
+        ":pk": "PLAYER#" + userId,
+        ":skPrefix": skPrefix,
+      },
+      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      ProjectionExpression: "#sk",
+    })
+  );
+  if (result.Items !== undefined) {
+    for (const item of result.Items) {
+      ids.push((item.sk as string).slice(skPrefix.length));
+    }
+  }
+  let last = result.LastEvaluatedKey;
+  while (last !== undefined) {
+    result = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :skPrefix)",
+        ExpressionAttributeValues: {
+          ":pk": "PLAYER#" + userId,
+          ":skPrefix": skPrefix,
+        },
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        ProjectionExpression: "#sk",
+        ExclusiveStartKey: last,
+      })
+    );
+    if (result.Items !== undefined) {
+      for (const item of result.Items) {
+        ids.push((item.sk as string).slice(skPrefix.length));
+      }
+    }
+    last = result.LastEvaluatedKey;
+  }
+  return ids;
+}
+
+async function block_player(blockingPlayerId: string, pars: { playerId: string }) {
+  const blockedPlayerId = pars.playerId;
+  if (blockingPlayerId === blockedPlayerId) {
+    return formatReturnError("Cannot block yourself");
+  }
+  try {
+    await Promise.all([
+      ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: {
+          pk: `PLAYER#${blockingPlayerId}`,
+          sk: `BLOCKED#${blockedPlayerId}`,
+        },
+      })),
+      ddbDocClient.send(new PutCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Item: {
+          pk: `PLAYER#${blockedPlayerId}`,
+          sk: `BLOCKEDBY#${blockingPlayerId}`,
+        },
+      })),
+    ]);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: "Successfully blocked player" }),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to block player ${blockedPlayerId}`);
+  }
+}
+
+async function unblock_player(blockingPlayerId: string, pars: { playerId: string }) {
+  const blockedPlayerId = pars.playerId;
+  try {
+    await Promise.all([
+      ddbDocClient.send(new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          pk: `PLAYER#${blockingPlayerId}`,
+          sk: `BLOCKED#${blockedPlayerId}`,
+        },
+      })),
+      ddbDocClient.send(new DeleteCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          pk: `PLAYER#${blockedPlayerId}`,
+          sk: `BLOCKEDBY#${blockingPlayerId}`,
+        },
+      })),
+    ]);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: "Successfully unblocked player" }),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to unblock player ${blockedPlayerId}`);
+  }
+}
+
+async function standingChallenges(pars: { metaGame: string; userId?: string }) {
   const game = pars.metaGame;
   console.log(game);
 
@@ -1087,8 +1201,12 @@ async function standingChallenges(pars: { metaGame: string; }) {
     })
   );
 
+  const blockedByPromise = pars.userId
+    ? getPlayerRelationIds(pars.userId, "BLOCKEDBY#")
+    : Promise.resolve([] as string[]);
+
   try {
-    const [challengesData, countsData] = await Promise.all([
+    const [challengesData, countsData, blockedBy] = await Promise.all([
       ddbDocClient.send(
         new QueryCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -1096,16 +1214,23 @@ async function standingChallenges(pars: { metaGame: string; }) {
           ExpressionAttributeValues: { ":pk": "STANDINGCHALLENGE#" + game },
           ExpressionAttributeNames: { "#pk": "pk" }
         })),
-      countsPromise
+      countsPromise,
+      blockedByPromise,
     ]);
 
     // Verify and correct standing challenges count
     const actualCount = challengesData.Items?.length || 0;
     await verifyAndCorrectCountWithData(game, "standingchallenges", actualCount, countsData);
 
+    let items = challengesData.Items || [];
+    if (blockedBy.length > 0) {
+      const blockedBySet = new Set(blockedBy);
+      items = items.filter(c => !blockedBySet.has((c as FullChallenge).challenger?.id));
+    }
+
     return {
       statusCode: 200,
-      body: JSON.stringify(challengesData.Items),
+      body: JSON.stringify(items),
       headers
     };
   }
@@ -2298,6 +2423,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
 
     const botIds: string[] = Array.from(user?.bots ?? new Set());
     const botsWork = getBots(botIds);
+    const blockedWork = getPlayerRelationIds(userId, "BLOCKED#");
 
     const removedGameIDs: string[] = [];
     if (!pars || !pars.size || pars.size !== "small") {
@@ -2445,7 +2571,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       const challengesAccepted = getChallenges(challengesAcceptedIDs);
       const standingChallenges = getChallenges(standingChallengeIDs);
       data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges, tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork, botsWork]);
+        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork, botsWork, blockedWork]);
       tagData = data[4];
       paletteData = data[5];
       standingData = data[9];
@@ -2453,13 +2579,14 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       botData = data[11];
     } else {
       data = await Promise.all([tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork, botsWork]);
+        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork, botsWork, blockedWork]);
       tagData = data[0];
       paletteData = data[1];
       standingData = data[5];
       customizationData = data[6];
       botData = data[7];
     }
+    const blocked: string[] = data[data.length - 1] as string[];
     const bots = (botData as { Item?: BotRecord }[])
       .map(d => toClientBot(d.Item))
       .filter((bot): bot is ClientBot => bot !== undefined);
@@ -2517,6 +2644,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "standingChallenges": (data[3] as any[]).map(d => d.Item),
           "realStanding": realStanding,
           customizations,
+          blocked,
         } as MeData, Set_toJSON),
         headers
       };
@@ -2541,6 +2669,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           palettes,
           "realStanding": realStanding,
           customizations,
+          blocked,
         } as MeData, Set_toJSON),
         headers
       }
