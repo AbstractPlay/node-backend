@@ -39,7 +39,7 @@
  *      Body: { verb: "move", gameid, metaGame, move }
  *      AP  ←  200 + updated game JSON on success
  *
- * Full schema details: https://abstractplay.com/wiki/doku.php?id=rfcs:bots
+ * Full protocol docs: /backend/bots/ (node-backend docs; wiki RFC is legacy)
  *
  * ---------------------------------------------------------------------------
  * Inbound authentication (AP → your bot)
