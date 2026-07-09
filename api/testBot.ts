@@ -113,7 +113,7 @@
  * engine / search / ML pipeline.
  */
 
-import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { GameFactory } from '@abstractplay/gameslib';
 import { verifyBotRequest } from '../lib/botVerify';

@@ -1,6 +1,6 @@
 # node-backend
 
-Backend for [Abstract Play](https://abstractplay.com): Serverless Framework Lambdas (Node.js 20) on AWS with DynamoDB.
+Backend for [Abstract Play](https://abstractplay.com): Serverless Framework Lambdas (Node.js 24) on AWS with DynamoDB.
 
 **Developer documentation:** [`docs/index.md`](docs/index.md) — architecture, database schema, API reference, and subsystem guides. Published on the [developer docs site](https://docs.dev.abstractplay.com) (via the [docs](https://github.com/AbstractPlay/docs) repository).
 

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Node.js 20** (matches `serverless.yml` runtime)
+- **Node.js 24** (matches `serverless.yml` runtime)
 - **AWS CLI** with profiles `AbstractPlayDev` and `AbstractPlayProd` in `~/.aws/credentials`
 - Access to the `@abstractplay` GitHub Packages scope
 
