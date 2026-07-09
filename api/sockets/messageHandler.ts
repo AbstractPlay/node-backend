@@ -8,7 +8,7 @@ import {
   ApiGatewayManagementApiClient,
   PostToConnectionCommand,
 } from "@aws-sdk/client-apigatewaymanagementapi";
-import { SQSEvent, SQSRecord } from "aws-lambda";
+import type { SQSEvent, SQSRecord } from "aws-lambda";
 
 const REGION = "us-east-1";
 const clnt = new DynamoDBClient({ region: REGION });

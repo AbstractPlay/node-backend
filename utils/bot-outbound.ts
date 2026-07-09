@@ -1,4 +1,4 @@
-import { SQSEvent, SQSRecord } from 'aws-lambda';
+import type { SQSEvent, SQSRecord } from 'aws-lambda';
 import {
   BotOutboundMessage,
   processBotChallengeMessage,
