@@ -32,11 +32,11 @@
     "@aws-sdk/client-apigatewaymanagementapi": "^3.957.0",
     "@aws-sdk/client-cloudfront": "^3.445.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1065.0",
-    "@aws-sdk/client-dynamodb": "^3.321.1",
+    "@aws-sdk/client-dynamodb": "3.1090.0",
     "@aws-sdk/client-s3": "^3.374.0",
     "@aws-sdk/client-ses": "^3.321.1",
     "@aws-sdk/client-sqs": "^3.490.0",
-    "@aws-sdk/lib-dynamodb": "^3.321.1",
+    "@aws-sdk/lib-dynamodb": "3.1090.0",
     "@sunknudsen/totp": "^1.1.0",
     "abstractplay-backend": "file:",
     "aws-jwt-verify": "^5.1.1",
@@ -64,6 +64,9 @@
     "typescript": "^5.0.4"
   },
   "overrides": {
-    "splaytree": "3.1.2"
+    "splaytree": "3.1.2",
+    "@aws-sdk/lib-dynamodb": {
+      "@aws-sdk/client-dynamodb": "$@aws-sdk/client-dynamodb"
+    }
   }
 }
