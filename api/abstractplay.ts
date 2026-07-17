@@ -40,6 +40,7 @@ import {
   validateBotDisplayName,
 } from '../lib/botNames';
 import { testBotStatus, updateTestBot } from './testBot';
+import { hydrateGameState, prepareGameStateForStorage } from '../lib/gameState';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -981,7 +982,7 @@ async function games(pars: { metaGame: string, type: string; }) {
         countsPromise
       ]);
 
-      const gamelist = gamesData.Items as FullGame[];
+      const gamelist = (gamesData.Items as FullGame[]).map(hydrateGameState);
 
       // Verify and correct current games count
       const actualCount = gamelist.length;
@@ -1358,23 +1359,22 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
 
     const gameData = await getGame;
     // console.log(`Game data fetched:\n${JSON.stringify(gameData)}`);
-    let game = gameData.Item as FullGame;
+    let game = gameData.Item !== undefined ? hydrateGameState(gameData.Item as FullGame) : undefined;
+    if (game === undefined && (pars.cbit === 0 || pars.cbit === "0")) {
+      const completedGameData = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "GAME",
+            "sk": pars.metaGame + "#1#" + pars.id
+          },
+        }));
+      game = completedGameData.Item !== undefined
+        ? hydrateGameState(completedGameData.Item as FullGame)
+        : undefined;
+    }
     if (game === undefined) {
-      // Maybe the game has ended and we need to look for the completed game.
-      if (pars.cbit === 0 || pars.cbit === "0") {
-        const completedGameData = await ddbDocClient.send(
-          new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": "GAME",
-              "sk": pars.metaGame + "#1#" + pars.id
-            },
-          }));
-        game = completedGameData.Item as FullGame;
-      }
-      if (game === undefined) {
-        throw new Error(`Game ${pars.id}, metaGame ${pars.metaGame}, completed bit ${pars.cbit} not found`);
-      }
+      throw new Error(`Game ${pars.id}, metaGame ${pars.metaGame}, completed bit ${pars.cbit} not found`);
     }
     // Always set seen time, not just when the game is over
     if (userid !== undefined && userid !== null && userid !== "") {
@@ -1383,7 +1383,8 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
     // hide other player's simultaneous moves
     const flags = gameinfo.get(game.metaGame).flags;
     if (flags !== undefined && flags.includes('simultaneous') && game.partialMove !== undefined) {
-      game.partialMove = game.partialMove.split(',').map((m: string, i: number) => (game.players[i].id === userid ? m : '')).join(',');
+      const players = game.players;
+      game.partialMove = game.partialMove.split(',').map((m: string, i: number) => (players[i].id === userid ? m : '')).join(',');
     }
     const noteData = await getNote;
     console.log(`Fetched notes:\n${JSON.stringify(noteData)}`);
@@ -1716,7 +1717,7 @@ async function injectState(userid: string, pars: { id: string; newState: string;
     const gameData = await getGame;
     console.log("Got:");
     console.log(gameData);
-    game = gameData.Item as FullGame;
+    game = hydrateGameState(gameData.Item as FullGame);
     if (game === undefined) {
       throw new Error(`Game ${pars.id} not found`);
     }
@@ -1731,7 +1732,7 @@ async function injectState(userid: string, pars: { id: string; newState: string;
   try {
     await ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: game
+      Item: prepareGameStateForStorage(game)
     }));
   } catch (error) {
     logGetItemError(error);
@@ -1759,7 +1760,7 @@ async function updateGameSettings(userid: string, pars: { game: string, settings
       }));
     console.log("Got:");
     console.log(data);
-    const game = data.Item as Game;
+    const game = hydrateGameState(data.Item as FullGame);
     if (game === undefined)
       throw new Error(`updateGameSettings: game ${pars.game} not found`);
     const player = game.players.find((p: { id: any; }) => p.id === userid);
@@ -1769,7 +1770,7 @@ async function updateGameSettings(userid: string, pars: { game: string, settings
     try {
       await ddbDocClient.send(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: game
+        Item: prepareGameStateForStorage(game)
       }));
     }
     catch (error) {
@@ -3999,7 +4000,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     }
     const addGame = ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: {
+      Item: prepareGameStateForStorage({
         "pk": "GAME",
         "sk": challenge.metaGame + "#0#" + gameId,
         "id": gameId,
@@ -4017,7 +4018,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
         "lastMoveTime": now,
         "gameStarted": now,
         "variants": engine.variants,
-      }
+      })
     }));
     // this should be all the info we want to show on the "my games" summary page.
     const game = {
@@ -4419,7 +4420,7 @@ async function submitMove(userid: string, pars: {
   if (!data.Item)
     throw new Error(`No game ${pars.id} in table ${process.env.ABSTRACT_PLAY_TABLE}`);
   try {
-    const game = data.Item as FullGame;
+    const game = hydrateGameState(data.Item as FullGame);
     console.log("got game in submitMove:");
     console.log(game);
     const engine = GameFactory(game.metaGame, game.state);
@@ -4583,7 +4584,7 @@ async function submitMove(userid: string, pars: {
     game.lastMoveTime = timestamp;
     const updateGame = sendCommandWithRetry<PutCommandOutput>(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: game
+      Item: prepareGameStateForStorage(game)
     }));
     list.push(updateGame);
     console.log("Scheduled update to game");
@@ -4964,7 +4965,7 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
   if (!data.Item)
     throw new Error(`No game ${metaGame}, ${gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
 
-  const game = data.Item as FullGame;
+  const game = hydrateGameState(data.Item as FullGame);
   if (check) {
     console.log("game.toMove", game.toMove);
     if (Array.isArray(game.toMove)) {
@@ -5038,7 +5039,7 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
 
   work.push(ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Item: game
+    Item: prepareGameStateForStorage(game)
   })));
 
   const newRatings = updateRatings(game, players as unknown as FullUser[]);
@@ -5084,7 +5085,7 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
     throw new Error(`No game ${pars.metaGame}, ${pars.id} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
 
   try {
-    const game = data.Item as FullGame;
+    const game = hydrateGameState(data.Item as FullGame);
     const playerIDs = game.players.map((p: { id: any; }) => p.id);
     const players = await getPlayers(playerIDs);
     const now = Date.now();
@@ -5143,7 +5144,7 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
 
     work.push(ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: game
+      Item: prepareGameStateForStorage(game)
     })));
 
     // Update players
@@ -5511,7 +5512,7 @@ async function updateLastChatForPlayers(
             })
           );
           if (gameData.Item !== undefined) {
-            fullGame = gameData.Item as FullGame;
+            fullGame = hydrateGameState(gameData.Item as FullGame);
             gameEngine = GameFactory(metaGame, fullGame.state);
             if (gameEngine === undefined) {
               console.log(`Unable to hydrate state for ${metaGame}`);
@@ -5902,7 +5903,7 @@ async function botMove(pars: { uid: string, token: string, metaGame: string, gam
       }));
     if (!data.Item)
       throw new Error(`No game ${pars.metaGame + "#0#" + pars.gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
-    game = data.Item as FullGame;
+    game = hydrateGameState(data.Item as FullGame);
   }
   catch (error) {
     logGetItemError(error);
@@ -6807,7 +6808,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
             console.log(`Creating game ${gameId} for tournament ${tournament.id} with division ${division}`);
             await ddbDocClient.send(new PutCommand({
               TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Item: {
+              Item: prepareGameStateForStorage({
                 "pk": "GAME",
                 "sk": tournament.metaGame + "#0#" + gameId,
                 "id": gameId,
@@ -6828,7 +6829,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
                 "variants": engine.variants,
                 "tournament": tournament.id,
                 "division": division
-              }
+              })
             }));
           }
           catch (error) {
@@ -8365,7 +8366,7 @@ async function eventCreateGames(userid: string, pars: { eventid: string; pairs: 
       // queue for update
       const addGame = sendCommandWithRetry(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: {
+        Item: prepareGameStateForStorage({
           "pk": "GAME",
           "sk": pair.metagame + "#0#" + gameId,
           "id": gameId,
@@ -8384,7 +8385,7 @@ async function eventCreateGames(userid: string, pars: { eventid: string; pairs: 
           "gameStarted": now,
           "variants": engine.variants,
           "event": pars.eventid,
-        } as FullGame
+        } as FullGame)
       }));
       list.push(addGame);
       // this should be all the info we want to show on the "my games" summary page.
@@ -8839,7 +8840,7 @@ async function invokePie(userid: string, pars: { id: string, metaGame: string, c
   if (!data.Item)
     throw new Error(`No game ${pars.id} in table ${process.env.ABSTRACT_PLAY_TABLE}`);
   try {
-    const game = data.Item as FullGame;
+    const game = hydrateGameState(data.Item as FullGame);
     console.log("got game in invokePie:");
     console.log(game);
     if (("pieInvoked" in game) && (game.pieInvoked === true)) {
@@ -8925,7 +8926,7 @@ async function invokePie(userid: string, pars: { id: string, metaGame: string, c
       game.lastMoveTime = timestamp;
       const updateGame = ddbDocClient.send(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: game
+        Item: prepareGameStateForStorage(game)
       }));
       list.push(updateGame);
       console.log("Scheduled update to game");
@@ -9541,7 +9542,7 @@ async function realPingBot(metaGame: string, gameid: string, game?: FullGame) {
         }));
       if (!data.Item)
         throw new Error(`No game ${metaGame + "#0#" + gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
-      game = data.Item as FullGame;
+      game = hydrateGameState(data.Item as FullGame);
     }
     catch (error) {
       logGetItemError(error);

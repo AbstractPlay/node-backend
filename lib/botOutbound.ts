@@ -2,6 +2,7 @@ import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { GameFactory } from '@abstractplay/gameslib';
 import { ddbDocClient } from './ddb';
+import { hydrateGameState } from './gameState';
 import { signBotPayload } from './botSigning';
 import { BotRecord, getBotRecord } from './participants';
 
@@ -224,7 +225,8 @@ export async function loadGameRecord(metaGame: string, gameid: string): Promise<
       },
     })
   );
-  return data.Item as GameRecord | undefined;
+  const item = data.Item as GameRecord | undefined;
+  return item !== undefined ? hydrateGameState(item) : undefined;
 }
 
 export async function processBotChallengeMessage(message: BotOutboundChallengeMessage): Promise<void> {
