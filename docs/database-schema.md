@@ -24,9 +24,11 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `USER`
   - sk: `<userid>`
 
-- **Push subscriptions** — web push endpoints
+- **Push subscriptions** — web push endpoints (one record per browser/device)
   - pk: `PUSH`
-  - sk: `<userid>`
+  - sk: `<userid>#<subscriptionKey>` (`subscriptionKey` = first 16 hex chars of SHA-256 of `payload.endpoint`)
+  - fields: `payload`, `endpoint`, `updatedAt`
+  - legacy: `sk: <userid>` (migrated on next `save_push` or removed on 404/410)
 
 - **User list** — public directory (name, country, lastSeen, stars)
   - pk: `USERS`

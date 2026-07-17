@@ -8,7 +8,7 @@ import { CognitoIdentityProviderClient, CreateUserPoolClientCommand, DeleteUserP
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import webpush, { RequestOptions } from "web-push";
+import webpush from "web-push";
 import { validateToken } from '@sunknudsen/totp';
 import i18n from 'i18next';
 import en from '../locales/en/apback.json';
@@ -41,6 +41,13 @@ import {
 } from '../lib/botNames';
 import { testBotStatus, updateTestBot } from './testBot';
 import { hydrateGameState, prepareGameStateForStorage } from '../lib/gameState';
+import {
+  type PushOptions,
+  deleteAllPushSubscriptions,
+  queryPushSubscriptions,
+  savePushSubscription,
+  sendPushToSubscriptions,
+} from '../lib/pushSubscriptions';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -289,20 +296,6 @@ type Comment = {
   userId: string;
   moveNumber: number;
   timeStamp: number;
-}
-
-type PushCredentials = {
-  pk: string;
-  sk: string;
-  payload: any;
-}
-
-type PushOptions = {
-  userId: string;
-  title: string;
-  body: string;
-  topic: "yourturn" | "ended" | "started" | "challenges" | "test" | "tournament";
-  url?: string; //relative url of target page, if appropriate
 }
 
 type Exploration = {
@@ -3124,15 +3117,7 @@ async function setPush(userid: string, pars: { state: boolean }) {
       })
     );
     if (pars.state === false) {
-      // purge any existing push data for this user
-      await ddbDocClient.send(
-        new DeleteCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "PUSH", "sk": userid
-          },
-        })
-      )
+      await deleteAllPushSubscriptions(userid);
     }
   } catch (error) {
     logGetItemError(error);
@@ -3148,16 +3133,18 @@ async function setPush(userid: string, pars: { state: boolean }) {
 }
 
 async function savePush(userid: string, pars: { payload: any }) {
+  if (pars.payload?.endpoint === undefined) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        message: 'savePush: missing payload.endpoint',
+      }),
+      headers
+    };
+  }
   try {
     console.log(`Attempting to save push notification credentials for user ${userid}:\n${JSON.stringify(pars.payload)}`);
-    await ddbDocClient.send(new PutCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: {
-        "pk": "PUSH",
-        "sk": userid,
-        "payload": pars.payload,
-      }
-    }));
+    await savePushSubscription(userid, pars.payload);
   } catch (error) {
     logGetItemError(error);
     throw new Error("savePush: Failed to save push notification credentials");
@@ -8756,65 +8743,16 @@ async function reportProblem(pars: { error: string }) {
 
 async function sendPush(opts: PushOptions) {
   console.log(`Sending push: ${JSON.stringify(opts)}`);
-  const { userId, body, title, topic, url } = opts;
-  let subscription: PushCredentials | undefined;
+  const { userId } = opts;
+  let subscriptions;
   try {
-    const push = await ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "PUSH",
-          "sk": userId
-        },
-      })
-    );
-    if (push.Item !== undefined) {
-      subscription = push.Item as PushCredentials;
-    }
+    subscriptions = await queryPushSubscriptions(userId);
   } catch (err) {
     logGetItemError(err);
     return formatReturnError(`Unable to fetch push credentials for ${userId}`);
   }
 
-  if (subscription !== undefined) {
-    // treat both 410 and 404 as permanent. There are a LOT of 404 web push errors in the logs and apparently these are because since June 2024 the Chrome/FCM push service has changed the way it reports stale or deleted web‑push registrations.
-    const PERMANENT_FAILURES = new Set([404, 410]);
-
-    let subject = "https://play.abstractplay.com";
-    if (process.env.WEBSOCKET_STAGE === "dev") {
-      subject = "https://play.dev.abstractplay.com";
-    }
-    try {
-      const options: RequestOptions = {
-        vapidDetails: {
-          subject,
-          publicKey: process.env.VAPID_PUBLIC_KEY as string,
-          privateKey: process.env.VAPID_PRIVATE_KEY as string,
-        },
-        // @ts-ignore
-        topic,
-      };
-      const payload = { title, body, url, topic };
-      const result = await webpush.sendNotification(subscription.payload, JSON.stringify(payload), options);
-      console.log(`Result of webpush:`);
-      console.log(result);
-    } catch (err: any) {
-      if (("statusCode" in err) && PERMANENT_FAILURES.has(err.statusCode)) {
-        await ddbDocClient.send(
-          new DeleteCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": "PUSH",
-              "sk": userId
-            },
-          })
-        );
-      } else {
-        logGetItemError(err);
-      }
-      return formatReturnError(`Unable to send push notification: ${err}`);
-    }
-  }
+  await sendPushToSubscriptions(opts, subscriptions, webpush.sendNotification.bind(webpush), logGetItemError);
 }
 
 
