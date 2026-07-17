@@ -44,6 +44,7 @@ import { hydrateGameState, prepareGameStateForStorage } from '../lib/gameState';
 import {
   type PushOptions,
   deleteAllPushSubscriptions,
+  deletePushSubscriptionByEndpoint,
   queryPushSubscriptions,
   savePushSubscription,
   sendPushToSubscriptions,
@@ -743,6 +744,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await setPush(event.cognitoPoolClaims.sub, pars);
     case "save_push":
       return await savePush(event.cognitoPoolClaims.sub, pars);
+    case "delete_push":
+      return await deletePush(event.cognitoPoolClaims.sub, pars);
     case "save_tags":
       return await saveTags(event.cognitoPoolClaims.sub, pars);
     case "save_palettes":
@@ -3145,6 +3148,15 @@ async function savePush(userid: string, pars: { payload: any }) {
   try {
     console.log(`Attempting to save push notification credentials for user ${userid}:\n${JSON.stringify(pars.payload)}`);
     await savePushSubscription(userid, pars.payload);
+    await ddbDocClient.send(
+      new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { pk: "USER", sk: userid },
+        ExpressionAttributeNames: { "#mp": "mayPush" },
+        ExpressionAttributeValues: { ":mp": true },
+        UpdateExpression: "set #mp = :mp",
+      })
+    );
   } catch (error) {
     logGetItemError(error);
     throw new Error("savePush: Failed to save push notification credentials");
@@ -3153,6 +3165,44 @@ async function savePush(userid: string, pars: { payload: any }) {
     statusCode: 200,
     body: JSON.stringify({
       message: `Successfully saved push notifications credentials for ${userid}`,
+    }),
+    headers
+  };
+}
+
+async function deletePush(userid: string, pars: { endpoint?: string }) {
+  const endpoint = pars.endpoint;
+  if (endpoint === undefined || endpoint.length === 0) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        message: "deletePush: missing endpoint",
+      }),
+      headers,
+    };
+  }
+  try {
+    await deletePushSubscriptionByEndpoint(userid, endpoint);
+    const remaining = await queryPushSubscriptions(userid);
+    if (remaining.length === 0) {
+      await ddbDocClient.send(
+        new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { pk: "USER", sk: userid },
+          ExpressionAttributeNames: { "#mp": "mayPush" },
+          ExpressionAttributeValues: { ":mp": false },
+          UpdateExpression: "set #mp = :mp",
+        })
+      );
+    }
+  } catch (error) {
+    logGetItemError(error);
+    throw new Error("deletePush: Failed to delete push subscription");
+  }
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: `Successfully deleted push subscription for ${userid}`,
     }),
     headers
   };

@@ -9,6 +9,7 @@ import {
 import {
   __setDocClientForTests,
   deleteAllPushSubscriptions,
+  deletePushSubscriptionByEndpoint,
   pushSortKey,
   pushSubscriptionKey,
   queryPushSubscriptions,
@@ -217,6 +218,34 @@ test('sendPushToSubscriptions keeps subscription on transient errors', async () 
 
   assert.equal(store.has(itemKey(sub)), true);
   assert.equal(errors.length, 1);
+});
+
+test('deletePushSubscriptionByEndpoint removes one device and leaves others', async () => {
+  await savePushSubscription(USER_ID, { endpoint: ENDPOINT_A, keys: { a: 1 } });
+  await savePushSubscription(USER_ID, { endpoint: ENDPOINT_B, keys: { b: 2 } });
+
+  await deletePushSubscriptionByEndpoint(USER_ID, ENDPOINT_A);
+
+  const subscriptions = await queryPushSubscriptions(USER_ID);
+  assert.equal(subscriptions.length, 1);
+  assert.equal(subscriptions[0].endpoint, ENDPOINT_B);
+});
+
+test('deletePushSubscriptionByEndpoint is idempotent', async () => {
+  await savePushSubscription(USER_ID, { endpoint: ENDPOINT_A, keys: {} });
+
+  await deletePushSubscriptionByEndpoint(USER_ID, ENDPOINT_A);
+  await deletePushSubscriptionByEndpoint(USER_ID, ENDPOINT_A);
+
+  const subscriptions = await queryPushSubscriptions(USER_ID);
+  assert.equal(subscriptions.length, 0);
+});
+
+test('deletePushSubscriptionByEndpoint rejects missing endpoint', async () => {
+  await assert.rejects(
+    () => deletePushSubscriptionByEndpoint(USER_ID, ''),
+    /missing endpoint/
+  );
 });
 
 test('deleteAllPushSubscriptions removes new and legacy records', async () => {

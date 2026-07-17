@@ -14,9 +14,15 @@ Language follows the recipient's `language` field (`locales/*/apback.json`).
 
 ## Web push
 
-VAPID keys (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`) enable browser push. Each device/browser subscription is stored as its own `PUSH` record (`sk: <userid>#<subscriptionKey>`). Queries: `set_push`, `save_push`, `test_push`.
+VAPID keys (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`) enable browser push. Each device/browser subscription is stored as its own `PUSH` record (`sk: <userid>#<subscriptionKey>`). Auth queries:
 
-When a push fails with HTTP 404 or 410 (stale endpoint), only that subscription record is deleted. `set_push({ state: false })` removes all subscriptions for the user.
+- `save_push` — register or refresh **this device** (upserts one `PUSH` record; sets `mayPush` on the user)
+- `delete_push` — unregister **this device** (`pars.endpoint`; clears `mayPush` when no subscriptions remain)
+- `set_push({ state: false })` — unregister **all devices** for the user
+- `set_push({ state: true })` — sets user preference only; still requires `save_push` to register a device
+- `test_push` — send a test notification to all registered devices
+
+When a push fails with HTTP 404 or 410 (stale endpoint), only that subscription record is deleted.
 
 ## Your turn batching
 

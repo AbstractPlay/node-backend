@@ -164,6 +164,24 @@ let store;
     strict_1.default.equal(store.has(itemKey(sub)), true);
     strict_1.default.equal(errors.length, 1);
 });
+(0, node_test_1.test)('deletePushSubscriptionByEndpoint removes one device and leaves others', async () => {
+    await (0, pushSubscriptions_1.savePushSubscription)(USER_ID, { endpoint: ENDPOINT_A, keys: { a: 1 } });
+    await (0, pushSubscriptions_1.savePushSubscription)(USER_ID, { endpoint: ENDPOINT_B, keys: { b: 2 } });
+    await (0, pushSubscriptions_1.deletePushSubscriptionByEndpoint)(USER_ID, ENDPOINT_A);
+    const subscriptions = await (0, pushSubscriptions_1.queryPushSubscriptions)(USER_ID);
+    strict_1.default.equal(subscriptions.length, 1);
+    strict_1.default.equal(subscriptions[0].endpoint, ENDPOINT_B);
+});
+(0, node_test_1.test)('deletePushSubscriptionByEndpoint is idempotent', async () => {
+    await (0, pushSubscriptions_1.savePushSubscription)(USER_ID, { endpoint: ENDPOINT_A, keys: {} });
+    await (0, pushSubscriptions_1.deletePushSubscriptionByEndpoint)(USER_ID, ENDPOINT_A);
+    await (0, pushSubscriptions_1.deletePushSubscriptionByEndpoint)(USER_ID, ENDPOINT_A);
+    const subscriptions = await (0, pushSubscriptions_1.queryPushSubscriptions)(USER_ID);
+    strict_1.default.equal(subscriptions.length, 0);
+});
+(0, node_test_1.test)('deletePushSubscriptionByEndpoint rejects missing endpoint', async () => {
+    await strict_1.default.rejects(() => (0, pushSubscriptions_1.deletePushSubscriptionByEndpoint)(USER_ID, ''), /missing endpoint/);
+});
 (0, node_test_1.test)('deleteAllPushSubscriptions removes new and legacy records', async () => {
     store.set(`PUSH:${USER_ID}`, {
         pk: 'PUSH',
