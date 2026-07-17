@@ -92,6 +92,16 @@ export async function deleteAllPushSubscriptions(userId: string): Promise<void> 
   await Promise.all(subscriptions.map((sub) => deletePushSubscription(sub.sk)));
 }
 
+export async function deletePushSubscriptionByEndpoint(
+  userId: string,
+  endpoint: string
+): Promise<void> {
+  if (endpoint === undefined || typeof endpoint !== 'string' || endpoint.length === 0) {
+    throw new Error('deletePush: missing endpoint');
+  }
+  await deletePushSubscription(pushSortKey(userId, endpoint));
+}
+
 export async function savePushSubscription(userId: string, payload: any): Promise<void> {
   const endpoint = payload?.endpoint;
   if (endpoint === undefined || typeof endpoint !== 'string' || endpoint.length === 0) {

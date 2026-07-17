@@ -22,8 +22,9 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `set_push` | Enable/disable push | push subscription fields |
-| `save_push` | Save push subscription | subscription object |
+| `set_push` | User push preference; `{ state: false }` removes **all** device subscriptions | `state` (boolean) |
+| `save_push` | Register or refresh **this device** | `payload` (Web Push subscription object) |
+| `delete_push` | Remove **this device** subscription | `endpoint` (subscription URL) |
 | `save_tags` | Save game tags | `payload` (tag lists) |
 | `save_palettes` | Save color palettes | `palettes` |
 | `save_customization` | Per-game UI customization | `metaGame`, settings |
