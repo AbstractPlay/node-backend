@@ -5,7 +5,7 @@ import { DynamoDBDocumentClient, GetCommand, QueryCommand,  } from '@aws-sdk/lib
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
 import type { Handler } from "aws-lambda";
-import { createSendEmailCommand, logGetItemError, formatReturnError, initi18n, UserSettings } from '../api/abstractplay';
+import { createSendEmailCommand, logGetItemError, formatReturnError, initi18n, changeLanguageForPlayer, UserSettings } from '../api/abstractplay';
 import { gameinfo } from '@abstractplay/gameslib';
 
 const REGION = "us-east-1";
@@ -197,7 +197,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         for (const {user: p, total: n, urgent} of notifications) {
             if (p.language !== lastlang) {
                 lastlang = p.language;
-                await i18n.changeLanguage(p.language);
+                await changeLanguageForPlayer(p);
             }
             let comm: SendEmailCommand;
             if (urgent > 0) {
