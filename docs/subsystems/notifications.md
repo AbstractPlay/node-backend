@@ -6,11 +6,11 @@ Transactional email is sent via AWS SES for:
 
 - Challenge issued / revoked / accepted
 - Game start and game end (with expanded end-game details)
-- Tournament start and end
+- Tournament start, end, and removal
 
-Users can disable most email categories in `settings.all.notifications`; push notifications for challenges are sent regardless.
+Users can disable most email categories in `settings.all.notifications`; push notifications for challenges and tournaments follow the same preference flags where applicable (challenge/game push still sends regardless of email toggles for challenges).
 
-Language follows the recipient's `language` field (`locales/*/apback.json`).
+Language follows the recipient's `language` field (`locales/*/apback.json`). At send time, if the user's language is not yet registered in i18next, notifications fall back to English while the stored preference is kept unchanged — adding a locale later will apply automatically for users who already selected that language.
 
 ## Web push
 

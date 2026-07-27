@@ -13,7 +13,11 @@ import { validateToken } from '@sunknudsen/totp';
 import i18n from 'i18next';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
+import de from '../locales/de/apback.json';
 import it from '../locales/it/apback.json';
+
+const LOCALE_RESOURCES = { en, fr, de, it } as const;
+const REGISTERED_LANGUAGES = Object.keys(LOCALE_RESOURCES);
 import { wsBroadcast } from '../lib/wsBroadcast';
 import {
   isBotId,
@@ -3559,31 +3563,31 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
   if (!comment.endsWith(".") && !comment.endsWith("!") && !comment.endsWith("?"))
     comment += ".";
   for (const player of players) {
+    await changeLanguageForPlayer(player);
+    let body;
+    if (comment === ".") {
+      body = i18n.t("ChallengeBody", { "challenger": challengerName, metaGame });
+    } else {
+      body = i18n.t("ChallengeBodyComment", { "challenger": challengerName, metaGame, comment });
+    }
     if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
-      await changeLanguageForPlayer(player);
-      let body;
-      if (comment === ".") {
-        body = i18n.t("ChallengeBody", { "challenger": challengerName, metaGame });
-      } else {
-        body = i18n.t("ChallengeBodyComment", { "challenger": challengerName, metaGame, comment });
-      }
       if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges)) {
         const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), body);
         work.push(sesClient.send(comm));
       } else {
         console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
       }
-      // push notifications are sent no matter what
-      work.push(sendPush({
-        userId: player.id,
-        topic: "challenges",
-        title: i18n.t("PUSH.titles.challenged"),
-        body: body,
-        url: "/",
-      }));
     } else {
       console.log(`No verified email address found for ${player.name} (${player.id})`);
     }
+    // push notifications are sent no matter what
+    work.push(sendPush({
+      userId: player.id,
+      topic: "challenges",
+      title: i18n.t("PUSH.titles.challenged"),
+      body: body,
+      url: "/",
+    }));
   }
   return Promise.all(work);
 }
@@ -6998,6 +7002,13 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
           const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentStartSubject", { "metaGame": metaGameName }), body);
           await sesClient.send(comm);
         }
+        await sendPush({
+          userId: player.id,
+          topic: "tournament",
+          title: i18n.t("PUSH.titles.tournament"),
+          body,
+          url: "/tournaments",
+        });
       }
     }
     returnvalue = 1;
@@ -7037,6 +7048,13 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
           const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentRemoveSubject", { "metaGame": metaGameName }), body);
           await sesClient.send(comm);
         }
+        await sendPush({
+          userId: player.id,
+          topic: "tournament",
+          title: i18n.t("PUSH.titles.tournament"),
+          body,
+          url: "/tournaments",
+        });
       } catch (error) {
         logGetItemError(error);
         return formatReturnError(`Failed to send email to player ${player.name}, ${player.email}. Error: ${error}`);
@@ -7257,6 +7275,13 @@ async function endTournament(tournament: Tournament) {
                 const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName, }), body);
                 work.push(sesClient.send(comm));
               }
+              work.push(sendPush({
+                userId: player.id,
+                topic: "tournament",
+                title: i18n.t("PUSH.titles.tournamentOver"),
+                body,
+                url: `/tournament/${tournament.id}`,
+              }));
             }
           }
         }
@@ -9412,6 +9437,7 @@ async function fixGames(userId: string, pars: { targetId: string }) {
 
 async function testPush(userId: string) {
   // Make sure people aren't getting clever
+  let player: FullUser | undefined;
   try {
     const user = await ddbDocClient.send(
       new GetCommand({
@@ -9429,15 +9455,18 @@ async function testPush(userId: string) {
         headers
       };
     }
+    player = user.Item as FullUser;
   } catch (err) {
     logGetItemError(err);
     return formatReturnError(`Unable to testPush ${userId}`);
   }
 
+  await initi18n('en');
+  await changeLanguageForPlayer(player);
   await sendPush({
     userId,
-    title: "Test",
-    body: "Testing 1...2...3...",
+    title: i18n.t("PUSH.test.title"),
+    body: i18n.t("PUSH.test.body"),
     topic: "test",
     url: "/about",
   });
@@ -9610,12 +9639,11 @@ function shuffle(array: any[]) {
 }
 
 export async function changeLanguageForPlayer(player: { language: string | undefined; }) {
-  let lng = "en";
-  if (player.language !== undefined)
-    lng = player.language;
+  const lng = player.language && REGISTERED_LANGUAGES.includes(player.language)
+    ? player.language
+    : 'en';
   if (i18n.language !== lng) {
     await i18n.changeLanguage(lng);
-    console.log(`changed language to ${lng}`);
   }
 }
 
@@ -9648,18 +9676,9 @@ export async function initi18n(language: string) {
   await i18n.init({
     lng: language,
     fallbackLng: 'en',
-    debug: true,
-    resources: {
-      en: {
-        translation: en
-      },
-      fr: {
-        translation: fr
-      },
-      it: {
-        translation: it
-      }
-    }
+    resources: Object.fromEntries(
+      Object.entries(LOCALE_RESOURCES).map(([lng, translation]) => [lng, { translation }])
+    ),
   });
 }
 
