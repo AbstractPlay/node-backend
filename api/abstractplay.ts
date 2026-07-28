@@ -5596,11 +5596,57 @@ async function updateLastChatForPlayers(
   }
 }
 
-async function submitComment(userid: string, pars: { id: string; players?: { [k: string]: any; id: string }[]; metaGame?: string, comment: string; moveNumber: number; }) {
+async function submitComment(userid: string, pars: { id: string; metaGame: string; players?: { [k: string]: any; id: string }[]; comment: string; moveNumber: number; }) {
   // reject empty comments
   if ((pars.comment.length === 0) || (/^\s*$/.test(pars.comment))) {
     return formatReturnError(`Refusing to accept blank comment.`);
   }
+  if (!pars.metaGame) {
+    return formatReturnError(`metaGame is required.`);
+  }
+
+  // Active games: only participants and admins may comment
+  if (userid) {
+    let gameData: any;
+    try {
+      gameData = await ddbDocClient.send(
+        new GetCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: {
+            "pk": "GAME",
+            "sk": pars.metaGame + "#0#" + pars.id
+          },
+        }));
+    }
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    }
+    if (gameData.Item) {
+      const game = gameData.Item as FullGame;
+      const isParticipant = game.players.some(p => p.id === userid);
+      if (!isParticipant) {
+        try {
+          const user = await ddbDocClient.send(
+            new GetCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Key: {
+                "pk": "USER",
+                "sk": userid
+              },
+            }));
+          if (user.Item === undefined || user.Item.admin !== true) {
+            return formatReturnError(`Only game participants and admins can comment on active games.`);
+          }
+        }
+        catch (error) {
+          logGetItemError(error);
+          return formatReturnError(`Unable to verify permissions for user ${userid}`);
+        }
+      }
+    }
+  }
+
   let data: any;
   try {
     data = await ddbDocClient.send(
@@ -8962,7 +9008,7 @@ async function invokePie(userid: string, pars: { id: string, metaGame: string, c
 
       // insert a comment into the game log
       const thisPlayer = players.find(p => p.id === userid)!;
-      list.push(submitComment("", { id: game.id, comment: `${thisPlayer.name} elected to switch seats. As a result, the game record for ply 1 has been retroactively changed to look as if ${thisPlayer.name} made that move.`, moveNumber: 2 }));
+      list.push(submitComment("", { id: game.id, metaGame: pars.metaGame, comment: `${thisPlayer.name} elected to switch seats. As a result, the game record for ply 1 has been retroactively changed to look as if ${thisPlayer.name} made that move.`, moveNumber: 2 }));
 
       list.push(sendSubmittedMoveEmails(game, players.filter(p => p.email) as FullUser[], false, []));
       console.log("Scheduled emails");
