@@ -85,10 +85,6 @@
       "yourturn": "Il tuo turno",
       "tournament": "Torneo iniziato",
       "tournamentOver": "Torneo terminato"
-    },
-    "test": {
-      "title": "Test",
-      "body": "Test 1...2...3..."
     }
   },
   "YourMove": "È il tuo turno di muovere.",

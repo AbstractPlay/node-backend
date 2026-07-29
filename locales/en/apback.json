@@ -31,10 +31,6 @@
             "yourturn": "Your turn",
             "tournament": "Tournament started",
             "tournamentOver": "Tournament ended"
-        },
-        "test": {
-            "title": "Test",
-            "body": "Testing 1...2...3..."
         }
     },
     "YourMove": "It is your turn to move.",

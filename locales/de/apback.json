@@ -85,10 +85,6 @@
       "yourturn": "Du bist am Zug",
       "tournament": "Turnier gestartet",
       "tournamentOver": "Turnier beendet"
-    },
-    "test": {
-      "title": "Test",
-      "body": "Test 1...2...3..."
     }
   },
   "YourMove": "Du bist am Zug.",
