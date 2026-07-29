@@ -1,0 +1,4 @@
+{
+    "ChallengeBody": "{{challenger}} utfordret deg til et slag {{- metaGame}}. Besøk https://play.abstractplay.com/ for flere detaljer.",
+    "ChallengeResponseComment": "Din motstander kommenterte: «{{- comment}}»"
+}

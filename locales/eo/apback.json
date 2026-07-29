@@ -1,0 +1,11 @@
+{
+    "DearPlayer": "Kara {{player}}",
+    "GameOverResult_win": "Vi gajnis!",
+    "GameOverResult_lose": "Vi malgajnis.",
+    "PUSH": {
+        "titles": {
+            "ended": "Fino de ludo",
+            "started": "Ludo komenciĝis"
+        }
+    }
+}

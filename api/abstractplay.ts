@@ -15,8 +15,10 @@ import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
 import de from '../locales/de/apback.json';
 import it from '../locales/it/apback.json';
+import pt from '../locales/pt/apback.json';
+import ta from '../locales/ta/apback.json';
 
-const LOCALE_RESOURCES = { en, fr, de, it } as const;
+const LOCALE_RESOURCES = { en, fr, de, it, pt, ta } as const;
 const REGISTERED_LANGUAGES = Object.keys(LOCALE_RESOURCES);
 import { wsBroadcast } from '../lib/wsBroadcast';
 import {
@@ -9483,7 +9485,6 @@ async function fixGames(userId: string, pars: { targetId: string }) {
 
 async function testPush(userId: string) {
   // Make sure people aren't getting clever
-  let player: FullUser | undefined;
   try {
     const user = await ddbDocClient.send(
       new GetCommand({
@@ -9501,18 +9502,15 @@ async function testPush(userId: string) {
         headers
       };
     }
-    player = user.Item as FullUser;
   } catch (err) {
     logGetItemError(err);
     return formatReturnError(`Unable to testPush ${userId}`);
   }
 
-  await initi18n('en');
-  await changeLanguageForPlayer(player);
   await sendPush({
     userId,
-    title: i18n.t("PUSH.test.title"),
-    body: i18n.t("PUSH.test.body"),
+    title: "Test",
+    body: "Testing 1...2...3...",
     topic: "test",
     url: "/about",
   });
