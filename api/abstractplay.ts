@@ -21,6 +21,7 @@ import ta from '../locales/ta/apback.json';
 const LOCALE_RESOURCES = { en, fr, de, it, pt, ta } as const;
 const REGISTERED_LANGUAGES = Object.keys(LOCALE_RESOURCES);
 import { wsBroadcast } from '../lib/wsBroadcast';
+import { checkInGameCommentAuth } from '../lib/commentAuth';
 import {
   isBotId,
   getParticipants,
@@ -5607,46 +5608,25 @@ async function submitComment(userid: string, pars: { id: string; metaGame: strin
     return formatReturnError(`metaGame is required.`);
   }
 
-  // Active games: only participants and admins may comment
-  if (userid) {
-    let gameData: any;
-    try {
-      gameData = await ddbDocClient.send(
-        new GetCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "GAME",
-            "sk": pars.metaGame + "#0#" + pars.id
-          },
-        }));
+  try {
+    const auth = await checkInGameCommentAuth(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userid,
+      pars.metaGame,
+      pars.id,
+    );
+    if (!auth.ok) {
+      return {
+        statusCode: 401,
+        body: JSON.stringify({ message: auth.message }),
+        headers,
+      };
     }
-    catch (error) {
-      logGetItemError(error);
-      return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-    }
-    if (gameData.Item) {
-      const game = gameData.Item as FullGame;
-      const isParticipant = game.players.some(p => p.id === userid);
-      if (!isParticipant) {
-        try {
-          const user = await ddbDocClient.send(
-            new GetCommand({
-              TableName: process.env.ABSTRACT_PLAY_TABLE,
-              Key: {
-                "pk": "USER",
-                "sk": userid
-              },
-            }));
-          if (user.Item === undefined || user.Item.admin !== true) {
-            return formatReturnError(`Only game participants and admins can comment on active games.`);
-          }
-        }
-        catch (error) {
-          logGetItemError(error);
-          return formatReturnError(`Unable to verify permissions for user ${userid}`);
-        }
-      }
-    }
+  }
+  catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to verify permissions for user ${userid} on game ${pars.id}`);
   }
 
   let data: any;
@@ -5729,6 +5709,12 @@ async function submitComment(userid: string, pars: { id: string; metaGame: strin
     // broadcasting that state has updated
     await wsBroadcast("game", { "meta": pars.metaGame, "id": pars.id }, [userid]);
   }
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ success: true }),
+    headers,
+  };
 }
 
 async function saveExploration(userid: string, pars: { public: boolean, game: string; metaGame: string; move: number; version: number; tree: Exploration; updateCommentedFlag?: number; gameEnded?: number; updateLastChat?: boolean; players?: { [k: string]: any; id: string }[]; }) {
@@ -9071,6 +9057,7 @@ async function updateNote(userId: string, pars: { gameId: string; note?: string;
   };
 }
 
+// updateCommented has no participant/admin gate today; client side effects of commented-flag updates are not fully understood.
 async function updateCommented(userId: string, pars: { id: string; metaGame: string; cbit: number; commented: number; gameEnded?: number; }) {
   console.log(`Updating commented flag for game ${pars.id} to ${pars.commented}, cbit=${pars.cbit}, gameEnded=${pars.gameEnded}`);
   try {
