@@ -1,0 +1,10 @@
+{
+  "query": "submit_comment",
+  "pars": {
+    "id": "e6c0a8c9-51a4-4d14-8024-55058cafefe0",
+    "metaGame": "waldmeister",
+    "comment": "Testing unauthorized comments",
+    "moveNumber": 49
+  },
+  "userid": "TesterA1"
+}

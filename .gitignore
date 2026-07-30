@@ -8,8 +8,6 @@ jspm_packages
 /utils/*.js
 /lib/*.js
 .vscode/
-bin/*
-!bin/install-ap-deps.mjs
 
 # Cursor — keep shared rules, ignore other local state
 .cursor/*
