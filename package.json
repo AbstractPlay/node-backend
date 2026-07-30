@@ -27,8 +27,9 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@abstractplay/gameslib": "^1.0.0-ci-30410334929.0",
+    "@abstractplay/gameslib": "1.0.0-ci-30499004629.0",
     "@abstractplay/recranks": "latest",
+    "@abstractplay/renderer": "1.0.0-ci-30491195223.0",
     "@aws-sdk/client-apigatewaymanagementapi": "^3.957.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1065.0",
     "@aws-sdk/client-dynamodb": "3.1090.0",
@@ -67,6 +68,7 @@
     "splaytree": "3.1.2",
     "@aws-sdk/lib-dynamodb": {
       "@aws-sdk/client-dynamodb": "$@aws-sdk/client-dynamodb"
-    }
+    },
+    "@abstractplay/renderer": "1.0.0-ci-30491195223.0"
   }
 }
