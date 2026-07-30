@@ -18,6 +18,10 @@ on:
     types: [dep_update_prod]
   workflow_dispatch:
 
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: true
+
 env:
     VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
     VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
@@ -27,6 +31,8 @@ env:
 jobs:
   deploy-prod:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
@@ -53,14 +59,25 @@ jobs:
       run: echo "@abstractplay:registry=https://npm.pkg.github.com/" > .npmrc
     - run: echo "//npm.pkg.github.com/:_authToken=${{secrets.PAT_READ_PACKAGES}}" >> .npmrc
 
-    - name: Kill package-lock.json
-      run: rm package-lock.json
-
     - name: Install NPM dependencies
-      run: npm i
+      run: npm ci
 
-    - name: Dump package-lock.json
-      run: cat package-lock.json
+    - name: Install pinned AP dependencies
+      env:
+        AP_GAMESLIB_VERSION: ${{ github.event.client_payload.gameslib_version }}
+        AP_RENDERER_VERSION: ${{ github.event.client_payload.renderer_version }}
+        AP_SOURCE: ${{ github.event.client_payload.source_run_id && format('gameslib-ci-{0}', github.event.client_payload.source_run_id) || '' }}
+      run: node bin/install-ap-deps.mjs --stage prod
+
+    - name: Sync dependency manifests
+      if: github.event_name == 'repository_dispatch'
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "deps: sync AP versions [skip ci]"
+        file_pattern: |
+          ci-deps.json
+          package-lock.json
+          package.json
 
     - name: Set CI version
       run: npm version prerelease --preid=ci-$GITHUB_RUN_ID --no-git-tag-version
