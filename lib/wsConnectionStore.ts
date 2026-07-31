@@ -24,7 +24,7 @@ export type WsConnectionItem = {
   invisible?: boolean;
   endpoint: string;
   ttl: number;
-  watchingGames?: Set<string>;
+  watchingGames?: Set<string> | string[];
   wantsPresence?: boolean;
   watchVersion?: number;
 };
