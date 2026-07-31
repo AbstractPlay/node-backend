@@ -6,9 +6,9 @@
   "scripts": {
     "test": "npm run typecheck && node --test test/gameState.test.js test/push.test.js test/i18n.test.js test/commentAuth.test.js",
     "typecheck": "tsc --noEmit",
-    "build-ts": "npm run typecheck",
+    "build-ts": "tsc",
     "lint": "eslint && npm run typecheck",
-    "build": "npm run lint",
+    "build": "npm run lint && npm run build-ts",
     "deploy-dev": "serverless deploy",
     "deploy-prod": "serverless --stage prod deploy",
     "full-dev": "npm run build && serverless deploy",
