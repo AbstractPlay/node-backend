@@ -244,6 +244,29 @@ resources:
         VisibilityTimeout: 60
         MessageRetentionPeriod: 86400
 
+    GameProjectorDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: abstractplay-game-projector-dlq-${self:provider.stage}
+        MessageRetentionPeriod: 1209600
+
+    GameProjectorDLQAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: abstractplay-game-projector-dlq-${self:provider.stage}
+        AlarmDescription: Game projector Lambda failed and sent records to the DLQ
+        Namespace: AWS/SQS
+        MetricName: ApproximateNumberOfMessagesVisible
+        Dimensions:
+          - Name: QueueName
+            Value: !GetAtt GameProjectorDLQ.QueueName
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+
     # Apparently this is explicitly needed (which makes no sense to me, but there it is)
     ConnectLambdaPermission:
       Type: AWS::Lambda::Permission
@@ -401,6 +424,30 @@ functions:
               - BotOutboundQueue
               - Arn
           batchSize: 1
+
+  gameProjector:
+    handler: utils/game-projector.handler
+    description: DynamoDB stream shadow projector for CURRENTGAMES#, COMPLETEDGAMES#, and sharded METAGAMES# counts
+    timeout: 60
+    memorySize: 512
+    logRetentionInDays: 30
+    events:
+      - stream:
+          type: dynamodb
+          arn:
+            Fn::GetAtt:
+              - AbstractGamesDynamoDbTable
+              - StreamArn
+          batchSize: 25
+          startingPosition: LATEST
+          maximumRetryAttempts: 3
+          destinations:
+            onFailure:
+              arn:
+                Fn::GetAtt:
+                  - GameProjectorDLQ
+                  - Arn
+              type: sqs
 
   # websocket functions
   # wsAuthorizer:
