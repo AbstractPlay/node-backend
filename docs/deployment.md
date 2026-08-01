@@ -40,7 +40,7 @@ Table name: `abstract-play-${stage}`.
 
 The DynamoDB table must have streams enabled **before** CloudFormation can reference `StreamArn`. The stream Lambda trigger is gated by the `enableGameProjectorStream` deploy parameter.
 
-**CI** ([`bin/serverless-deploy.sh`](../bin/serverless-deploy.sh)) checks `LatestStreamArn` on the stage table before deploy:
+**CI** (`bin/serverless-deploy.sh`) checks `LatestStreamArn` on the stage table before deploy:
 
 - **No stream yet** → `enableGameProjectorStream=false` (enables `StreamSpecification` on the table; deploys `gameProjector` Lambda without a trigger).
 - **Stream exists** → `enableGameProjectorStream=true` (creates `GameProjectorEventSourceMapping` + DLQ wiring).
