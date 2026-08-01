@@ -1,46 +1,28 @@
-import {
-  DynamoDBClient,
-  QueryCommand,
-  DeleteItemCommand,
-} from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import {
-  ApiGatewayManagementApiClient,
-  PostToConnectionCommand,
-} from "@aws-sdk/client-apigatewaymanagementapi";
 import type { SQSEvent, SQSRecord } from "aws-lambda";
-
-const REGION = "us-east-1";
-const clnt = new DynamoDBClient({ region: REGION });
-const marshallOptions = {
-  // Whether to automatically convert empty strings, blobs, and sets to `null`.
-  convertEmptyValues: false, // false, by default.
-  // Whether to remove undefined values while marshalling.
-  removeUndefinedValues: true, // false, by default.
-  // Whether to convert typeof object to map attribute.
-  convertClassInstanceToMap: false, // false, by default.
-};
-const unmarshallOptions = {
-  // Whether to return numbers as a string instead of converting them to native JavaScript numbers.
-  wrapNumbers: false, // false, by default.
-};
-const translateConfig = { marshallOptions, unmarshallOptions };
-const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
+import {
+  deleteConnection,
+  gameWatchKey,
+  isLegacyGameFanout,
+  listAllConnections,
+  usesStrictGameWatch,
+  watchingGamesHas,
+  wantsPresenceUpdates,
+  type WsConnectionItem,
+} from "../../lib/wsConnectionStore";
+import { postToMany } from "../../lib/wsPost";
 
 type MsgBody = {
   domainName: string;
   stage: string;
   verb: string;
-  payload?: any;
+  payload?: { meta?: string; id?: string; type?: string };
   exclude?: string[];
 };
 
 export const handler = async (event: SQSEvent) => {
-  // SQS may batch multiple messages
   for (const record of event.Records) {
     await processRecord(record);
   }
-
   return { statusCode: 200 };
 };
 
@@ -60,68 +42,58 @@ async function processRecord(record: SQSRecord) {
     return;
   }
 
-  // Query all active connections
-  const result = await ddbDocClient.send(
-    new QueryCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE!,
-      KeyConditionExpression: "pk = :pk",
-      ExpressionAttributeValues: {
-        ":pk": { S: "wsConnections" },
-      },
-    })
-  );
-
+  const connections = await listAllConnections();
   const now = Math.floor(Date.now() / 1000);
+  const targets: { endpoint: string; connectionId: string }[] = [];
 
-  for (const conn of result.Items ?? []) {
-    const endpoint = conn.endpoint.S!;
-    const apigw = new ApiGatewayManagementApiClient({
-        endpoint,
-    });
-    const connectionId = conn.sk.S!;
-    const userId = conn.userId.S!;
-    const ttl = conn.ttl?.N ? parseInt(conn.ttl.N) : null;
-
-    // Delete expired TTL entries
-    if (ttl && ttl < now) {
-        console.log(`Deleting expired connection: ${connectionId}`);
-      await deleteConnection(connectionId);
+  for (const conn of connections) {
+    if (conn.ttl && conn.ttl < now) {
+      await deleteConnection(conn.sk);
       continue;
     }
 
-    // send message to all but excluded connections
-    if (exclude === undefined || !exclude.includes(userId)) {
-        try {
-            await apigw.send(
-                new PostToConnectionCommand({
-                    ConnectionId: connectionId,
-                    Data: Buffer.from(JSON.stringify({ verb, payload })),
-                })
-            );
-        } catch (err: any) {
-            // 410 Gone → stale connection
-            if (err.statusCode === 410) {
-                await deleteConnection(connectionId);
-            } else {
-                console.error("Error posting to connection", err);
-            }
-        }
+    if (exclude?.includes(conn.userId)) {
+      continue;
     }
+
+    if (!shouldDeliver(verb, conn, payload)) {
+      continue;
+    }
+
+    targets.push({ endpoint: conn.endpoint, connectionId: conn.sk });
   }
+
+  await postToMany(targets, { verb, payload });
 }
 
-async function deleteConnection(connectionId: string) {
-  try {
-    await ddbDocClient.send(
-      new DeleteItemCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE!,
-        Key: {
-          pk: { S: "wsConnections" },
-          sk: { S: connectionId },
-        },
-      })
-    );
-  } catch (err) {
-    console.error("Failed to delete connection", err);
+function shouldDeliver(
+  verb: string,
+  conn: WsConnectionItem,
+  payload?: MsgBody["payload"]
+): boolean {
+  if (verb === "game" || verb === "chat") {
+    const meta = payload?.meta;
+    const id = payload?.id;
+    if (!meta || !id) {
+      return false;
+    }
+    const key = gameWatchKey(meta, id);
+
+    if (isLegacyGameFanout(conn)) {
+      return true;
+    }
+    if (usesStrictGameWatch(conn)) {
+      return watchingGamesHas(conn, key);
+    }
+    return watchingGamesHas(conn, key);
   }
+
+  if (verb === "connections") {
+    if (payload?.type === "delta" || payload?.type === "snapshot") {
+      return wantsPresenceUpdates(conn);
+    }
+    return wantsPresenceUpdates(conn);
+  }
+
+  return true;
 }

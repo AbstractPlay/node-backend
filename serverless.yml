@@ -89,7 +89,16 @@ provider:
   profile: ${self:custom.stageConfig.${self:provider.stage}.profile}
   region: us-east-1
   logs:
-    websocket: true
+    restApi:
+      accessLogging: false
+      executionLogging: true
+      level: ERROR
+      fullExecutionData: false
+    websocket:
+      accessLogging: false
+      executionLogging: true
+      level: ERROR
+      fullExecutionData: false
   environment:
     ABSTRACT_PLAY_TABLE: abstract-play-${self:provider.stage}
     userpool: ${self:custom.stageConfig.${self:provider.stage}.userpool}
@@ -107,6 +116,8 @@ provider:
     OPENSSH_PRIVATE_KEY: ${env:OPENSSH_PRIVATE_KEY}
     BOT_OUTBOUND_QUEUE_URL:
       Ref: BotOutboundQueue
+    PRESENCE_COALESCE_SQS:
+      Ref: PresenceCoalesceQueue
     BOT_TOKEN_URL: ${self:custom.stageConfig.${self:provider.stage}.botTokenUrl}
     BOT_OAUTH_SCOPE: ${self:custom.stageConfig.${self:provider.stage}.botOAuthScope}
     TEST_BOT_CLIENT_ID: ${env:TEST_BOT_CLIENT_ID, ''}
@@ -221,6 +232,13 @@ resources:
         VisibilityTimeout: 900   # match your consumer Lambda timeout
         MessageRetentionPeriod: 86400  # 1 day, adjust as needed
 
+    PresenceCoalesceQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: abstractplay-presence-coalesce-${self:provider.stage}
+        VisibilityTimeout: 60
+        MessageRetentionPeriod: 86400
+
     BotOutboundQueue:
       Type: AWS::SQS::Queue
       Properties:
@@ -265,8 +283,8 @@ resources:
     #     ApiId: !Ref WebsocketsApi
     #     DeploymentId: !Ref WebsocketsDeployment
     #     DefaultRouteSettings:
-    #       DataTraceEnabled: true       # enables execution logging
-    #       LoggingLevel: INFO           # ERROR | INFO
+    #       DataTraceEnabled: false
+    #       LoggingLevel: ERROR
 
   Outputs:
     WsMessageQueueArn:
@@ -418,6 +436,35 @@ functions:
     events:
       - websocket:
           route: subscribe
+
+  watchGames:
+    handler: api/sockets/watchGamesHandler.handler
+    logRetentionInDays: 7
+    timeout: 30
+    events:
+      - websocket:
+          route: watchGames
+
+  syncPresence:
+    handler: api/sockets/syncPresenceHandler.handler
+    logRetentionInDays: 7
+    timeout: 30
+    events:
+      - websocket:
+          route: syncPresence
+
+  presenceBroadcaster:
+    handler: api/sockets/presenceBroadcaster.handler
+    logRetentionInDays: 7
+    timeout: 30
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - PresenceCoalesceQueue
+              - Arn
+          batchSize: 50
+          maximumBatchingWindow: 2
 
   messageHandler:
     handler: api/sockets/messageHandler.handler

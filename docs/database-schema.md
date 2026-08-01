@@ -154,6 +154,16 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 - **WebSocket connections** — active API Gateway connection registry
   - pk: `wsConnections`
   - sk: `<connectionId>`
+  - `userId`, `invisible`, `endpoint` — connection owner and API GW endpoint URL
+  - `watchingGames` — string set of `metaGame#gameId` keys the client wants game events for
+  - `wantsPresence` — boolean, default true; receive presence snapshot/delta messages
+  - `watchVersion` — `1` when the client uses targeted game watch (enables strict filtering)
+  - `ttl` — Unix epoch expiry (24h; refreshed on subscribe and `watchGames`)
+
+- **WebSocket presence sequence** — monotonic counter for presence deltas
+  - pk: `wsMeta`
+  - sk: `presenceSeq`
+  - `seq` — incremented on each debounced presence delta broadcast
 
 ## Related docs
 

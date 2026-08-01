@@ -1,53 +1,31 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
 'use strict';
 
-import { DynamoDBClient, DeleteItemCommand } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { getConnections } from '../../lib/getConnections';
-import { wsBroadcast } from '../../lib/wsBroadcast';
+import { getConnection, deleteConnection } from '../../lib/wsConnectionStore';
+import { enqueuePresenceEvent } from '../../lib/wsPresence';
 
 interface WebSocketDisconnectEvent {
   requestContext: {
     connectionId: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
-const REGION = "us-east-1";
-const clnt = new DynamoDBClient({ region: REGION });
-const marshallOptions = {
-  // Whether to automatically convert empty strings, blobs, and sets to `null`.
-  convertEmptyValues: false, // false, by default.
-  // Whether to remove undefined values while marshalling.
-  removeUndefinedValues: true, // false, by default.
-  // Whether to convert typeof object to map attribute.
-  convertClassInstanceToMap: false, // false, by default.
-};
-const unmarshallOptions = {
-  // Whether to return numbers as a string instead of converting them to native JavaScript numbers.
-  wrapNumbers: false, // false, by default.
-};
-const translateConfig = { marshallOptions, unmarshallOptions };
-const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
-
 export const handler = async (event: WebSocketDisconnectEvent) => {
-//   console.log("Disconnect event:", JSON.stringify(event));
   const { connectionId } = event.requestContext;
 
   try {
-    await ddbDocClient.send(
-      new DeleteItemCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE!,
-        Key: {
-          pk: { S: "wsConnections" },
-          sk: { S: connectionId },
-        },
-      })
-    );
+    const conn = await getConnection(connectionId);
 
-    const conns = await getConnections();
-    await wsBroadcast("connections", conns);
+    await deleteConnection(connectionId);
+
+    if (conn?.userId) {
+      await enqueuePresenceEvent({
+        type: "leave",
+        userId: conn.userId,
+        invisible: conn.invisible,
+      });
+    }
   } catch (err) {
     console.error("Disconnect cleanup failed", err);
   }
