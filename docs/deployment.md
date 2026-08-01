@@ -36,28 +36,26 @@ Per-stage settings live in `serverless.yml` under `custom.stageConfig`:
 
 Table name: `abstract-play-${stage}`.
 
-## gameProjector stream (two-step deploy)
+## gameProjector stream (automatic in CI)
 
-The DynamoDB table must have streams enabled **before** CloudFormation can reference `StreamArn`. The stream Lambda trigger is gated by the `enableGameProjectorStream` deploy parameter (default `false`).
+The DynamoDB table must have streams enabled **before** CloudFormation can reference `StreamArn`. The stream Lambda trigger is gated by the `enableGameProjectorStream` deploy parameter.
 
-1. **First deploy** (enables streams on the table, deploys the `gameProjector` Lambda without a trigger):
+**CI** ([`bin/serverless-deploy.sh`](../bin/serverless-deploy.sh)) checks `LatestStreamArn` on the stage table before deploy:
 
-   ```bash
-   npm run build
-   serverless deploy
-   ```
+- **No stream yet** → `enableGameProjectorStream=false` (enables `StreamSpecification` on the table; deploys `gameProjector` Lambda without a trigger).
+- **Stream exists** → `enableGameProjectorStream=true` (creates `GameProjectorEventSourceMapping` + DLQ wiring).
 
-2. **Second deploy** (attaches the stream event source mapping + DLQ):
+So the **first** deploy to a new stage only enables streams. The **next** CI run on that stage attaches the mapping. No manual flags.
 
-   ```bash
-   serverless deploy --param="enableGameProjectorStream=true"
-   ```
+**Local manual deploy** (same two-step logic):
 
-   In GitHub Actions, pass the same param once after the first successful deploy, e.g. add to the workflow `serverless deploy` step:
+```bash
+npm run build
+bash bin/serverless-deploy.sh dev AbstractPlayDev
+# After first run succeeds, any later run passes enableGameProjectorStream=true automatically.
+```
 
-   ```bash
-   serverless deploy --param="enableGameProjectorStream=true"
-   ```
+Once a stage has a stream, always deploy with `true` (or use the script) so CloudFormation does not remove the event source mapping.
 
 ## Required GitHub secrets
 
