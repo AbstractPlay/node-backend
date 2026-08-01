@@ -47,17 +47,21 @@ export const handler = async (event: WebSocketEvent) => {
       ? "SET watchingGames = :wg, #ttl = :ttl, watchVersion = :wv"
       : "REMOVE watchingGames SET #ttl = :ttl, watchVersion = :wv";
 
+  const values: Record<string, unknown> = {
+    ":ttl": connectionTtl(),
+    ":wv": 1,
+  };
+  if (watchingGames.size > 0) {
+    values[":wg"] = watchingGames;
+  }
+
   await ddbDocClient.send(
     new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE!,
       Key: { pk: "wsConnections", sk: connectionId },
       UpdateExpression: updateExpr,
       ExpressionAttributeNames: { "#ttl": "ttl" },
-      ExpressionAttributeValues: {
-        ":wg": watchingGames,
-        ":ttl": connectionTtl(),
-        ":wv": 1,
-      },
+      ExpressionAttributeValues: values,
     })
   );
 

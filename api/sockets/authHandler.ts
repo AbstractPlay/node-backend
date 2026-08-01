@@ -63,7 +63,6 @@ export const handler = async (event: WebSocketEvent) => {
 
     if (watchVersion === 1) {
       item.watchVersion = 1;
-      item.watchingGames = new Set<string>();
     }
 
     await ddbDocClient.send(
