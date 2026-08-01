@@ -4,7 +4,7 @@ import { CognitoJwtVerifier } from "aws-jwt-verify";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
-import { connectionTtl } from '../../lib/wsConnectionStore';
+import { connectionTtl, watchingGamesFromRefs } from '../../lib/wsConnectionStore';
 import { enqueuePresenceEvent, sendPresenceSnapshot } from '../../lib/wsPresence';
 
 type WebSocketRequestContext = APIGatewayProxyEventV2["requestContext"] & {
@@ -35,6 +35,7 @@ export const handler = async (event: WebSocketEvent) => {
   const invisible: boolean = body.invisible ?? false;
   const watchVersion: number | undefined = body.watchVersion;
   const wantsPresence: boolean = body.wantsPresence !== false;
+  const games: unknown = body.games;
 
   if (!token) {
     console.error("Missing token in auth message");
@@ -63,6 +64,11 @@ export const handler = async (event: WebSocketEvent) => {
 
     if (watchVersion === 1) {
       item.watchVersion = 1;
+    }
+
+    const watchingGames = watchingGamesFromRefs(games);
+    if (watchingGames.size > 0) {
+      item.watchingGames = watchingGames;
     }
 
     await ddbDocClient.send(

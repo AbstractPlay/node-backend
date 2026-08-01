@@ -5,8 +5,8 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import {
   connectionTtl,
-  gameWatchKey,
   getConnection,
+  watchingGamesFromRefs,
 } from "../../lib/wsConnectionStore";
 
 type WebSocketRequestContext = APIGatewayProxyEventV2["requestContext"] & {
@@ -35,12 +35,7 @@ export const handler = async (event: WebSocketEvent) => {
     return { statusCode: 403, body: "Not subscribed" };
   }
 
-  const watchingGames = new Set<string>();
-  for (const g of games) {
-    if (g?.meta && g?.id) {
-      watchingGames.add(gameWatchKey(g.meta, g.id));
-    }
-  }
+  const watchingGames = watchingGamesFromRefs(games);
 
   const updateExpr =
     watchingGames.size > 0

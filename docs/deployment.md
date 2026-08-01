@@ -36,6 +36,27 @@ Per-stage settings live in `serverless.yml` under `custom.stageConfig`:
 
 Table name: `abstract-play-${stage}`.
 
+## gameProjector stream (automatic in CI)
+
+The DynamoDB table must have streams enabled **before** CloudFormation can reference `StreamArn`. The stream Lambda trigger is gated by the `enableGameProjectorStream` deploy parameter.
+
+**CI** (`bin/serverless-deploy.sh`) checks `LatestStreamArn` on the stage table before deploy:
+
+- **No stream yet** → `enableGameProjectorStream=false` (enables `StreamSpecification` on the table; deploys `gameProjector` Lambda without a trigger).
+- **Stream exists** → `enableGameProjectorStream=true` (creates `GameProjectorEventSourceMapping` + DLQ wiring).
+
+So the **first** deploy to a new stage only enables streams. The **next** CI run on that stage attaches the mapping. No manual flags.
+
+**Local manual deploy** (same two-step logic):
+
+```bash
+npm run build
+bash bin/serverless-deploy.sh dev AbstractPlayDev
+# After first run succeeds, any later run passes enableGameProjectorStream=true automatically.
+```
+
+Once a stage has a stream, always deploy with `true` (or use the script) so CloudFormation does not remove the event source mapping.
+
 ## Required GitHub secrets
 
 - `AWS_KEY`, `AWS_SECRET` — deploy credentials

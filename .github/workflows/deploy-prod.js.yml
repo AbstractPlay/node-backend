@@ -101,7 +101,7 @@ jobs:
     #     aws-region: us-east-1
 
     - name: Deploy
-      run: serverless deploy --stage prod
+      run: bash bin/serverless-deploy.sh prod AbstractPlayProd
 
     - name: Trigger docs rebuild
       if: github.event_name == 'push'

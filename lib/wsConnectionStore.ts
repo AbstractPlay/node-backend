@@ -33,6 +33,21 @@ export function gameWatchKey(meta: string, id: string): string {
   return `${meta}#${id}`;
 }
 
+type GameRef = { meta?: string; id?: string };
+
+export function watchingGamesFromRefs(games: unknown): Set<string> {
+  const watchingGames = new Set<string>();
+  if (!Array.isArray(games)) {
+    return watchingGames;
+  }
+  for (const g of games as GameRef[]) {
+    if (g?.meta && g?.id) {
+      watchingGames.add(gameWatchKey(g.meta, g.id));
+    }
+  }
+  return watchingGames;
+}
+
 export function connectionTtl(): number {
   return Math.floor(Date.now() / 1000) + WS_CONNECTION_TTL_SEC;
 }

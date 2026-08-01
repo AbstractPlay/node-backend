@@ -56,6 +56,11 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 
 ## Game lists
 
+- **Current games by player** — per-player active game summaries (stream-maintained shadow; reads still use `USER.games[]` until Phase 3)
+  - pk: `CURRENTGAMES#<userid>`
+  - sk: `<gameid>`
+  - summary fields mirror dashboard `Game` objects (`id`, `metaGame`, `players`, `toMove`, `lastMoveTime`, etc.)
+
 - **Completed games by metaGame** — summary rows for the completed-games page
   - pk: `COMPLETEDGAMES#<metaGame>`
   - sk: `<timestamp>#<gameid>`
@@ -64,7 +69,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `COMPLETEDGAMES#<userid>`
   - sk: `<timestamp>#<gameid>`
 
-**Retired (no longer written; purge via admin `purge_retired_completed_games`):**
+**Retired (no longer written; purge via `node bin/purge-retired-completed-games.mjs --stage prod`):**
 
 - pk: `COMPLETEDGAMES`, sk: `<timestamp>#<gameid>` — legacy global list
 - pk: `COMPLETEDGAMES#<metaGame>#<userid>`, sk: `<timestamp>#<gameid>` — legacy per-player-per-game index
@@ -85,6 +90,15 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `METAGAMES`
   - sk: `COUNTS`
   - Per-game nested maps are auto-initialized from `gameinfo` on `meta_games` reads and before count writes
+
+- **Meta game counts (sharded, stream shadow)** — per-metaGame live counters written by the `gameProjector` Lambda; not read by the API until Phase 4b
+  - pk: `METAGAMES#<metaGame>`
+  - sk: `COUNTS`
+  - fields: `currentgames`, `completedgames`, `standingchallenges`, `stars`, `ratingsCount`
+
+- **Per-user game overlay (planned)** — per-user `seen` / `lastChat` on dashboard games (Phase 3+)
+  - pk: `USERGAME#<userid>`
+  - sk: `<gameid>`
 
 ## Challenges
 

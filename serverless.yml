@@ -21,6 +21,11 @@ service: abstract-play
 frameworkVersion: '3'
 configValidationMode: warn
 
+params:
+  default:
+    # Set true on the deploy AFTER streams are enabled on the DynamoDB table (see docs/deployment.md).
+    enableGameProjectorStream: 'false'
+
 custom:
   scheduleEnabled:
     prod: true
@@ -161,6 +166,14 @@ provider:
             - ses:SendRawEmail
             - sqs:SendMessage
           Resource: "*"
+        - Effect: Allow
+          Action:
+            - dynamodb:GetRecords
+            - dynamodb:GetShardIterator
+            - dynamodb:DescribeStream
+            - dynamodb:ListStreams
+          Resource:
+            Fn::Sub: 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/abstract-play-${self:provider.stage}/stream/*'
         - Effect: 'Allow'
           Action:
             - 's3:ListBucket'
@@ -188,6 +201,20 @@ provider:
             - ${self:custom.stageConfig.prod.botpool}
 
 resources:
+  Parameters:
+    EnableGameProjectorStream:
+      Type: String
+      Default: ${param:enableGameProjectorStream}
+      AllowedValues:
+        - 'true'
+        - 'false'
+
+  Conditions:
+    GameProjectorStreamEnabled:
+      Fn::Equals:
+        - Ref: EnableGameProjectorStream
+        - 'true'
+
   Resources:
     # One table design
     AbstractGamesDynamoDbTable:
@@ -244,6 +271,60 @@ resources:
         VisibilityTimeout: 60
         MessageRetentionPeriod: 86400
 
+    GameProjectorDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: abstractplay-game-projector-dlq-${self:provider.stage}
+        MessageRetentionPeriod: 1209600
+
+    GameProjectorDLQAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: abstractplay-game-projector-dlq-${self:provider.stage}
+        AlarmDescription: Game projector Lambda failed and sent records to the DLQ
+        Namespace: AWS/SQS
+        MetricName: ApproximateNumberOfMessagesVisible
+        Dimensions:
+          - Name: QueueName
+            Value: !GetAtt GameProjectorDLQ.QueueName
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+
+    GameProjectorDLQPolicy:
+      Type: AWS::SQS::QueuePolicy
+      Condition: GameProjectorStreamEnabled
+      Properties:
+        Queues:
+          - Ref: GameProjectorDLQ
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sqs:SendMessage
+              Resource: !GetAtt GameProjectorDLQ.Arn
+
+    GameProjectorEventSourceMapping:
+      Type: AWS::Lambda::EventSourceMapping
+      Condition: GameProjectorStreamEnabled
+      DependsOn:
+        - AbstractGamesDynamoDbTable
+        - GameProjectorLambdaFunction
+      Properties:
+        BatchSize: 25
+        MaximumRetryAttempts: 3
+        StartingPosition: LATEST
+        EventSourceArn: !GetAtt AbstractGamesDynamoDbTable.StreamArn
+        FunctionName: !Ref GameProjectorLambdaFunction
+        DestinationConfig:
+          OnFailure:
+            Destination: !GetAtt GameProjectorDLQ.Arn
+
     # Apparently this is explicitly needed (which makes no sense to me, but there it is)
     ConnectLambdaPermission:
       Type: AWS::Lambda::Permission
@@ -285,6 +366,11 @@ resources:
     #       LoggingLevel: ERROR
 
   Outputs:
+    DynamoDbStreamArn:
+      Condition: GameProjectorStreamEnabled
+      Value: !GetAtt AbstractGamesDynamoDbTable.StreamArn
+      Export:
+        Name: ${self:service}-${self:provider.stage}-DynamoDbStreamArn
     WsMessageQueueArn:
       Value: !GetAtt WsMessageQueue.Arn
       Export:
@@ -367,17 +453,16 @@ functions:
     memorySize: 256
     description: Dev-only reference bot — full source and docs in api/testBot.ts
     logRetentionInDays: 30
+    enabled: ${self:custom.testBotEnabled.${self:provider.stage}}
     events:
       - http:
           path: testBot
           method: get
           cors: true
-          enabled: ${self:custom.testBotEnabled.${self:provider.stage}}
       - http:
           path: testBot
           method: post
           cors: true
-          enabled: ${self:custom.testBotEnabled.${self:provider.stage}}
   yourturn:
     handler: utils/yourturn.handler
     description: Sends out "your turn" notifications
@@ -401,6 +486,15 @@ functions:
               - BotOutboundQueue
               - Arn
           batchSize: 1
+
+  gameProjector:
+    handler: utils/game-projector.handler
+    description: DynamoDB stream shadow projector for CURRENTGAMES#, COMPLETEDGAMES#, and sharded METAGAMES# counts
+    timeout: 60
+    memorySize: 512
+    logRetentionInDays: 30
+    # Stream trigger is defined in resources.GameProjectorEventSourceMapping (conditional)
+    # so the table can gain StreamSpecification before StreamArn is referenced.
 
   # websocket functions
   # wsAuthorizer:
