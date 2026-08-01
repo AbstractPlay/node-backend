@@ -56,14 +56,6 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 
 ## Game lists
 
-- **All completed games** — not currently used in the UI
-  - pk: `COMPLETEDGAMES`
-  - sk: `<timestamp>#<gameid>`
-
-- **Completed games by metaGame and player** — not used yet
-  - pk: `COMPLETEDGAMES#<metaGame>#<userid>`
-  - sk: `<timestamp>#<gameid>`
-
 - **Completed games by metaGame** — summary rows for the completed-games page
   - pk: `COMPLETEDGAMES#<metaGame>`
   - sk: `<timestamp>#<gameid>`
@@ -71,6 +63,11 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 - **Completed games by player** — one item per player per game
   - pk: `COMPLETEDGAMES#<userid>`
   - sk: `<timestamp>#<gameid>`
+
+**Retired (no longer written; purge via admin `purge_retired_completed_games`):**
+
+- pk: `COMPLETEDGAMES`, sk: `<timestamp>#<gameid>` — legacy global list
+- pk: `COMPLETEDGAMES#<metaGame>#<userid>`, sk: `<timestamp>#<gameid>` — legacy per-player-per-game index
 
 ## Exploration
 
@@ -87,6 +84,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 - **Meta game counts** — aggregate stats (current games, completed games, standing challenges, stars, etc.)
   - pk: `METAGAMES`
   - sk: `COUNTS`
+  - Per-game nested maps are auto-initialized from `gameinfo` on `meta_games` reads and before count writes
 
 ## Challenges
 

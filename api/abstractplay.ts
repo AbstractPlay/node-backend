@@ -2,7 +2,7 @@
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, BatchWriteCommand, QueryCommandInput, GetCommandOutput, PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, ScanCommand, BatchWriteCommand, QueryCommandInput, GetCommandOutput, PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageRequest } from "@aws-sdk/client-sqs";
 import { CognitoIdentityProviderClient, CreateUserPoolClientCommand, DeleteUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { v4 as uuid } from 'uuid';
@@ -256,7 +256,7 @@ type Game = {
   gameEnded?: number;
   lastChat?: number;
   variants?: string[];
-  commented?: number; // 0 or missing: no comments or post game variations, 1: has in-game comments, 2: has post game variations, 3: has post game comments. Only used in main COMPLETEDGAMES list.
+  commented?: number; // 0 or missing: no comments or post game variations, 1: has in-game comments, 2: has post game variations, 3: has post game comments. Only used in COMPLETEDGAMES#<metaGame> rows.
 }
 
 type FullGame = {
@@ -488,106 +488,45 @@ async function sendCommandWithRetry<T = any>(command: any, maxRetries = 8, initi
   throw new Error(`Command failed after ${maxRetries} retries without a retryable error`);
 }
 
-async function verifyAndCorrectCountWithData(metaGame: string, countType: "currentgames" | "completedgames" | "standingchallenges", actualCount: number, countsData: any) {
-  try {
-    if (!countsData.Item) {
-      console.log(`No METAGAMES COUNTS found, creating initial record for ${metaGame}`);
-      await ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-        ExpressionAttributeNames: { "#g": metaGame },
-        ExpressionAttributeValues: { ":gameData": { [countType]: actualCount } },
-        UpdateExpression: `set #g = :gameData`
-      }));
-      console.log(`Initialized ${countType} for ${metaGame} to ${actualCount}`);
-      return;
-    }
+const DEFAULT_META_GAME_COUNTS = {
+  currentgames: 0,
+  completedgames: 0,
+  standingchallenges: 0,
+  stars: 0,
+};
 
-    const details = countsData.Item as MetaGameCounts;
-
-    // Check if the metaGame nested attribute exists at all
-    if (!details[metaGame]) {
-      console.log(`No nested attribute for ${metaGame} in METAGAMES COUNTS, initializing...`);
-      await ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-        ExpressionAttributeNames: { "#g": metaGame },
-        ExpressionAttributeValues: { ":gameData": { [countType]: actualCount } },
-        UpdateExpression: `set #g = :gameData`
-      }));
-      console.log(`Initialized ${countType} for new game ${metaGame} to ${actualCount}`);
-      return;
-    }
-
-    const storedCount = details[metaGame][countType] || 0;
-
-    if (storedCount !== actualCount) {
-      console.log(`Count mismatch for ${metaGame}.${countType}: stored=${storedCount}, actual=${actualCount}. Correcting...`);
-
-      await ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-        ExpressionAttributeNames: { "#g": metaGame },
-        ExpressionAttributeValues: { ":count": actualCount },
-        UpdateExpression: `set #g.${countType} = :count`
-      }));
-
-      console.log(`Corrected ${countType} for ${metaGame} from ${storedCount} to ${actualCount}`);
-    }
-  } catch (error) {
-    console.error(`Error verifying/correcting count for ${metaGame}.${countType}:`, error);
-    // Don't throw - we don't want to break the main query if count correction fails
-  }
+function isMetaGameCountsKey(key: string): boolean {
+  return key === "pk" || key === "sk" || key.endsWith("_ratings");
 }
 
-async function verifyAndCorrectRatingsCountWithData(metaGame: string, actualRatings: any[], countsData: any) {
-  try {
-    // Extract unique player IDs from actual ratings data as a Set
-    const actualPlayerIds = new Set(actualRatings.map(rating => rating.sk));
-    const actualCount = actualPlayerIds.size;
-
-    if (!countsData.Item && actualCount > 0) {
-      console.log(`No METAGAMES COUNTS found, creating initial ratings record for ${metaGame}`);
-      await ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-        ExpressionAttributeNames: { "#gr": metaGame + "_ratings" },
-        ExpressionAttributeValues: { ":players": actualPlayerIds },
-        UpdateExpression: `set #gr = :players`
-      }));
-      console.log(`Initialized ratings for ${metaGame} with ${actualCount} players`);
-      return;
-    }
-
-    const details = countsData.Item as any;
-    const storedPlayerIds = details[metaGame + "_ratings"] || new Set();
-    const storedCount = storedPlayerIds.size;
-
-    if (storedCount !== actualCount || !setsEqual(storedPlayerIds, actualPlayerIds)) {
-      console.log(`Ratings mismatch for ${metaGame}: stored=${storedCount} players, actual=${actualCount} players. Updating player list...`);
-
-      await ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "METAGAMES", "sk": "COUNTS" },
-        ExpressionAttributeNames: { "#gr": metaGame + "_ratings" },
-        ExpressionAttributeValues: { ":players": actualPlayerIds },
-        UpdateExpression: `set #gr = :players`
-      }));
-
-      console.log(`Updated ratings list for ${metaGame} from ${storedCount} to ${actualCount} players`);
-    }
-  } catch (error) {
-    console.error(`Error verifying/correcting ratings for ${metaGame}:`, error);
-    // Don't throw - we don't want to break the main query if count correction fails
-  }
+async function ensureMetaGameCountEntry(metaGame: string): Promise<void> {
+  await ddbDocClient.send(new UpdateCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: { pk: "METAGAMES", sk: "COUNTS" },
+    ExpressionAttributeNames: { "#g": metaGame },
+    ExpressionAttributeValues: { ":defaults": DEFAULT_META_GAME_COUNTS },
+    UpdateExpression: "SET #g = if_not_exists(#g, :defaults)",
+  }));
 }
 
-function setsEqual(a: Set<any>, b: Set<any>): boolean {
-  if (a.size !== b.size) return false;
-  for (const item of a) {
-    if (!b.has(item)) return false;
+async function ensureMissingMetaGameCounts(): Promise<void> {
+  const data = await ddbDocClient.send(new GetCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: { pk: "METAGAMES", sk: "COUNTS" },
+  }));
+  const item = data.Item ?? {};
+  const existing = new Set(Object.keys(item).filter(k => !isMetaGameCountsKey(k)));
+  const missing: string[] = [];
+  gameinfo.forEach(g => {
+    if (!existing.has(g.uid)) {
+      missing.push(g.uid);
+    }
+  });
+  if (missing.length === 0) {
+    return;
   }
-  return true;
+  console.log(`Initializing METAGAMES/COUNTS for new games: ${missing.join(", ")}`);
+  await Promise.all(missing.map(uid => ensureMetaGameCountEntry(uid)));
 }
 
 module.exports.query = async (event: { queryStringParameters: any; body?: string; httpMethod: string; }) => {
@@ -815,6 +754,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await updateUserSettings(event.cognitoPoolClaims.sub, pars);
     case "update_meta_game_counts":
       return await updateMetaGameCounts(event.cognitoPoolClaims.sub);
+    case "purge_retired_completed_games":
+      return await purgeRetiredCompletedGames(event.cognitoPoolClaims.sub);
     case "mark_published":
       return await markAsPublished(event.cognitoPoolClaims.sub, pars);
     case "new_tournament":
@@ -962,34 +903,17 @@ async function games(pars: { metaGame: string, type: string; }) {
   const game = pars.metaGame;
   console.log(game);
 
-  // Start fetching counts in parallel
-  const countsPromise = ddbDocClient.send(
-    new GetCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: {
-        "pk": "METAGAMES", "sk": "COUNTS"
-      },
-    })
-  );
-
   if (pars.type === "current") {
     try {
-      const [gamesData, countsData] = await Promise.all([
-        ddbDocClient.send(
-          new QueryCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-            ExpressionAttributeValues: { ":pk": "GAME", ":sk": game + '#0#' },
-            ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-          })),
-        countsPromise
-      ]);
+      const gamesData = await ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+          ExpressionAttributeValues: { ":pk": "GAME", ":sk": game + '#0#' },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        }));
 
       const gamelist = (gamesData.Items as FullGame[]).map(hydrateGameState);
-
-      // Verify and correct current games count
-      const actualCount = gamelist.length;
-      await verifyAndCorrectCountWithData(game, "currentgames", actualCount, countsData);
 
       const returnlist = gamelist.map(g => {
         const state = GameFactory(g.metaGame, g.state); // JSON.parse(g.state);
@@ -1013,20 +937,13 @@ async function games(pars: { metaGame: string, type: string; }) {
     }
   } else if (pars.type === "completed") {
     try {
-      const [gamesData, countsData] = await Promise.all([
-        ddbDocClient.send(
-          new QueryCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            KeyConditionExpression: "#pk = :pk",
-            ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES#" + game },
-            ExpressionAttributeNames: { "#pk": "pk" }
-          })),
-        countsPromise
-      ]);
-
-      // Verify and correct completed games count
-      const actualCount = gamesData.Items?.length || 0;
-      await verifyAndCorrectCountWithData(game, "completedgames", actualCount, countsData);
+      const gamesData = await ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "#pk = :pk",
+          ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES#" + game },
+          ExpressionAttributeNames: { "#pk": "pk" }
+        }));
 
       return {
         statusCode: 200,
@@ -1046,31 +963,14 @@ async function games(pars: { metaGame: string, type: string; }) {
 async function ratings(pars: { metaGame: string }) {
   const game = pars.metaGame;
 
-  // Start fetching counts in parallel
-  const countsPromise = ddbDocClient.send(
-    new GetCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: {
-        "pk": "METAGAMES", "sk": "COUNTS"
-      },
-    })
-  );
-
   try {
-    const [ratingsData, countsData] = await Promise.all([
-      ddbDocClient.send(
-        new QueryCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          KeyConditionExpression: "#pk = :pk",
-          ExpressionAttributeValues: { ":pk": "RATINGS#" + game },
-          ExpressionAttributeNames: { "#pk": "pk" }
-        })),
-      countsPromise
-    ]);
-
-    // Verify and correct ratings count
-    const actualRatings = ratingsData.Items || [];
-    await verifyAndCorrectRatingsCountWithData(game, actualRatings, countsData);
+    const ratingsData = await ddbDocClient.send(
+      new QueryCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeValues: { ":pk": "RATINGS#" + game },
+        ExpressionAttributeNames: { "#pk": "pk" }
+      }));
 
     return {
       statusCode: 200,
@@ -1195,22 +1095,12 @@ async function standingChallenges(pars: { metaGame: string; userId?: string }) {
   const game = pars.metaGame;
   console.log(game);
 
-  // Start fetching counts in parallel
-  const countsPromise = ddbDocClient.send(
-    new GetCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: {
-        "pk": "METAGAMES", "sk": "COUNTS"
-      },
-    })
-  );
-
   const blockedByPromise = pars.userId
     ? getPlayerRelationIds(pars.userId, "BLOCKEDBY#")
     : Promise.resolve([] as string[]);
 
   try {
-    const [challengesData, countsData, blockedBy] = await Promise.all([
+    const [challengesData, blockedBy] = await Promise.all([
       ddbDocClient.send(
         new QueryCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -1218,13 +1108,8 @@ async function standingChallenges(pars: { metaGame: string; userId?: string }) {
           ExpressionAttributeValues: { ":pk": "STANDINGCHALLENGE#" + game },
           ExpressionAttributeNames: { "#pk": "pk" }
         })),
-      countsPromise,
       blockedByPromise,
     ]);
-
-    // Verify and correct standing challenges count
-    const actualCount = challengesData.Items?.length || 0;
-    await verifyAndCorrectCountWithData(game, "standingchallenges", actualCount, countsData);
 
     let items = challengesData.Items || [];
     if (blockedBy.length > 0) {
@@ -1276,6 +1161,7 @@ async function assembleTags(): Promise<TagList[] | undefined> {
 
 async function metaGamesDetails() {
   try {
+    await ensureMissingMetaGameCounts();
     const data = await ddbDocClient.send(
       new GetCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -1283,15 +1169,19 @@ async function metaGamesDetails() {
           "pk": "METAGAMES", "sk": "COUNTS"
         },
       }));
-    const details = data.Item as MetaGameCounts;
-    // console.log(`Got the following metagame counts:\n${JSON.stringify(details, undefined, 2)}`);
+    const details = { ...(data.Item ?? {}) } as MetaGameCounts;
+    gameinfo.forEach(g => {
+      if (!details[g.uid]) {
+        details[g.uid] = { ...DEFAULT_META_GAME_COUNTS };
+      }
+    });
     // get list of tags
     const taglist = await assembleTags();
     if (taglist === undefined) {
       throw new Error("An error occured while fetching game tags");
     }
     for (const key of Object.keys(details)) {
-      if ((key === "pk") || (key === "sk") || key.endsWith("_ratings")) {
+      if (isMetaGameCountsKey(key)) {
         continue;
       }
       const tags = taglist.find(l => l.meta === key);
@@ -1304,7 +1194,7 @@ async function metaGamesDetails() {
     // console.log(`Details:\n${JSON.stringify(details, undefined, 2)}`);
     // Change every "ratings" to the number of elements in the Set.
     const details2 = Object.keys(details)
-      .filter(key => key !== "pk" && key !== "sk" && !key.endsWith("_ratings"))
+      .filter(key => !isMetaGameCountsKey(key))
       .reduce((a, k) => ({
         ...a,
         [k]: {
@@ -1637,24 +1527,7 @@ async function toggleStar(userid: string, pars: { metaGame: string }) {
     );
     console.log(`Queued update to player ${player.id}, ${player.name}, toggling star for ${pars.metaGame}: ${delta}`);
 
-    /* Don't need to do this. Can just add directly. Assumes the metaCount has been updated before adding a new game, otherwise will throw an error. */
-    // get metagame counts
-    // const data = await ddbDocClient.send(
-    //     new GetCommand({
-    //       TableName: process.env.ABSTRACT_PLAY_TABLE,
-    //       Key: {
-    //         "pk": "METAGAMES", "sk": "COUNTS"
-    //     },
-    // }));
-    // const details = data.Item as MetaGameCounts;
-    // if (! (pars.metaGame in details)) {
-    //     throw new Error(`Could not find a metagame record for '${pars.metaGame}'`);
-    // }
-    // // update count
-    // if (details[pars.metaGame].stars === undefined) {
-    //     details[pars.metaGame].stars = 0;
-    // }
-    // details[pars.metaGame].stars! += delta;
+    await ensureMetaGameCountEntry(pars.metaGame);
 
     // queue game update
     list.push(
@@ -2583,12 +2456,12 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       botData = data[11];
     } else {
       data = await Promise.all([tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork, botsWork, blockedWork]);
+        standingWork, customizationWork, botsWork, blockedWork]);
       tagData = data[0];
       paletteData = data[1];
-      standingData = data[5];
-      customizationData = data[6];
-      botData = data[7];
+      standingData = data[4];
+      customizationData = data[5];
+      botData = data[6];
     }
     const blocked: string[] = data[data.length - 1] as string[];
     const bots = (botData as { Item?: BotRecord }[])
@@ -3947,34 +3820,14 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
 }
 
 async function updateStandingChallengeCount(metaGame: any, diff: number) {
-  const updateCommand = new UpdateCommand({
+  await ensureMetaGameCountEntry(metaGame);
+  return ddbDocClient.send(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "METAGAMES", "sk": "COUNTS" },
     ExpressionAttributeNames: { "#g": metaGame },
     ExpressionAttributeValues: { ":n": diff, ":zero": 0 },
     UpdateExpression: "set #g.standingchallenges = if_not_exists(#g.standingchallenges, :zero) + :n",
-  });
-
-  try {
-    return await ddbDocClient.send(updateCommand);
-  } catch (error: any) {
-    if (error.name === 'ValidationException') {
-      console.log(`ValidationException updating METAGAMES/COUNTS standing challenges for new game ${metaGame}. Initializing nested attribute...`);
-
-      // Fetch current METAGAMES/COUNTS record
-      const countsData = await ddbDocClient.send(new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "METAGAMES", "sk": "COUNTS" }
-      }));
-
-      // Initialize the nested attribute for this game
-      await verifyAndCorrectCountWithData(metaGame, "standingchallenges", 0, countsData);
-
-      // Retry the original update
-      return await ddbDocClient.send(updateCommand);
-    }
-    throw error;
-  }
+  }));
 }
 
 async function acceptChallenge(userid: string, metaGame: string, challengeId: string, standing: boolean) {
@@ -4279,6 +4132,7 @@ async function scheduleRatingUpdates(
     }
   })));
 
+  list.push(ensureMetaGameCountEntry(game.metaGame));
   list.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Key: { "pk": "METAGAMES", "sk": "COUNTS" },
@@ -4292,14 +4146,6 @@ async function addToGameLists(type: string, game: Game, now: number, keepgame: b
   const work: Promise<any>[] = [];
   const sk = now + "#" + game.id;
   if (type === "COMPLETEDGAMES" && keepgame) {
-    work.push(sendCommandWithRetry(new PutCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Item: {
-        "pk": type,
-        "sk": sk,
-        ...game
-      }
-    })));
     work.push(sendCommandWithRetry(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: {
@@ -4317,46 +4163,20 @@ async function addToGameLists(type: string, game: Game, now: number, keepgame: b
           ...game
         }
       })));
-      work.push(sendCommandWithRetry(new PutCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: {
-          "pk": type + "#" + game.metaGame + "#" + player.id,
-          "sk": sk,
-          ...game
-        }
-      })));
     });
   }
+  if (type === "CURRENTGAMES" || type === "COMPLETEDGAMES") {
+    await ensureMetaGameCountEntry(game.metaGame);
+  }
   if (type === "CURRENTGAMES") {
-    const updateCommand = new UpdateCommand({
+    work.push(sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
       ExpressionAttributeNames: { "#g": game.metaGame },
       ExpressionAttributeValues: { ":n": 1, ":zero": 0 },
       UpdateExpression: "set #g.currentgames = if_not_exists(#g.currentgames, :zero) + :n"
-    });
-
-    work.push(
-      sendCommandWithRetry(updateCommand).catch(async (error) => {
-        if (error.name === 'ValidationException') {
-          console.log(`ValidationException updating METAGAMES/COUNTS for new game ${game.metaGame}. Initializing nested attribute...`);
-
-          // Fetch current METAGAMES/COUNTS record
-          const countsData = await ddbDocClient.send(new GetCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "METAGAMES", "sk": "COUNTS" }
-          }));
-
-          // Initialize the nested attribute for this game
-          await verifyAndCorrectCountWithData(game.metaGame, "currentgames", 0, countsData);
-
-          // Retry the original update
-          return sendCommandWithRetry(updateCommand);
-        }
-        throw error;
-      })
-    );
-  } else {
+    })));
+  } else if (type === "COMPLETEDGAMES") {
     let update = "set #g.currentgames = if_not_exists(#g.currentgames, :zero) + :nm";
     const eavObj: { [k: string]: number } = { ":nm": -1, ":zero": 0 };
     if (keepgame) {
@@ -4374,16 +4194,10 @@ async function addToGameLists(type: string, game: Game, now: number, keepgame: b
   return Promise.all(work);
 }
 
-function deleteFromGameLists(type: string, game: FullGame) {
+async function deleteFromGameLists(type: string, game: FullGame) {
   const work: Promise<any>[] = [];
   if (type === "COMPLETEDGAMES") {
     const sk = game.lastMoveTime + "#" + game.id;
-    work.push(ddbDocClient.send(new DeleteCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: {
-        "pk": "COMPLETEDGAMES", "sk": sk
-      },
-    })));
     work.push(ddbDocClient.send(new DeleteCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: {
@@ -4397,15 +4211,10 @@ function deleteFromGameLists(type: string, game: FullGame) {
           "pk": "COMPLETEDGAMES#" + player.id, "sk": sk
         },
       })));
-      work.push(ddbDocClient.send(new DeleteCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "COMPLETEDGAMES#" + game.metaGame + "#" + player.id, "sk": sk
-        },
-      })));
     });
   }
   if (type === "CURRENTGAMES") {
+    await ensureMetaGameCountEntry(game.metaGame);
     work.push(ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "METAGAMES", "sk": "COUNTS" },
@@ -9786,6 +9595,86 @@ async function* queryItemsGenerator(queryInput: QueryCommandInput): AsyncGenerat
       yield Items
     }
   } while (lastEvaluatedKey !== undefined)
+}
+
+function isRetiredCompletedGamesPk(pk: string, metaGameUids: Set<string>): boolean {
+  if (pk === "COMPLETEDGAMES") {
+    return true;
+  }
+  const parts = pk.split("#");
+  if (parts.length !== 3 || parts[0] !== "COMPLETEDGAMES") {
+    return false;
+  }
+  return metaGameUids.has(parts[1]);
+}
+
+async function purgeRetiredCompletedGames(userId: string) {
+  try {
+    const user = await ddbDocClient.send(
+      new GetCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: {
+          "pk": "USER",
+          "sk": userId
+        },
+      }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers
+      };
+    }
+
+    const metaGameUids = new Set<string>();
+    gameinfo.forEach(g => metaGameUids.add(g.uid));
+
+    let deleted = 0;
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+    do {
+      const scan = await ddbDocClient.send(new ScanCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        FilterExpression: "begins_with(#pk, :prefix)",
+        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        ExpressionAttributeValues: { ":prefix": "COMPLETEDGAMES" },
+        ProjectionExpression: "#pk, #sk",
+        ExclusiveStartKey: lastEvaluatedKey,
+      }));
+
+      const toDelete = (scan.Items ?? []).filter(item =>
+        isRetiredCompletedGamesPk(item.pk as string, metaGameUids)
+      );
+
+      for (let i = 0; i < toDelete.length; i += 25) {
+        const chunk = toDelete.slice(i, i + 25);
+        if (chunk.length === 0) {
+          continue;
+        }
+        await ddbDocClient.send(new BatchWriteCommand({
+          RequestItems: {
+            [process.env.ABSTRACT_PLAY_TABLE!]: chunk.map(item => ({
+              DeleteRequest: {
+                Key: { pk: item.pk, sk: item.sk }
+              }
+            }))
+          }
+        }));
+        deleted += chunk.length;
+      }
+
+      lastEvaluatedKey = scan.LastEvaluatedKey;
+    } while (lastEvaluatedKey !== undefined);
+
+    console.log(`purge_retired_completed_games deleted ${deleted} items`);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ deleted }),
+      headers
+    };
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to purge retired completed games ${userId}`);
+  }
 }
 
 async function updateMetaGameCounts(userId: string) {
