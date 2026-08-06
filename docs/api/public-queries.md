@@ -19,7 +19,7 @@ POST body: `{ "query": "<name>", "pars": { ... } }`
 |-------|---------|------------|
 | `games` | Active games for a metaGame | `metaGame` |
 | `representative_games` | Community-recommended completed games | `metaGame` |
-| `get_game` | Full game record | `metaGame`, `id` |
+| `get_game` | Full game record with `watchCount` | `metaGame`, `id`, `cbit` |
 | `get_public_exploration` | Published exploration tree | `gameid`, `userid`, `movenumber` |
 
 ## Challenges

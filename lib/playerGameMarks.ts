@@ -550,6 +550,28 @@ export async function listMetaGameRecommendations(
     .sort((a, b) => (a.addedAt ?? 0) - (b.addedAt ?? 0));
 }
 
+export async function countGameWatchers(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  gameId: string,
+): Promise<number> {
+  let count = 0;
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const result = await client.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: '#pk = :pk',
+      ExpressionAttributeNames: { '#pk': 'pk' },
+      ExpressionAttributeValues: { ':pk': `GAMEWATCHERS#${gameId}` },
+      Select: 'COUNT',
+      ExclusiveStartKey: lastKey,
+    }));
+    count += result.Count ?? 0;
+    lastKey = result.LastEvaluatedKey;
+  } while (lastKey);
+  return count;
+}
+
 export async function updateWatcherSummaries(
   client: DynamoDBDocumentClient,
   tableName: string,

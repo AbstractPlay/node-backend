@@ -28,6 +28,7 @@ import {
   listMetaGameRecommendations,
   listUserRecommendations,
   listWatchedGames,
+  countGameWatchers,
   recommendGame,
   type GameMarkSummary,
   type HighlightEntry,
@@ -1287,6 +1288,11 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
         },
         ReturnConsumedCapacity: "INDEXES"
       }));
+    const watchCountWork = countGameWatchers(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      pars.id,
+    );
 
     const gameData = await getGame;
     // console.log(`Game data fetched:\n${JSON.stringify(gameData)}`);
@@ -1344,10 +1350,11 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
       }
     }
 
+    const watchCount = await watchCountWork;
     console.log(`Returning 200.`);
     return {
       statusCode: 200,
-      body: JSON.stringify({ "game": game, "comments": comments }),
+      body: JSON.stringify({ "game": game, "comments": comments, "watchCount": watchCount }),
       headers
     };
   }

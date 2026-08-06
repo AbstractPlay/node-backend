@@ -10,6 +10,7 @@ import {
 import { gameRecordSk } from '../lib/commentAuth';
 import {
   buildGameSummary,
+  countGameWatchers,
   countUserRecommendationsForMetaGame,
   highlightGame,
   isQualityCompletedGame,
@@ -95,6 +96,9 @@ function createMockDocClient(store: Map<string, Item>) {
           }
           return true;
         });
+        if (command.input.Select === 'COUNT') {
+          return { Count: items.length };
+        }
         return { Items: items };
       }
       if (command instanceof UpdateCommand) {
@@ -279,6 +283,20 @@ test('updateLastChatForWatchers sets lastChat without seen for non-commenter', a
   const watched = store.get(`WATCHED#${SPECTATOR}:${GAME_ID}`);
   assert.ok(watched?.lastChat);
   assert.equal(watched?.seen, undefined);
+});
+
+test('countGameWatchers returns watcher index size', async () => {
+  store.set(itemKey({
+    pk: `GAMEWATCHERS#${GAME_ID}`,
+    sk: SPECTATOR,
+  }), { pk: `GAMEWATCHERS#${GAME_ID}`, sk: SPECTATOR });
+  store.set(itemKey({
+    pk: `GAMEWATCHERS#${GAME_ID}`,
+    sk: PLAYER_A,
+  }), { pk: `GAMEWATCHERS#${GAME_ID}`, sk: PLAYER_A });
+
+  const count = await countGameWatchers(client as any, TABLE, GAME_ID);
+  assert.equal(count, 2);
 });
 
 test('updateLastChatForWatchers sets seen for commenter watcher', async () => {

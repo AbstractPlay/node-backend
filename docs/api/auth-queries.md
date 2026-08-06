@@ -66,7 +66,7 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `timeloss` | Report time loss | game ids |
 | `abandoned` | Mark game abandoned | game ids |
 | `invoke_pie` | Pie rule: reverse player order | game ids |
-| `get_game` | Game with user context | `metaGame`, `id` |
+| `get_game` | Game with user context and `watchCount` | `metaGame`, `id`, `cbit` |
 | `update_game_settings` | Per-game settings | game + settings |
 | `update_note` | User note on a game | `gameId`, note text |
 | `update_commented` | Mark comments seen | game ids |

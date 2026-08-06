@@ -78,6 +78,9 @@ function createMockDocClient(store) {
                     }
                     return true;
                 });
+                if (command.input.Select === 'COUNT') {
+                    return { Count: items.length };
+                }
                 return { Items: items };
             }
             if (command instanceof lib_dynamodb_1.UpdateCommand) {
@@ -237,6 +240,18 @@ function userRecord(id, name) {
     const watched = store.get(`WATCHED#${SPECTATOR}:${GAME_ID}`);
     strict_1.default.ok(watched?.lastChat);
     strict_1.default.equal(watched?.seen, undefined);
+});
+(0, node_test_1.test)('countGameWatchers returns watcher index size', async () => {
+    store.set(itemKey({
+        pk: `GAMEWATCHERS#${GAME_ID}`,
+        sk: SPECTATOR,
+    }), { pk: `GAMEWATCHERS#${GAME_ID}`, sk: SPECTATOR });
+    store.set(itemKey({
+        pk: `GAMEWATCHERS#${GAME_ID}`,
+        sk: PLAYER_A,
+    }), { pk: `GAMEWATCHERS#${GAME_ID}`, sk: PLAYER_A });
+    const count = await (0, playerGameMarks_1.countGameWatchers)(client, TABLE, GAME_ID);
+    strict_1.default.equal(count, 2);
 });
 (0, node_test_1.test)('updateLastChatForWatchers sets seen for commenter watcher', async () => {
     store.set(itemKey({
