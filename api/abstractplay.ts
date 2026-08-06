@@ -23,6 +23,25 @@ const REGISTERED_LANGUAGES = Object.keys(LOCALE_RESOURCES);
 import { wsBroadcast } from '../lib/wsBroadcast';
 import { checkInGameCommentAuth } from '../lib/commentAuth';
 import {
+  highlightGame,
+  listHighlights,
+  listMetaGameRecommendations,
+  listUserRecommendations,
+  listWatchedGames,
+  recommendGame,
+  type GameMarkSummary,
+  type HighlightEntry,
+  type MarkResult,
+  type RepresentativeEntry,
+  unhighlightGame,
+  unrecommendGame,
+  unwatchGame,
+  updateLastChatForWatchers,
+  updateWatcherSummaries,
+  watchGame,
+  setWatchedSeen,
+} from '../lib/playerGameMarks';
+import {
   isBotId,
   getParticipants,
   getBotRecord,
@@ -223,6 +242,9 @@ type MeData = {
   realStanding?: StandingChallenge[];
   customizations?: { [key: string]: any };
   blocked?: string[];
+  watchedGames?: Game[];
+  highlights?: Game[];
+  representatives?: Game[];
 }
 
 type Rating = {
@@ -590,6 +612,10 @@ module.exports.query = async (event: { queryStringParameters: any; body?: string
       return await eventGetEvent(pars);
     case "get_events":
       return await eventGetEvents();
+    case "player_highlights":
+      return await playerHighlights(pars);
+    case "representative_games":
+      return await representativeGames(pars);
     case "report_problem":
       return await reportProblem(pars);
     default:
@@ -746,6 +772,18 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await resetPlayground(event.cognitoPoolClaims.sub);
     case "toggle_star":
       return await toggleStar(event.cognitoPoolClaims.sub, pars);
+    case "watch_game":
+      return await watchGameAuth(event.cognitoPoolClaims.sub, pars);
+    case "unwatch_game":
+      return await unwatchGameAuth(event.cognitoPoolClaims.sub, pars);
+    case "highlight_game":
+      return await highlightGameAuth(event.cognitoPoolClaims.sub, pars);
+    case "unhighlight_game":
+      return await unhighlightGameAuth(event.cognitoPoolClaims.sub, pars);
+    case "recommend_game":
+      return await recommendGameAuth(event.cognitoPoolClaims.sub, pars);
+    case "unrecommend_game":
+      return await unrecommendGameAuth(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
       return await injectState(event.cognitoPoolClaims.sub, pars);
     case "update_game_settings":
@@ -1487,6 +1525,203 @@ async function getPlayground(userid: string, pars: any) {
   catch (error) {
     logGetItemError(error);
     return formatReturnError(`Unable to get playground for user ${userid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  }
+}
+
+type GameMarkPars = { metaGame: string; id: string };
+
+function markResultResponse(result: MarkResult, successBody?: unknown) {
+  if (!result.ok) {
+    return formatReturnError(result.message);
+  }
+  return {
+    statusCode: 200,
+    body: JSON.stringify(successBody ?? { message: 'Success' }),
+    headers,
+  };
+}
+
+function parseGameMarkPars(pars: GameMarkPars): GameMarkPars | undefined {
+  if (!pars?.metaGame || !pars?.id) {
+    return undefined;
+  }
+  return { metaGame: pars.metaGame, id: pars.id };
+}
+
+async function watchGameAuth(userId: string, pars: GameMarkPars) {
+  const parsed = parseGameMarkPars(pars);
+  if (parsed === undefined) {
+    return formatReturnError('metaGame and id are required.');
+  }
+  try {
+    const result = await watchGame(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      parsed.metaGame,
+      parsed.id,
+    );
+    if (!result.ok) {
+      return markResultResponse(result);
+    }
+    const watchedGames = await listWatchedGames(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, userId);
+    return markResultResponse(result, watchedGames);
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to watch game ${parsed.id}`);
+  }
+}
+
+async function unwatchGameAuth(userId: string, pars: GameMarkPars) {
+  const parsed = parseGameMarkPars(pars);
+  if (parsed === undefined) {
+    return formatReturnError('metaGame and id are required.');
+  }
+  try {
+    const result = await unwatchGame(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      parsed.id,
+    );
+    if (!result.ok) {
+      return markResultResponse(result);
+    }
+    const watchedGames = await listWatchedGames(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, userId);
+    return markResultResponse(result, watchedGames);
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to unwatch game ${parsed.id}`);
+  }
+}
+
+async function highlightGameAuth(userId: string, pars: GameMarkPars) {
+  const parsed = parseGameMarkPars(pars);
+  if (parsed === undefined) {
+    return formatReturnError('metaGame and id are required.');
+  }
+  try {
+    const result = await highlightGame(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      parsed.metaGame,
+      parsed.id,
+    );
+    if (!result.ok) {
+      return markResultResponse(result);
+    }
+    const highlights = await listHighlights(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, userId);
+    return markResultResponse(result, highlights);
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to highlight game ${parsed.id}`);
+  }
+}
+
+async function unhighlightGameAuth(userId: string, pars: GameMarkPars) {
+  const parsed = parseGameMarkPars(pars);
+  if (parsed === undefined) {
+    return formatReturnError('metaGame and id are required.');
+  }
+  try {
+    const result = await unhighlightGame(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      parsed.metaGame,
+      parsed.id,
+    );
+    if (!result.ok) {
+      return markResultResponse(result);
+    }
+    const highlights = await listHighlights(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, userId);
+    return markResultResponse(result, highlights);
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to unhighlight game ${parsed.id}`);
+  }
+}
+
+async function recommendGameAuth(userId: string, pars: GameMarkPars) {
+  const parsed = parseGameMarkPars(pars);
+  if (parsed === undefined) {
+    return formatReturnError('metaGame and id are required.');
+  }
+  try {
+    const result = await recommendGame(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      parsed.metaGame,
+      parsed.id,
+    );
+    if (!result.ok) {
+      return markResultResponse(result);
+    }
+    const representatives = await listUserRecommendations(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, userId);
+    return markResultResponse(result, representatives);
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to recommend game ${parsed.id}`);
+  }
+}
+
+async function unrecommendGameAuth(userId: string, pars: GameMarkPars) {
+  const parsed = parseGameMarkPars(pars);
+  if (parsed === undefined) {
+    return formatReturnError('metaGame and id are required.');
+  }
+  try {
+    const result = await unrecommendGame(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      parsed.metaGame,
+      parsed.id,
+    );
+    if (!result.ok) {
+      return markResultResponse(result);
+    }
+    const representatives = await listUserRecommendations(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, userId);
+    return markResultResponse(result, representatives);
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to unrecommend game ${parsed.id}`);
+  }
+}
+
+async function playerHighlights(pars: { userId: string }) {
+  if (!pars?.userId) {
+    return formatReturnError('userId is required.');
+  }
+  try {
+    const highlights = await listHighlights(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, pars.userId);
+    return {
+      statusCode: 200,
+      body: JSON.stringify(highlights),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get highlights for ${pars.userId}`);
+  }
+}
+
+async function representativeGames(pars: { metaGame: string }) {
+  if (!pars?.metaGame) {
+    return formatReturnError('metaGame is required.');
+  }
+  try {
+    const games = await listMetaGameRecommendations(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, pars.metaGame);
+    return {
+      statusCode: 200,
+      body: JSON.stringify(games),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get representative games for ${pars.metaGame}`);
   }
 }
 
@@ -2301,6 +2536,10 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
     const botIds: string[] = Array.from(user?.bots ?? new Set());
     const botsWork = getBots(botIds);
     const blockedWork = getPlayerRelationIds(userId, "BLOCKED#");
+    const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+    const watchedGamesWork = listWatchedGames(ddbDocClient, tableName, userId);
+    const highlightsWork = listHighlights(ddbDocClient, tableName, userId);
+    const representativesWork = listUserRecommendations(ddbDocClient, tableName, userId);
 
     const removedGameIDs: string[] = [];
     if (!pars || !pars.size || pars.size !== "small") {
@@ -2448,7 +2687,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       const challengesAccepted = getChallenges(challengesAcceptedIDs);
       const standingChallenges = getChallenges(standingChallengeIDs);
       data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges, tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork, botsWork, blockedWork]);
+        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork, botsWork, watchedGamesWork, highlightsWork, representativesWork, blockedWork]);
       tagData = data[4];
       paletteData = data[5];
       standingData = data[9];
@@ -2456,7 +2695,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       botData = data[11];
     } else {
       data = await Promise.all([tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        standingWork, customizationWork, botsWork, blockedWork]);
+        standingWork, customizationWork, botsWork, watchedGamesWork, highlightsWork, representativesWork, blockedWork]);
       tagData = data[0];
       paletteData = data[1];
       standingData = data[4];
@@ -2464,6 +2703,9 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       botData = data[6];
     }
     const blocked: string[] = data[data.length - 1] as string[];
+    const watchedGames = data[data.length - 4] as GameMarkSummary[];
+    const highlights = data[data.length - 3] as HighlightEntry[];
+    const representatives = data[data.length - 2] as RepresentativeEntry[];
     const bots = (botData as { Item?: BotRecord }[])
       .map(d => toClientBot(d.Item))
       .filter((bot): bot is ClientBot => bot !== undefined);
@@ -2522,6 +2764,9 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "realStanding": realStanding,
           customizations,
           blocked,
+          watchedGames,
+          highlights,
+          representatives,
         } as MeData, Set_toJSON),
         headers
       };
@@ -2547,6 +2792,9 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "realStanding": realStanding,
           customizations,
           blocked,
+          watchedGames,
+          highlights,
+          representatives,
         } as MeData, Set_toJSON),
         headers
       }
@@ -4471,6 +4719,13 @@ async function submitMove(userid: string, pars: {
       await scheduleRatingUpdates(game, player, ind, newRatings, list);
     }
 
+    list.push(updateWatcherSummaries(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      game.id,
+      playerGame as GameMarkSummary,
+    ));
+
     if (simultaneous)
       game.partialMove = game.players.map((p: User, i: number) => (p.id === userid ? game.partialMove!.split(',')[i] : '')).join(',');
 
@@ -4911,6 +5166,12 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
     work.push(updateUserGames(player.id, player.gamesUpdate, updatedGameIds, games));
     await scheduleRatingUpdates(game, player, ind, newRatings, work);
   }
+  work.push(updateWatcherSummaries(
+    ddbDocClient,
+    process.env.ABSTRACT_PLAY_TABLE!,
+    game.id,
+    playerGame as GameMarkSummary,
+  ));
   if (game.tournament !== undefined) {
     work.push(tournamentUpdates(game, players as unknown as FullUser[], player));
   }
@@ -5012,6 +5273,12 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
       const updatedGameIds = [playerGame.id];
       work.push(updateUserGames(player.id, player.gamesUpdate, updatedGameIds, games));
     }
+    work.push(updateWatcherSummaries(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      game.id,
+      playerGame as GameMarkSummary,
+    ));
     await Promise.all(work);
     return {
       statusCode: 200,
@@ -5406,6 +5673,12 @@ async function updateLastChatForPlayers(
       console.log(`Warning: User ${user.name} doesn't have in-progress game ${gameId} in their list`);
     }
   }
+  await updateLastChatForWatchers(
+    ddbDocClient,
+    process.env.ABSTRACT_PLAY_TABLE!,
+    gameId,
+    currentUserId,
+  );
 }
 
 async function submitComment(userid: string, pars: { id: string; metaGame: string; players?: { [k: string]: any; id: string }[]; comment: string; moveNumber: number; }) {
@@ -8803,6 +9076,13 @@ async function invokePie(userid: string, pars: { id: string, metaGame: string, c
         console.log(`Scheduled update to player ${player.id}, ${player.name}, with games`, games);
       }
 
+      list.push(updateWatcherSummaries(
+        ddbDocClient,
+        process.env.ABSTRACT_PLAY_TABLE!,
+        game.id,
+        playerGame as GameMarkSummary,
+      ));
+
       // insert a comment into the game log
       const thisPlayer = players.find(p => p.id === userid)!;
       list.push(submitComment("", { id: game.id, metaGame: pars.metaGame, comment: `${thisPlayer.name} elected to switch seats. As a result, the game record for ply 1 has been retroactively changed to look as if ${thisPlayer.name} made that move.`, moveNumber: 2 }));
@@ -8956,6 +9236,28 @@ async function setLastSeen(userId: string, pars: { gameId: string; interval?: nu
         headers
       };
     }
+  }
+  let interval = 8;
+  if (pars.interval !== undefined) {
+    interval = pars.interval;
+  }
+  const now = new Date();
+  const then = new Date();
+  then.setDate(now.getDate() - interval);
+  const watchedUpdated = await setWatchedSeen(
+    ddbDocClient,
+    process.env.ABSTRACT_PLAY_TABLE!,
+    userId,
+    pars.gameId,
+    then.getTime(),
+    then.getTime(),
+  );
+  if (watchedUpdated) {
+    return {
+      statusCode: 200,
+      body: "",
+      headers
+    };
   }
   return {
     statusCode: 406,

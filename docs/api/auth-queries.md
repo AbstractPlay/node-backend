@@ -10,13 +10,26 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `me` | Dashboard payload: games, challenges, settings, bots, `blocked` list | `size` (`small` skips challenge fetch), `vars`, `update` |
+| `me` | Dashboard payload: games, challenges, settings, bots, `blocked` list, `watchedGames`, `highlights`, `representatives` | `size` (`small` skips challenge fetch), `vars`, `update` |
 | `next_game` | Next game id in user's list | — |
 | `my_settings` | Minimal profile for settings UI | — |
 | `new_setting` | Update name, language, country, bggid, about | `attribute`, `value` |
 | `new_profile` | Bulk profile update | profile fields |
-| `set_lastSeen` | Update last-seen timestamp | — |
+| `set_lastSeen` | Update last-seen timestamp (participating or watched game) | `gameId`, optional `interval` |
 | `toggle_star` | Favorite a metaGame | `metaGame` |
+
+## Watch, highlight, and representative games
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `watch_game` | Spectate a game (non-participant) | `metaGame`, `id` |
+| `unwatch_game` | Stop spectating | `metaGame`, `id` |
+| `highlight_game` | Pin a participated game on player page | `metaGame`, `id` |
+| `unhighlight_game` | Remove highlight | `metaGame`, `id` |
+| `recommend_game` | Recommend completed game for metaGame (max 2 per metaGame) | `metaGame`, `id` |
+| `unrecommend_game` | Remove recommendation | `metaGame`, `id` |
+
+Mutations return the updated list (`watchedGames`, `highlights`, or `representatives`) on success.
 
 ## Push, tags, palettes, customizations
 

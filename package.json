@@ -4,7 +4,7 @@
   "description": "node.js lambda with DynamoDB",
   "main": "??",
   "scripts": {
-    "test": "npm run typecheck && node --test test/gameState.test.js test/gameProjector.test.js test/push.test.js test/i18n.test.js test/commentAuth.test.js test/wsAuth.test.js",
+    "test": "npm run typecheck && node --test test/gameState.test.js test/gameProjector.test.js test/push.test.js test/i18n.test.js test/commentAuth.test.js test/playerGameMarks.test.js test/wsAuth.test.js",
     "typecheck": "tsc --noEmit",
     "build-ts": "tsc",
     "lint": "eslint && npm run typecheck",

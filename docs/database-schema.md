@@ -53,6 +53,22 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 - **Player relations** — blocking (bidirectional)
   - pk: `PLAYER#<blockingPlayerId>`, sk: `BLOCKED#<blockedPlayerId>`
   - pk: `PLAYER#<blockedPlayerId>`, sk: `BLOCKEDBY#<blockingPlayerId>`
+  - pk: `PLAYER#<userid>`, sk: `REPRESENTATIVE#<metaGame>#<gameid>` — per-user representative-game index (max 2 per metaGame)
+
+- **Watched games** — spectator dashboard list (not a participant)
+  - pk: `WATCHED#<userid>`, sk: `<gameid>`
+  - summary fields mirror dashboard `Game` objects plus `addedAt`, `seen`, `lastChat`
+
+- **Game watchers** — reverse index for fan-out on moves and chat
+  - pk: `GAMEWATCHERS#<gameid>`, sk: `<userid>`
+
+- **Highlighted games** — player page pins (participant only)
+  - pk: `HIGHLIGHT#<userid>`, sk: `<metaGame>#<gameid>`
+  - summary fields plus `addedAt` for display order
+
+- **Representative games** — community recommendations per metaGame
+  - pk: `REPRESENTATIVE#<metaGame>`, sk: `<userid>#<gameid>`
+  - fields: `userId`, `userName`, `addedAt`, game summary fields
 
 ## Game lists
 
