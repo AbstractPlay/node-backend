@@ -14,6 +14,7 @@ const activeRow = {
     clockHard: true,
     toMove: '0',
     lastMoveTime: 100,
+    numMoves: 7,
 };
 const completedLegacy = {
     id: 'g-done',
@@ -34,6 +35,7 @@ const completedLegacy = {
     const game = (0, dashboardGames_1.currentRowToGame)(activeRow);
     strict_1.default.equal(game.id, 'g-active');
     strict_1.default.equal(game.metaGame, 'saltire');
+    strict_1.default.equal(game.numMoves, 7);
 });
 (0, node_test_1.test)('mergeDashboardGames prefers CURRENTGAMES# for active games', () => {
     const legacy = [
@@ -44,6 +46,7 @@ const completedLegacy = {
             clockHard: false,
             toMove: '0',
             lastMoveTime: 1,
+            numMoves: 3,
             seen: 99,
         },
         completedLegacy,
@@ -56,6 +59,7 @@ const completedLegacy = {
     strict_1.default.equal(merged.length, 2);
     strict_1.default.equal(merged[0].id, 'g-active');
     strict_1.default.equal(merged[0].clockHard, true);
+    strict_1.default.equal(merged[0].numMoves, 7);
     strict_1.default.equal(merged[0].seen, 5);
     strict_1.default.equal(merged[0].lastChat, 6);
     strict_1.default.equal(merged[1].id, 'g-done');

@@ -72,10 +72,10 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 
 ## Game lists
 
-- **Current games by player** — per-player active game summaries (stream-maintained shadow; reads still use `USER.games[]` until Phase 3)
+- **Current games by player** — per-player active game summaries (stream-maintained; Phase 3 reads from here)
   - pk: `CURRENTGAMES#<userid>`
   - sk: `<gameid>`
-  - summary fields mirror dashboard `Game` objects (`id`, `metaGame`, `players`, `toMove`, `lastMoveTime`, etc.)
+  - summary fields mirror dashboard `Game` objects (`id`, `metaGame`, `players`, `toMove`, `lastMoveTime`, `numMoves`, etc.)
 
 - **Completed games by metaGame** — summary rows for the completed-games page
   - pk: `COMPLETEDGAMES#<metaGame>`

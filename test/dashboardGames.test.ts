@@ -17,6 +17,7 @@ const activeRow: CurrentGameIndexRow = {
   clockHard: true,
   toMove: '0',
   lastMoveTime: 100,
+  numMoves: 7,
 };
 
 const completedLegacy: DashboardGame = {
@@ -40,6 +41,7 @@ test('currentRowToGame uses sk as id', () => {
   const game = currentRowToGame(activeRow);
   assert.equal(game.id, 'g-active');
   assert.equal(game.metaGame, 'saltire');
+  assert.equal(game.numMoves, 7);
 });
 
 test('mergeDashboardGames prefers CURRENTGAMES# for active games', () => {
@@ -51,6 +53,7 @@ test('mergeDashboardGames prefers CURRENTGAMES# for active games', () => {
       clockHard: false,
       toMove: '0',
       lastMoveTime: 1,
+      numMoves: 3,
       seen: 99,
     },
     completedLegacy,
@@ -65,6 +68,7 @@ test('mergeDashboardGames prefers CURRENTGAMES# for active games', () => {
   assert.equal(merged.length, 2);
   assert.equal(merged[0]!.id, 'g-active');
   assert.equal(merged[0]!.clockHard, true);
+  assert.equal(merged[0]!.numMoves, 7);
   assert.equal(merged[0]!.seen, 5);
   assert.equal(merged[0]!.lastChat, 6);
   assert.equal(merged[1]!.id, 'g-done');

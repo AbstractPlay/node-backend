@@ -60,6 +60,7 @@ export function toCurrentSummary(game: GameRecord) {
     lastMoveTime: game.lastMoveTime,
     variants: game.variants,
     gameStarted: game.gameStarted,
+    numMoves: resolveNumMoves(game),
   };
 }
 

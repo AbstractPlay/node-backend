@@ -4203,6 +4203,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       "noExplore": challenge.noExplore || false,
       "toMove": whoseTurn,
       "lastMoveTime": now,
+      "numMoves": 0,
       "variants": engine.variants,
     } as Game;
     const list: Promise<any>[] = [];
@@ -7061,6 +7062,7 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
             "clockHard": true,
             "toMove": whoseTurn,
             "lastMoveTime": now,
+            "numMoves": 0,
             "variants": engine.variants,
           } as Game;
           console.log(`Adding game ${gameId} to game lists`);
@@ -8635,6 +8637,7 @@ async function eventCreateGames(userid: string, pars: { eventid: string; pairs: 
         "noExplore": false,
         "toMove": whoseTurn,
         "lastMoveTime": now,
+        "numMoves": 0,
         "variants": engine.variants,
       } as Game;
       list.push(addToGameLists("CURRENTGAMES", game, now, false));
