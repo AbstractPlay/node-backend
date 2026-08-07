@@ -3037,7 +3037,7 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
       break;
     case "about":
       attr = "about";
-      val = pars.value.substring(0, 255);
+      val = pars.value.substring(0, 1000);
       break;
     default:
       return;
