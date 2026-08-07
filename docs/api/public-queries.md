@@ -9,6 +9,7 @@ POST body: `{ "query": "<name>", "pars": { ... } }`
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `user_names` | Player and bot directory for challenges | — |
+| `player_highlights` | Highlighted games for a player page | `userId` |
 | `meta_games` | Meta game counts and stats | — |
 | `ratings` | Leaderboard for a game | `metaGame` |
 
@@ -17,7 +18,8 @@ POST body: `{ "query": "<name>", "pars": { ... } }`
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `games` | Active games for a metaGame | `metaGame` |
-| `get_game` | Full game record | `metaGame`, `id` |
+| `representative_games` | Community-recommended completed games | `metaGame` |
+| `get_game` | Full game record with `watchCount` | `metaGame`, `id`, `cbit` |
 | `get_public_exploration` | Published exploration tree | `gameid`, `userid`, `movenumber` |
 
 ## Challenges
