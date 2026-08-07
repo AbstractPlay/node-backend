@@ -1,0 +1,337 @@
+#!/usr/bin/env node
+/* eslint-env node */
+/**
+ * Phase 2 normalization backfill (admin maintenance).
+ *
+ * Steps:
+ *   user-index   — CURRENTGAMES# + USERGAME# from USER.games[]
+ *   meta-counts  — METAGAMES#<metaGame>/COUNTS from monolith METAGAMES/COUNTS
+ *   all          — both steps (default)
+ *
+ * Conditional writes skip rows that already exist (stream or prior backfill).
+ *
+ * Usage:
+ *   node bin/backfill-normalization-phase2.mjs [--stage dev|prod] [--dry-run]
+ *     [--step user-index|meta-counts|all] [--user-id <cognitoSub>]
+ *
+ * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
+ */
+import { createRequire } from 'module';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  ScanCommand,
+} from '@aws-sdk/lib-dynamodb';
+
+const require = createRequire(import.meta.url);
+const { gameinfo } = require('@abstractplay/gameslib');
+
+const STAGES = {
+  dev: {
+    profile: 'AbstractPlayDev',
+    table: 'abstract-play-dev',
+  },
+  prod: {
+    profile: 'AbstractPlayProd',
+    table: 'abstract-play-prod',
+  },
+};
+
+const DEFAULT_META_GAME_COUNTS = {
+  currentgames: 0,
+  completedgames: 0,
+  standingchallenges: 0,
+  stars: 0,
+};
+
+function usage() {
+  console.error(`Usage: node bin/backfill-normalization-phase2.mjs [options]
+
+Options:
+  --stage dev|prod          AWS profile + DynamoDB table (default: dev)
+  --dry-run                 Count actions only; do not write
+  --step user-index|meta-counts|all   Backfill step (default: all)
+  --user-id <cognitoSub>    Backfill a single user (user-index step only)
+  --help, -h                Show this help
+`);
+  process.exit(1);
+}
+
+function parseArgs(argv) {
+  let stage = 'dev';
+  let dryRun = false;
+  let step = 'all';
+  let userId;
+
+  for (let i = 2; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--stage' && argv[i + 1]) {
+      stage = argv[++i];
+    } else if (arg === '--dry-run') {
+      dryRun = true;
+    } else if (arg === '--step' && argv[i + 1]) {
+      step = argv[++i];
+    } else if (arg === '--user-id' && argv[i + 1]) {
+      userId = argv[++i];
+    } else if (arg === '--help' || arg === '-h') {
+      usage();
+    } else {
+      console.error(`Unknown argument: ${arg}`);
+      usage();
+    }
+  }
+
+  if (!STAGES[stage]) {
+    console.error(`Unknown stage: ${stage}`);
+    usage();
+  }
+  if (!['user-index', 'meta-counts', 'all'].includes(step)) {
+    console.error(`Unknown step: ${step}`);
+    usage();
+  }
+
+  return { stage, dryRun, step, userId };
+}
+
+function isActiveDashboardGame(game) {
+  return game.toMove !== '' && game.toMove !== null && game.toMove !== undefined;
+}
+
+function toCurrentSummaryFromUserGame(game) {
+  return {
+    id: game.id,
+    metaGame: game.metaGame,
+    players: game.players,
+    clockHard: game.clockHard,
+    noExplore: game.noExplore ?? false,
+    toMove: game.toMove,
+    lastMoveTime: game.lastMoveTime,
+    variants: game.variants,
+    gameStarted: game.gameStarted,
+  };
+}
+
+function toUserGameOverlay(game) {
+  const overlay = { id: game.id };
+  if (game.seen !== undefined) {
+    overlay.seen = game.seen;
+  }
+  if (game.lastChat !== undefined) {
+    overlay.lastChat = game.lastChat;
+  }
+  return overlay;
+}
+
+function hasUserGameOverlay(game) {
+  return game.seen !== undefined || game.lastChat !== undefined;
+}
+
+async function putIfAbsent(docClient, tableName, item, dryRun, stats, label) {
+  if (dryRun) {
+    stats[label] = (stats[label] ?? 0) + 1;
+    return 'dry-run';
+  }
+  try {
+    await docClient.send(new PutCommand({
+      TableName: tableName,
+      Item: item,
+      ConditionExpression: 'attribute_not_exists(pk)',
+    }));
+    stats[label] = (stats[label] ?? 0) + 1;
+    return 'written';
+  } catch (err) {
+    if (err.name === 'ConditionalCheckFailedException') {
+      stats[`${label}Skipped`] = (stats[`${label}Skipped`] ?? 0) + 1;
+      return 'skipped';
+    }
+    throw err;
+  }
+}
+
+async function backfillUserRecord(docClient, tableName, userId, games, dryRun, stats) {
+  for (const game of games) {
+    if (!game?.id || !game.metaGame) {
+      stats.invalidGames = (stats.invalidGames ?? 0) + 1;
+      continue;
+    }
+
+    if (isActiveDashboardGame(game)) {
+      const summary = toCurrentSummaryFromUserGame(game);
+      await putIfAbsent(docClient, tableName, {
+        pk: `CURRENTGAMES#${userId}`,
+        sk: game.id,
+        ...summary,
+      }, dryRun, stats, 'currentGames');
+    }
+
+    if (hasUserGameOverlay(game)) {
+      const overlay = toUserGameOverlay(game);
+      const { id, ...fields } = overlay;
+      await putIfAbsent(docClient, tableName, {
+        pk: `USERGAME#${userId}`,
+        sk: id,
+        ...fields,
+      }, dryRun, stats, 'userGames');
+    }
+  }
+}
+
+async function getUserRecord(docClient, tableName, userId) {
+  const data = await docClient.send(new GetCommand({
+    TableName: tableName,
+    Key: { pk: 'USER', sk: userId },
+    ProjectionExpression: '#pk, #sk, games',
+    ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
+  }));
+  return data.Item;
+}
+
+async function scanAllUsers(docClient, tableName) {
+  const users = [];
+  let lastEvaluatedKey;
+
+  do {
+    const page = await docClient.send(new ScanCommand({
+      TableName: tableName,
+      FilterExpression: '#pk = :pk',
+      ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
+      ExpressionAttributeValues: { ':pk': 'USER' },
+      ProjectionExpression: '#pk, #sk, games',
+      ExclusiveStartKey: lastEvaluatedKey,
+    }));
+
+    for (const item of page.Items ?? []) {
+      users.push(item);
+    }
+    lastEvaluatedKey = page.LastEvaluatedKey;
+
+    if (users.length > 0 && users.length % 500 === 0) {
+      process.stdout.write(`\r  scanned users: ${users.length}`);
+    }
+  } while (lastEvaluatedKey);
+
+  if (users.length >= 500) {
+    process.stdout.write('\n');
+  }
+
+  return users;
+}
+
+async function backfillUserIndex(docClient, tableName, { dryRun, userId }) {
+  const stats = { users: 0 };
+
+  console.log('\nBackfilling CURRENTGAMES# and USERGAME# from USER.games[]…');
+
+  if (userId) {
+    const user = await getUserRecord(docClient, tableName, userId);
+    if (!user) {
+      console.error(`No USER record for ${userId}`);
+      return stats;
+    }
+    stats.users = 1;
+    await backfillUserRecord(docClient, tableName, userId, user.games ?? [], dryRun, stats);
+    return stats;
+  }
+
+  const users = await scanAllUsers(docClient, tableName);
+  stats.users = users.length;
+  console.log(`  found ${users.length} USER records`);
+
+  for (const user of users) {
+    await backfillUserRecord(docClient, tableName, user.sk, user.games ?? [], dryRun, stats);
+  }
+
+  return stats;
+}
+
+async function backfillMetaCounts(docClient, tableName, dryRun) {
+  const stats = {};
+
+  console.log('\nBackfilling METAGAMES#<metaGame>/COUNTS from monolith…');
+
+  const data = await docClient.send(new GetCommand({
+    TableName: tableName,
+    Key: { pk: 'METAGAMES', sk: 'COUNTS' },
+  }));
+  const monolith = data.Item ?? {};
+
+  const metaGames = [];
+  gameinfo.forEach(g => metaGames.push(g.uid));
+
+  for (const metaGame of metaGames) {
+    const source = monolith[metaGame] ?? DEFAULT_META_GAME_COUNTS;
+    const ratingsKey = `${metaGame}_ratings`;
+    const ratingsValue = monolith[ratingsKey];
+    const ratingsCount = ratingsValue?.size ?? ratingsValue?.values?.length ?? 0;
+
+    const item = {
+      pk: `METAGAMES#${metaGame}`,
+      sk: 'COUNTS',
+      currentgames: source.currentgames ?? 0,
+      completedgames: source.completedgames ?? 0,
+      standingchallenges: source.standingchallenges ?? 0,
+      stars: source.stars ?? 0,
+      ratingsCount,
+    };
+
+    await putIfAbsent(docClient, tableName, item, dryRun, stats, 'metaCounts');
+  }
+
+  stats.metaGames = metaGames.length;
+  return stats;
+}
+
+function printStats(label, stats) {
+  console.log(`\n${label}:`);
+  for (const [key, value] of Object.entries(stats).sort()) {
+    console.log(`  ${key}: ${value}`);
+  }
+}
+
+async function main() {
+  const { stage, dryRun, step, userId } = parseArgs(process.argv);
+  const { profile, table } = STAGES[stage];
+
+  const client = new DynamoDBClient({
+    region: 'us-east-1',
+    profile,
+  });
+  const docClient = DynamoDBDocumentClient.from(client, {
+    marshallOptions: {
+      convertEmptyValues: false,
+      removeUndefinedValues: true,
+    },
+  });
+
+  console.log(`Stage: ${stage}`);
+  console.log(`Table: ${table}`);
+  console.log(`Profile: ${profile}`);
+  console.log(`Dry run: ${dryRun}`);
+  console.log(`Step: ${step}`);
+  if (userId) {
+    console.log(`User id: ${userId}`);
+  }
+  console.log(`Meta games in gameinfo: ${[...gameinfo.keys()].length}`);
+
+  if (step === 'user-index' || step === 'all') {
+    const stats = await backfillUserIndex(docClient, table, { dryRun, userId });
+    printStats('User index backfill', stats);
+  }
+
+  if (step === 'meta-counts' || step === 'all') {
+    if (userId) {
+      console.warn('\n--user-id is ignored for meta-counts step');
+    }
+    const stats = await backfillMetaCounts(docClient, table, dryRun);
+    printStats('Meta counts backfill', stats);
+  }
+
+  console.log('\nDone.');
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});

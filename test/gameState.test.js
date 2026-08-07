@@ -96,3 +96,30 @@ const storisendeGz = loadFixture('storisende-gz.txt');
     strict_1.default.equal(hydrated.state, saltireState);
     strict_1.default.equal(hydrated.pk, 'GAME');
 });
+(0, node_test_1.test)('setGameEndedFromEngine sets gameEnded and winner when game is over', () => {
+    const engine = (0, gameslib_1.GameFactory)('saltire', saltireState);
+    strict_1.default.ok(engine);
+    const game = {};
+    (0, gameState_1.setGameEndedFromEngine)(game, engine);
+    strict_1.default.equal(game.gameEnded, new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime());
+    strict_1.default.deepEqual(game.winner, engine.winner);
+    strict_1.default.equal(game.gameStarted, new Date(engine.stack[0]._timestamp).getTime());
+});
+(0, node_test_1.test)('setGameEndedFromEngine is a no-op for in-progress games', () => {
+    const engine = {
+        gameover: false,
+        winner: [1],
+        stack: [{ _timestamp: '2020-01-01T00:00:00.000Z' }],
+    };
+    const game = {};
+    (0, gameState_1.setGameEndedFromEngine)(game, engine);
+    strict_1.default.equal(game.gameEnded, undefined);
+    strict_1.default.equal(game.winner, undefined);
+});
+(0, node_test_1.test)('setGameEndedFromEngine preserves existing gameStarted', () => {
+    const engine = (0, gameslib_1.GameFactory)('saltire', saltireState);
+    strict_1.default.ok(engine);
+    const game = { gameStarted: 42 };
+    (0, gameState_1.setGameEndedFromEngine)(game, engine);
+    strict_1.default.equal(game.gameStarted, 42);
+});
