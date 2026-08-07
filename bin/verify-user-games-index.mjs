@@ -90,7 +90,7 @@ async function queryPartition(docClient, tableName, pk) {
     const page = await docClient.send(new QueryCommand({
       TableName: tableName,
       KeyConditionExpression: '#pk = :pk',
-      ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
+      ExpressionAttributeNames: { '#pk': 'pk' },
       ExpressionAttributeValues: { ':pk': pk },
       ExclusiveStartKey: lastEvaluatedKey,
     }));
