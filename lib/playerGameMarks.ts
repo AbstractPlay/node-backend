@@ -145,6 +145,46 @@ export async function loadGameForMark(
   return undefined;
 }
 
+function applyEngineToSummary(
+  source: GameMarkSource,
+  summary: GameMarkSummary,
+  completed: boolean,
+): void {
+  if (!source.state) {
+    return;
+  }
+  try {
+    const stateStr = decompressGameState(source.state);
+    const engine = GameFactory(source.metaGame, stateStr);
+    if (!engine) {
+      return;
+    }
+    const lastTs = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
+    if (summary.numMoves === undefined) {
+      summary.numMoves = engine.stack.length - 1;
+    }
+    if (summary.gameStarted === undefined) {
+      summary.gameStarted = new Date(engine.stack[0]._timestamp).getTime();
+    }
+    if (summary.variants === undefined) {
+      summary.variants = engine.variants;
+    }
+    if (completed && summary.gameEnded === undefined) {
+      summary.gameEnded = lastTs;
+    }
+    if (engine.gameover) {
+      if (summary.gameEnded === undefined) {
+        summary.gameEnded = lastTs;
+      }
+      if (summary.winner === undefined) {
+        summary.winner = engine.winner;
+      }
+    }
+  } catch {
+    // leave derived fields unset; caller may apply fallbacks
+  }
+}
+
 export function buildGameSummary(source: GameMarkSource): GameMarkSummary {
   const summary: GameMarkSummary = {
     id: source.id,
@@ -169,33 +209,30 @@ export function buildGameSummary(source: GameMarkSource): GameMarkSummary {
   if (source.commented !== undefined) {
     summary.commented = source.commented;
   }
-  if (!isCompletedToMove(source.toMove)) {
+  const completed = isCompletedToMove(source.toMove);
+  if (!completed) {
     summary.toMove = source.toMove;
   }
 
   if (source.numMoves !== undefined) {
     summary.numMoves = source.numMoves;
-  } else if (source.state) {
-    try {
-      const stateStr = decompressGameState(source.state);
-      const engine = GameFactory(source.metaGame, stateStr);
-      if (engine) {
-        summary.numMoves = engine.stack.length - 1;
-        if (summary.gameStarted === undefined) {
-          summary.gameStarted = new Date(engine.stack[0]._timestamp).getTime();
-        }
-        if (engine.gameover) {
-          summary.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
-          summary.winner = engine.winner;
-        }
-        if (summary.variants === undefined) {
-          summary.variants = engine.variants;
-        }
-      }
-    } catch {
-      // leave numMoves unset
-    }
   }
+
+  const needsEngine =
+    summary.numMoves === undefined
+    || summary.gameStarted === undefined
+    || summary.variants === undefined
+    || (completed && summary.gameEnded === undefined)
+    || (completed && summary.winner === undefined);
+
+  if (needsEngine) {
+    applyEngineToSummary(source, summary, completed);
+  }
+
+  if (completed && summary.gameEnded === undefined) {
+    summary.gameEnded = source.lastMoveTime;
+  }
+
   return summary;
 }
 

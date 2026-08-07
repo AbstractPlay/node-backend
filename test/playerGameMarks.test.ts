@@ -258,7 +258,56 @@ test('recommend rejects too-short completed game', () => {
     numMoves: 2,
   };
   const summary = buildGameSummary(source);
+  assert.equal(summary.gameEnded, 1);
   assert.equal(isQualityCompletedGame(source, summary), false);
+});
+
+test('buildGameSummary derives gameEnded for completed game when numMoves already set', () => {
+  const source: GameMarkSource = {
+    id: GAME_ID,
+    metaGame: META,
+    players: [{ id: PLAYER_A, name: 'a' }, { id: PLAYER_B, name: 'b' }],
+    clockHard: false,
+    toMove: '',
+    lastMoveTime: 1234567890,
+    numPlayers: 2,
+    numMoves: 41,
+  };
+  const summary = buildGameSummary(source);
+  assert.equal(summary.gameEnded, 1234567890);
+  assert.equal(summary.toMove, undefined);
+});
+
+test('buildGameSummary preserves source gameEnded when present', () => {
+  const source: GameMarkSource = {
+    id: GAME_ID,
+    metaGame: META,
+    players: [{ id: PLAYER_A, name: 'a' }, { id: PLAYER_B, name: 'b' }],
+    clockHard: false,
+    toMove: '',
+    lastMoveTime: 100,
+    gameEnded: 999,
+    numPlayers: 2,
+    numMoves: 10,
+  };
+  const summary = buildGameSummary(source);
+  assert.equal(summary.gameEnded, 999);
+});
+
+test('buildGameSummary does not set gameEnded for in-progress game', () => {
+  const source: GameMarkSource = {
+    id: GAME_ID,
+    metaGame: META,
+    players: [{ id: PLAYER_A, name: 'a' }, { id: PLAYER_B, name: 'b' }],
+    clockHard: false,
+    toMove: '0',
+    lastMoveTime: 1234567890,
+    numPlayers: 2,
+    numMoves: 5,
+  };
+  const summary = buildGameSummary(source);
+  assert.equal(summary.gameEnded, undefined);
+  assert.equal(summary.toMove, '0');
 });
 
 test('updateLastChatForWatchers sets lastChat without seen for non-commenter', async () => {

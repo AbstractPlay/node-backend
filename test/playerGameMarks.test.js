@@ -218,7 +218,53 @@ function userRecord(id, name) {
         numMoves: 2,
     };
     const summary = (0, playerGameMarks_1.buildGameSummary)(source);
+    strict_1.default.equal(summary.gameEnded, 1);
     strict_1.default.equal((0, playerGameMarks_1.isQualityCompletedGame)(source, summary), false);
+});
+(0, node_test_1.test)('buildGameSummary derives gameEnded for completed game when numMoves already set', () => {
+    const source = {
+        id: GAME_ID,
+        metaGame: META,
+        players: [{ id: PLAYER_A, name: 'a' }, { id: PLAYER_B, name: 'b' }],
+        clockHard: false,
+        toMove: '',
+        lastMoveTime: 1234567890,
+        numPlayers: 2,
+        numMoves: 41,
+    };
+    const summary = (0, playerGameMarks_1.buildGameSummary)(source);
+    strict_1.default.equal(summary.gameEnded, 1234567890);
+    strict_1.default.equal(summary.toMove, undefined);
+});
+(0, node_test_1.test)('buildGameSummary preserves source gameEnded when present', () => {
+    const source = {
+        id: GAME_ID,
+        metaGame: META,
+        players: [{ id: PLAYER_A, name: 'a' }, { id: PLAYER_B, name: 'b' }],
+        clockHard: false,
+        toMove: '',
+        lastMoveTime: 100,
+        gameEnded: 999,
+        numPlayers: 2,
+        numMoves: 10,
+    };
+    const summary = (0, playerGameMarks_1.buildGameSummary)(source);
+    strict_1.default.equal(summary.gameEnded, 999);
+});
+(0, node_test_1.test)('buildGameSummary does not set gameEnded for in-progress game', () => {
+    const source = {
+        id: GAME_ID,
+        metaGame: META,
+        players: [{ id: PLAYER_A, name: 'a' }, { id: PLAYER_B, name: 'b' }],
+        clockHard: false,
+        toMove: '0',
+        lastMoveTime: 1234567890,
+        numPlayers: 2,
+        numMoves: 5,
+    };
+    const summary = (0, playerGameMarks_1.buildGameSummary)(source);
+    strict_1.default.equal(summary.gameEnded, undefined);
+    strict_1.default.equal(summary.toMove, '0');
 });
 (0, node_test_1.test)('updateLastChatForWatchers sets lastChat without seen for non-commenter', async () => {
     store.set(itemKey({
