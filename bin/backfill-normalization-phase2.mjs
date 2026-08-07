@@ -4,10 +4,11 @@
  * Phase 2 normalization backfill (admin maintenance).
  *
  * Steps:
- *   user-index     — CURRENTGAMES# + USERGAME# from USER.games[] (insert-only)
- *   sync-overlays  — Phase 2b: upsert USERGAME# from USER.games[] + delete orphan rows
- *   meta-counts    — METAGAMES#<metaGame>/COUNTS from monolith METAGAMES/COUNTS
- *   all            — user-index + meta-counts (default; does not include sync-overlays)
+ *   user-index          — CURRENTGAMES# + USERGAME# from USER.games[] (insert-only)
+ *   sync-overlays       — Phase 2b: upsert USERGAME# from USER.games[] + delete orphan rows
+ *   sync-current-games  — Upsert CURRENTGAMES# from USER.games[] (fixes missing summary fields e.g. numMoves)
+ *   meta-counts         — METAGAMES#<metaGame>/COUNTS from monolith METAGAMES/COUNTS
+ *   all                 — user-index + meta-counts (default; does not include sync steps)
  *
  * Conditional writes skip rows that already exist (stream or prior backfill).
  *
@@ -55,9 +56,10 @@ function usage() {
 Options:
   --stage dev|prod          AWS profile + DynamoDB table (default: dev)
   --dry-run                 Count actions only; do not write
-  --step user-index|sync-overlays|meta-counts|all   Step (default: all)
+  --step user-index|sync-overlays|sync-current-games|meta-counts|all   Step (default: all)
   --sync-overlays           Shorthand for --step sync-overlays
-  --user-id <cognitoSub>    Single user (user-index or sync-overlays)
+  --sync-current-games      Shorthand for --step sync-current-games
+  --user-id <cognitoSub>    Single user (user-index, sync-overlays, or sync-current-games)
   --help, -h                Show this help
 `);
   process.exit(1);
@@ -81,6 +83,8 @@ function parseArgs(argv) {
       userId = argv[++i];
     } else if (arg === '--sync-overlays') {
       step = 'sync-overlays';
+    } else if (arg === '--sync-current-games') {
+      step = 'sync-current-games';
     } else if (arg === '--help' || arg === '-h') {
       usage();
     } else {
@@ -93,7 +97,7 @@ function parseArgs(argv) {
     console.error(`Unknown stage: ${stage}`);
     usage();
   }
-  if (!['user-index', 'sync-overlays', 'meta-counts', 'all'].includes(step)) {
+  if (!['user-index', 'sync-overlays', 'sync-current-games', 'meta-counts', 'all'].includes(step)) {
     console.error(`Unknown step: ${step}`);
     usage();
   }
@@ -116,6 +120,16 @@ function toCurrentSummaryFromUserGame(game) {
     lastMoveTime: game.lastMoveTime,
     variants: game.variants,
     gameStarted: game.gameStarted,
+    numMoves: game.numMoves ?? 0,
+  };
+}
+
+function currentGamesItemFromUserGame(userId, game) {
+  const summary = toCurrentSummaryFromUserGame(game);
+  return {
+    pk: `CURRENTGAMES#${userId}`,
+    sk: game.id,
+    ...summary,
   };
 }
 
@@ -320,6 +334,50 @@ async function syncOverlays(docClient, tableName, { dryRun, userId }) {
   return stats;
 }
 
+async function syncCurrentGamesForUser(docClient, tableName, userId, games, dryRun, stats) {
+  for (const game of games) {
+    if (!game?.id || !game.metaGame || !isActiveDashboardGame(game)) {
+      continue;
+    }
+    if (dryRun) {
+      stats.currentGamesUpserted = (stats.currentGamesUpserted ?? 0) + 1;
+      continue;
+    }
+    await docClient.send(new PutCommand({
+      TableName: tableName,
+      Item: currentGamesItemFromUserGame(userId, game),
+    }));
+    stats.currentGamesUpserted = (stats.currentGamesUpserted ?? 0) + 1;
+  }
+}
+
+async function syncCurrentGames(docClient, tableName, { dryRun, userId }) {
+  const stats = { users: 0 };
+
+  console.log('\nSyncing CURRENTGAMES# from USER.games[] active games (upsert)…');
+
+  if (userId) {
+    const user = await getUserRecord(docClient, tableName, userId);
+    if (!user) {
+      console.error(`No USER record for ${userId}`);
+      return stats;
+    }
+    stats.users = 1;
+    await syncCurrentGamesForUser(docClient, tableName, userId, user.games ?? [], dryRun, stats);
+    return stats;
+  }
+
+  const users = await scanAllUsers(docClient, tableName);
+  stats.users = users.length;
+  console.log(`  found ${users.length} USER records`);
+
+  for (const user of users) {
+    await syncCurrentGamesForUser(docClient, tableName, user.sk, user.games ?? [], dryRun, stats);
+  }
+
+  return stats;
+}
+
 async function backfillUserIndex(docClient, tableName, { dryRun, userId }) {
   const stats = { users: 0 };
 
@@ -424,6 +482,11 @@ async function main() {
   if (step === 'sync-overlays') {
     const stats = await syncOverlays(docClient, table, { dryRun, userId });
     printStats('USERGAME overlay sync', stats);
+  }
+
+  if (step === 'sync-current-games') {
+    const stats = await syncCurrentGames(docClient, table, { dryRun, userId });
+    printStats('CURRENTGAMES sync', stats);
   }
 
   if (step === 'meta-counts' || step === 'all') {

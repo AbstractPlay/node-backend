@@ -25,7 +25,7 @@ describe('parseGameSk', () => {
 });
 
 describe('toCurrentSummary', () => {
-  it('maps active game fields', () => {
+  it('maps active game fields including numMoves', () => {
     const summary = toCurrentSummary({
       pk: 'GAME',
       sk: 'saltire#0#g1',
@@ -39,11 +39,13 @@ describe('toCurrentSummary', () => {
       state: '{}',
       variants: ['v1'],
       gameStarted: 50,
+      numMoves: 12,
     });
     assert.equal(summary.id, 'g1');
     assert.equal(summary.metaGame, 'saltire');
     assert.equal(summary.noExplore, false);
     assert.deepEqual(summary.variants, ['v1']);
+    assert.equal(summary.numMoves, 12);
   });
 });
 

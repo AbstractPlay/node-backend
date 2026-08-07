@@ -36,6 +36,7 @@ export type CurrentGameIndexRow = {
   lastMoveTime: number;
   variants?: string[];
   gameStarted?: number;
+  numMoves?: number;
 };
 
 export function isActiveDashboardGame(game: { toMove?: string | boolean[] | null }): boolean {
@@ -43,7 +44,7 @@ export function isActiveDashboardGame(game: { toMove?: string | boolean[] | null
 }
 
 export function currentRowToGame(row: CurrentGameIndexRow): DashboardGame {
-  return {
+  const game: DashboardGame = {
     id: row.id ?? row.sk,
     metaGame: row.metaGame,
     players: row.players,
@@ -54,6 +55,10 @@ export function currentRowToGame(row: CurrentGameIndexRow): DashboardGame {
     variants: row.variants,
     gameStarted: row.gameStarted,
   };
+  if (row.numMoves !== undefined) {
+    game.numMoves = row.numMoves;
+  }
+  return game;
 }
 
 async function listCurrentGameRows(

@@ -159,10 +159,30 @@ async function main() {
   const missingUserGame = [...overlayIds].filter(id => !userGameIds.has(id));
   const extraUserGame = [...userGameIds].filter(id => !overlayIds.has(id));
 
+  const currentById = new Map(currentGames.map(row => [row.sk, row]));
+  const numMovesMismatches = [];
+  for (const game of activeGames) {
+    const row = currentById.get(game.id);
+    if (!row) {
+      continue;
+    }
+    const legacyMoves = game.numMoves ?? 0;
+    const indexMoves = row.numMoves ?? 0;
+    if (legacyMoves !== indexMoves) {
+      numMovesMismatches.push({
+        id: game.id,
+        metaGame: game.metaGame,
+        legacyMoves,
+        indexMoves,
+      });
+    }
+  }
+
   const currentCountMatch = activeGames.length === currentGames.length;
   const currentIdsMatch = missingFromCurrent.length === 0 && extraInCurrent.length === 0;
   const userGameCountMatch = overlayGames.length === userGameRows.length;
   const userGameIdsMatch = missingUserGame.length === 0 && extraUserGame.length === 0;
+  const numMovesMatch = numMovesMismatches.length === 0;
 
   const phase3Ready = currentCountMatch && currentIdsMatch && userGameCountMatch && userGameIdsMatch;
 
@@ -182,9 +202,16 @@ async function main() {
   console.log(`  CURRENTGAMES id match:    ${currentIdsMatch ? 'yes' : 'NO'}`);
   console.log(`  USERGAME count match:     ${userGameCountMatch ? 'yes' : 'NO'}`);
   console.log(`  USERGAME id match:        ${userGameIdsMatch ? 'yes' : 'NO'}`);
+  console.log(`  CURRENTGAMES numMoves:    ${numMovesMatch ? 'yes' : 'NO'}`);
   console.log(`  READY FOR PHASE 3:        ${phase3Ready ? 'YES' : 'NO'}`);
 
-  if (verbose || !phase3Ready) {
+  if (verbose || !phase3Ready || !numMovesMatch) {
+    if (numMovesMismatches.length > 0) {
+      console.log('\nCURRENTGAMES# numMoves mismatch vs USER.games[]:');
+      for (const row of numMovesMismatches) {
+        console.log(`  ${row.id} (${row.metaGame}): legacy=${row.legacyMoves} index=${row.indexMoves}`);
+      }
+    }
     if (missingFromCurrent.length > 0) {
       console.log('\nActive in USER.games but missing from CURRENTGAMES#:');
       for (const id of missingFromCurrent) {
