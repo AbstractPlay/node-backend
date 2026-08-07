@@ -1,4 +1,11 @@
+import { GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
 import { gzipSync, gunzipSync } from 'zlib';
+
+type GameEndedTarget = {
+  gameEnded?: number;
+  winner?: number[];
+  gameStarted?: number;
+};
 
 export const GAME_STATE_COMPRESS_THRESHOLD_BYTES = 300_000;
 /** DynamoDB item limit is 400KB; leave headroom for non-state attributes. */
@@ -92,4 +99,18 @@ export function prepareGameStateForStorage<T extends { state: string }>(record: 
     return record;
   }
   return { ...record, state: compressed };
+}
+
+export function setGameEndedFromEngine(
+  game: GameEndedTarget,
+  engine: GameBase | GameBaseSimultaneous,
+): void {
+  if (!engine.gameover) {
+    return;
+  }
+  game.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
+  game.winner = engine.winner;
+  if (game.gameStarted === undefined && engine.stack.length > 0) {
+    game.gameStarted = new Date(engine.stack[0]._timestamp).getTime();
+  }
 }

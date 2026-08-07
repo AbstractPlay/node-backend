@@ -67,7 +67,7 @@ import {
   validateBotDisplayName,
 } from '../lib/botNames';
 import { testBotStatus, updateTestBot } from './testBot';
-import { hydrateGameState, prepareGameStateForStorage } from '../lib/gameState';
+import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } from '../lib/gameState';
 import {
   type PushOptions,
   deleteAllPushSubscriptions,
@@ -4689,6 +4689,7 @@ async function submitMove(userid: string, pars: {
         list.push(eventUpdates({ eventid: game.event, gameid: pars.id, winner: winners }))
       }
     }
+    setGameEndedFromEngine(game, engine);
     game.lastMoveTime = timestamp;
     const updateGame = sendCommandWithRetry<PutCommandOutput>(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -5118,6 +5119,7 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
   game.winner = engine.winner;
   game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   game.lastMoveTime = timestamp;
+  setGameEndedFromEngine(game, engine);
   const playerIDs = game.players.map((p: { id: any; }) => p.id);
   const players = await getPlayers(playerIDs);
 
@@ -5231,6 +5233,7 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
     game.winner = engine.winner;
     game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
     game.lastMoveTime = now;
+    setGameEndedFromEngine(game, engine);
 
     // this should be all the info we want to show on the "my games" summary page.
     const playerGame = {

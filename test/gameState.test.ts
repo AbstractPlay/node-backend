@@ -11,6 +11,7 @@ import {
   hydrateGameState,
   isCompressedGameState,
   prepareGameStateForStorage,
+  setGameEndedFromEngine,
 } from '../lib/gameState';
 
 function loadFixture(name: string): string {
@@ -113,4 +114,34 @@ test('hydrateGameState decompresses backend gz state', () => {
   assert.notEqual(hydrated, stored);
   assert.equal(hydrated.state, saltireState);
   assert.equal(hydrated.pk, 'GAME');
+});
+
+test('setGameEndedFromEngine sets gameEnded and winner when game is over', () => {
+  const engine = GameFactory('saltire', saltireState);
+  assert.ok(engine);
+  const game: { gameEnded?: number; winner?: number[]; gameStarted?: number } = {};
+  setGameEndedFromEngine(game, engine);
+  assert.equal(game.gameEnded, new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime());
+  assert.deepEqual(game.winner, engine.winner);
+  assert.equal(game.gameStarted, new Date(engine.stack[0]._timestamp).getTime());
+});
+
+test('setGameEndedFromEngine is a no-op for in-progress games', () => {
+  const engine = {
+    gameover: false,
+    winner: [1],
+    stack: [{ _timestamp: '2020-01-01T00:00:00.000Z' }],
+  };
+  const game: { gameEnded?: number; winner?: number[] } = {};
+  setGameEndedFromEngine(game, engine as unknown as Parameters<typeof setGameEndedFromEngine>[1]);
+  assert.equal(game.gameEnded, undefined);
+  assert.equal(game.winner, undefined);
+});
+
+test('setGameEndedFromEngine preserves existing gameStarted', () => {
+  const engine = GameFactory('saltire', saltireState);
+  assert.ok(engine);
+  const game = { gameStarted: 42 };
+  setGameEndedFromEngine(game, engine);
+  assert.equal(game.gameStarted, 42);
 });
