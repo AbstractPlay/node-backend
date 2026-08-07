@@ -68,6 +68,11 @@ import {
 } from '../lib/botNames';
 import { testBotStatus, updateTestBot } from './testBot';
 import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } from '../lib/gameState';
+import { loadDashboardGames } from '../lib/dashboardGames';
+import {
+  deleteUserGameOverlay,
+  upsertUserGameOverlay,
+} from '../lib/userGameOverlay';
 import {
   type PushOptions,
   deleteAllPushSubscriptions,
@@ -1928,9 +1933,17 @@ async function setSeenTime(userid: string, gameid: any) {
   const games = user.games;
   if (games !== undefined) {
     const thegame = games.find((g: { id: any; }) => g.id == gameid);
+    const now = Date.now();
     if (thegame !== undefined) {
-      thegame.seen = Date.now();
+      thegame.seen = now;
     }
+    await upsertUserGameOverlay(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userid,
+      gameid,
+      { seen: now },
+    );
   }
   return updateUserGames(userid, user.gamesUpdate, [gameid], games);
 }
@@ -2488,9 +2501,8 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
     const user = userData.Item as FullUser;
     if (user.email !== email)
       await updateUserEMail(claim);
-    let games = user.games;
-    if (games == undefined)
-      games = [];
+    const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+    let games = await loadDashboardGames(ddbDocClient, tableName, userId, user.games ?? []);
     if (fixGames) {
       console.log("games before", games);
       games = await getGamesForUser(userId);
@@ -2543,7 +2555,6 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
     const botIds: string[] = Array.from(user?.bots ?? new Set());
     const botsWork = getBots(botIds);
     const blockedWork = getPlayerRelationIds(userId, "BLOCKED#");
-    const tableName = process.env.ABSTRACT_PLAY_TABLE!;
     const watchedGamesWork = listWatchedGames(ddbDocClient, tableName, userId);
     const highlightsWork = listHighlights(ddbDocClient, tableName, userId);
     const representativesWork = listUserRecommendations(ddbDocClient, tableName, userId);
@@ -2683,6 +2694,11 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
 
     let data = null;
     console.log(`Fetching challenges`);
+    if (removedGameIDs.length > 0) {
+      await Promise.all(removedGameIDs.map(gameId =>
+        deleteUserGameOverlay(ddbDocClient, tableName, userId, gameId)
+      ));
+    }
     let tagData, paletteData, standingData, customizationData, botData;
     if (!pars || !pars.size || pars.size !== "small") {
       const challengesIssuedIDs: string[] = Array.from(user?.challenges_issued ?? new Set());
@@ -2830,6 +2846,12 @@ async function nextGame(userid: string) {
       };
     }
     const userRec = userData.Item as FullUser;
+    const games = await loadDashboardGames(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userid,
+      userRec.games ?? [],
+    );
 
     // get list of all games where it is your turn
     type GameWithTime = {
@@ -2837,7 +2859,7 @@ async function nextGame(userid: string) {
       remaining: number;
     };
     const yourturn: GameWithTime[] = [];
-    for (const game of userRec.games) {
+    for (const game of games) {
       const thisPlayerIdx = game.players.findIndex(p => p.id === userid);
       // explicitly this player's turn
       if ((Array.isArray(game.toMove) && game.toMove.length > thisPlayerIdx + 1 && game.toMove[thisPlayerIdx]) || (game.toMove === thisPlayerIdx.toString())) {
@@ -4709,8 +4731,17 @@ async function submitMove(userid: string, pars: {
       (player.games as Game[] ?? []).forEach(g => {
         if (g.id === playerGame.id) {
           if (player.id === userid) {
-            if (game.toMove === "" || game.toMove === null)
-              games.push({ ...playerGame, seen: Date.now() });
+            if (game.toMove === "" || game.toMove === null) {
+              const seen = Date.now();
+              games.push({ ...playerGame, seen });
+              list.push(upsertUserGameOverlay(
+                ddbDocClient,
+                process.env.ABSTRACT_PLAY_TABLE!,
+                player.id,
+                playerGame.id,
+                { seen },
+              ));
+            }
             else
               games.push(playerGame);
           }
@@ -5620,9 +5651,18 @@ async function updateLastChatForPlayers(
       game.lastChat = now;
       // if this is the user who added the comment/exploration, also update their `seen`
       // so it doesn't get flagged as new
+      const overlay = { lastChat: now } as { lastChat: number; seen?: number };
       if (pid === currentUserId) {
         game.seen = now + 10;
+        overlay.seen = now + 10;
       }
+      await upsertUserGameOverlay(
+        ddbDocClient,
+        process.env.ABSTRACT_PLAY_TABLE!,
+        pid,
+        gameId,
+        overlay,
+      );
       await updateUserGames(pid, user.gamesUpdate, [gameId], user.games);
       console.log(`Updated lastChat for user ${user.name} on game ${gameId}`);
     } else if (allowReAdd) {
@@ -5673,6 +5713,16 @@ async function updateLastChatForPlayers(
           user.games = [];
         }
         user.games.push(newGame);
+        await upsertUserGameOverlay(
+          ddbDocClient,
+          process.env.ABSTRACT_PLAY_TABLE!,
+          pid,
+          gameId,
+          {
+            lastChat: now,
+            ...(pid === currentUserId ? { seen: now + 10 } : {}),
+          },
+        );
         await updateUserGames(pid, user.gamesUpdate, [gameId], user.games);
         console.log(`Re-added completed game ${gameId} to user ${user.name}'s games list`);
       } else {
@@ -9235,6 +9285,13 @@ async function setLastSeen(userId: string, pars: { gameId: string; interval?: nu
       console.log(`Setting lastSeen for ${game.id} to ${then.getTime()} (${then.toUTCString()}). It is currently ${new Date().toUTCString()}`);
       // you need to set `lastChat` as well or chats near the end of the game will be flagged
       game.lastChat = then.getTime();
+      await upsertUserGameOverlay(
+        ddbDocClient,
+        process.env.ABSTRACT_PLAY_TABLE!,
+        userId,
+        pars.gameId,
+        { seen: then.getTime(), lastChat: then.getTime() },
+      );
       // save USER rec
       await ddbDocClient.send(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
