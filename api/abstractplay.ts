@@ -6,7 +6,7 @@ import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCo
 import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageRequest } from "@aws-sdk/client-sqs";
 import { CognitoIdentityProviderClient, CreateUserPoolClientCommand, DeleteUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { v4 as uuid } from 'uuid';
-import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
+import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush from "web-push";
 import { validateToken } from '@sunknudsen/totp';
@@ -81,6 +81,14 @@ import {
   savePushSubscription,
   sendPushToSubscriptions,
 } from '../lib/pushSubscriptions';
+import {
+  deletePlaygroundSave,
+  getPlaygroundSave,
+  listPlaygroundSaves,
+  putPlaygroundSave,
+  validatePlaygroundSaveInput,
+  type PlaygroundSaveInput,
+} from '../lib/playgroundSaves';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -318,13 +326,6 @@ type FullGame = {
   division?: number;
   noExplore?: boolean;
   commented?: number; // 0 or missing: no comments or post game variations, 1: has in-game comments (note this does NOT get updated for post-game comments/variations)
-}
-
-type Playground = {
-  pk: "PLAYGROUND";
-  sk: string;
-  metaGame: string;
-  state: string;
 }
 
 type Comment = {
@@ -770,12 +771,16 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await getPrivateExploration(event.cognitoPoolClaims.sub, pars);
     case "get_game":
       return await game(event.cognitoPoolClaims.sub, pars);
-    case "get_playground":
-      return await getPlayground(event.cognitoPoolClaims.sub, pars);
-    case "new_playground":
-      return await newPlayground(event.cognitoPoolClaims.sub, pars);
-    case "reset_playground":
-      return await resetPlayground(event.cognitoPoolClaims.sub);
+    case "list_playground_saves":
+      return await listPlaygroundSavesAuth(event.cognitoPoolClaims.sub);
+    case "get_playground_save":
+      return await getPlaygroundSaveAuth(event.cognitoPoolClaims.sub, pars);
+    case "create_playground_save":
+      return await createPlaygroundSaveAuth(event.cognitoPoolClaims.sub, pars);
+    case "save_playground_save":
+      return await savePlaygroundSaveAuth(event.cognitoPoolClaims.sub, pars);
+    case "delete_playground_save":
+      return await deletePlaygroundSaveAuth(event.cognitoPoolClaims.sub, pars);
     case "toggle_star":
       return await toggleStar(event.cognitoPoolClaims.sub, pars);
     case "watch_game":
@@ -1369,178 +1374,153 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
   }
 }
 
-async function newPlayground(userid: string, pars: { metaGame: string; state: string; }) {
-  console.log(`New playground request received:\nGame: ${pars.metaGame}\nState: ${pars.state}`);
-  // first make sure it's a 2-player non-simultaneous game
-  const info: APGamesInformation | undefined = gameinfo.get(pars.metaGame);
-  let valid = true;
-  if (info !== undefined) {
-    if ((!info.playercounts.includes(2)) || (info.flags.includes("simultaneous"))) {
-      valid = false;
-    }
-  } else {
-    valid = false;
-  }
-
-  if (!valid) {
-    console.log(`Invalid game (400)`);
-    return {
-      statusCode: 400,
-      headers
-    };
-  }
-
-  // initialize the playground
-  try {
-    // delete existing exploration
-    console.log(`Deleting existing exploration`);
-    const explorationQuery = ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + userid },
-        ExpressionAttributeNames: { "#pk": "pk" },
-      }));
-    const explorationData = await explorationQuery;
-    const explorationRecs = explorationData.Items;
-    if (explorationRecs !== undefined) {
-      const batches = Math.ceil(explorationRecs.length / 10);
-      for (let batch = 0; batch < batches; batch++) {
-        const subset = explorationRecs.slice(batch * 10, 10);
-        await ddbDocClient.send(
-          new BatchWriteCommand({
-            "RequestItems": {
-              [process.env.ABSTRACT_PLAY_TABLE!]: subset.map(item => ({
-                DeleteRequest: {
-                  Key: {
-                    pk: item.pk,
-                    sk: item.sk,
-                  }
-                }
-              }))
-            }
-          })
-        );
-      }
-    }
-
-    // create new playground record
-    console.log(`Creating playground record`);
-    const Item: Playground = {
-      pk: "PLAYGROUND",
-      sk: userid,
-      metaGame: pars.metaGame,
-      state: pars.state,
-    };
-    await ddbDocClient.send(
-      new PutCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item,
-      })
-    );
-    console.log(`Returning ${JSON.stringify(Item)}`);
-    return {
-      statusCode: 200,
-      body: JSON.stringify(Item),
-      headers
-    };
-  }
-  catch (error) {
-    handleCommonErrors(error as { code: any; message: any });
-    return formatReturnError(`Unable to create playground for ${userid}: ${error}`);
-  }
-}
-
-async function resetPlayground(userid: string) {
-  console.log(`Playground reset requested`);
-  try {
-    // delete existing exploration
-    console.log(`Deleting existing exploration`);
-    const explorationQuery = ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + userid },
-        ExpressionAttributeNames: { "#pk": "pk" },
-      }));
-    const explorationData = await explorationQuery;
-    const explorationRecs = explorationData.Items;
-    if (explorationRecs !== undefined) {
-      const batches = Math.ceil(explorationRecs.length / 10);
-      for (let batch = 0; batch < batches; batch++) {
-        const subset = explorationRecs.slice(batch * 10, 10);
-        await ddbDocClient.send(
-          new BatchWriteCommand({
-            "RequestItems": {
-              [process.env.ABSTRACT_PLAY_TABLE!]: subset.map(item => ({
-                DeleteRequest: {
-                  Key: {
-                    pk: item.pk,
-                    sk: item.sk,
-                  }
-                }
-              }))
-            }
-          })
-        );
-      }
-    }
-
-    // delete existing playground record
-    await ddbDocClient.send(
-      new DeleteCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "PLAYGROUND", "sk": userid
-        },
-      })
-    )
-    console.log(`Playground reset`);
-    return {
-      statusCode: 200,
-      headers
-    };
-  }
-  catch (error) {
-    handleCommonErrors(error as { code: any; message: any });
-    return formatReturnError(`Unable to reset playground for ${userid}: ${error}`);
-  }
-}
-
-async function getPlayground(userid: string, pars: any) {
-  try {
-    const getGame = ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "PLAYGROUND",
-          "sk": userid
-        },
-      }));
-
-    const gameData = await getGame;
-    const game = gameData.Item as Playground;
-    if (game === undefined) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify(null),
-        headers
-      };
-    } else {
-      return {
-        headers,
-        statusCode: 200,
-        body: JSON.stringify(game),
-      };
-    }
-  }
-  catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to get playground for user ${userid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-  }
-}
-
 type GameMarkPars = { metaGame: string; id: string };
+
+async function listPlaygroundSavesAuth(userId: string) {
+  try {
+    const saves = await listPlaygroundSaves(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify(saves),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to list playground saves for ${userId}`);
+  }
+}
+
+async function getPlaygroundSaveAuth(userId: string, pars: { id: string }) {
+  if (!pars?.id) {
+    return formatReturnError('id is required.');
+  }
+  try {
+    const save = await getPlaygroundSave(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      pars.id,
+    );
+    if (save === undefined) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ message: 'Playground save not found.' }),
+        headers,
+      };
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(save),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get playground save ${pars.id}`);
+  }
+}
+
+async function createPlaygroundSaveAuth(userId: string, pars: PlaygroundSaveInput) {
+  const validated = validatePlaygroundSaveInput(pars);
+  if (!validated.ok) {
+    return formatReturnError(validated.message);
+  }
+  const id = uuid();
+  try {
+    const record = await putPlaygroundSave(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      id,
+      validated.data,
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify(record),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to create playground save for ${userId}: ${error}`);
+  }
+}
+
+async function savePlaygroundSaveAuth(userId: string, pars: PlaygroundSaveInput & { id: string }) {
+  if (!pars?.id) {
+    return formatReturnError('id is required.');
+  }
+  const validated = validatePlaygroundSaveInput(pars);
+  if (!validated.ok) {
+    return formatReturnError(validated.message);
+  }
+  try {
+    const existing = await getPlaygroundSave(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      pars.id,
+    );
+    if (existing === undefined) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ message: 'Playground save not found.' }),
+        headers,
+      };
+    }
+    const record = await putPlaygroundSave(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      pars.id,
+      validated.data,
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify(record),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to save playground save ${pars.id}: ${error}`);
+  }
+}
+
+async function deletePlaygroundSaveAuth(userId: string, pars: { id: string }) {
+  if (!pars?.id) {
+    return formatReturnError('id is required.');
+  }
+  try {
+    const existing = await getPlaygroundSave(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      pars.id,
+    );
+    if (existing === undefined) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ message: 'Playground save not found.' }),
+        headers,
+      };
+    }
+    await deletePlaygroundSave(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      pars.id,
+    );
+    return {
+      statusCode: 200,
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to delete playground save ${pars.id}`);
+  }
+}
 
 function markResultResponse(result: MarkResult, successBody?: unknown) {
   if (!result.ok) {

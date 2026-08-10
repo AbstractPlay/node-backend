@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 /* eslint-env node */
 /**
- * Verify a user's dashboard game index readiness for Phase 3 cutover.
+ * Verify a user's dashboard index health (Phase 3+).
  *
- * Compares:
- *   - active games in USER.games[] (toMove set)
- *   - CURRENTGAMES#<userid> projected rows
- *   - USERGAME#<userid> overlay rows vs games with seen/lastChat in USER.games[]
+ * CURRENTGAMES# — active game summaries (stream-maintained):
+ *   - Count and ids vs USER.games[] active games
+ *   - numMoves vs legacy active entries
+ *
+ * USERGAME# — overlay source of truth for seen / lastChat (Phase 3 reads here first):
+ *   - Every row must belong to a game on the user's dashboard
+ *   - Legacy USER.games[] must have a USERGAME# row when it still carries overlay fields
+ *   - Index-only overlays (USERGAME# without legacy seen/lastChat) are expected after moves
+ *   - When both stores have a field, values should match (dual-write drift)
  *
  * Usage:
  *   node bin/verify-user-games-index.mjs <userid> [--stage dev|prod] [--verbose]
@@ -36,7 +41,7 @@ function usage() {
 
 Options:
   --stage dev|prod   AWS profile + DynamoDB table (default: dev)
-  --verbose          Print per-game details for mismatches
+  --verbose          Print per-game details (including expected index-only overlays)
   --help, -h         Show this help
 `);
   process.exit(1);
@@ -78,8 +83,19 @@ function isActiveDashboardGame(game) {
   return game.toMove !== '' && game.toMove !== null && game.toMove !== undefined;
 }
 
-function hasUserGameOverlay(game) {
+function hasLegacyOverlayFields(game) {
   return game.seen !== undefined || game.lastChat !== undefined;
+}
+
+function summarizeOverlay(source) {
+  const parts = [];
+  if (source.seen !== undefined) {
+    parts.push(`seen=${source.seen}`);
+  }
+  if (source.lastChat !== undefined) {
+    parts.push(`lastChat=${source.lastChat}`);
+  }
+  return parts.join(', ');
 }
 
 async function queryPartition(docClient, tableName, pk) {
@@ -104,15 +120,15 @@ async function queryPartition(docClient, tableName, pk) {
   return items;
 }
 
-function summarizeOverlay(game) {
-  const parts = [];
-  if (game.seen !== undefined) {
-    parts.push(`seen=${game.seen}`);
+function compareOverlayFields(legacy, indexRow) {
+  const mismatches = [];
+  if (legacy.seen !== undefined && indexRow.seen !== undefined && legacy.seen !== indexRow.seen) {
+    mismatches.push(`seen legacy=${legacy.seen} index=${indexRow.seen}`);
   }
-  if (game.lastChat !== undefined) {
-    parts.push(`lastChat=${game.lastChat}`);
+  if (legacy.lastChat !== undefined && indexRow.lastChat !== undefined && legacy.lastChat !== indexRow.lastChat) {
+    mismatches.push(`lastChat legacy=${legacy.lastChat} index=${indexRow.lastChat}`);
   }
-  return parts.join(', ');
+  return mismatches;
 }
 
 async function main() {
@@ -144,22 +160,26 @@ async function main() {
 
   const games = userData.Item.games ?? [];
   const activeGames = games.filter(isActiveDashboardGame);
-  const overlayGames = games.filter(hasUserGameOverlay);
+  const legacyOverlayGames = games.filter(hasLegacyOverlayFields);
 
   const currentGames = await queryPartition(docClient, table, `CURRENTGAMES#${userId}`);
   const userGameRows = await queryPartition(docClient, table, `USERGAME#${userId}`);
 
+  const legacyById = new Map(games.map(g => [g.id, g]));
+  const currentById = new Map(currentGames.map(row => [row.sk, row]));
+  const userGameById = new Map(userGameRows.map(row => [row.sk, row]));
+
+  const dashboardIds = new Set([
+    ...games.map(g => g.id),
+    ...currentGames.map(row => row.sk),
+  ]);
+
   const activeIds = new Set(activeGames.map(g => g.id));
   const currentIds = new Set(currentGames.map(g => g.sk));
-  const overlayIds = new Set(overlayGames.map(g => g.id));
-  const userGameIds = new Set(userGameRows.map(g => g.sk));
 
   const missingFromCurrent = [...activeIds].filter(id => !currentIds.has(id));
   const extraInCurrent = [...currentIds].filter(id => !activeIds.has(id));
-  const missingUserGame = [...overlayIds].filter(id => !userGameIds.has(id));
-  const extraUserGame = [...userGameIds].filter(id => !overlayIds.has(id));
 
-  const currentById = new Map(currentGames.map(row => [row.sk, row]));
   const numMovesMismatches = [];
   for (const game of activeGames) {
     const row = currentById.get(game.id);
@@ -178,34 +198,77 @@ async function main() {
     }
   }
 
+  const orphanUserGameRows = userGameRows.filter(row => !dashboardIds.has(row.sk));
+
+  const missingUserGameOverlays = legacyOverlayGames.filter(
+    game => !userGameById.has(game.id),
+  );
+
+  const indexOnlyOverlays = userGameRows.filter(row => {
+    if (!dashboardIds.has(row.sk)) {
+      return false;
+    }
+    const legacy = legacyById.get(row.sk);
+    return !legacy || !hasLegacyOverlayFields(legacy);
+  });
+
+  const overlayValueMismatches = [];
+  for (const game of legacyOverlayGames) {
+    const indexRow = userGameById.get(game.id);
+    if (!indexRow) {
+      continue;
+    }
+    const fieldMismatches = compareOverlayFields(game, indexRow);
+    if (fieldMismatches.length > 0) {
+      overlayValueMismatches.push({
+        id: game.id,
+        metaGame: game.metaGame,
+        details: fieldMismatches.join('; '),
+      });
+    }
+  }
+
   const currentCountMatch = activeGames.length === currentGames.length;
   const currentIdsMatch = missingFromCurrent.length === 0 && extraInCurrent.length === 0;
-  const userGameCountMatch = overlayGames.length === userGameRows.length;
-  const userGameIdsMatch = missingUserGame.length === 0 && extraUserGame.length === 0;
   const numMovesMatch = numMovesMismatches.length === 0;
+  const userGameOrphansClear = orphanUserGameRows.length === 0;
+  const userGameCoverageOk = missingUserGameOverlays.length === 0;
+  const overlayValuesMatch = overlayValueMismatches.length === 0;
 
-  const phase3Ready = currentCountMatch && currentIdsMatch && userGameCountMatch && userGameIdsMatch;
+  const indexHealthy = currentCountMatch
+    && currentIdsMatch
+    && numMovesMatch
+    && userGameOrphansClear
+    && userGameCoverageOk
+    && overlayValuesMatch;
 
   console.log(`User: ${userData.Item.name ?? userId}`);
   console.log(`Stage: ${stage}`);
   console.log(`Table: ${table}`);
   console.log('');
   console.log('Counts:');
-  console.log(`  USER.games total:              ${games.length}`);
-  console.log(`  USER.games active (toMove set): ${activeGames.length}`);
-  console.log(`  CURRENTGAMES# rows:            ${currentGames.length}`);
-  console.log(`  USER.games with seen/lastChat: ${overlayGames.length}`);
-  console.log(`  USERGAME# rows:                ${userGameRows.length}`);
+  console.log(`  USER.games total:                 ${games.length}`);
+  console.log(`  USER.games active (toMove set):   ${activeGames.length}`);
+  console.log(`  CURRENTGAMES# rows:               ${currentGames.length}`);
+  console.log(`  USER.games legacy overlay fields: ${legacyOverlayGames.length}`);
+  console.log(`  USERGAME# rows (index overlays):  ${userGameRows.length}`);
+  console.log(`  USERGAME# index-only (expected):  ${indexOnlyOverlays.length}`);
   console.log('');
-  console.log('Phase 3 readiness:');
-  console.log(`  CURRENTGAMES count match: ${currentCountMatch ? 'yes' : 'NO'}`);
-  console.log(`  CURRENTGAMES id match:    ${currentIdsMatch ? 'yes' : 'NO'}`);
-  console.log(`  USERGAME count match:     ${userGameCountMatch ? 'yes' : 'NO'}`);
-  console.log(`  USERGAME id match:        ${userGameIdsMatch ? 'yes' : 'NO'}`);
-  console.log(`  CURRENTGAMES numMoves:    ${numMovesMatch ? 'yes' : 'NO'}`);
-  console.log(`  READY FOR PHASE 3:        ${phase3Ready ? 'YES' : 'NO'}`);
+  console.log('CURRENTGAMES# (active games):');
+  console.log(`  count match:  ${currentCountMatch ? 'yes' : 'NO'}`);
+  console.log(`  id match:     ${currentIdsMatch ? 'yes' : 'NO'}`);
+  console.log(`  numMoves:     ${numMovesMatch ? 'yes' : 'NO'}`);
+  console.log('');
+  console.log('USERGAME# (seen / lastChat — index is source of truth):');
+  console.log(`  no orphan rows:        ${userGameOrphansClear ? 'yes' : 'NO'}`);
+  console.log(`  legacy coverage:       ${userGameCoverageOk ? 'yes' : 'NO'}`);
+  console.log(`  dual-write values:     ${overlayValuesMatch ? 'yes' : 'NO'}`);
+  console.log('');
+  console.log(`INDEX HEALTHY: ${indexHealthy ? 'YES' : 'NO'}`);
 
-  if (verbose || !phase3Ready || !numMovesMatch) {
+  const showDetails = verbose || !indexHealthy;
+
+  if (showDetails) {
     if (numMovesMismatches.length > 0) {
       console.log('\nCURRENTGAMES# numMoves mismatch vs USER.games[]:');
       for (const row of numMovesMismatches) {
@@ -226,30 +289,35 @@ async function main() {
         console.log(`  ${id} (${row?.metaGame ?? 'unknown'})`);
       }
     }
-    if (missingUserGame.length > 0) {
-      console.log('\nOverlay expected in USERGAME# but missing:');
-      for (const id of missingUserGame) {
-        const game = overlayGames.find(g => g.id === id);
-        console.log(`  ${id} (${summarizeOverlay(game)})`);
+    if (orphanUserGameRows.length > 0) {
+      console.log('\nUSERGAME# orphan rows (not on dashboard — safe to delete):');
+      for (const row of orphanUserGameRows) {
+        console.log(`  ${row.sk} (${summarizeOverlay(row)})`);
       }
     }
-    if (extraUserGame.length > 0) {
-      console.log('\nUSERGAME# rows without overlay source in USER.games:');
-      for (const id of extraUserGame) {
-        const row = userGameRows.find(g => g.sk === id);
-        const parts = [];
-        if (row?.seen !== undefined) {
-          parts.push(`seen=${row.seen}`);
-        }
-        if (row?.lastChat !== undefined) {
-          parts.push(`lastChat=${row.lastChat}`);
-        }
-        console.log(`  ${id} (${parts.join(', ')})`);
+    if (missingUserGameOverlays.length > 0) {
+      console.log('\nLegacy USER.games overlay fields missing from USERGAME#:');
+      for (const game of missingUserGameOverlays) {
+        console.log(`  ${game.id} (${game.metaGame ?? 'unknown'}): ${summarizeOverlay(game)}`);
+      }
+    }
+    if (overlayValueMismatches.length > 0) {
+      console.log('\nDual-write overlay value mismatch (both stores set, values differ):');
+      for (const row of overlayValueMismatches) {
+        console.log(`  ${row.id} (${row.metaGame}): ${row.details}`);
+      }
+    }
+    if (verbose && indexOnlyOverlays.length > 0) {
+      console.log('\nUSERGAME# index-only overlays (expected after Phase 3 — not an error):');
+      for (const row of indexOnlyOverlays) {
+        const legacy = legacyById.get(row.sk);
+        const metaGame = legacy?.metaGame ?? currentById.get(row.sk)?.metaGame ?? 'unknown';
+        console.log(`  ${row.sk} (${metaGame}): ${summarizeOverlay(row)}`);
       }
     }
   }
 
-  process.exit(phase3Ready ? 0 : 1);
+  process.exit(indexHealthy ? 0 : 1);
 }
 
 main().catch(err => {
