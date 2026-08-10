@@ -6,8 +6,9 @@
  * Steps:
  *   user-index          — CURRENTGAMES# + USERGAME# from USER.games[] (insert-only)
  *   sync-overlays       — Phase 2b: upsert USERGAME# from USER.games[] + delete orphan rows
- *   sync-current-games  — Upsert CURRENTGAMES# from USER.games[] (fixes missing summary fields e.g. numMoves)
- *   meta-counts         — METAGAMES#<metaGame>/COUNTS from monolith METAGAMES/COUNTS
+ *   sync-current-games     — Upsert CURRENTGAMES# from USER.games[] (fixes missing summary fields e.g. numMoves)
+ *   purge-usergame-orphans — Delete USERGAME# rows for games not on the user's dashboard
+ *   meta-counts            — METAGAMES#<metaGame>/COUNTS from monolith METAGAMES/COUNTS
  *   all                 — user-index + meta-counts (default; does not include sync steps)
  *
  * Conditional writes skip rows that already exist (stream or prior backfill).
@@ -56,10 +57,11 @@ function usage() {
 Options:
   --stage dev|prod          AWS profile + DynamoDB table (default: dev)
   --dry-run                 Count actions only; do not write
-  --step user-index|sync-overlays|sync-current-games|meta-counts|all   Step (default: all)
+  --step user-index|sync-overlays|sync-current-games|purge-usergame-orphans|meta-counts|all   Step (default: all)
   --sync-overlays           Shorthand for --step sync-overlays
   --sync-current-games      Shorthand for --step sync-current-games
-  --user-id <cognitoSub>    Single user (user-index, sync-overlays, or sync-current-games)
+  --purge-usergame-orphans  Shorthand for --step purge-usergame-orphans
+  --user-id <cognitoSub>    Single user (user-index, sync-overlays, sync-current-games, purge-usergame-orphans)
   --help, -h                Show this help
 `);
   process.exit(1);
@@ -85,6 +87,8 @@ function parseArgs(argv) {
       step = 'sync-overlays';
     } else if (arg === '--sync-current-games') {
       step = 'sync-current-games';
+    } else if (arg === '--purge-usergame-orphans') {
+      step = 'purge-usergame-orphans';
     } else if (arg === '--help' || arg === '-h') {
       usage();
     } else {
@@ -97,7 +101,7 @@ function parseArgs(argv) {
     console.error(`Unknown stage: ${stage}`);
     usage();
   }
-  if (!['user-index', 'sync-overlays', 'sync-current-games', 'meta-counts', 'all'].includes(step)) {
+  if (!['user-index', 'sync-overlays', 'sync-current-games', 'purge-usergame-orphans', 'meta-counts', 'all'].includes(step)) {
     console.error(`Unknown step: ${step}`);
     usage();
   }
@@ -378,6 +382,91 @@ async function syncCurrentGames(docClient, tableName, { dryRun, userId }) {
   return stats;
 }
 
+async function queryPartition(docClient, tableName, pk) {
+  const items = [];
+  let lastEvaluatedKey;
+
+  do {
+    const page = await docClient.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: '#pk = :pk',
+      ExpressionAttributeNames: { '#pk': 'pk' },
+      ExpressionAttributeValues: { ':pk': pk },
+      ExclusiveStartKey: lastEvaluatedKey,
+    }));
+
+    for (const item of page.Items ?? []) {
+      items.push(item);
+    }
+    lastEvaluatedKey = page.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return items;
+}
+
+function dashboardGameIds(games, currentGameRows) {
+  const ids = new Set();
+  for (const game of games) {
+    if (game?.id) {
+      ids.add(game.id);
+    }
+  }
+  for (const row of currentGameRows) {
+    if (row.sk) {
+      ids.add(row.sk);
+    }
+  }
+  return ids;
+}
+
+async function purgeUserGameOrphansForUser(docClient, tableName, userId, games, dryRun, stats) {
+  const currentRows = await queryPartition(docClient, tableName, `CURRENTGAMES#${userId}`);
+  const onDashboard = dashboardGameIds(games, currentRows);
+  const userGameRows = await queryUserGameRows(docClient, tableName, userId);
+
+  for (const row of userGameRows) {
+    if (onDashboard.has(row.sk)) {
+      continue;
+    }
+    if (dryRun) {
+      stats.userGamesDeleted = (stats.userGamesDeleted ?? 0) + 1;
+      continue;
+    }
+    await docClient.send(new DeleteCommand({
+      TableName: tableName,
+      Key: { pk: row.pk, sk: row.sk },
+    }));
+    stats.userGamesDeleted = (stats.userGamesDeleted ?? 0) + 1;
+  }
+}
+
+async function purgeUserGameOrphans(docClient, tableName, { dryRun, userId }) {
+  const stats = { users: 0 };
+
+  console.log('\nPurging USERGAME# rows not on user dashboard…');
+
+  if (userId) {
+    const user = await getUserRecord(docClient, tableName, userId);
+    if (!user) {
+      console.error(`No USER record for ${userId}`);
+      return stats;
+    }
+    stats.users = 1;
+    await purgeUserGameOrphansForUser(docClient, tableName, userId, user.games ?? [], dryRun, stats);
+    return stats;
+  }
+
+  const users = await scanAllUsers(docClient, tableName);
+  stats.users = users.length;
+  console.log(`  found ${users.length} USER records`);
+
+  for (const user of users) {
+    await purgeUserGameOrphansForUser(docClient, tableName, user.sk, user.games ?? [], dryRun, stats);
+  }
+
+  return stats;
+}
+
 async function backfillUserIndex(docClient, tableName, { dryRun, userId }) {
   const stats = { users: 0 };
 
@@ -487,6 +576,11 @@ async function main() {
   if (step === 'sync-current-games') {
     const stats = await syncCurrentGames(docClient, table, { dryRun, userId });
     printStats('CURRENTGAMES sync', stats);
+  }
+
+  if (step === 'purge-usergame-orphans') {
+    const stats = await purgeUserGameOrphans(docClient, table, { dryRun, userId });
+    printStats('USERGAME orphan purge', stats);
   }
 
   if (step === 'meta-counts' || step === 'all') {
