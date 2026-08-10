@@ -42,7 +42,7 @@ Each `USER` record holds a denormalized `games` array for the dashboard (id, met
 
 ## Playground
 
-Sandbox games use `PLAYGROUND` records (`pk: PLAYGROUND`, `sk: <userid>`) — separate from live `GAME` records. Queries: `get_playground`, `new_playground`, `reset_playground`.
+Users can save unlimited playground positions. Each save is stored as `pk: PLAYGROUND#<userid>`, `sk: <uuid>` with `name`, `metaGame`, `date`, and `body` (JSON; auto-compressed when large). Queries: `list_playground_saves`, `get_playground_save`, `create_playground_save`, `save_playground_save`, `delete_playground_save`.
 
 ## Record types
 

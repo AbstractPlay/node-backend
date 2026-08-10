@@ -81,9 +81,11 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `save_exploration` | Save exploration branch | game + move tree |
 | `get_exploration` | Load exploration | game, user, move |
 | `get_private_exploration` | Private exploration | game, user, move |
-| `get_playground` | Sandbox state | — |
-| `new_playground` | Create sandbox | metaGame, variants |
-| `reset_playground` | Clear sandbox | — |
+| `list_playground_saves` | List user's playground saves (metadata only) | — |
+| `get_playground_save` | Load one playground save | `id` |
+| `create_playground_save` | Create playground save | `name`, `metaGame`, `date`, `body` |
+| `save_playground_save` | Overwrite playground save | `id`, `name`, `metaGame`, `date`, `body` |
+| `delete_playground_save` | Delete playground save | `id` |
 
 ## Tournaments
 

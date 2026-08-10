@@ -101,6 +101,22 @@ export function prepareGameStateForStorage<T extends { state: string }>(record: 
   return { ...record, state: compressed };
 }
 
+export function hydratePlaygroundBody<T extends { body: string }>(record: T): T {
+  const decompressed = decompressGameState(record.body);
+  if (decompressed === record.body) {
+    return record;
+  }
+  return { ...record, body: decompressed };
+}
+
+export function preparePlaygroundBodyForStorage<T extends { body: string }>(record: T): T {
+  const compressed = compressGameStateIfNeeded(record.body);
+  if (compressed === record.body) {
+    return record;
+  }
+  return { ...record, body: compressed };
+}
+
 export function setGameEndedFromEngine(
   game: GameEndedTarget,
   engine: GameBase | GameBaseSimultaneous,

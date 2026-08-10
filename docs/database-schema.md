@@ -46,9 +46,14 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `CUSTOMIZATION#<userid>`
   - sk: `<metaGame>`
 
-- **Playground** — sandbox game state for a user
-  - pk: `PLAYGROUND`
-  - sk: `<userid>`
+- **Playground saves** — per-user saved playground positions (unlimited slots)
+  - pk: `PLAYGROUND#<userid>`
+  - sk: `<uuid>`
+  - fields: `id`, `name`, `metaGame`, `date` (epoch ms), `body` (JSON string; gzip-compressed when large)
+
+**Retired (no longer written; purge via `node bin/purge-playground.mjs --stage prod`):**
+
+- pk: `PLAYGROUND`, sk: `<userid>` — legacy single-slot sandbox
 
 - **Player relations** — blocking (bidirectional)
   - pk: `PLAYER#<blockingPlayerId>`, sk: `BLOCKED#<blockedPlayerId>`
