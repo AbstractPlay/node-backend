@@ -4693,6 +4693,7 @@ async function submitMove(userid: string, pars: {
       }
     }
     setGameEndedFromEngine(game, engine);
+    game.numMoves = engine.stack.length - 1;
     game.lastMoveTime = timestamp;
     const updateGame = sendCommandWithRetry<PutCommandOutput>(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -5521,10 +5522,10 @@ function applyMove(
   }
 
   game.state = engine.serialize();
+  game.numMoves = engine.state().stack.length - 1;
   if (engine.gameover) {
     game.toMove = "";
     game.winner = engine.winner;
-    game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   } else {
     if ((!("currplayer" in engine)) || (engine.currplayer === undefined) || (engine.currplayer === null) || (typeof engine.currplayer !== "number")) {
       throw new Error("The engine must provide a current player for `applyMove()` to be able to function.");
@@ -9071,6 +9072,7 @@ async function invokePie(userid: string, pars: { id: string, metaGame: string, c
         // to change)
         const otherPlayer = game.players.find(p => p.id !== userid)!;
         otherPlayer.time = otherPlayer.time! + timeUsed;
+        game.numMoves = engine.state().stack.length - 1;
       }
 
       // this should be all the info we want to show on the "my games" summary page.
