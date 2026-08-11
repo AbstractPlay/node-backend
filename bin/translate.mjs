@@ -4,10 +4,22 @@ import path from "path";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+const ES_US_DIALECT = [
+  "Use Latin American Spanish as spoken in the United States (es-US).",
+  'Use "ustedes" (not "vosotros"), LatAm vocabulary (e.g. computadora, celular, aplicación), and informal "tú" for game UI where natural.',
+  "Avoid European Spanish forms (vuestro, os, ordenador).",
+  "Use standard board-game terms (Pasar, Rendirse, Tablero, etc.).",
+].join(" ");
+
 const TARGET_LANGUAGES = [
   { code: "fr", name: "French" },
   { code: "de", name: "German" },
   { code: "it", name: "Italian" },
+  {
+    code: "es-US",
+    name: "Latin American Spanish (United States)",
+    dialect: ES_US_DIALECT,
+  },
 ];
 
 function localeRoots(sourcePath) {
@@ -129,6 +141,20 @@ function buildCleanTargetData(sourceData, targetData) {
   return cleanTargetData;
 }
 
+function buildPrompt(lang) {
+  const dialectBlock = lang.dialect ? `\n\nDIALECT:\n${lang.dialect}` : "";
+  return `You are an expert translator specializing in UI strings for abstract strategy board games (like Chess, Go, Tak, etc.).
+Translate the provided JSON key-value pairs from English to ${lang.name} (${lang.code}).${dialectBlock}
+
+STRICT RULES:
+1. Preserve all placeholders verbatim (e.g. {{count}}, {{player}}, {0}, %s, HTML tags). Do not modify variables inside braces.
+2. Use natural tabletop gaming terms (e.g., "Pass", "Resign", "Stalemate", "Hand", "Pip", "Board").
+3. Return a JSON object matching the exact input keys supplied, with translated string values.
+4. Preserve all Markdown syntax exactly: [text](url), *italic*, **bold**, \`code\`, bullet lists, and literal \\n newlines.
+5. Return ONLY valid JSON. Escape all double quotes inside string values as \\". Do not use smart or curly quotes.
+6. Do not translate URLs, placeholder tokens, or content inside backticks unless natural in the target language.`;
+}
+
 async function translateFile(sourcePath) {
   if (!fs.existsSync(sourcePath)) {
     console.error(`File not found: ${sourcePath}`);
@@ -167,15 +193,7 @@ async function translateFile(sourcePath) {
 
     console.log(`[${lang.code}] ${fileName}: Translating ${keysToTranslate.length} new/updated keys...`);
 
-    const prompt = `
-    You are an expert translator specializing in UI strings for abstract strategy board games (like Chess, Go, Tak, etc.).
-    Translate the provided JSON key-value pairs from English to ${lang.name}.
-
-    STRICT RULES:
-    1. Preserve all placeholders verbatim (e.g. {{count}}, {{player}}, {0}, %s, HTML tags). Do not modify variables inside braces.
-    2. Use natural tabletop gaming terms (e.g., "Pass", "Resign", "Stalemate", "Hand", "Pip", "Board").
-    3. Return a JSON object matching the exact input keys supplied, with translated string values.
-    `;
+    const prompt = buildPrompt(lang);
 
     try {
       const response = await ai.models.generateContent({
