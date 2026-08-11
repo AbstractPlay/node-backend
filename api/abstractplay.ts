@@ -15,11 +15,25 @@ import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
 import de from '../locales/de/apback.json';
 import it from '../locales/it/apback.json';
+import esUS from '../locales/es-US/apback.json';
 import pt from '../locales/pt/apback.json';
 import ta from '../locales/ta/apback.json';
 
-const LOCALE_RESOURCES = { en, fr, de, it, pt, ta } as const;
+const LOCALE_RESOURCES = { en, fr, de, it, "es-US": esUS, pt, ta } as const;
 const REGISTERED_LANGUAGES = Object.keys(LOCALE_RESOURCES);
+
+function resolvePlayerLanguage(language: string | undefined): string {
+  if (language && REGISTERED_LANGUAGES.includes(language)) {
+    return language;
+  }
+  if (language) {
+    const lower = language.toLowerCase();
+    if (lower === "es" || lower.startsWith("es-")) {
+      return "es-US";
+    }
+  }
+  return "en";
+}
 import { wsBroadcast } from '../lib/wsBroadcast';
 import { checkInGameCommentAuth } from '../lib/commentAuth';
 import {
@@ -9833,9 +9847,7 @@ function shuffle(array: any[]) {
 }
 
 export async function changeLanguageForPlayer(player: { language: string | undefined; }) {
-  const lng = player.language && REGISTERED_LANGUAGES.includes(player.language)
-    ? player.language
-    : 'en';
+  const lng = resolvePlayerLanguage(player.language);
   if (i18n.language !== lng) {
     await i18n.changeLanguage(lng);
   }
