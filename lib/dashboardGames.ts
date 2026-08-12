@@ -1,5 +1,10 @@
 import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import {
+  listRecentCompletedRows,
+  recentCompletedRowToGame,
+  type RecentCompletedIndexRow,
+} from './recentCompletedGames';
+import {
   applyOverlayFields,
   listUserGameOverlays,
   type UserGameOverlay,
@@ -89,42 +94,74 @@ async function listCurrentGameRows(
 
 export function mergeDashboardGames(
   currentRows: CurrentGameIndexRow[],
+  recentCompletedRows: RecentCompletedIndexRow[],
   overlays: Map<string, UserGameOverlay>,
   legacyGames: DashboardGame[],
 ): DashboardGame[] {
   const legacyById = new Map(legacyGames.map(game => [game.id, game]));
-  const indexById = new Map(
+  const activeById = new Map(
     currentRows.map(row => {
       const game = currentRowToGame(row);
       return [game.id, applyOverlayFields(game, overlays.get(game.id), legacyById.get(game.id))];
     }),
   );
-  const useIndex = currentRows.length > 0;
+  const completedById = new Map(
+    recentCompletedRows.map(row => {
+      const game = recentCompletedRowToGame(row);
+      return [game.id, applyOverlayFields(game, overlays.get(game.id), legacyById.get(game.id))];
+    }),
+  );
+  const useActiveIndex = currentRows.length > 0;
+  const useCompletedIndex = recentCompletedRows.length > 0;
 
-  if (!useIndex) {
+  if (!useActiveIndex && !useCompletedIndex) {
     return legacyGames.map(game => applyOverlayFields({ ...game }, overlays.get(game.id), game));
   }
 
   const result: DashboardGame[] = [];
-  const emittedActive = new Set<string>();
+  const emitted = new Set<string>();
 
   for (const legacy of legacyGames) {
     if (isActiveDashboardGame(legacy)) {
-      const indexed = indexById.get(legacy.id);
-      if (indexed) {
-        result.push(indexed);
-        emittedActive.add(legacy.id);
+      if (useActiveIndex) {
+        const indexed = activeById.get(legacy.id);
+        if (indexed) {
+          result.push(indexed);
+          emitted.add(legacy.id);
+        } else {
+          result.push(applyOverlayFields({ ...legacy }, overlays.get(legacy.id), legacy));
+          emitted.add(legacy.id);
+        }
       } else {
         result.push(applyOverlayFields({ ...legacy }, overlays.get(legacy.id), legacy));
+        emitted.add(legacy.id);
+      }
+      continue;
+    }
+
+    if (useCompletedIndex) {
+      const indexed = completedById.get(legacy.id);
+      if (indexed) {
+        result.push(indexed);
+        emitted.add(legacy.id);
       }
     } else {
       result.push(applyOverlayFields({ ...legacy }, overlays.get(legacy.id), legacy));
+      emitted.add(legacy.id);
     }
   }
 
-  for (const [id, game] of indexById) {
-    if (!emittedActive.has(id)) {
+  for (const [id, game] of activeById) {
+    if (!emitted.has(id)) {
       result.push(game);
+      emitted.add(id);
+    }
+  }
+
+  for (const [id, game] of completedById) {
+    if (!emitted.has(id)) {
+      result.push(game);
+      emitted.add(id);
     }
   }
 
@@ -137,9 +174,10 @@ export async function loadDashboardGames(
   userId: string,
   legacyGames: DashboardGame[],
 ): Promise<DashboardGame[]> {
-  const [currentRows, overlays] = await Promise.all([
+  const [currentRows, recentCompletedRows, overlays] = await Promise.all([
     listCurrentGameRows(client, tableName, userId),
+    listRecentCompletedRows(client, tableName, userId),
     listUserGameOverlays(client, tableName, userId),
   ]);
-  return mergeDashboardGames(currentRows, overlays, legacyGames);
+  return mergeDashboardGames(currentRows, recentCompletedRows, overlays, legacyGames);
 }

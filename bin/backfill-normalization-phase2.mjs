@@ -7,6 +7,7 @@
  *   user-index          — CURRENTGAMES# + USERGAME# from USER.games[] (insert-only)
  *   sync-overlays       — Phase 2b: upsert USERGAME# from USER.games[] + delete orphan rows
  *   sync-current-games     — Upsert CURRENTGAMES# from USER.games[] (fixes missing summary fields e.g. numMoves)
+ *   sync-recent-completed  — Upsert RECENTCOMPLETED# from eligible USER.games[] completed entries (Phase 3b)
  *   purge-usergame-orphans — Delete USERGAME# rows for games not on the user's dashboard
  *   meta-counts            — METAGAMES#<metaGame>/COUNTS from monolith METAGAMES/COUNTS
  *   all                 — user-index + meta-counts (default; does not include sync steps)
@@ -15,7 +16,7 @@
  *
  * Usage:
  *   node bin/backfill-normalization-phase2.mjs [--stage dev|prod] [--dry-run]
- *     [--step user-index|sync-overlays|meta-counts|all] [--user-id <cognitoSub>]
+ *     [--step user-index|sync-overlays|sync-current-games|sync-recent-completed|purge-usergame-orphans|meta-counts|all] [--user-id <cognitoSub>]
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -57,11 +58,12 @@ function usage() {
 Options:
   --stage dev|prod          AWS profile + DynamoDB table (default: dev)
   --dry-run                 Count actions only; do not write
-  --step user-index|sync-overlays|sync-current-games|purge-usergame-orphans|meta-counts|all   Step (default: all)
+  --step user-index|sync-overlays|sync-current-games|sync-recent-completed|purge-usergame-orphans|meta-counts|all   Step (default: all)
   --sync-overlays           Shorthand for --step sync-overlays
   --sync-current-games      Shorthand for --step sync-current-games
+  --sync-recent-completed   Shorthand for --step sync-recent-completed
   --purge-usergame-orphans  Shorthand for --step purge-usergame-orphans
-  --user-id <cognitoSub>    Single user (user-index, sync-overlays, sync-current-games, purge-usergame-orphans)
+  --user-id <cognitoSub>    Single user (user-index, sync-overlays, sync-current-games, sync-recent-completed, purge-usergame-orphans)
   --help, -h                Show this help
 `);
   process.exit(1);
@@ -87,6 +89,8 @@ function parseArgs(argv) {
       step = 'sync-overlays';
     } else if (arg === '--sync-current-games') {
       step = 'sync-current-games';
+    } else if (arg === '--sync-recent-completed') {
+      step = 'sync-recent-completed';
     } else if (arg === '--purge-usergame-orphans') {
       step = 'purge-usergame-orphans';
     } else if (arg === '--help' || arg === '-h') {
@@ -101,7 +105,7 @@ function parseArgs(argv) {
     console.error(`Unknown stage: ${stage}`);
     usage();
   }
-  if (!['user-index', 'sync-overlays', 'sync-current-games', 'purge-usergame-orphans', 'meta-counts', 'all'].includes(step)) {
+  if (!['user-index', 'sync-overlays', 'sync-current-games', 'sync-recent-completed', 'purge-usergame-orphans', 'meta-counts', 'all'].includes(step)) {
     console.error(`Unknown step: ${step}`);
     usage();
   }
@@ -111,6 +115,48 @@ function parseArgs(argv) {
 
 function isActiveDashboardGame(game) {
   return game.toMove !== '' && game.toMove !== null && game.toMove !== undefined;
+}
+
+function toRecentCompletedSummaryFromUserGame(game) {
+  return {
+    id: game.id,
+    metaGame: game.metaGame,
+    players: game.players,
+    clockHard: game.clockHard,
+    noExplore: game.noExplore ?? false,
+    toMove: '',
+    lastMoveTime: game.lastMoveTime,
+    variants: game.variants,
+    gameStarted: game.gameStarted,
+    gameEnded: game.gameEnded,
+    winner: game.winner,
+    numMoves: game.numMoves ?? 0,
+    commented: game.commented,
+  };
+}
+
+const COMPLETED_DASHBOARD_RETENTION_MS = 7 * 24 * 3600000;
+
+function shouldBeOnCompletedDashboard(game, now = Date.now()) {
+  if (isActiveDashboardGame(game)) {
+    return false;
+  }
+  if (game.seen === undefined) {
+    return true;
+  }
+  if ((game.lastChat || 0) > game.seen) {
+    return true;
+  }
+  return now - game.seen <= COMPLETED_DASHBOARD_RETENTION_MS;
+}
+
+function recentCompletedItemFromUserGame(userId, game) {
+  const summary = toRecentCompletedSummaryFromUserGame(game);
+  return {
+    pk: `RECENTCOMPLETED#${userId}`,
+    sk: game.id,
+    ...summary,
+  };
 }
 
 function toCurrentSummaryFromUserGame(game) {
@@ -404,7 +450,7 @@ async function queryPartition(docClient, tableName, pk) {
   return items;
 }
 
-function dashboardGameIds(games, currentGameRows) {
+function dashboardGameIds(games, currentGameRows, recentCompletedRows) {
   const ids = new Set();
   for (const game of games) {
     if (game?.id) {
@@ -416,12 +462,63 @@ function dashboardGameIds(games, currentGameRows) {
       ids.add(row.sk);
     }
   }
+  for (const row of recentCompletedRows) {
+    if (row.sk) {
+      ids.add(row.sk);
+    }
+  }
   return ids;
 }
 
+async function syncRecentCompletedForUser(docClient, tableName, userId, games, dryRun, stats) {
+  for (const game of games) {
+    if (!game?.id || !game.metaGame || !shouldBeOnCompletedDashboard(game)) {
+      continue;
+    }
+    if (dryRun) {
+      stats.recentCompletedUpserted = (stats.recentCompletedUpserted ?? 0) + 1;
+      continue;
+    }
+    await docClient.send(new PutCommand({
+      TableName: tableName,
+      Item: recentCompletedItemFromUserGame(userId, game),
+    }));
+    stats.recentCompletedUpserted = (stats.recentCompletedUpserted ?? 0) + 1;
+  }
+}
+
+async function syncRecentCompleted(docClient, tableName, { dryRun, userId }) {
+  const stats = { users: 0 };
+
+  console.log('\nSyncing RECENTCOMPLETED# from USER.games[] eligible completed games (upsert)…');
+
+  if (userId) {
+    const user = await getUserRecord(docClient, tableName, userId);
+    if (!user) {
+      console.error(`No USER record for ${userId}`);
+      return stats;
+    }
+    stats.users = 1;
+    await syncRecentCompletedForUser(docClient, tableName, userId, user.games ?? [], dryRun, stats);
+    return stats;
+  }
+
+  const users = await scanAllUsers(docClient, tableName);
+  stats.users = users.length;
+  console.log(`  found ${users.length} USER records`);
+
+  for (const user of users) {
+    await syncRecentCompletedForUser(docClient, tableName, user.sk, user.games ?? [], dryRun, stats);
+  }
+
+  return stats;
+}
+
+
 async function purgeUserGameOrphansForUser(docClient, tableName, userId, games, dryRun, stats) {
   const currentRows = await queryPartition(docClient, tableName, `CURRENTGAMES#${userId}`);
-  const onDashboard = dashboardGameIds(games, currentRows);
+  const recentCompletedRows = await queryPartition(docClient, tableName, `RECENTCOMPLETED#${userId}`);
+  const onDashboard = dashboardGameIds(games, currentRows, recentCompletedRows);
   const userGameRows = await queryUserGameRows(docClient, tableName, userId);
 
   for (const row of userGameRows) {
@@ -576,6 +673,11 @@ async function main() {
   if (step === 'sync-current-games') {
     const stats = await syncCurrentGames(docClient, table, { dryRun, userId });
     printStats('CURRENTGAMES sync', stats);
+  }
+
+  if (step === 'sync-recent-completed') {
+    const stats = await syncRecentCompleted(docClient, table, { dryRun, userId });
+    printStats('RECENTCOMPLETED sync', stats);
   }
 
   if (step === 'purge-usergame-orphans') {
