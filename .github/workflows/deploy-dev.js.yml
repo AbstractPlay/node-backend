@@ -27,7 +27,7 @@ env:
     VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
     TOTP_KEY: ${{ secrets.TOTP_KEY }}
     OPENSSH_PRIVATE_KEY: ${{ secrets.OPENSSH_PRIVATE_KEY }}
-    # Dev bot pool (us-east-1_kqlqXHDJ5) — separate from prod; update secrets after createBot / test-bot client rotation
+    # Dev bot pool (us-east-1_kqlqXHDJ5) â€” separate from prod; update secrets after createBot / test-bot client rotation
     TEST_BOT_CLIENT_ID: ${{ secrets.TEST_BOT_CLIENT_ID }}
     TEST_BOT_CLIENT_SECRET: ${{ secrets.TEST_BOT_CLIENT_SECRET }}
 
@@ -109,7 +109,19 @@ jobs:
     - name: Trigger docs rebuild
       if: github.event_name == 'push'
       run: |
-        if git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -q '^docs/'; then
+        BEFORE="${{ github.event.before }}"
+        SHA="${{ github.sha }}"
+        if [[ "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
+          CHANGED=""
+          for commit in ${{ join(github.event.commits.*.id, ' ') }}; do
+            git fetch --depth=1 origin "$commit"
+            CHANGED+="$(git show --name-only --pretty=format: "$commit")"$'\n'
+          done
+        else
+          git fetch --depth=1 origin "$BEFORE"
+          CHANGED="$(git diff --name-only "$BEFORE" "$SHA")"
+        fi
+        if echo "$CHANGED" | grep -q '^docs/'; then
           curl -L \
             -X POST \
             -H "Accept: application/vnd.github+json" \
