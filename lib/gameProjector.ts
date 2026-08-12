@@ -199,6 +199,38 @@ async function deleteCurrentGamesForPlayers(
   ));
 }
 
+async function putRecentCompletedForPlayers(
+  docClient: DynamoDBDocumentClient,
+  tableName: string,
+  summary: ReturnType<typeof toCompletedSummary>,
+  playerIds: string[],
+): Promise<void> {
+  await Promise.all(playerIds.map(playerId =>
+    docClient.send(new PutCommand({
+      TableName: tableName,
+      Item: {
+        pk: `RECENTCOMPLETED#${playerId}`,
+        sk: summary.id,
+        ...summary,
+      },
+    }))
+  ));
+}
+
+async function deleteRecentCompletedForPlayers(
+  docClient: DynamoDBDocumentClient,
+  tableName: string,
+  gameId: string,
+  playerIds: string[],
+): Promise<void> {
+  await Promise.all(playerIds.map(playerId =>
+    docClient.send(new DeleteCommand({
+      TableName: tableName,
+      Key: { pk: `RECENTCOMPLETED#${playerId}`, sk: gameId },
+    }))
+  ));
+}
+
 async function putCompletedGameIndexes(
   docClient: DynamoDBDocumentClient,
   tableName: string,
@@ -278,9 +310,11 @@ async function handleCompletedGameInsert(
 ): Promise<void> {
   const numMoves = resolveNumMoves(game);
   const keepgame = shouldKeepCompletedGame(game, numMoves);
+  const playerIds = await humanPlayerIds(game.players);
   if (keepgame) {
     const summary = toCompletedSummary(game, numMoves);
     await putCompletedGameIndexes(docClient, tableName, game, summary);
+    await putRecentCompletedForPlayers(docClient, tableName, summary, playerIds);
   }
   const deltas: { currentgames: number; completedgames?: number } = { currentgames: -1 };
   if (keepgame) {
@@ -311,7 +345,9 @@ async function handleCompletedGameRemove(
   tableName: string,
   game: GameRecord,
 ): Promise<void> {
+  const playerIds = await humanPlayerIds(game.players);
   await deleteCompletedGameIndexes(docClient, tableName, game);
+  await deleteRecentCompletedForPlayers(docClient, tableName, game.id, playerIds);
   const numMoves = resolveNumMoves(game);
   if (shouldKeepCompletedGame(game, numMoves)) {
     await adjustShardedCounts(docClient, tableName, game.metaGame, {

@@ -16,6 +16,7 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 | `new_setting` | Update name, language, country, bggid, about | `attribute`, `value` |
 | `new_profile` | Bulk profile update | profile fields |
 | `set_lastSeen` | Update last-seen timestamp (participating or watched game) | `gameId`, optional `interval` |
+| `dismiss_completed_game` | Remove a completed game from the dashboard (does not delete game history) | `id` or `gameId` |
 | `toggle_star` | Favorite a metaGame | `metaGame` |
 
 ## Watch, highlight, and representative games
