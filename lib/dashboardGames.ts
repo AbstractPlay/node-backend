@@ -1,7 +1,10 @@
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import {
+  hasCurrentGameRow,
+  hasRecentCompletedRow,
   listRecentCompletedRows,
   recentCompletedRowToGame,
+  shouldBeOnCompletedDashboard,
   type RecentCompletedIndexRow,
 } from './recentCompletedGames';
 import {
@@ -115,7 +118,12 @@ export function mergeDashboardGames(
   const useCompletedIndex = recentCompletedRows.length > 0;
 
   if (!useActiveIndex && !useCompletedIndex) {
-    return legacyGames.map(game => applyOverlayFields({ ...game }, overlays.get(game.id), game));
+    return legacyGames
+      .filter(game => {
+        const withOverlay = applyOverlayFields({ ...game }, overlays.get(game.id), game);
+        return isActiveDashboardGame(withOverlay) || shouldBeOnCompletedDashboard(withOverlay);
+      })
+      .map(game => applyOverlayFields({ ...game }, overlays.get(game.id), game));
   }
 
   const result: DashboardGame[] = [];
@@ -146,8 +154,11 @@ export function mergeDashboardGames(
         emitted.add(legacy.id);
       }
     } else {
-      result.push(applyOverlayFields({ ...legacy }, overlays.get(legacy.id), legacy));
-      emitted.add(legacy.id);
+      const withOverlay = applyOverlayFields({ ...legacy }, overlays.get(legacy.id), legacy);
+      if (shouldBeOnCompletedDashboard(withOverlay)) {
+        result.push(withOverlay);
+        emitted.add(legacy.id);
+      }
     }
   }
 
@@ -166,6 +177,51 @@ export function mergeDashboardGames(
   }
 
   return result;
+}
+
+/**
+ * Whether opening a game (setSeenTime) may update USERGAME# / legacy seen.
+ * Index membership (CURRENTGAMES# / RECENTCOMPLETED#) is authoritative when present.
+ * Legacy USER.games[] alone does not qualify for completed games once RECENTCOMPLETED# exists,
+ * and stale legacy completed entries must pass shouldBeOnCompletedDashboard.
+ */
+export async function shouldWriteGameOpenOverlay(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  gameId: string,
+  legacyGames?: DashboardGame[],
+): Promise<boolean> {
+  const [onCurrent, onRecent] = await Promise.all([
+    hasCurrentGameRow(client, tableName, userId, gameId),
+    hasRecentCompletedRow(client, tableName, userId, gameId),
+  ]);
+  if (onCurrent || onRecent) {
+    return true;
+  }
+
+  const legacy = legacyGames?.find(game => game.id === gameId);
+  if (!legacy) {
+    return false;
+  }
+
+  const recentCompletedRows = await listRecentCompletedRows(client, tableName, userId);
+  if (recentCompletedRows.length > 0) {
+    return false;
+  }
+
+  if (isActiveDashboardGame(legacy)) {
+    return true;
+  }
+
+  const overlayData = await client.send(new GetCommand({
+    TableName: tableName,
+    Key: { pk: `USERGAME#${userId}`, sk: gameId },
+    ProjectionExpression: 'seen, lastChat',
+  }));
+  const overlay = overlayData.Item as UserGameOverlay | undefined;
+  const withOverlay = applyOverlayFields({ ...legacy }, overlay, legacy);
+  return shouldBeOnCompletedDashboard(withOverlay);
 }
 
 export async function loadDashboardGames(

@@ -136,23 +136,6 @@ export async function hasCurrentGameRow(
   return data.Item !== undefined;
 }
 
-export async function isGameOnUserDashboard(
-  client: DynamoDBDocumentClient,
-  tableName: string,
-  userId: string,
-  gameId: string,
-  legacyGames?: DashboardGame[],
-): Promise<boolean> {
-  const [onCurrent, onRecent] = await Promise.all([
-    hasCurrentGameRow(client, tableName, userId, gameId),
-    hasRecentCompletedRow(client, tableName, userId, gameId),
-  ]);
-  if (onCurrent || onRecent) {
-    return true;
-  }
-  return legacyGames?.some(game => game.id === gameId) ?? false;
-}
-
 export async function putRecentCompletedRow(
   client: DynamoDBDocumentClient,
   tableName: string,

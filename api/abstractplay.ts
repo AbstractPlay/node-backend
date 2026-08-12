@@ -82,11 +82,14 @@ import {
 } from '../lib/botNames';
 import { testBotStatus, updateTestBot } from './testBot';
 import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } from '../lib/gameState';
-import { loadDashboardGames, isActiveDashboardGame } from '../lib/dashboardGames';
+import {
+  loadDashboardGames,
+  isActiveDashboardGame,
+  shouldWriteGameOpenOverlay,
+} from '../lib/dashboardGames';
 import {
   deleteRecentCompletedRow,
   hasRecentCompletedRow,
-  isGameOnUserDashboard,
   putRecentCompletedRow,
 } from '../lib/recentCompletedGames';
 import {
@@ -1934,14 +1937,14 @@ async function setSeenTime(userid: string, gameid: any) {
   }
 
   const games = user.games;
-  const onDashboard = await isGameOnUserDashboard(
+  const mayWriteOverlay = await shouldWriteGameOpenOverlay(
     ddbDocClient,
     tableName,
     userid,
     gameid,
     games,
   );
-  if (!onDashboard) {
+  if (!mayWriteOverlay) {
     return;
   }
 
