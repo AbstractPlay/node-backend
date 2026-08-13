@@ -82,6 +82,7 @@ import {
 } from '../lib/botNames';
 import { testBotStatus, updateTestBot } from './testBot';
 import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } from '../lib/gameState';
+import { filterExplorationTreeForSave, type ExplorationTreeNode } from '../lib/explorationMoves';
 import {
   loadDashboardGames,
   isActiveDashboardGame,
@@ -4679,7 +4680,7 @@ async function submitMove(userid: string, pars: {
     }
     catch (error) {
       logGetItemError(error);
-      return formatReturnError(`Unable to apply move ${pars.move}`);
+      return formatReturnError(`Unable to apply move ${pars.move}`, error);
     }
 
     const player = game.players.find(p => p.id === userid);
@@ -5486,9 +5487,13 @@ function applySimultaneousMove(userid: string, move: string, engine: GameBaseSim
 function findExplorationChild(exploration: Exploration[] | null | undefined, move: string, engine: GameBase): Exploration | null {
   if (!exploration) return null;
   for (const child of exploration) {
-    // @ts-ignore - sameMove exists on game engines
-    if (engine.sameMove(move, child.move as unknown as string)) {
-      return child;
+    try {
+      // @ts-ignore - sameMove exists on game engines
+      if (engine.sameMove(move, child.move as unknown as string)) {
+        return child;
+      }
+    } catch {
+      // Incompatible or partial exploration branch — not a match
     }
   }
   return null;
@@ -5961,7 +5966,30 @@ async function submitComment(userid: string, pars: { id: string; metaGame: strin
   };
 }
 
-async function saveExploration(userid: string, pars: { public: boolean, game: string; metaGame: string; move: number; version: number; tree: Exploration; updateCommentedFlag?: number; gameEnded?: number; updateLastChat?: boolean; players?: { [k: string]: any; id: string }[]; }) {
+async function saveExploration(userid: string, pars: { public: boolean, game: string; metaGame: string; move: number; version: number; tree: ExplorationTreeNode | ExplorationTreeNode[]; updateCommentedFlag?: number; gameEnded?: number; updateLastChat?: boolean; players?: { [k: string]: any; id: string }[]; }) {
+  let treeToSave: ExplorationTreeNode | ExplorationTreeNode[] = pars.tree;
+  try {
+    const gameData = await ddbDocClient.send(new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        pk: 'GAME',
+        sk: pars.metaGame + '#' + (pars.public ? '1' : '0') + '#' + pars.game,
+      },
+    }));
+    if (gameData.Item?.state) {
+      const game = hydrateGameState(gameData.Item as FullGame);
+      treeToSave = filterExplorationTreeForSave(
+        pars.metaGame,
+        game.state,
+        pars.move,
+        pars.tree,
+        pars.public
+      );
+    }
+  } catch (error) {
+    console.warn(`Unable to filter exploration tree for game ${pars.game} move ${pars.move}:`, error);
+  }
+
   // If we need to update the commented flag for a completed game
   if (pars.updateCommentedFlag !== undefined && pars.public && pars.gameEnded !== undefined) {
     // Update the commented flag in COMPLETEDGAMES
@@ -6003,7 +6031,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
         "user": userid,
         "game": pars.game,
         "move": pars.move,
-        "tree": JSON.stringify(pars.tree)
+        "tree": JSON.stringify(treeToSave)
       }
     }));
   } else {
@@ -6012,7 +6040,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
       await ddbDocClient.send(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "PUBLICEXPLORATION#" + pars.game, "sk": `${pars.move}` },
-        ExpressionAttributeValues: { ":v": pars.version, ":inc": 1, ":t": JSON.stringify(pars.tree) },
+        ExpressionAttributeValues: { ":v": pars.version, ":inc": 1, ":t": JSON.stringify(treeToSave) },
         ExpressionAttributeNames: { "#v": "version", "#t": "tree" },
         ConditionExpression: "#v = :v",
         UpdateExpression: "set #v = :v + :inc, #t = :t"
@@ -6041,7 +6069,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
                 "sk": `${pars.move}`,
                 "version": pars.version + 1,
                 "game": pars.game,
-                "tree": JSON.stringify(pars.tree)
+                "tree": JSON.stringify(treeToSave)
               },
               ConditionExpression: "attribute_not_exists(sk)"
             }));
@@ -9994,11 +10022,23 @@ export async function initi18n(language: string) {
   });
 }
 
-export function formatReturnError(message: string) {
+function clientErrorMessage(err: unknown): string | undefined {
+  if (!(err instanceof Error)) return undefined;
+  if (err.name === 'UserFacingError') {
+    const ufe = err as Error & { client?: string };
+    return ufe.client || err.message;
+  }
+  if (err.message === 'It is not your turn!') {
+    return err.message;
+  }
+  return undefined;
+}
+
+export function formatReturnError(message: string, err?: unknown) {
   return {
     statusCode: 500,
     body: JSON.stringify({
-      message: message
+      message: clientErrorMessage(err) ?? message
     }),
     headers
   };
@@ -10012,9 +10052,14 @@ export function logGetItemError(err: unknown) {
     return;
   }
   if (!(err as { code: any; message: any; }).code) {
-    console.error(`An exception occurred, investigate and configure retry strategy. Error: ${JSON.stringify(err)}`);
-    console.error('Full error object:', err);
-    console.error('Stack trace:', new Error().stack);
+    if (err instanceof Error) {
+      console.error(`An exception occurred, investigate and configure retry strategy. Error: ${err.message}`);
+      if (err.stack) {
+        console.error('Stack trace:', err.stack);
+      }
+    } else {
+      console.error(`An exception occurred, investigate and configure retry strategy. Error: ${JSON.stringify(err)}`);
+    }
     return;
   }
   // here are no API specific errors to handle for GetItem, common DynamoDB API errors are handled below
