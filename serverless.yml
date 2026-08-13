@@ -236,6 +236,9 @@ resources:
             AttributeName: "sk"
             KeyType: "RANGE"
         BillingMode: PAY_PER_REQUEST
+        TimeToLiveSpecification:
+          AttributeName: expiresAt
+          Enabled: true
         StreamSpecification:
           StreamViewType: "NEW_AND_OLD_IMAGES"
         TableName: ${self:provider.environment.ABSTRACT_PLAY_TABLE}

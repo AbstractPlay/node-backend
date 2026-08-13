@@ -179,7 +179,7 @@ async function main() {
   const games = userData.Item.games ?? [];
   const activeGames = games.filter(isActiveDashboardGame);
   const completedGames = games.filter(game => !isActiveDashboardGame(game));
-  const eligibleCompletedGames = completedGames.filter(shouldBeOnCompletedDashboard);
+  const eligibleCompletedGames = completedGames.filter(game => shouldBeOnCompletedDashboard(game));
   const legacyOverlayGames = games.filter(hasLegacyOverlayFields);
 
   const currentGames = await queryPartition(docClient, table, `CURRENTGAMES#${userId}`);

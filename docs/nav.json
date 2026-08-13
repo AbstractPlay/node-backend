@@ -20,5 +20,6 @@
   { "slug": "subsystems/bots" },
   { "slug": "subsystems/websockets" },
   { "slug": "subsystems/notifications" },
-  { "slug": "subsystems/player-blocking", "title": "Player blocking" }
+  { "slug": "subsystems/player-blocking", "title": "Player blocking" },
+  { "slug": "subsystems/recommendations", "title": "Recommendations" }
 ]

@@ -29,6 +29,9 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 | `unhighlight_game` | Remove highlight | `metaGame`, `id` |
 | `recommend_game` | Recommend completed game for metaGame (max 2 per metaGame) | `metaGame`, `id` |
 | `unrecommend_game` | Remove recommendation | `metaGame`, `id` |
+| `log_recommendation_event` | Log game-recommendation impression event (show/click/challenge) | `event`, `batchId`, `surface`, `tier`, plus event-specific fields |
+
+See [Recommendations](/backend/subsystems/recommendations/) for event schemas and DynamoDB layout.
 
 Mutations return the updated list (`watchedGames`, `highlights`, or `representatives`) on success.
 
