@@ -75,6 +75,12 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `REPRESENTATIVE#<metaGame>`, sk: `<userid>#<gameid>`
   - fields: `userId`, `userName`, `addedAt`, game summary fields
 
+- **Recommendation impression events** — logged-in show/click/challenge telemetry for offline tuning (no live reads)
+  - pk: `RECOMMENDS#<userid>`
+  - sk: `<epochMs>#<random>`
+  - fields: `event`, `batchId`, `surface`, `tier`, `expiresAt` (TTL, ~90 days), plus `metaGame`, `position`, `reasonType`, `gameIds`, `reasons` as applicable
+  - no GSI; rate limit 50 events/user/UTC day
+
 ## Game lists
 
 - **Current games by player** — per-player active game summaries (stream-maintained; Phase 3 reads from here)
@@ -213,3 +219,4 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 - [Bots](/backend/subsystems/bots/)
 - [WebSockets](/backend/subsystems/websockets/)
 - [Player blocking](/backend/subsystems/player-blocking/)
+- [Recommendations](/backend/subsystems/recommendations/) — impression event storage

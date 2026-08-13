@@ -113,6 +113,10 @@ import {
   validatePlaygroundSaveInput,
   type PlaygroundSaveInput,
 } from '../lib/playgroundSaves';
+import {
+  logRecommendationEvent,
+  type RecommendationEventPars,
+} from '../lib/recommendationEvents';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -821,6 +825,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await recommendGameAuth(event.cognitoPoolClaims.sub, pars);
     case "unrecommend_game":
       return await unrecommendGameAuth(event.cognitoPoolClaims.sub, pars);
+    case "log_recommendation_event":
+      return await logRecommendationEventAuth(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
       return await injectState(event.cognitoPoolClaims.sub, pars);
     case "update_game_settings":
@@ -1557,6 +1563,28 @@ function markResultResponse(result: MarkResult, successBody?: unknown) {
     body: JSON.stringify(successBody ?? { message: 'Success' }),
     headers,
   };
+}
+
+async function logRecommendationEventAuth(userId: string, pars: RecommendationEventPars) {
+  try {
+    const result = await logRecommendationEvent(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      pars,
+    );
+    if (!result.ok) {
+      return formatReturnError(result.message);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: true }),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to log recommendation event for ${userId}`);
+  }
 }
 
 function parseGameMarkPars(pars: GameMarkPars): GameMarkPars | undefined {
