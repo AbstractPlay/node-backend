@@ -1,52 +1,202 @@
 {
-  "ChallengeBody": "{{challenger}} has challenged you to a game of {{- metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
-  "ChallengeBodyComment": "{{challenger}} has challenged you to a game of {{- metaGame}} with note: \"{{- comment}}\" Please visit https://play.abstractplay.com/ for more details.",
-  "ChallengeRejectedBody": "{{quitter}} has declined the {{- metaGame}} challenge. The challenge has been removed.",
-  "ChallengeRejectedSubject": "AbstractPlay: Challenge rejected",
-  "ChallengeResponseComment": "Your opponent commented: \"{{- comment}}\"",
-  "ChallengeRevokedBody": "{{name}} has revoked his {{- metaGame}} challenge.",
-  "ChallengeRevokedBodyComment": "{{name}} has revoked his {{- metaGame}} challenge and commented: \"{{- comment}}\"",
-  "ChallengeRevokedSubject": "AbstractPlay: challenge revoked",
-  "ChallengeSubject": "AbstractPlay: new challenge",
-  "DearPlayer": "Dear {{player}}",
-  "EmailOut": "The AbstractPlay system.",
-  "GameLink": "You can view the game at https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}}.",
-  "GameOverBody": "Your {{- metaGame}} game has ended.",
-  "GameOverLink": "For more details, including a game record you can archive, please visit https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}.",
-  "GameOverRating": "Your new rating is {{rating}}.",
-  "GameOverResult_draw": "It was a draw.",
-  "GameOverResult_lose": "You lost.",
-  "GameOverResult_win": "You won!",
-  "GameOverScores": "Final scores were as follows: {{scores}}.",
-  "GameOverSubject": "AbstractPlay: game over",
-  "GameStartedBody": "The {{- metaGame}} challenge was accepted by all players and the game has started.",
-  "GameStartedSubject": "AbstractPlay: game started",
-  "PUSH.titles.challenged": "Challenged",
-  "PUSH.titles.declined": "Challenge declined",
-  "PUSH.titles.ended": "Game over",
-  "PUSH.titles.revoked": "Challenge revoked",
-  "PUSH.titles.started": "Game started",
-  "PUSH.titles.tournament": "Tournament started",
-  "PUSH.titles.tournamentOver": "Tournament ended",
-  "PUSH.titles.yourturn": "Your turn",
-  "TournamentCancelBody": "Not enough players signed up for Tournament {{number}} of the {{- metaGame}} series and the tournament had to be cancelled.",
-  "TournamentCancelBodyVariants": "Not enough players signed up for Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series and the tournament had to be cancelled.",
-  "TournamentCancelSubject": "Your {{- metaGame}} tournament was cancelled",
-  "TournamentEndBody": "Tournament {{number}} of the {{- metaGame}} series has ended. See https://play.abstractplay.com/tournament/{{tournamentId}}. The next tournament in the series will start in one week.",
-  "TournamentEndBodyVariants": "Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series has ended. See https://play.abstractplay.com/tournament/{{tournamentId}}. The next tournament in the series will start in one week.",
-  "TournamentEndSubject": "Your {{- metaGame}} tournament has ended",
-  "TournamentRemoveBody": "You were removed from the {{- metaGame}} tournament you were signed up for, because it is unclear whether you are still interested. If you would still like to participate, please sign up again at https://play.abstractplay.com/tournaments.",
-  "TournamentRemoveBodyVariants": "You were removed from the {{- metaGame}}, variants: {{variants}} tournament you were signed up for, because it is unclear whether you are still interested. If you would still like to participate, please sign up again at https://play.abstractplay.com/tournaments.",
-  "TournamentRemoveSubject": "You were removed from a tournament",
-  "TournamentStartBody": "Tournament {{number}} of the {{- metaGame}} series has started. See https://play.abstractplay.com/tournaments. You are also registered for the next tournament in the series. It will start one week after this tournament ends.",
-  "TournamentStartBodyVariants": "Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series has started. See https://play.abstractplay.com/tournaments. You are also registered for the next tournament in the series. It will start one week after this tournament ends.",
-  "TournamentStartSubject": "Your {{- metaGame}} tournament has started",
-  "YourMove": "It is your turn to move.",
-  "YourMoveBatchedBodyUrgent_one": "It's your turn in {{ count }} game. At least one game has less than 24 hours left on the clock. Visit https://play.abstractplay.com to take your turns.",
-  "YourMoveBatchedBodyUrgent_other": "It's your turn in {{ count }} games. At least one game has less than 24 hours left on the clock. Visit https://play.abstractplay.com to take your turns.",
-  "YourMoveBatchedBody_one": "It's your turn in {{ count }} game. Visit https://play.abstractplay.com to take your turns.",
-  "YourMoveBatchedBody_other": "It's your turn in {{ count }} games. Visit https://play.abstractplay.com to take your turns.",
-  "YourMoveBody": "It is now your move in a game of {{- metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
-  "YourMoveSubject": "AbstractPlay: your move",
-  "YourMoveSubjectUrgent": "AbstractPlay: your move (urgent)"
+  "ChallengeBody": {
+    "src": "{{challenger}} has challenged you to a game of {{- metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
+    "out": "{{challenger}} hat dich zu einer Partie {{- metaGame}} herausgefordert. Bitte besuche https://play.abstractplay.com/ für weitere Details."
+  },
+  "ChallengeBodyComment": {
+    "src": "{{challenger}} has challenged you to a game of {{- metaGame}} with note: \"{{- comment}}\" Please visit https://play.abstractplay.com/ for more details.",
+    "out": "{{challenger}} hat dich zu einer Partie {{- metaGame}} herausgefordert mit der Anmerkung: \"{{- comment}}\". Bitte besuche https://play.abstractplay.com/ für weitere Details."
+  },
+  "ChallengeRejectedBody": {
+    "src": "{{quitter}} has declined the {{- metaGame}} challenge. The challenge has been removed.",
+    "out": "{{quitter}} hat die Herausforderung für {{- metaGame}} abgelehnt. Die Herausforderung wurde entfernt."
+  },
+  "ChallengeRejectedSubject": {
+    "src": "AbstractPlay: Challenge rejected",
+    "out": "AbstractPlay: Herausforderung abgelehnt"
+  },
+  "ChallengeResponseComment": {
+    "src": "Your opponent commented: \"{{- comment}}\"",
+    "out": "Dein Gegner hat kommentiert: \"{{- comment}}\""
+  },
+  "ChallengeRevokedBody": {
+    "src": "{{name}} has revoked his {{- metaGame}} challenge.",
+    "out": "{{name}} hat seine Herausforderung für {{- metaGame}} zurückgezogen."
+  },
+  "ChallengeRevokedBodyComment": {
+    "src": "{{name}} has revoked his {{- metaGame}} challenge and commented: \"{{- comment}}\"",
+    "out": "{{name}} hat seine Herausforderung für {{- metaGame}} zurückgezogen und kommentiert: \"{{- comment}}\""
+  },
+  "ChallengeRevokedSubject": {
+    "src": "AbstractPlay: challenge revoked",
+    "out": "AbstractPlay: Herausforderung zurückgezogen"
+  },
+  "ChallengeSubject": {
+    "src": "AbstractPlay: new challenge",
+    "out": "AbstractPlay: Neue Herausforderung"
+  },
+  "DearPlayer": {
+    "src": "Dear {{player}}",
+    "out": "Hallo {{player}}"
+  },
+  "EmailOut": {
+    "src": "The AbstractPlay system.",
+    "out": "Das AbstractPlay-System."
+  },
+  "GameLink": {
+    "src": "You can view the game at https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}}.",
+    "out": "Du kannst die Partie unter https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}} ansehen."
+  },
+  "GameOverBody": {
+    "src": "Your {{- metaGame}} game has ended.",
+    "out": "Deine Partie {{- metaGame}} ist beendet."
+  },
+  "GameOverLink": {
+    "src": "For more details, including a game record you can archive, please visit https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}.",
+    "out": "Für weitere Details, einschließlich eines Partieverlaufs zum Archivieren, besuche bitte https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}."
+  },
+  "GameOverRating": {
+    "src": "Your new rating is {{rating}}.",
+    "out": "Deine neue Wertung ist {{rating}}."
+  },
+  "GameOverResult_draw": {
+    "src": "It was a draw.",
+    "out": "Es war unentschieden."
+  },
+  "GameOverResult_lose": {
+    "src": "You lost.",
+    "out": "Du hast verloren."
+  },
+  "GameOverResult_win": {
+    "src": "You won!",
+    "out": "Du hast gewonnen!"
+  },
+  "GameOverScores": {
+    "src": "Final scores were as follows: {{scores}}.",
+    "out": "Die Endergebnisse lauteten wie folgt: {{scores}}."
+  },
+  "GameOverSubject": {
+    "src": "AbstractPlay: game over",
+    "out": "AbstractPlay: Partie beendet"
+  },
+  "GameStartedBody": {
+    "src": "The {{- metaGame}} challenge was accepted by all players and the game has started.",
+    "out": "Die Herausforderung für {{- metaGame}} wurde von allen Spielern angenommen und die Partie hat begonnen."
+  },
+  "GameStartedSubject": {
+    "src": "AbstractPlay: game started",
+    "out": "AbstractPlay: Partie gestartet"
+  },
+  "PUSH.titles.challenged": {
+    "src": "Challenged",
+    "out": "Herausgefordert"
+  },
+  "PUSH.titles.declined": {
+    "src": "Challenge declined",
+    "out": "Herausforderung abgelehnt"
+  },
+  "PUSH.titles.ended": {
+    "src": "Game over",
+    "out": "Partie beendet"
+  },
+  "PUSH.titles.revoked": {
+    "src": "Challenge revoked",
+    "out": "Herausforderung zurückgezogen"
+  },
+  "PUSH.titles.started": {
+    "src": "Game started",
+    "out": "Partie gestartet"
+  },
+  "PUSH.titles.tournament": {
+    "src": "Tournament started",
+    "out": "Turnier gestartet"
+  },
+  "PUSH.titles.tournamentOver": {
+    "src": "Tournament ended",
+    "out": "Turnier beendet"
+  },
+  "PUSH.titles.yourturn": {
+    "src": "Your turn",
+    "out": "Du bist am Zug"
+  },
+  "TournamentCancelBody": {
+    "src": "Not enough players signed up for Tournament {{number}} of the {{- metaGame}} series and the tournament had to be cancelled.",
+    "out": "Es haben sich nicht genügend Spieler für Turnier {{number}} der {{- metaGame}}-Serie angemeldet, daher musste das Turnier abgesagt werden."
+  },
+  "TournamentCancelBodyVariants": {
+    "src": "Not enough players signed up for Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series and the tournament had to be cancelled.",
+    "out": "Es haben sich nicht genügend Spieler für Turnier {{number}} der Serie {{- metaGame}} (Varianten: {{variants}}) angemeldet, daher musste das Turnier abgesagt werden."
+  },
+  "TournamentCancelSubject": {
+    "src": "Your {{- metaGame}} tournament was cancelled",
+    "out": "Dein {{- metaGame}}-Turnier wurde abgesagt"
+  },
+  "TournamentEndBody": {
+    "src": "Tournament {{number}} of the {{- metaGame}} series has ended. See https://play.abstractplay.com/tournament/{{tournamentId}}. The next tournament in the series will start in one week.",
+    "out": "Turnier {{number}} der {{- metaGame}}-Serie ist beendet. Siehe https://play.abstractplay.com/tournament/{{tournamentId}}. Das nächste Turnier dieser Serie beginnt in einer Woche."
+  },
+  "TournamentEndBodyVariants": {
+    "src": "Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series has ended. See https://play.abstractplay.com/tournament/{{tournamentId}}. The next tournament in the series will start in one week.",
+    "out": "Turnier {{number}} der Serie {{- metaGame}} (Varianten: {{variants}}) ist beendet. Siehe https://play.abstractplay.com/tournament/{{tournamentId}}. Das nächste Turnier dieser Serie beginnt in einer Woche."
+  },
+  "TournamentEndSubject": {
+    "src": "Your {{- metaGame}} tournament has ended",
+    "out": "Dein {{- metaGame}}-Turnier ist beendet"
+  },
+  "TournamentRemoveBody": {
+    "src": "You were removed from the {{- metaGame}} tournament you were signed up for, because it is unclear whether you are still interested. If you would still like to participate, please sign up again at https://play.abstractplay.com/tournaments.",
+    "out": "Du wurdest aus dem {{- metaGame}}-Turnier entfernt, für das du angemeldet warst, da unklar ist, ob du noch interessiert bist. Wenn du weiterhin teilnehmen möchtest, melde dich bitte erneut unter https://play.abstractplay.com/tournaments an."
+  },
+  "TournamentRemoveBodyVariants": {
+    "src": "You were removed from the {{- metaGame}}, variants: {{variants}} tournament you were signed up for, because it is unclear whether you are still interested. If you would still like to participate, please sign up again at https://play.abstractplay.com/tournaments.",
+    "out": "Du wurdest aus dem {{- metaGame}}-Turnier (Varianten: {{variants}}) entfernt, für das du angemeldet warst, da unklar ist, ob du noch interessiert bist. Wenn du weiterhin teilnehmen möchtest, melde dich bitte erneut unter https://play.abstractplay.com/tournaments an."
+  },
+  "TournamentRemoveSubject": {
+    "src": "You were removed from a tournament",
+    "out": "Du wurdest aus einem Turnier entfernt"
+  },
+  "TournamentStartBody": {
+    "src": "Tournament {{number}} of the {{- metaGame}} series has started. See https://play.abstractplay.com/tournaments. You are also registered for the next tournament in the series. It will start one week after this tournament ends.",
+    "out": "Turnier {{number}} der {{- metaGame}}-Serie hat begonnen. Siehe https://play.abstractplay.com/tournaments. Du bist auch für das nächste Turnier dieser Serie registriert. Es beginnt eine Woche nach Ende dieses Turniers."
+  },
+  "TournamentStartBodyVariants": {
+    "src": "Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series has started. See https://play.abstractplay.com/tournaments. You are also registered for the next tournament in the series. It will start one week after this tournament ends.",
+    "out": "Turnier {{number}} der Serie {{- metaGame}} (Varianten: {{variants}}) hat begonnen. Siehe https://play.abstractplay.com/tournaments. Du bist auch für das nächste Turnier dieser Serie registriert. Es beginnt eine Woche nach Ende dieses Turniers."
+  },
+  "TournamentStartSubject": {
+    "src": "Your {{- metaGame}} tournament has started",
+    "out": "Dein {{- metaGame}}-Turnier hat begonnen"
+  },
+  "YourMove": {
+    "src": "It is your turn to move.",
+    "out": "Du bist am Zug."
+  },
+  "YourMoveBatchedBodyUrgent_one": {
+    "src": "It's your turn in {{ count }} game. At least one game has less than 24 hours left on the clock. Visit https://play.abstractplay.com to take your turns.",
+    "out": "Du bist in {{ count }} Partie am Zug. Bei mindestens einer Partie verbleiben weniger als 24 Stunden auf der Uhr. Besuche https://play.abstractplay.com, um deinen Zug zu machen."
+  },
+  "YourMoveBatchedBodyUrgent_other": {
+    "src": "It's your turn in {{ count }} games. At least one game has less than 24 hours left on the clock. Visit https://play.abstractplay.com to take your turns.",
+    "out": "Du bist in {{ count }} Partien am Zug. Bei mindestens einer Partie verbleiben weniger als 24 Stunden auf der Uhr. Besuche https://play.abstractplay.com, um deine Züge zu machen."
+  },
+  "YourMoveBatchedBody_one": {
+    "src": "It's your turn in {{ count }} game. Visit https://play.abstractplay.com to take your turns.",
+    "out": "Du bist in {{ count }} Partie am Zug. Besuche https://play.abstractplay.com, um deinen Zug zu machen."
+  },
+  "YourMoveBatchedBody_other": {
+    "src": "It's your turn in {{ count }} games. Visit https://play.abstractplay.com to take your turns.",
+    "out": "Du bist in {{ count }} Partien am Zug. Besuche https://play.abstractplay.com, um deine Züge zu machen."
+  },
+  "YourMoveBody": {
+    "src": "It is now your move in a game of {{- metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
+    "out": "Du bist jetzt in einer Partie {{- metaGame}} am Zug. Bitte besuche https://play.abstractplay.com/ für weitere Details."
+  },
+  "YourMoveSubject": {
+    "src": "AbstractPlay: your move",
+    "out": "AbstractPlay: Du bist am Zug"
+  },
+  "YourMoveSubjectUrgent": {
+    "src": "AbstractPlay: your move (urgent)",
+    "out": "AbstractPlay: Du bist am Zug (dringend)"
+  }
 }

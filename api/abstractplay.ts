@@ -244,6 +244,7 @@ type FullUser = {
   tags?: TagList[];
   palettes?: Palette[];
   mayPush?: boolean;
+  publicRivalries?: boolean;
   bggid?: string;
   about?: string;
 }
@@ -276,6 +277,7 @@ type MeData = {
   tags?: TagList[];
   palettes?: Palette[];
   mayPush: boolean;
+  publicRivalries: boolean;
   bots?: Bot[];
   challengesIssued?: FullChallenge[];
   challengesReceived?: FullChallenge[];
@@ -749,6 +751,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await newProfile(event.cognitoPoolClaims, pars);
     case "set_push":
       return await setPush(event.cognitoPoolClaims.sub, pars);
+    case "set_public_rivalries":
+      return await setPublicRivalries(event.cognitoPoolClaims.sub, pars);
     case "save_push":
       return await savePush(event.cognitoPoolClaims.sub, pars);
     case "delete_push":
@@ -2885,6 +2889,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           tags,
           palettes,
           "mayPush": user.mayPush,
+          "publicRivalries": user.publicRivalries === true,
           bots,
           "challengesIssued": (data[0] as any[]).map(d => d.Item),
           "challengesReceived": (data[1] as any[]).map(d => d.Item),
@@ -2915,6 +2920,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           "bggid": user.bggid,
           "about": user.about,
           "mayPush": user.mayPush,
+          "publicRivalries": user.publicRivalries === true,
           bots,
           tags,
           palettes,
@@ -3338,13 +3344,15 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
         "annotate": true,
         "color": "standard"
       }
-    }
+    },
+    "publicRivalries": false
   };
   // So that we can list all users
   const data2 = {
     "pk": "USERS",
     "sk": userid,
-    "name": pars.name
+    "name": pars.name,
+    "publicRivalries": false
   };
   try {
     const insertUser = ddbDocClient.send(new PutCommand({
@@ -3393,6 +3401,42 @@ async function setPush(userid: string, pars: { state: boolean }) {
     statusCode: 200,
     body: JSON.stringify({
       message: `Successfully saved push preference for ${userid}`,
+    }),
+    headers
+  };
+}
+
+async function setPublicRivalries(userid: string, pars: { state: boolean }) {
+  try {
+    console.log(`Setting 'publicRivalries' to ${pars.state} for user ${userid}`);
+    const update = {
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      ExpressionAttributeNames: { "#pr": "publicRivalries" },
+      ExpressionAttributeValues: { ":pr": pars.state },
+      UpdateExpression: "set #pr = :pr",
+    };
+    await Promise.all([
+      ddbDocClient.send(
+        new UpdateCommand({
+          ...update,
+          Key: { "pk": "USER", "sk": userid },
+        })
+      ),
+      ddbDocClient.send(
+        new UpdateCommand({
+          ...update,
+          Key: { "pk": "USERS", "sk": userid },
+        })
+      ),
+    ]);
+  } catch (error) {
+    logGetItemError(error);
+    throw new Error("setPublicRivalries: Failed to save public rivalries preference");
+  }
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      message: `Successfully saved public rivalries preference for ${userid}`,
     }),
     headers
   };

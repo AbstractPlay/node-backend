@@ -23,6 +23,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 - **Users** — profile, settings, dashboard game/challenge lists
   - pk: `USER`
   - sk: `<userid>`
+  - fields include `publicRivalries` (boolean, default false) — opt in to public rivalries table
 
 - **Push subscriptions** — web push endpoints (one record per browser/device)
   - pk: `PUSH`
@@ -30,7 +31,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - fields: `payload`, `endpoint`, `updatedAt`
   - legacy: `sk: <userid>` (migrated on next `save_push` or removed on 404/410)
 
-- **User list** — public directory (name, country, lastSeen, stars)
+- **User list** — public directory (name, country, lastSeen, stars, publicRivalries)
   - pk: `USERS`
   - sk: `<userid>`
 
