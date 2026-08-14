@@ -64,15 +64,11 @@ Attributes: `event`, `batchId`, `surface`, `tier`, `expiresAt`, plus event-speci
 
 Implementation: [`lib/recommendationEvents.ts`](../../lib/recommendationEvents.ts), wired from [`api/abstractplay.ts`](../../api/abstractplay.ts).
 
-## Offline read path (planned)
+## Offline read path
 
-Nightly, as part of the records/stats batch:
+Nightly `records-rec-analytics` (backend-crons) scans `RECOMMENDS#` rows, aggregates anonymized funnel metrics, and writes to private ops S3 (`recommendations/analytics/`). See [Recommendation analytics](/crons/recommendations-analytics/).
 
-1. Export recommendation events from DynamoDB → S3.
-2. Aggregate CTR by `surface`, `reasonType`, `tier`.
-3. Optionally emit `recommendations/tuning.json` with updated hybrid weights.
-
-The live recommender continues to use static nightly artifacts (`cooccur.json`, `mvtimes.json`, gameslib tags, player records) — not impression rows.
+The live recommender continues to use static nightly artifacts (`cooccur.json`, `mvtimes.json`, gameslib tags, player records) — not impression rows. Optional `tuning.json` weight updates remain deferred.
 
 ## Privacy
 

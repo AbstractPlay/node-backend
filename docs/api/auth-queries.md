@@ -40,6 +40,7 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `set_push` | User push preference; `{ state: false }` removes **all** device subscriptions | `state` (boolean) |
+| `set_public_rivalries` | Opt in to public rivalries table (both players must opt in for a pair to be named) | `state` (boolean) |
 | `save_push` | Register or refresh **this device** | `payload` (Web Push subscription object) |
 | `delete_push` | Remove **this device** subscription | `endpoint` (subscription URL) |
 | `save_tags` | Save game tags | `payload` (tag lists) |
