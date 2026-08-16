@@ -16,11 +16,19 @@ test('changeLanguageForPlayer uses German when registered', async () => {
   assert.match(i18n.t('ChallengeSubject'), /Neue Herausforderung/);
 });
 
-test('changeLanguageForPlayer falls back to English for unregistered languages', async () => {
+test('changeLanguageForPlayer maps es to es-US', async () => {
   const player = { language: 'es' };
   await changeLanguageForPlayer(player);
-  assert.equal(i18n.language, 'en');
+  assert.equal(i18n.language, 'es-US');
   assert.equal(player.language, 'es');
+  assert.equal(i18n.t('ChallengeSubject'), 'AbstractPlay: nuevo desafío');
+});
+
+test('changeLanguageForPlayer falls back to English for unregistered languages', async () => {
+  const player = { language: 'ja' };
+  await changeLanguageForPlayer(player);
+  assert.equal(i18n.language, 'en');
+  assert.equal(player.language, 'ja');
   assert.equal(i18n.t('ChallengeSubject'), 'AbstractPlay: new challenge');
 });
 
