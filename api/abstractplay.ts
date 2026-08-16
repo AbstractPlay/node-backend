@@ -95,6 +95,7 @@ import {
 } from '../lib/recentCompletedGames';
 import {
   deleteUserGameOverlay,
+  stripOverlayFieldsFromGames,
   upsertUserGameOverlay,
 } from '../lib/userGameOverlay';
 import {
@@ -1982,20 +1983,13 @@ async function setSeenTime(userid: string, gameid: any) {
   }
 
   const now = Date.now();
-  if (games !== undefined) {
-    const thegame = games.find((g: { id: any; }) => g.id == gameid);
-    if (thegame !== undefined) {
-      thegame.seen = now;
-    }
-    await upsertUserGameOverlay(
-      ddbDocClient,
-      tableName,
-      userid,
-      gameid,
-      { seen: now },
-    );
-  }
-  return updateUserGames(userid, user.gamesUpdate, [gameid], games);
+  await upsertUserGameOverlay(
+    ddbDocClient,
+    tableName,
+    userid,
+    gameid,
+    { seen: now },
+  );
 }
 
 async function dismissCompletedGame(userid: string, pars: { id?: string; gameId?: string }) {
@@ -3016,6 +3010,7 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
   if (await isBotId(userId)) {
     return;
   }
+  const gamesToWrite = stripOverlayFieldsFromGames(games);
   const gameIDsCloned = gameIDsChanged.slice();
   gameIDsChanged.length = 0;
   if (gamesUpdate === undefined) {
@@ -3023,7 +3018,7 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
     return sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userId },
-      ExpressionAttributeValues: { ":val": 1, ":gs": games },
+      ExpressionAttributeValues: { ":val": 1, ":gs": gamesToWrite },
       UpdateExpression: "set gamesUpdate = :val, games = :gs"
     }));
   } else {
@@ -3032,7 +3027,7 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
       await sendCommandWithRetry(new UpdateCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
         Key: { "pk": "USER", "sk": userId },
-        ExpressionAttributeValues: { ":val": gamesUpdate, ":inc": 1, ":gs": games },
+        ExpressionAttributeValues: { ":val": gamesUpdate, ":inc": 1, ":gs": gamesToWrite },
         ConditionExpression: "gamesUpdate = :val",
         UpdateExpression: "set gamesUpdate = gamesUpdate + :inc, games = :gs"
       }));
@@ -3057,7 +3052,7 @@ async function updateUserGames(userId: string, gamesUpdate: undefined | number, 
           const newgames: Game[] = [];
           for (const game of dbGames) {
             if (gameIDsCloned.includes(game.id)) {
-              const newgame = games.find(g => g.id === game.id);
+              const newgame = gamesToWrite.find(g => g.id === game.id);
               if (newgame) {
                 newgames.push(newgame);
               }
@@ -4885,7 +4880,7 @@ async function submitMove(userid: string, pars: {
           if (player.id === userid) {
             if (game.toMove === "" || game.toMove === null) {
               const seen = Date.now();
-              games.push({ ...playerGame, seen });
+              games.push(playerGame);
               list.push(upsertUserGameOverlay(
                 ddbDocClient,
                 process.env.ABSTRACT_PLAY_TABLE!,
@@ -5806,12 +5801,6 @@ async function updateLastChatForPlayers(
     const onRecentCompleted = await hasRecentCompletedRow(ddbDocClient, tableName, pid, gameId);
 
     if (game !== undefined || onRecentCompleted) {
-      if (game !== undefined) {
-        game.lastChat = now;
-        if (pid === currentUserId) {
-          game.seen = now + 10;
-        }
-      }
       const overlay = { lastChat: now } as { lastChat: number; seen?: number };
       if (pid === currentUserId) {
         overlay.seen = now + 10;
@@ -5823,9 +5812,6 @@ async function updateLastChatForPlayers(
         gameId,
         overlay,
       );
-      if (game !== undefined) {
-        await updateUserGames(pid, user.gamesUpdate, [gameId], user.games);
-      }
       console.log(`Updated lastChat for user ${user.name} on game ${gameId}`);
     } else if (allowReAdd) {
       // Re-add completed game to dashboard when opponent chats on an evicted/dismissed game
@@ -5868,8 +5854,6 @@ async function updateLastChatForPlayers(
           numMoves,
           gameStarted: fullGame.gameStarted || new Date(gameEngine.stack[0]._timestamp).getTime(),
           gameEnded: fullGame.gameEnded || new Date(gameEngine.stack[gameEngine.stack.length - 1]._timestamp).getTime(),
-          lastChat: now,
-          seen: pid === currentUserId ? now + 10 : undefined,
         };
 
         await putRecentCompletedRow(ddbDocClient, tableName, pid, {
@@ -9486,10 +9470,7 @@ async function setLastSeen(userId: string, pars: { gameId: string; interval?: nu
       const now = new Date();
       const then = new Date();
       then.setDate(now.getDate() - interval);
-      game.seen = then.getTime();
-      console.log(`Setting lastSeen for ${game.id} to ${then.getTime()} (${then.toUTCString()}). It is currently ${new Date().toUTCString()}`);
-      // you need to set `lastChat` as well or chats near the end of the game will be flagged
-      game.lastChat = then.getTime();
+      console.log(`Setting lastSeen for ${pars.gameId} to ${then.getTime()} (${then.toUTCString()}). It is currently ${new Date().toUTCString()}`);
       await upsertUserGameOverlay(
         ddbDocClient,
         process.env.ABSTRACT_PLAY_TABLE!,
@@ -9497,11 +9478,6 @@ async function setLastSeen(userId: string, pars: { gameId: string; interval?: nu
         pars.gameId,
         { seen: then.getTime(), lastChat: then.getTime() },
       );
-      // save USER rec
-      await ddbDocClient.send(new PutCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: user
-      }));
       return {
         statusCode: 200,
         body: "",
