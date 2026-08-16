@@ -66,5 +66,5 @@ Nightly `records-layout-feedback-analytics` (backend-crons) scans `LAYOUTFB#` ro
 
 ## Related
 
-- [Database schema — layout feedback events](../database-schema.md)
-- [Auth queries — `log_layout_feedback_event`](../api/auth-queries.md)
+- [Database schema — layout feedback events](/backend/database-schema/)
+- [Auth queries — `log_layout_feedback_event`](/backend/api/auth-queries/)
