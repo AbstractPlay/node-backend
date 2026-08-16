@@ -18,11 +18,18 @@ const abstractplay_1 = require("../api/abstractplay");
     strict_1.default.equal(i18next_1.default.language, 'de');
     strict_1.default.match(i18next_1.default.t('ChallengeSubject'), /Neue Herausforderung/);
 });
-(0, node_test_1.test)('changeLanguageForPlayer falls back to English for unregistered languages', async () => {
+(0, node_test_1.test)('changeLanguageForPlayer maps es to es-US', async () => {
     const player = { language: 'es' };
     await (0, abstractplay_1.changeLanguageForPlayer)(player);
-    strict_1.default.equal(i18next_1.default.language, 'en');
+    strict_1.default.equal(i18next_1.default.language, 'es-US');
     strict_1.default.equal(player.language, 'es');
+    strict_1.default.equal(i18next_1.default.t('ChallengeSubject'), 'AbstractPlay: nuevo desafío');
+});
+(0, node_test_1.test)('changeLanguageForPlayer falls back to English for unregistered languages', async () => {
+    const player = { language: 'ja' };
+    await (0, abstractplay_1.changeLanguageForPlayer)(player);
+    strict_1.default.equal(i18next_1.default.language, 'en');
+    strict_1.default.equal(player.language, 'ja');
     strict_1.default.equal(i18next_1.default.t('ChallengeSubject'), 'AbstractPlay: new challenge');
 });
 (0, node_test_1.test)('YourMoveBatchedBody pluralizes by count', async () => {

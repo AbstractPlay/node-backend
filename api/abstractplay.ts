@@ -118,6 +118,10 @@ import {
   logRecommendationEvent,
   type RecommendationEventPars,
 } from '../lib/recommendationEvents';
+import {
+  logLayoutFeedbackEvent,
+  type LayoutFeedbackEventPars,
+} from '../lib/layoutFeedbackEvents';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -832,6 +836,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await unrecommendGameAuth(event.cognitoPoolClaims.sub, pars);
     case "log_recommendation_event":
       return await logRecommendationEventAuth(event.cognitoPoolClaims.sub, pars);
+    case "log_layout_feedback_event":
+      return await logLayoutFeedbackEventAuth(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
       return await injectState(event.cognitoPoolClaims.sub, pars);
     case "update_game_settings":
@@ -1589,6 +1595,28 @@ async function logRecommendationEventAuth(userId: string, pars: RecommendationEv
   } catch (error) {
     logGetItemError(error);
     return formatReturnError(`Unable to log recommendation event for ${userId}`);
+  }
+}
+
+async function logLayoutFeedbackEventAuth(userId: string, pars: LayoutFeedbackEventPars) {
+  try {
+    const result = await logLayoutFeedbackEvent(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      pars,
+    );
+    if (!result.ok) {
+      return formatReturnError(result.message);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: true }),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to log layout feedback event for ${userId}`);
   }
 }
 

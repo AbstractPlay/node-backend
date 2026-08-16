@@ -82,6 +82,12 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - fields: `event`, `batchId`, `surface`, `tier`, `expiresAt` (TTL, ~90 days), plus `metaGame`, `position`, `reasonType`, `gameIds`, `reasons` as applicable
   - no GSI; rate limit 50 events/user/UTC day
 
+- **Game Move layout feedback events** — beta layout experiment telemetry (no live reads)
+  - pk: `LAYOUTFB#<userid>`
+  - sk: `<epochMs>#<random>`
+  - fields: `event`, `layoutId`, plus `rating`, `comment`, `toLayoutId`, `gameId`, `durationMs` as applicable
+  - no GSI; **no TTL** (manual purge when experiment ends); no rate limit
+
 ## Game lists
 
 - **Current games by player** — per-player active game summaries (stream-maintained; Phase 3 reads from here)
