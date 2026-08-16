@@ -180,7 +180,7 @@ export function mergeDashboardGames(
 }
 
 /**
- * Whether opening a game (setSeenTime) may update USERGAME# / legacy seen.
+ * Whether opening a game (setSeenTime) may update USERGAME# seen.
  * Index membership (CURRENTGAMES# / RECENTCOMPLETED#) is authoritative when present.
  * Legacy USER.games[] alone does not qualify for completed games once RECENTCOMPLETED# exists,
  * and stale legacy completed entries must pass shouldBeOnCompletedDashboard.

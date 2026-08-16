@@ -130,9 +130,10 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - sk: `COUNTS`
   - fields: `currentgames`, `completedgames`, `standingchallenges`, `stars`, `ratingsCount`
 
-- **Per-user game overlay (planned)** — per-user `seen` / `lastChat` on dashboard games (Phase 3+)
+- **Per-user game overlay (Phase 3 read / Phase 4a write)** — per-user `seen` / `lastChat` on dashboard games; sole write path after Phase 4a
   - pk: `USERGAME#<userid>`
   - sk: `<gameid>`
+  - `USER.games[]` entries must not include `seen`/`lastChat` after Phase 4a (`updateUserGames` strips them)
 
 ## Challenges
 

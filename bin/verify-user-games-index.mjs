@@ -8,13 +8,12 @@
  *   - numMoves vs legacy active entries
  *
  * RECENTCOMPLETED# — transient completed-dashboard membership (Phase 3b):
- *   - Count and ids vs eligible USER.games[] completed entries when index is present
+ *   - Count and ids vs dashboard-eligible completed games (legacy + USERGAME# overlays)
  *
  * USERGAME# — overlay source of truth for seen / lastChat (Phase 3 reads here first):
  *   - Every row must belong to a game on the user's dashboard
- *   - Legacy USER.games[] must have a USERGAME# row when it still carries overlay fields
- *   - Index-only overlays (USERGAME# without legacy seen/lastChat) are expected after moves
- *   - When both stores have a field, values should match (dual-write drift)
+ *   - Legacy USER.games[] should not carry seen/lastChat after Phase 4a (USERGAME# only)
+ *   - When legacy still has overlay fields, values should match USERGAME# (migration drift)
  *
  * Usage:
  *   node bin/verify-user-games-index.mjs <userid> [--stage dev|prod] [--verbose]
@@ -92,7 +91,7 @@ function hasLegacyOverlayFields(game) {
   return game.seen !== undefined || game.lastChat !== undefined;
 }
 
-function shouldBeOnCompletedDashboard(game, now = Date.now()) {
+function shouldBeOnCompletedDashboard(game, now) {
   if (isActiveDashboardGame(game)) {
     return false;
   }
@@ -103,6 +102,60 @@ function shouldBeOnCompletedDashboard(game, now = Date.now()) {
     return true;
   }
   return now - game.seen <= COMPLETED_DASHBOARD_RETENTION_MS;
+}
+
+function applyOverlayFields(game, overlayRow, legacy) {
+  const result = { ...game };
+  const seen = overlayRow?.seen ?? legacy?.seen;
+  const lastChat = overlayRow?.lastChat ?? legacy?.lastChat;
+  if (seen !== undefined) {
+    result.seen = seen;
+  } else {
+    delete result.seen;
+  }
+  if (lastChat !== undefined) {
+    result.lastChat = lastChat;
+  } else {
+    delete result.lastChat;
+  }
+  return result;
+}
+
+function recentCompletedRowToGame(row) {
+  return {
+    id: row.id ?? row.sk,
+    metaGame: row.metaGame,
+    toMove: row.toMove ?? '',
+    lastMoveTime: row.lastMoveTime,
+  };
+}
+
+function buildEligibleCompletedIds(games, recentCompletedGames, userGameById, now) {
+  const eligible = new Set();
+  const legacyById = new Map(games.map(game => [game.id, game]));
+
+  for (const game of games) {
+    if (isActiveDashboardGame(game)) {
+      continue;
+    }
+    const merged = applyOverlayFields(game, userGameById.get(game.id), game);
+    if (shouldBeOnCompletedDashboard(merged, now)) {
+      eligible.add(game.id);
+    }
+  }
+
+  for (const row of recentCompletedGames) {
+    const legacy = legacyById.get(row.sk);
+    const base = legacy && !isActiveDashboardGame(legacy)
+      ? legacy
+      : recentCompletedRowToGame(row);
+    const merged = applyOverlayFields(base, userGameById.get(row.sk), legacy);
+    if (shouldBeOnCompletedDashboard(merged, now)) {
+      eligible.add(row.sk);
+    }
+  }
+
+  return eligible;
 }
 
 function summarizeOverlay(source) {
@@ -176,10 +229,10 @@ async function main() {
     process.exit(1);
   }
 
+  const now = Date.now();
   const games = userData.Item.games ?? [];
   const activeGames = games.filter(isActiveDashboardGame);
   const completedGames = games.filter(game => !isActiveDashboardGame(game));
-  const eligibleCompletedGames = completedGames.filter(game => shouldBeOnCompletedDashboard(game));
   const legacyOverlayGames = games.filter(hasLegacyOverlayFields);
 
   const currentGames = await queryPartition(docClient, table, `CURRENTGAMES#${userId}`);
@@ -191,16 +244,24 @@ async function main() {
   const recentCompletedById = new Map(recentCompletedGames.map(row => [row.sk, row]));
   const userGameById = new Map(userGameRows.map(row => [row.sk, row]));
 
-  const dashboardIds = new Set([
-    ...games.map(g => g.id),
-    ...currentGames.map(row => row.sk),
-    ...recentCompletedGames.map(row => row.sk),
-  ]);
-
   const activeIds = new Set(activeGames.map(g => g.id));
   const currentIds = new Set(currentGames.map(g => g.sk));
-  const eligibleCompletedIds = new Set(eligibleCompletedGames.map(g => g.id));
+  const eligibleCompletedIds = buildEligibleCompletedIds(
+    games,
+    recentCompletedGames,
+    userGameById,
+    now,
+  );
+  const eligibleCompletedGames = [...eligibleCompletedIds]
+    .map(id => legacyById.get(id) ?? recentCompletedById.get(id))
+    .filter(Boolean);
   const recentCompletedIds = new Set(recentCompletedGames.map(row => row.sk));
+
+  const dashboardIds = new Set([
+    ...activeIds,
+    ...currentIds,
+    ...eligibleCompletedIds,
+  ]);
 
   const missingFromCurrent = [...activeIds].filter(id => !currentIds.has(id));
   const extraInCurrent = [...currentIds].filter(id => !activeIds.has(id));
@@ -231,7 +292,16 @@ async function main() {
     ? [...recentCompletedIds].filter(id => !eligibleCompletedIds.has(id))
     : [];
 
-  const orphanUserGameRows = userGameRows.filter(row => !dashboardIds.has(row.sk));
+  const orphanUserGameRows = userGameRows.filter(row => {
+    if (dashboardIds.has(row.sk)) {
+      return false;
+    }
+    // Legacy USER.games[] may still list stale completed entries until me() evicts them.
+    if (legacyById.has(row.sk)) {
+      return false;
+    }
+    return true;
+  });
 
   const missingUserGameOverlays = legacyOverlayGames.filter(
     game => !userGameById.has(game.id),
@@ -265,7 +335,7 @@ async function main() {
   const currentIdsMatch = missingFromCurrent.length === 0 && extraInCurrent.length === 0;
   const numMovesMatch = numMovesMismatches.length === 0;
   const recentCompletedCountMatch = !useRecentCompletedIndex
-    || eligibleCompletedGames.length === recentCompletedGames.length;
+    || eligibleCompletedIds.size === recentCompletedGames.length;
   const recentCompletedIdsMatch = !useRecentCompletedIndex
     || (missingFromRecentCompleted.length === 0 && extraInRecentCompleted.length === 0);
   const userGameOrphansClear = orphanUserGameRows.length === 0;
@@ -290,7 +360,7 @@ async function main() {
   console.log(`  USER.games active (toMove set):   ${activeGames.length}`);
   console.log(`  CURRENTGAMES# rows:               ${currentGames.length}`);
   console.log(`  USER.games completed:             ${completedGames.length}`);
-  console.log(`  USER.games eligible completed:    ${eligibleCompletedGames.length}`);
+  console.log(`  eligible completed (merged):      ${eligibleCompletedIds.size}`);
   console.log(`  RECENTCOMPLETED# rows:            ${recentCompletedGames.length}`);
   console.log(`  USER.games legacy overlay fields: ${legacyOverlayGames.length}`);
   console.log(`  USERGAME# rows (index overlays):  ${userGameRows.length}`);
@@ -340,14 +410,14 @@ async function main() {
       }
     }
     if (missingFromRecentCompleted.length > 0) {
-      console.log('\nEligible completed in USER.games but missing from RECENTCOMPLETED#:');
+      console.log('\nEligible completed (merged) but missing from RECENTCOMPLETED#:');
       for (const id of missingFromRecentCompleted) {
-        const game = eligibleCompletedGames.find(g => g.id === id);
+        const game = legacyById.get(id) ?? recentCompletedById.get(id);
         console.log(`  ${id} (${game?.metaGame ?? 'unknown'})`);
       }
     }
     if (extraInRecentCompleted.length > 0) {
-      console.log('\nIn RECENTCOMPLETED# but not eligible in USER.games:');
+      console.log('\nIn RECENTCOMPLETED# but not dashboard-eligible (merged overlays):');
       for (const id of extraInRecentCompleted) {
         const row = recentCompletedById.get(id);
         console.log(`  ${id} (${row?.metaGame ?? 'unknown'})`);

@@ -8,6 +8,7 @@
  *   sync-overlays       — Phase 2b: upsert USERGAME# from USER.games[] + delete orphan rows
  *   sync-current-games     — Upsert CURRENTGAMES# from USER.games[] (fixes missing summary fields e.g. numMoves)
  *   sync-recent-completed  — Upsert RECENTCOMPLETED# from eligible USER.games[] completed entries (Phase 3b)
+ *   prune-stale-recent-completed — Delete RECENTCOMPLETED# rows not dashboard-eligible (merged USERGAME# overlays)
  *   purge-usergame-orphans — Delete USERGAME# rows for games not on the user's dashboard
  *   meta-counts            — METAGAMES#<metaGame>/COUNTS from monolith METAGAMES/COUNTS
  *   all                 — user-index + meta-counts (default; does not include sync steps)
@@ -16,7 +17,7 @@
  *
  * Usage:
  *   node bin/backfill-normalization-phase2.mjs [--stage dev|prod] [--dry-run]
- *     [--step user-index|sync-overlays|sync-current-games|sync-recent-completed|purge-usergame-orphans|meta-counts|all] [--user-id <cognitoSub>]
+ *     [--step user-index|sync-overlays|sync-current-games|sync-recent-completed|prune-stale-recent-completed|purge-usergame-orphans|meta-counts|all] [--user-id <cognitoSub>]
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -58,12 +59,13 @@ function usage() {
 Options:
   --stage dev|prod          AWS profile + DynamoDB table (default: dev)
   --dry-run                 Count actions only; do not write
-  --step user-index|sync-overlays|sync-current-games|sync-recent-completed|purge-usergame-orphans|meta-counts|all   Step (default: all)
+  --step user-index|sync-overlays|sync-current-games|sync-recent-completed|prune-stale-recent-completed|purge-usergame-orphans|meta-counts|all   Step (default: all)
   --sync-overlays           Shorthand for --step sync-overlays
   --sync-current-games      Shorthand for --step sync-current-games
   --sync-recent-completed   Shorthand for --step sync-recent-completed
+  --prune-stale-recent-completed  Shorthand for --step prune-stale-recent-completed
   --purge-usergame-orphans  Shorthand for --step purge-usergame-orphans
-  --user-id <cognitoSub>    Single user (user-index, sync-overlays, sync-current-games, sync-recent-completed, purge-usergame-orphans)
+  --user-id <cognitoSub>    Single user (user-index, sync-overlays, sync-current-games, sync-recent-completed, prune-stale-recent-completed, purge-usergame-orphans)
   --help, -h                Show this help
 `);
   process.exit(1);
@@ -91,6 +93,8 @@ function parseArgs(argv) {
       step = 'sync-current-games';
     } else if (arg === '--sync-recent-completed') {
       step = 'sync-recent-completed';
+    } else if (arg === '--prune-stale-recent-completed') {
+      step = 'prune-stale-recent-completed';
     } else if (arg === '--purge-usergame-orphans') {
       step = 'purge-usergame-orphans';
     } else if (arg === '--help' || arg === '-h') {
@@ -105,7 +109,7 @@ function parseArgs(argv) {
     console.error(`Unknown stage: ${stage}`);
     usage();
   }
-  if (!['user-index', 'sync-overlays', 'sync-current-games', 'sync-recent-completed', 'purge-usergame-orphans', 'meta-counts', 'all'].includes(step)) {
+  if (!['user-index', 'sync-overlays', 'sync-current-games', 'sync-recent-completed', 'prune-stale-recent-completed', 'purge-usergame-orphans', 'meta-counts', 'all'].includes(step)) {
     console.error(`Unknown step: ${step}`);
     usage();
   }
@@ -148,6 +152,40 @@ function shouldBeOnCompletedDashboard(game, now = Date.now()) {
     return true;
   }
   return now - game.seen <= COMPLETED_DASHBOARD_RETENTION_MS;
+}
+
+function applyOverlayFields(game, overlayRow, legacy) {
+  const result = { ...game };
+  const seen = overlayRow?.seen ?? legacy?.seen;
+  const lastChat = overlayRow?.lastChat ?? legacy?.lastChat;
+  if (seen !== undefined) {
+    result.seen = seen;
+  } else {
+    delete result.seen;
+  }
+  if (lastChat !== undefined) {
+    result.lastChat = lastChat;
+  } else {
+    delete result.lastChat;
+  }
+  return result;
+}
+
+function recentCompletedRowToGame(row) {
+  return {
+    id: row.id ?? row.sk,
+    metaGame: row.metaGame,
+    toMove: row.toMove ?? '',
+    lastMoveTime: row.lastMoveTime,
+  };
+}
+
+function completedGameForEligibility(row, legacyById, overlayById) {
+  const legacy = legacyById.get(row.sk);
+  const base = legacy && !isActiveDashboardGame(legacy)
+    ? legacy
+    : recentCompletedRowToGame(row);
+  return applyOverlayFields(base, overlayById.get(row.sk), legacy);
 }
 
 function recentCompletedItemFromUserGame(userId, game) {
@@ -514,6 +552,57 @@ async function syncRecentCompleted(docClient, tableName, { dryRun, userId }) {
   return stats;
 }
 
+async function pruneStaleRecentCompletedForUser(docClient, tableName, userId, games, dryRun, stats) {
+  const recentCompletedRows = await queryPartition(docClient, tableName, `RECENTCOMPLETED#${userId}`);
+  const userGameRows = await queryUserGameRows(docClient, tableName, userId);
+  const legacyById = new Map((games ?? []).filter(game => game?.id).map(game => [game.id, game]));
+  const overlayById = new Map(userGameRows.map(row => [row.sk, row]));
+  const now = Date.now();
+
+  for (const row of recentCompletedRows) {
+    const merged = completedGameForEligibility(row, legacyById, overlayById);
+    if (shouldBeOnCompletedDashboard(merged, now)) {
+      continue;
+    }
+    if (dryRun) {
+      stats.recentCompletedPruned = (stats.recentCompletedPruned ?? 0) + 1;
+      continue;
+    }
+    await docClient.send(new DeleteCommand({
+      TableName: tableName,
+      Key: { pk: row.pk, sk: row.sk },
+    }));
+    stats.recentCompletedPruned = (stats.recentCompletedPruned ?? 0) + 1;
+  }
+}
+
+async function pruneStaleRecentCompleted(docClient, tableName, { dryRun, userId }) {
+  const stats = { users: 0 };
+
+  console.log('\nPruning stale RECENTCOMPLETED# rows (not dashboard-eligible with merged overlays)…');
+
+  if (userId) {
+    const user = await getUserRecord(docClient, tableName, userId);
+    if (!user) {
+      console.error(`No USER record for ${userId}`);
+      return stats;
+    }
+    stats.users = 1;
+    await pruneStaleRecentCompletedForUser(docClient, tableName, userId, user.games ?? [], dryRun, stats);
+    return stats;
+  }
+
+  const users = await scanAllUsers(docClient, tableName);
+  stats.users = users.length;
+  console.log(`  found ${users.length} USER records`);
+
+  for (const user of users) {
+    await pruneStaleRecentCompletedForUser(docClient, tableName, user.sk, user.games ?? [], dryRun, stats);
+  }
+
+  return stats;
+}
+
 
 async function purgeUserGameOrphansForUser(docClient, tableName, userId, games, dryRun, stats) {
   const currentRows = await queryPartition(docClient, tableName, `CURRENTGAMES#${userId}`);
@@ -678,6 +767,11 @@ async function main() {
   if (step === 'sync-recent-completed') {
     const stats = await syncRecentCompleted(docClient, table, { dryRun, userId });
     printStats('RECENTCOMPLETED sync', stats);
+  }
+
+  if (step === 'prune-stale-recent-completed') {
+    const stats = await pruneStaleRecentCompleted(docClient, table, { dryRun, userId });
+    printStats('RECENTCOMPLETED prune', stats);
   }
 
   if (step === 'purge-usergame-orphans') {
