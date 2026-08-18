@@ -85,9 +85,11 @@ import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } 
 import { adjustShardedCounts, ensureShardedMetaGameCountEntry } from '../lib/gameProjector';
 import { filterExplorationTreeForSave, type ExplorationTreeNode } from '../lib/explorationMoves';
 import {
+  loadDashboardGameData,
   loadDashboardGames,
   isActiveDashboardGame,
   shouldWriteGameOpenOverlay,
+  staleLegacyActiveGameIds,
 } from '../lib/dashboardGames';
 import {
   deleteRecentCompletedRow,
@@ -2080,7 +2082,7 @@ async function dismissCompletedGame(userid: string, pars: { id?: string; gameId?
     deleteUserGameOverlay(ddbDocClient, tableName, userid, gameId),
   ]);
 
-  if (legacyGame !== undefined && !isActiveDashboardGame(legacyGame)) {
+  if (legacyGame !== undefined) {
     const games = (user.games ?? []).filter(g => g.id !== gameId);
     await updateUserGames(userid, user.gamesUpdate, [gameId], games);
   }
@@ -2646,7 +2648,8 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
     if (user.email !== email)
       await updateUserEMail(claim);
     const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-    let games = await loadDashboardGames(ddbDocClient, tableName, userId, user.games ?? []);
+    const dashboardLoad = await loadDashboardGameData(ddbDocClient, tableName, userId, user.games ?? []);
+    let games = dashboardLoad.games;
     if (fixGames) {
       console.log("games before", games);
       games = await getGamesForUser(userId);
@@ -2703,7 +2706,8 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
     const highlightsWork = listHighlights(ddbDocClient, tableName, userId);
     const representativesWork = listUserRecommendations(ddbDocClient, tableName, userId);
 
-    const removedGameIDs: string[] = [];
+    const evictedGameIDs: string[] = [];
+    let staleLegacyIds: string[] = [];
     if (!pars || !pars.size || pars.size !== "small") {
       // LogInOutButton calls "me" with "small". If we do the below from the dashboard (and then at the same time from LogInOutButton) we run into
       // all kinds of race conditions. So we only do the below if we are not in "small" mode.
@@ -2717,7 +2721,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
         if (game.toMove === "" || game.toMove === null) {
           if ((game.seen !== undefined) && (Date.now() - (game.seen || 0) > 7 * 24 * 3600000) && ((game.lastChat || 0) <= (game.seen || 0))) {
             games.splice(i, 1);
-            removedGameIDs.push(game.id);
+            evictedGameIDs.push(game.id);
           }
         }
       }
@@ -2737,7 +2741,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
               }
             });
             if (minIndex !== -1) {
-              await updateUserGames(userId, user.gamesUpdate, removedGameIDs, games);
+              await updateUserGames(userId, user.gamesUpdate, evictedGameIDs, games);
               const newLastMoveTime = game.lastMoveTime + game.players[minIndex].time!;
 
               try {
@@ -2777,8 +2781,8 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           } else {
             const toMove = parseInt(game.toMove);
             if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
-              // To make sure games are up to date before we update further. Note this is a noop if removedGameIDs === [].
-              await updateUserGames(userId, user.gamesUpdate, removedGameIDs, games);
+              // To make sure games are up to date before we update further. Note this is a noop if evictedGameIDs === [].
+              await updateUserGames(userId, user.gamesUpdate, evictedGameIDs, games);
               const newLastMoveTime = game.lastMoveTime + game.players[toMove].time!;
               try {
                 // Conditional update: only succeed if toMove hasn't been cleared yet
@@ -2820,7 +2824,17 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
           }
         }
       }
+
+      staleLegacyIds = staleLegacyActiveGameIds(
+        user.games ?? [],
+        dashboardLoad.currentRows,
+        dashboardLoad.recentCompletedRows,
+      );
+      if (staleLegacyIds.length > 0) {
+        console.log(`Pruning stale legacy USER.games[] entries for ${userId}:`, staleLegacyIds);
+      }
     }
+    const legacySyncGameIDs = [...new Set([...evictedGameIDs, ...staleLegacyIds])];
     // Update last seen date for user
     console.log(`Updating last seen date for USER and USERS`);
     const lastSeenUserWork = ddbDocClient.send(new UpdateCommand({
@@ -2838,8 +2852,8 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
 
     let data = null;
     console.log(`Fetching challenges`);
-    if (removedGameIDs.length > 0) {
-      await Promise.all(removedGameIDs.flatMap(gameId => [
+    if (evictedGameIDs.length > 0) {
+      await Promise.all(evictedGameIDs.flatMap(gameId => [
         deleteUserGameOverlay(ddbDocClient, tableName, userId, gameId),
         deleteRecentCompletedRow(ddbDocClient, tableName, userId, gameId),
       ]));
@@ -2855,7 +2869,7 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
       const challengesAccepted = getChallenges(challengesAcceptedIDs);
       const standingChallenges = getChallenges(standingChallengeIDs);
       data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges, tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        updateUserGames(userId, user.gamesUpdate, removedGameIDs, games), standingWork, customizationWork, botsWork, watchedGamesWork, highlightsWork, representativesWork, blockedWork]);
+        updateUserGames(userId, user.gamesUpdate, legacySyncGameIDs, games), standingWork, customizationWork, botsWork, watchedGamesWork, highlightsWork, representativesWork, blockedWork]);
       tagData = data[4];
       paletteData = data[5];
       standingData = data[9];

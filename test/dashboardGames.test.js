@@ -143,3 +143,93 @@ const completedLegacy = {
     const merged = (0, dashboardGames_1.mergeDashboardGames)([], [], overlays, legacy);
     strict_1.default.equal(merged.length, 0);
 });
+(0, node_test_1.test)('mergeDashboardGames prefers RECENTCOMPLETED# over stale legacy active', () => {
+    const staleActiveLegacy = {
+        id: 'g-done',
+        metaGame: 'chess',
+        players: [{ id: 'u1', name: 'A' }, { id: 'u2', name: 'B' }],
+        clockHard: false,
+        toMove: '0',
+        lastMoveTime: 40,
+        numMoves: 9,
+    };
+    const legacy = [
+        staleActiveLegacy,
+        {
+            id: 'g-active',
+            metaGame: 'saltire',
+            players: [{ id: 'u1', name: 'A' }],
+            clockHard: true,
+            toMove: '0',
+            lastMoveTime: 10,
+        },
+    ];
+    const overlays = new Map([
+        ['g-done', { seen: 2 }],
+    ]);
+    const merged = (0, dashboardGames_1.mergeDashboardGames)([activeRow], [completedRow], overlays, legacy);
+    strict_1.default.equal(merged.length, 2);
+    const completed = merged.find(g => g.id === 'g-done');
+    strict_1.default.ok(completed);
+    strict_1.default.equal(completed.toMove, '');
+    strict_1.default.equal(completed.gameEnded, 55);
+    strict_1.default.equal(completed.seen, 2);
+});
+(0, node_test_1.test)('mergeDashboardGames omits stale legacy active ghost when CURRENTGAMES# exists', () => {
+    const legacy = [{
+            id: 'g-ghost',
+            metaGame: 'chess',
+            players: [{ id: 'u1', name: 'A' }],
+            clockHard: true,
+            toMove: '0',
+            lastMoveTime: 20,
+        }];
+    const merged = (0, dashboardGames_1.mergeDashboardGames)([activeRow], [], new Map(), legacy);
+    strict_1.default.equal(merged.length, 1);
+    strict_1.default.equal(merged[0].id, 'g-active');
+});
+(0, node_test_1.test)('mergeDashboardGames shows completed from index when only RECENTCOMPLETED# exists', () => {
+    const staleActiveLegacy = {
+        id: 'g-done',
+        metaGame: 'chess',
+        players: [{ id: 'u1', name: 'A' }],
+        clockHard: false,
+        toMove: '1',
+        lastMoveTime: 40,
+    };
+    const merged = (0, dashboardGames_1.mergeDashboardGames)([], [completedRow], new Map(), [staleActiveLegacy]);
+    strict_1.default.equal(merged.length, 1);
+    strict_1.default.equal(merged[0].id, 'g-done');
+    strict_1.default.equal(merged[0].toMove, '');
+    strict_1.default.equal(merged[0].gameEnded, 55);
+});
+(0, node_test_1.test)('staleLegacyActiveGameIds finds legacy active rows replaced by indexes', () => {
+    const legacy = [
+        {
+            id: 'g-done',
+            metaGame: 'chess',
+            players: [{ id: 'u1', name: 'A' }],
+            clockHard: false,
+            toMove: '0',
+            lastMoveTime: 40,
+        },
+        {
+            id: 'g-active',
+            metaGame: 'saltire',
+            players: [{ id: 'u1', name: 'A' }],
+            clockHard: true,
+            toMove: '0',
+            lastMoveTime: 10,
+        },
+        {
+            id: 'g-ghost',
+            metaGame: 'chess',
+            players: [{ id: 'u1', name: 'A' }],
+            clockHard: true,
+            toMove: '0',
+            lastMoveTime: 20,
+        },
+    ];
+    const stale = (0, dashboardGames_1.staleLegacyActiveGameIds)(legacy, [activeRow], [completedRow]);
+    strict_1.default.deepEqual(new Set(stale), new Set(['g-done', 'g-ghost']));
+});

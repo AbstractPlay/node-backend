@@ -131,15 +131,14 @@ export function mergeDashboardGames(
 
   for (const legacy of legacyGames) {
     if (isActiveDashboardGame(legacy)) {
-      if (useActiveIndex) {
-        const indexed = activeById.get(legacy.id);
-        if (indexed) {
-          result.push(indexed);
-          emitted.add(legacy.id);
-        } else {
-          result.push(applyOverlayFields({ ...legacy }, overlays.get(legacy.id), legacy));
-          emitted.add(legacy.id);
-        }
+      const indexed = activeById.get(legacy.id);
+      if (indexed) {
+        result.push(indexed);
+        emitted.add(legacy.id);
+      } else if (useActiveIndex) {
+        // Stale legacy active: stream removed CURRENTGAMES# on completion.
+      } else if (useCompletedIndex && completedById.has(legacy.id)) {
+        // Defer to RECENTCOMPLETED# pass — legacy still shows pre-completion toMove.
       } else {
         result.push(applyOverlayFields({ ...legacy }, overlays.get(legacy.id), legacy));
         emitted.add(legacy.id);
@@ -178,6 +177,29 @@ export function mergeDashboardGames(
 
   return result;
 }
+
+/** Legacy USER.games[] rows still marked active after stream completion or index removal. */
+export function staleLegacyActiveGameIds(
+  legacyGames: DashboardGame[],
+  currentRows: CurrentGameIndexRow[],
+  recentCompletedRows: RecentCompletedIndexRow[],
+): string[] {
+  const currentIds = new Set(currentRows.map(row => row.id ?? row.sk));
+  const recentIds = new Set(recentCompletedRows.map(row => row.id ?? row.sk));
+  const useActiveIndex = currentRows.length > 0;
+  return legacyGames
+    .filter(game => isActiveDashboardGame(game) && (
+      (useActiveIndex && !currentIds.has(game.id)) ||
+      recentIds.has(game.id)
+    ))
+    .map(game => game.id);
+}
+
+export type DashboardGameLoad = {
+  games: DashboardGame[];
+  currentRows: CurrentGameIndexRow[];
+  recentCompletedRows: RecentCompletedIndexRow[];
+};
 
 /**
  * Whether opening a game (setSeenTime) may update USERGAME# seen.
@@ -224,16 +246,27 @@ export async function shouldWriteGameOpenOverlay(
   return shouldBeOnCompletedDashboard(withOverlay);
 }
 
+export async function loadDashboardGameData(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  legacyGames: DashboardGame[],
+): Promise<DashboardGameLoad> {
+  const [currentRows, recentCompletedRows, overlays] = await Promise.all([
+    listCurrentGameRows(client, tableName, userId),
+    listRecentCompletedRows(client, tableName, userId),
+    listUserGameOverlays(client, tableName, userId),
+  ]);
+  const games = mergeDashboardGames(currentRows, recentCompletedRows, overlays, legacyGames);
+  return { games, currentRows, recentCompletedRows };
+}
+
 export async function loadDashboardGames(
   client: DynamoDBDocumentClient,
   tableName: string,
   userId: string,
   legacyGames: DashboardGame[],
 ): Promise<DashboardGame[]> {
-  const [currentRows, recentCompletedRows, overlays] = await Promise.all([
-    listCurrentGameRows(client, tableName, userId),
-    listRecentCompletedRows(client, tableName, userId),
-    listUserGameOverlays(client, tableName, userId),
-  ]);
-  return mergeDashboardGames(currentRows, recentCompletedRows, overlays, legacyGames);
+  const { games } = await loadDashboardGameData(client, tableName, userId, legacyGames);
+  return games;
 }
