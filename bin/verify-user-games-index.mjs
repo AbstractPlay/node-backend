@@ -266,6 +266,14 @@ async function main() {
   const missingFromCurrent = [...activeIds].filter(id => !currentIds.has(id));
   const extraInCurrent = [...currentIds].filter(id => !activeIds.has(id));
 
+  const useActiveIndex = currentGames.length > 0;
+  const expectedStaleLegacyActive = missingFromCurrent.filter(id =>
+    recentCompletedIds.has(id) || useActiveIndex,
+  );
+  const unexpectedMissingFromCurrent = missingFromCurrent.filter(id =>
+    !expectedStaleLegacyActive.includes(id),
+  );
+
   const numMovesMismatches = [];
   for (const game of activeGames) {
     const row = currentById.get(game.id);
@@ -331,8 +339,8 @@ async function main() {
     }
   }
 
-  const currentCountMatch = activeGames.length === currentGames.length;
-  const currentIdsMatch = missingFromCurrent.length === 0 && extraInCurrent.length === 0;
+  const currentCountMatch = activeGames.length - expectedStaleLegacyActive.length === currentGames.length;
+  const currentIdsMatch = unexpectedMissingFromCurrent.length === 0 && extraInCurrent.length === 0;
   const numMovesMatch = numMovesMismatches.length === 0;
   const recentCompletedCountMatch = !useRecentCompletedIndex
     || eligibleCompletedIds.size === recentCompletedGames.length;
@@ -395,9 +403,16 @@ async function main() {
         console.log(`  ${row.id} (${row.metaGame}): legacy=${row.legacyMoves} index=${row.indexMoves}`);
       }
     }
-    if (missingFromCurrent.length > 0) {
-      console.log('\nActive in USER.games but missing from CURRENTGAMES#:');
-      for (const id of missingFromCurrent) {
+    if (expectedStaleLegacyActive.length > 0) {
+      console.log('\nStale legacy active in USER.games[] (expected post-4b until me() prune):');
+      for (const id of expectedStaleLegacyActive) {
+        const game = activeGames.find(g => g.id === id);
+        console.log(`  ${id} (${game?.metaGame ?? 'unknown'})`);
+      }
+    }
+    if (unexpectedMissingFromCurrent.length > 0) {
+      console.log('\nActive in USER.games but missing from CURRENTGAMES# (unexpected):');
+      for (const id of unexpectedMissingFromCurrent) {
         const game = activeGames.find(g => g.id === id);
         console.log(`  ${id} (${game?.metaGame ?? 'unknown'})`);
       }
