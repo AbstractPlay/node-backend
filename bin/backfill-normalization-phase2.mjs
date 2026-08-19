@@ -5,7 +5,6 @@
  *
  * Steps:
  *   user-index          — CURRENTGAMES# + USERGAME# from USER.games[] (insert-only)
- *   sync-overlays       — Phase 2b: upsert USERGAME# from USER.games[] + delete orphan rows
  *   sync-current-games     — Upsert CURRENTGAMES# from USER.games[] (fixes missing summary fields e.g. numMoves)
  *   sync-recent-completed  — Upsert RECENTCOMPLETED# from eligible USER.games[] completed entries (Phase 3b)
  *   prune-stale-recent-completed — Delete RECENTCOMPLETED# rows not dashboard-eligible (merged USERGAME# overlays)
@@ -18,7 +17,7 @@
  *
  * Usage:
  *   node bin/backfill-normalization-phase2.mjs [--stage dev|prod] [--dry-run]
- *     [--step user-index|sync-overlays|sync-current-games|sync-recent-completed|prune-stale-recent-completed|purge-usergame-orphans|meta-counts|all] [--user-id <cognitoSub>]
+ *     [--step user-index|sync-current-games|sync-recent-completed|prune-stale-recent-completed|purge-usergame-orphans|strip-legacy-overlays|meta-counts|all] [--user-id <cognitoSub>]
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -61,14 +60,13 @@ function usage() {
 Options:
   --stage dev|prod          AWS profile + DynamoDB table (default: dev)
   --dry-run                 Count actions only; do not write
-  --step user-index|sync-overlays|sync-current-games|sync-recent-completed|prune-stale-recent-completed|purge-usergame-orphans|strip-legacy-overlays|meta-counts|all   Step (default: all)
-  --sync-overlays           Shorthand for --step sync-overlays
+  --step user-index|sync-current-games|sync-recent-completed|prune-stale-recent-completed|purge-usergame-orphans|strip-legacy-overlays|meta-counts|all   Step (default: all)
   --sync-current-games      Shorthand for --step sync-current-games
   --sync-recent-completed   Shorthand for --step sync-recent-completed
   --prune-stale-recent-completed  Shorthand for --step prune-stale-recent-completed
   --purge-usergame-orphans  Shorthand for --step purge-usergame-orphans
   --strip-legacy-overlays   Shorthand for --step strip-legacy-overlays
-  --user-id <cognitoSub>    Single user (user-index, sync-overlays, sync-current-games, sync-recent-completed, prune-stale-recent-completed, purge-usergame-orphans, strip-legacy-overlays)
+  --user-id <cognitoSub>    Single user (user-index, sync-current-games, sync-recent-completed, prune-stale-recent-completed, purge-usergame-orphans, strip-legacy-overlays)
   --help, -h                Show this help
 `);
   process.exit(1);
@@ -90,8 +88,6 @@ function parseArgs(argv) {
       step = argv[++i];
     } else if (arg === '--user-id' && argv[i + 1]) {
       userId = argv[++i];
-    } else if (arg === '--sync-overlays') {
-      step = 'sync-overlays';
     } else if (arg === '--sync-current-games') {
       step = 'sync-current-games';
     } else if (arg === '--sync-recent-completed') {
@@ -114,7 +110,7 @@ function parseArgs(argv) {
     console.error(`Unknown stage: ${stage}`);
     usage();
   }
-  if (!['user-index', 'sync-overlays', 'sync-current-games', 'sync-recent-completed', 'prune-stale-recent-completed', 'purge-usergame-orphans', 'strip-legacy-overlays', 'meta-counts', 'all'].includes(step)) {
+  if (!['user-index', 'sync-current-games', 'sync-recent-completed', 'prune-stale-recent-completed', 'purge-usergame-orphans', 'strip-legacy-overlays', 'meta-counts', 'all'].includes(step)) {
     console.error(`Unknown step: ${step}`);
     usage();
   }
@@ -419,79 +415,6 @@ async function queryUserGameRows(docClient, tableName, userId) {
   } while (lastEvaluatedKey);
 
   return items;
-}
-
-function overlayItemFromGame(userId, game) {
-  const overlay = toUserGameOverlay(game);
-  const { id, ...fields } = overlay;
-  return {
-    pk: `USERGAME#${userId}`,
-    sk: id,
-    ...fields,
-  };
-}
-
-async function syncOverlaysForUser(docClient, tableName, userId, games, dryRun, stats) {
-  const expectedIds = new Set();
-
-  for (const game of games) {
-    if (!game?.id || !hasUserGameOverlay(game)) {
-      continue;
-    }
-    expectedIds.add(game.id);
-    if (dryRun) {
-      stats.userGamesUpserted = (stats.userGamesUpserted ?? 0) + 1;
-      continue;
-    }
-    await docClient.send(new PutCommand({
-      TableName: tableName,
-      Item: overlayItemFromGame(userId, game),
-    }));
-    stats.userGamesUpserted = (stats.userGamesUpserted ?? 0) + 1;
-  }
-
-  const existing = await queryUserGameRows(docClient, tableName, userId);
-  for (const row of existing) {
-    if (expectedIds.has(row.sk)) {
-      continue;
-    }
-    if (dryRun) {
-      stats.userGamesDeleted = (stats.userGamesDeleted ?? 0) + 1;
-      continue;
-    }
-    await docClient.send(new DeleteCommand({
-      TableName: tableName,
-      Key: { pk: row.pk, sk: row.sk },
-    }));
-    stats.userGamesDeleted = (stats.userGamesDeleted ?? 0) + 1;
-  }
-}
-
-async function syncOverlays(docClient, tableName, { dryRun, userId }) {
-  const stats = { users: 0 };
-
-  console.log('\nSyncing USERGAME# overlays from USER.games[] (upsert + delete orphans)…');
-
-  if (userId) {
-    const user = await getUserRecord(docClient, tableName, userId);
-    if (!user) {
-      console.error(`No USER record for ${userId}`);
-      return stats;
-    }
-    stats.users = 1;
-    await syncOverlaysForUser(docClient, tableName, userId, user.games ?? [], dryRun, stats);
-    return stats;
-  }
-
-  const users = await scanAllUsers(docClient, tableName);
-  stats.users = users.length;
-  console.log(`  found ${users.length} USER records`);
-
-  for (const user of users) {
-    await syncOverlaysForUser(docClient, tableName, user.sk, user.games ?? [], dryRun, stats);
-  }
-
-  return stats;
 }
 
 async function syncCurrentGamesForUser(docClient, tableName, userId, games, dryRun, stats) {
@@ -824,11 +747,6 @@ async function main() {
   if (step === 'user-index' || step === 'all') {
     const stats = await backfillUserIndex(docClient, table, { dryRun, userId });
     printStats('User index backfill', stats);
-  }
-
-  if (step === 'sync-overlays') {
-    const stats = await syncOverlays(docClient, table, { dryRun, userId });
-    printStats('USERGAME overlay sync', stats);
   }
 
   if (step === 'sync-current-games') {
