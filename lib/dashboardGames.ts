@@ -5,6 +5,7 @@ import {
   listRecentCompletedRows,
   recentCompletedRowToGame,
   shouldBeOnCompletedDashboard,
+  COMPLETED_DASHBOARD_RETENTION_MS,
   type RecentCompletedIndexRow,
 } from './recentCompletedGames';
 import {
@@ -193,6 +194,31 @@ export function staleLegacyActiveGameIds(
       recentIds.has(game.id)
     ))
     .map(game => game.id);
+}
+
+/**
+ * In-memory prune of completed dashboard games seen >7 days ago with no newer chat.
+ * Matches the eviction loop in me() before side-effect writes.
+ */
+export function pruneSeenCompletedDashboardGames(
+  games: DashboardGame[],
+  now = Date.now(),
+): { games: DashboardGame[]; evictedIds: string[] } {
+  const evictedIds: string[] = [];
+  const kept: DashboardGame[] = [];
+  for (const game of games) {
+    if (
+      (game.toMove === '' || game.toMove === null) &&
+      game.seen !== undefined &&
+      now - (game.seen || 0) > COMPLETED_DASHBOARD_RETENTION_MS &&
+      (game.lastChat || 0) <= (game.seen || 0)
+    ) {
+      evictedIds.push(game.id);
+    } else {
+      kept.push(game);
+    }
+  }
+  return { games: kept, evictedIds };
 }
 
 export type DashboardGameLoad = {

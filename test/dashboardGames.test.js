@@ -153,17 +153,14 @@ const completedLegacy = {
         lastMoveTime: 40,
         numMoves: 9,
     };
-    const legacy = [
-        staleActiveLegacy,
-        {
+    const legacy = [staleActiveLegacy, {
             id: 'g-active',
             metaGame: 'saltire',
             players: [{ id: 'u1', name: 'A' }],
             clockHard: true,
             toMove: '0',
             lastMoveTime: 10,
-        },
-    ];
+        }];
     const overlays = new Map([
         ['g-done', { seen: 2 }],
     ]);
