@@ -1,4 +1,5 @@
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
+import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { ddbDocClient } from './ddb';
 
 export type BotRecord = {
@@ -46,6 +47,28 @@ export function toClientBot(item: BotRecord | undefined): ClientBot | undefined 
     pendingSecretCreatedAt: item.pendingSecretCreatedAt,
     secretRotationPending: item.pendingSecretId !== undefined && item.pendingSecretId !== '',
   };
+}
+
+export async function getBotRecordsByIds(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  botIds: Iterable<string>,
+): Promise<ClientBot[]> {
+  const ids = [...botIds];
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const results = await Promise.all(ids.map(id => client.send(
+    new GetCommand({
+      TableName: tableName,
+      Key: { pk: 'BOT', sk: id },
+    }),
+  )));
+
+  return results
+    .map(result => toClientBot(result.Item as BotRecord | undefined))
+    .filter((bot): bot is ClientBot => bot !== undefined);
 }
 
 export type Participant = {
