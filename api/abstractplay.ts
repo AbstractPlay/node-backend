@@ -119,6 +119,12 @@ import {
   type PlaygroundSaveInput,
 } from '../lib/playgroundSaves';
 import {
+  DEFAULT_PLAYER_RATING,
+  expectedScorePlayer1,
+  type PlayerRating,
+  updateTwoPlayerRatings,
+} from '../lib/ratings';
+import {
   logRecommendationEvent,
   type RecommendationEventPars,
 } from '../lib/recommendationEvents';
@@ -247,7 +253,7 @@ type FullUser = {
   lastSeen?: number;
   settings: UserSettings;
   ratings?: {
-    [metaGame: string]: Rating
+    [metaGame: string]: PlayerRating
   };
   stars?: string[];
   tags?: TagList[];
@@ -298,13 +304,6 @@ type MeData = {
   watchedGames?: Game[];
   highlights?: Game[];
   representatives?: Game[];
-}
-
-type Rating = {
-  rating: number;
-  N: number;
-  wins: number;
-  draws: number;
 }
 
 type Note = {
@@ -4553,7 +4552,7 @@ async function scheduleRatingUpdates(
   game: FullGame,
   player: { id: string; name: string },
   ind: number,
-  newRatings: { [metaGame: string]: Rating }[] | null,
+  newRatings: { [metaGame: string]: PlayerRating }[] | null,
   list: Promise<any>[]
 ) {
   if (newRatings === null || await isBotId(player.id)) {
@@ -4739,7 +4738,7 @@ async function submitMove(userid: string, pars: {
       playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
       playerGame.winner = engine.winner;
     }
-    let newRatings: { [metaGame: string]: Rating }[] | null = null;
+    let newRatings: { [metaGame: string]: PlayerRating }[] | null = null;
     if ((game.toMove === "" || game.toMove === null)) {
       newRatings = updateRatings(game, players as unknown as FullUser[]);
       // delete at old sk
@@ -4932,29 +4931,25 @@ function updateRatings(game: FullGame, players: FullUser[]) {
     return null;
   if (game.numPlayers !== 2)
     throw new Error(`Only 2 player games can be rated, game ${game.id}`);
-  let rating1: Rating = { rating: 1200, N: 0, wins: 0, draws: 0 }
-  let rating2: Rating = { rating: 1200, N: 0, wins: 0, draws: 0 }
+  let rating1: PlayerRating = { ...DEFAULT_PLAYER_RATING };
+  let rating2: PlayerRating = { ...DEFAULT_PLAYER_RATING };
   if (players[0].ratings !== undefined && players[0].ratings[game.metaGame] !== undefined)
     rating1 = players[0].ratings[game.metaGame];
   if (players[1].ratings !== undefined && players[1].ratings[game.metaGame] !== undefined)
     rating2 = players[1].ratings[game.metaGame];
-  let score;
+  let player1Score: number;
   if (Array.isArray(game.winner)) {
     if (game.winner.length == 1) {
       if (game.winner[0] === 1) {
-        score = 1;
-        rating1.wins += 1;
+        player1Score = 1;
       } else if (game.winner[0] === 2) {
-        score = 0;
-        rating2.wins += 1;
+        player1Score = 0;
       } else {
         throw new Error(`Winner ([${game.winner[0]}]) not in expected format, game ${game.id}`);
       }
     } else if (game.winner.length == 2) {
       if (game.winner.includes(1) && game.winner.includes(2)) {
-        score = 0.5;
-        rating1.draws += 1;
-        rating2.draws += 1;
+        player1Score = 0.5;
       } else {
         throw new Error(`Winner ([${game.winner[0]}, ${game.winner[1]}]) not in expected format, game ${game.id}`);
       }
@@ -4964,27 +4959,14 @@ function updateRatings(game: FullGame, players: FullUser[]) {
   } else {
     throw new Error(`Winner is not an array!? Game ${game.id}`);
   }
-  const expectedScore = 1 / (1 + Math.pow(10, (rating2.rating - rating1.rating) / 400)); // player 1's expected score;
-  const E2 = 1 / (1 + Math.pow(10, (rating1.rating - rating2.rating) / 400));
-  console.log(`E = ${expectedScore}, E2 = ${E2}`);
-  rating1.rating += getK(rating1.N) * (score - expectedScore);
-  rating2.rating += getK(rating2.N) * (expectedScore - score);
-  rating1.N += 1;
-  rating2.N += 1;
+  const expectedScore = expectedScorePlayer1(rating1.rating, rating2.rating);
+  console.log(`E = ${expectedScore}, E2 = ${1 - expectedScore}`);
+  const [updated1, updated2] = updateTwoPlayerRatings(rating1, rating2, player1Score);
   const ratings1 = players[0].ratings === undefined ? {} : players[0].ratings;
   const ratings2 = players[1].ratings === undefined ? {} : players[1].ratings;
-  ratings1[game.metaGame] = rating1;
-  ratings2[game.metaGame] = rating2;
+  ratings1[game.metaGame] = updated1;
+  ratings2[game.metaGame] = updated2;
   return [ratings1, ratings2];
-}
-
-function getK(N: number) {
-  return (
-    N < 10 ? 40
-      : N < 20 ? 30
-        : N < 40 ? 25
-          : 20
-  );
 }
 
 async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], simultaneous: any, newRatings: any[] | null) {

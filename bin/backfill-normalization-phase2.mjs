@@ -10,6 +10,7 @@
  *   sync-recent-completed  — Upsert RECENTCOMPLETED# from eligible USER.games[] completed entries (Phase 3b)
  *   prune-stale-recent-completed — Delete RECENTCOMPLETED# rows not dashboard-eligible (merged USERGAME# overlays)
  *   purge-usergame-orphans — Delete USERGAME# rows for games not on the user's dashboard
+ *   strip-legacy-overlays  — Remove seen/lastChat from USER.games[] (Phase 4a; USERGAME# is sole overlay store)
  *   meta-counts            — METAGAMES#<metaGame>/COUNTS from monolith METAGAMES/COUNTS
  *   all                 — user-index + meta-counts (default; does not include sync steps)
  *
@@ -30,6 +31,7 @@ import {
   PutCommand,
   QueryCommand,
   ScanCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 
 const require = createRequire(import.meta.url);
@@ -59,13 +61,14 @@ function usage() {
 Options:
   --stage dev|prod          AWS profile + DynamoDB table (default: dev)
   --dry-run                 Count actions only; do not write
-  --step user-index|sync-overlays|sync-current-games|sync-recent-completed|prune-stale-recent-completed|purge-usergame-orphans|meta-counts|all   Step (default: all)
+  --step user-index|sync-overlays|sync-current-games|sync-recent-completed|prune-stale-recent-completed|purge-usergame-orphans|strip-legacy-overlays|meta-counts|all   Step (default: all)
   --sync-overlays           Shorthand for --step sync-overlays
   --sync-current-games      Shorthand for --step sync-current-games
   --sync-recent-completed   Shorthand for --step sync-recent-completed
   --prune-stale-recent-completed  Shorthand for --step prune-stale-recent-completed
   --purge-usergame-orphans  Shorthand for --step purge-usergame-orphans
-  --user-id <cognitoSub>    Single user (user-index, sync-overlays, sync-current-games, sync-recent-completed, prune-stale-recent-completed, purge-usergame-orphans)
+  --strip-legacy-overlays   Shorthand for --step strip-legacy-overlays
+  --user-id <cognitoSub>    Single user (user-index, sync-overlays, sync-current-games, sync-recent-completed, prune-stale-recent-completed, purge-usergame-orphans, strip-legacy-overlays)
   --help, -h                Show this help
 `);
   process.exit(1);
@@ -97,6 +100,8 @@ function parseArgs(argv) {
       step = 'prune-stale-recent-completed';
     } else if (arg === '--purge-usergame-orphans') {
       step = 'purge-usergame-orphans';
+    } else if (arg === '--strip-legacy-overlays') {
+      step = 'strip-legacy-overlays';
     } else if (arg === '--help' || arg === '-h') {
       usage();
     } else {
@@ -109,7 +114,7 @@ function parseArgs(argv) {
     console.error(`Unknown stage: ${stage}`);
     usage();
   }
-  if (!['user-index', 'sync-overlays', 'sync-current-games', 'sync-recent-completed', 'prune-stale-recent-completed', 'purge-usergame-orphans', 'meta-counts', 'all'].includes(step)) {
+  if (!['user-index', 'sync-overlays', 'sync-current-games', 'sync-recent-completed', 'prune-stale-recent-completed', 'purge-usergame-orphans', 'strip-legacy-overlays', 'meta-counts', 'all'].includes(step)) {
     console.error(`Unknown step: ${step}`);
     usage();
   }
@@ -290,10 +295,77 @@ async function getUserRecord(docClient, tableName, userId) {
   const data = await docClient.send(new GetCommand({
     TableName: tableName,
     Key: { pk: 'USER', sk: userId },
-    ProjectionExpression: '#pk, #sk, games',
+    ProjectionExpression: '#pk, #sk, games, gamesUpdate',
     ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
   }));
   return data.Item;
+}
+
+function stripOverlayFields(game) {
+  const result = { ...game };
+  delete result.seen;
+  delete result.lastChat;
+  return result;
+}
+
+async function stripLegacyOverlaysForUser(docClient, tableName, userId, dryRun, stats) {
+  const user = await getUserRecord(docClient, tableName, userId);
+  if (!user) {
+    return;
+  }
+  const games = user.games ?? [];
+  if (!games.some(game => game.seen !== undefined || game.lastChat !== undefined)) {
+    return;
+  }
+  const stripped = games.map(stripOverlayFields);
+  if (dryRun) {
+    stats.gamesStripped = (stats.gamesStripped ?? 0) + 1;
+    return;
+  }
+  if (user.gamesUpdate === undefined) {
+    await docClient.send(new UpdateCommand({
+      TableName: tableName,
+      Key: { pk: 'USER', sk: userId },
+      ExpressionAttributeValues: { ':val': 1, ':gs': stripped },
+      UpdateExpression: 'set gamesUpdate = :val, games = :gs',
+    }));
+  } else {
+    await docClient.send(new UpdateCommand({
+      TableName: tableName,
+      Key: { pk: 'USER', sk: userId },
+      ExpressionAttributeValues: { ':val': user.gamesUpdate, ':inc': 1, ':gs': stripped },
+      ConditionExpression: 'gamesUpdate = :val',
+      UpdateExpression: 'set gamesUpdate = gamesUpdate + :inc, games = :gs',
+    }));
+  }
+  stats.gamesStripped = (stats.gamesStripped ?? 0) + 1;
+}
+
+async function stripLegacyOverlays(docClient, tableName, { dryRun, userId }) {
+  const stats = { users: 0 };
+
+  console.log('\nStripping seen/lastChat from USER.games[] (USERGAME# is overlay store)…');
+
+  if (userId) {
+    const user = await getUserRecord(docClient, tableName, userId);
+    if (!user) {
+      console.error(`No USER record for ${userId}`);
+      return stats;
+    }
+    stats.users = 1;
+    await stripLegacyOverlaysForUser(docClient, tableName, userId, dryRun, stats);
+    return stats;
+  }
+
+  const users = await scanAllUsers(docClient, tableName);
+  stats.users = users.length;
+  console.log(`  found ${users.length} USER records`);
+
+  for (const user of users) {
+    await stripLegacyOverlaysForUser(docClient, tableName, user.sk, dryRun, stats);
+  }
+
+  return stats;
 }
 
 async function scanAllUsers(docClient, tableName) {
@@ -777,6 +849,11 @@ async function main() {
   if (step === 'purge-usergame-orphans') {
     const stats = await purgeUserGameOrphans(docClient, table, { dryRun, userId });
     printStats('USERGAME orphan purge', stats);
+  }
+
+  if (step === 'strip-legacy-overlays') {
+    const stats = await stripLegacyOverlays(docClient, table, { dryRun, userId });
+    printStats('Legacy overlay strip', stats);
   }
 
   if (step === 'meta-counts' || step === 'all') {

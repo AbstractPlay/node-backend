@@ -18,6 +18,9 @@
  * Usage:
  *   node bin/verify-user-games-index.mjs <userid> [--stage dev|prod] [--verbose]
  *
+ * Legacy Phase 2/3 migration checks (USER.games[] vs indexes). For post–Phase 4b
+ * soak / Phase 5 readiness, use bin/verify-dashboard-index.mjs instead.
+ *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
