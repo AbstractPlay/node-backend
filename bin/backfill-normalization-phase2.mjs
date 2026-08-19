@@ -13,11 +13,13 @@
  *   meta-counts            — METAGAMES#<metaGame>/COUNTS from monolith METAGAMES/COUNTS
  *   all                 — user-index + meta-counts (default; does not include sync steps)
  *
- * Conditional writes skip rows that already exist (stream or prior backfill).
+ * User-index steps use conditional writes (skip rows that already exist).
+ * meta-counts is insert-only by default; use --force to overwrite sharded rows from monolith.
  *
  * Usage:
  *   node bin/backfill-normalization-phase2.mjs [--stage dev|prod] [--dry-run]
  *     [--step user-index|sync-current-games|sync-recent-completed|prune-stale-recent-completed|purge-usergame-orphans|strip-legacy-overlays|meta-counts|all] [--user-id <cognitoSub>]
+ *     [--force]   Overwrite existing METAGAMES# rows (meta-counts step only)
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -66,6 +68,7 @@ Options:
   --prune-stale-recent-completed  Shorthand for --step prune-stale-recent-completed
   --purge-usergame-orphans  Shorthand for --step purge-usergame-orphans
   --strip-legacy-overlays   Shorthand for --step strip-legacy-overlays
+  --force                   Overwrite sharded METAGAMES# counts from monolith (meta-counts only)
   --user-id <cognitoSub>    Single user (user-index, sync-current-games, sync-recent-completed, prune-stale-recent-completed, purge-usergame-orphans, strip-legacy-overlays)
   --help, -h                Show this help
 `);
@@ -75,6 +78,7 @@ Options:
 function parseArgs(argv) {
   let stage = 'dev';
   let dryRun = false;
+  let force = false;
   let step = 'all';
   let userId;
 
@@ -84,6 +88,8 @@ function parseArgs(argv) {
       stage = argv[++i];
     } else if (arg === '--dry-run') {
       dryRun = true;
+    } else if (arg === '--force') {
+      force = true;
     } else if (arg === '--step' && argv[i + 1]) {
       step = argv[++i];
     } else if (arg === '--user-id' && argv[i + 1]) {
@@ -115,7 +121,12 @@ function parseArgs(argv) {
     usage();
   }
 
-  return { stage, dryRun, step, userId };
+  if (force && step !== 'meta-counts' && step !== 'all') {
+    console.error('--force applies only to --step meta-counts (or all with meta-counts)');
+    usage();
+  }
+
+  return { stage, dryRun, force, step, userId };
 }
 
 function isActiveDashboardGame(game) {
@@ -675,10 +686,26 @@ async function backfillUserIndex(docClient, tableName, { dryRun, userId }) {
   return stats;
 }
 
-async function backfillMetaCounts(docClient, tableName, dryRun) {
+async function writeMetaCountItem(docClient, tableName, item, dryRun, stats, force) {
+  if (dryRun) {
+    stats[force ? 'metaCountsOverwritten' : 'metaCounts'] = (stats[force ? 'metaCountsOverwritten' : 'metaCounts'] ?? 0) + 1;
+    return;
+  }
+  if (force) {
+    await docClient.send(new PutCommand({
+      TableName: tableName,
+      Item: item,
+    }));
+    stats.metaCountsOverwritten = (stats.metaCountsOverwritten ?? 0) + 1;
+    return;
+  }
+  await putIfAbsent(docClient, tableName, item, dryRun, stats, 'metaCounts');
+}
+
+async function backfillMetaCounts(docClient, tableName, { dryRun, force }) {
   const stats = {};
 
-  console.log('\nBackfilling METAGAMES#<metaGame>/COUNTS from monolith…');
+  console.log(`\nBackfilling METAGAMES#<metaGame>/COUNTS from monolith${force ? ' (force overwrite)' : ''}…`);
 
   const data = await docClient.send(new GetCommand({
     TableName: tableName,
@@ -705,7 +732,7 @@ async function backfillMetaCounts(docClient, tableName, dryRun) {
       ratingsCount,
     };
 
-    await putIfAbsent(docClient, tableName, item, dryRun, stats, 'metaCounts');
+    await writeMetaCountItem(docClient, tableName, item, dryRun, stats, force);
   }
 
   stats.metaGames = metaGames.length;
@@ -720,7 +747,7 @@ function printStats(label, stats) {
 }
 
 async function main() {
-  const { stage, dryRun, step, userId } = parseArgs(process.argv);
+  const { stage, dryRun, force, step, userId } = parseArgs(process.argv);
   const { profile, table } = STAGES[stage];
 
   const client = new DynamoDBClient({
@@ -738,6 +765,7 @@ async function main() {
   console.log(`Table: ${table}`);
   console.log(`Profile: ${profile}`);
   console.log(`Dry run: ${dryRun}`);
+  console.log(`Force meta-counts overwrite: ${force}`);
   console.log(`Step: ${step}`);
   if (userId) {
     console.log(`User id: ${userId}`);
@@ -778,7 +806,7 @@ async function main() {
     if (userId) {
       console.warn('\n--user-id is ignored for meta-counts step');
     }
-    const stats = await backfillMetaCounts(docClient, table, dryRun);
+    const stats = await backfillMetaCounts(docClient, table, { dryRun, force });
     printStats('Meta counts backfill', stats);
   }
 
