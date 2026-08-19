@@ -10,6 +10,7 @@ import { GameFactory } from '@abstractplay/gameslib';
 import type { DynamoDBRecord } from 'aws-lambda';
 import { decompressGameState } from './gameState';
 import { isBotId } from './participants';
+import { deleteUserGameOverlay } from './userGameOverlay';
 
 export type GameRecord = {
   pk: string;
@@ -259,6 +260,18 @@ async function deleteRecentCompletedForPlayers(
   ));
 }
 
+/** Short completions skip RECENTCOMPLETED#; overlays would otherwise orphan forever. */
+async function deleteUserGameOverlaysForPlayers(
+  docClient: DynamoDBDocumentClient,
+  tableName: string,
+  gameId: string,
+  playerIds: string[],
+): Promise<void> {
+  await Promise.all(playerIds.map(playerId =>
+    deleteUserGameOverlay(docClient, tableName, playerId, gameId),
+  ));
+}
+
 async function putCompletedGameIndexes(
   docClient: DynamoDBDocumentClient,
   tableName: string,
@@ -343,6 +356,8 @@ async function handleCompletedGameInsert(
     const summary = toCompletedSummary(game, numMoves);
     await putCompletedGameIndexes(docClient, tableName, game, summary);
     await putRecentCompletedForPlayers(docClient, tableName, summary, playerIds);
+  } else {
+    await deleteUserGameOverlaysForPlayers(docClient, tableName, game.id, playerIds);
   }
   const deltas: { currentgames: number; completedgames?: number } = { currentgames: -1 };
   if (keepgame) {
