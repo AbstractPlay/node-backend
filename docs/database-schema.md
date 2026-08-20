@@ -20,10 +20,11 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 
 ## Users
 
-- **Users** — profile, settings, dashboard game/challenge lists
+- **Users** — profile, settings, challenge lists (dashboard via indexes below)
   - pk: `USER`
   - sk: `<userid>`
   - fields include `publicRivalries` (boolean, default false) — opt in to public rivalries table
+  - **Retired (Phase 5):** `games[]`, `gamesUpdate` — lazy-removed via `bin/backfill-normalization-phase2.mjs --step remove-legacy-games`
 
 - **Push subscriptions** — web push endpoints (one record per browser/device)
   - pk: `PUSH`
@@ -126,20 +127,17 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `RATINGS#<metaGame>`
   - sk: `<userid>`
 
-- **Meta game counts** — aggregate stats (current games, completed games, standing challenges, stars, etc.)
-  - pk: `METAGAMES`
-  - sk: `COUNTS`
-  - Per-game nested maps are auto-initialized from `gameinfo` on `meta_games` reads and before count writes
+- **Meta game counts** — aggregate stats (retired monolith; admin recount writes sharded items)
+  - pk: `METAGAMES` / sk: `COUNTS` — **retired** (Phase 5); delete after verification
 
-- **Meta game counts (sharded, stream shadow)** — per-metaGame live counters written by the `gameProjector` Lambda; not read by the API until Phase 4b
+- **Meta game counts (sharded, authoritative)** — per-metaGame live counters; stream + inline app writes; `meta_games` reads and admin `update_meta_game_counts` write here
   - pk: `METAGAMES#<metaGame>`
   - sk: `COUNTS`
   - fields: `currentgames`, `completedgames`, `standingchallenges`, `stars`, `ratingsCount`
 
-- **Per-user game overlay (Phase 3 read / Phase 4a write)** — per-user `seen` / `lastChat` on dashboard games; sole write path after Phase 4a
+- **Per-user game overlay (Phase 5)** — per-user `seen` / `lastChat` on dashboard games; sole overlay store
   - pk: `USERGAME#<userid>`
   - sk: `<gameid>`
-  - `USER.games[]` entries must not include `seen`/`lastChat` after Phase 4a (`updateUserGames` strips them)
 
 ## Challenges
 

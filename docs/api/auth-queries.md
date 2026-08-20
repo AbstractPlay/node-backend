@@ -140,7 +140,7 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `update_meta_game_counts` | Recompute meta game counters | — |
+| `update_meta_game_counts` | Recompute sharded `METAGAMES#<metaGame>/COUNTS` from live queries | — |
 | `purge_retired_completed_games` | Delete legacy completed-game rows (prefer local script; see below) | — |
 
 For the one-time legacy completed-game purge, use the local script (no Lambda timeout):
@@ -150,7 +150,7 @@ node bin/purge-retired-completed-games.mjs --stage prod --dry-run
 node bin/purge-retired-completed-games.mjs --stage prod
 ```
 | `onetime_fix` | One-off data repair | — |
-| `fix_games` | Repair user game lists | varies |
+| `fix_games` | Deprecated — use `bin/backfill-normalization-phase2.mjs --step purge-usergame-orphans\|prune-stale-recent-completed` | `targetId` |
 | `delete_games` | Delete games (admin) | game ids |
 | `test_push` | Send test push | — |
 | `test_async` | Async test hook | varies |

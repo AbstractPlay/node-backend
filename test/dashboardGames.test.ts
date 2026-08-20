@@ -4,12 +4,9 @@ import {
   currentRowToGame,
   isActiveDashboardGame,
   mergeDashboardGames,
-  staleLegacyActiveGameIds,
   type CurrentGameIndexRow,
-  type DashboardGame,
 } from '../lib/dashboardGames';
 import type { RecentCompletedIndexRow } from '../lib/recentCompletedGames';
-import { COMPLETED_DASHBOARD_RETENTION_MS } from '../lib/recentCompletedGames';
 import type { UserGameOverlay } from '../lib/userGameOverlay';
 
 const activeRow: CurrentGameIndexRow = {
@@ -35,17 +32,6 @@ const completedRow: RecentCompletedIndexRow = {
   gameEnded: 55,
 };
 
-const completedLegacy: DashboardGame = {
-  id: 'g-done',
-  metaGame: 'chess',
-  players: [{ id: 'u1', name: 'A' }, { id: 'u2', name: 'B' }],
-  clockHard: false,
-  toMove: '',
-  lastMoveTime: 50,
-  numMoves: 10,
-  seen: 1,
-};
-
 test('isActiveDashboardGame treats empty toMove as completed', () => {
   assert.equal(isActiveDashboardGame({ toMove: '' }), false);
   assert.equal(isActiveDashboardGame({ toMove: '0' }), true);
@@ -59,26 +45,13 @@ test('currentRowToGame uses sk as id', () => {
   assert.equal(game.numMoves, 7);
 });
 
-test('mergeDashboardGames prefers CURRENTGAMES# for active games', () => {
-  const legacy: DashboardGame[] = [
-    {
-      id: 'g-active',
-      metaGame: 'saltire',
-      players: [{ id: 'u1', name: 'A' }],
-      clockHard: false,
-      toMove: '0',
-      lastMoveTime: 1,
-      numMoves: 3,
-      seen: 99,
-    },
-    completedLegacy,
-  ];
+test('mergeDashboardGames merges CURRENTGAMES# and RECENTCOMPLETED# with overlays', () => {
   const overlays = new Map<string, UserGameOverlay>([
     ['g-active', { seen: 5, lastChat: 6 }],
-    ['g-done', { seen: 2 }],
+    ['g-done', { seen: 2, lastChat: 3 }],
   ]);
 
-  const merged = mergeDashboardGames([activeRow], [completedRow], overlays, legacy);
+  const merged = mergeDashboardGames([activeRow], [completedRow], overlays);
 
   assert.equal(merged.length, 2);
   assert.equal(merged[0]!.id, 'g-active');
@@ -87,27 +60,12 @@ test('mergeDashboardGames prefers CURRENTGAMES# for active games', () => {
   assert.equal(merged[0]!.seen, 5);
   assert.equal(merged[0]!.lastChat, 6);
   assert.equal(merged[1]!.id, 'g-done');
+  assert.equal(merged[1]!.gameEnded, 55);
   assert.equal(merged[1]!.seen, 2);
+  assert.equal(merged[1]!.lastChat, 3);
 });
 
-test('mergeDashboardGames prefers RECENTCOMPLETED# for completed games', () => {
-  const legacy: DashboardGame[] = [completedLegacy];
-  const overlays = new Map<string, UserGameOverlay>([
-    ['g-done', { seen: 2, lastChat: 3 }],
-  ]);
-
-  const merged = mergeDashboardGames([], [completedRow], overlays, legacy);
-
-  assert.equal(merged.length, 1);
-  assert.equal(merged[0]!.id, 'g-done');
-  assert.equal(merged[0]!.gameEnded, 55);
-  assert.equal(merged[0]!.seen, 2);
-  assert.equal(merged[0]!.lastChat, 3);
-});
-
-test('mergeDashboardGames omits legacy completed when RECENTCOMPLETED# is authoritative', () => {
-  const legacy: DashboardGame[] = [completedLegacy];
-  const overlays = new Map<string, UserGameOverlay>();
+test('mergeDashboardGames omits completed when not in RECENTCOMPLETED#', () => {
   const otherCompleted: RecentCompletedIndexRow = {
     pk: 'RECENTCOMPLETED#u1',
     sk: 'g-other',
@@ -118,151 +76,27 @@ test('mergeDashboardGames omits legacy completed when RECENTCOMPLETED# is author
     lastMoveTime: 40,
   };
 
-  const merged = mergeDashboardGames([], [otherCompleted], overlays, legacy);
+  const merged = mergeDashboardGames([], [otherCompleted], new Map());
 
   assert.equal(merged.length, 1);
   assert.equal(merged[0]!.id, 'g-other');
 });
 
-test('mergeDashboardGames falls back to legacy games when index is empty', () => {
-  const legacy: DashboardGame[] = [
-    {
-      id: 'g-active',
-      metaGame: 'saltire',
-      players: [{ id: 'u1', name: 'A' }],
-      clockHard: true,
-      toMove: '1',
-      lastMoveTime: 10,
-      seen: 3,
-    },
-  ];
-  const overlays = new Map<string, UserGameOverlay>([
-    ['g-active', { seen: 7 }],
-  ]);
-
-  const merged = mergeDashboardGames([], [], overlays, legacy);
-
-  assert.equal(merged.length, 1);
-  assert.equal(merged[0]!.seen, 7);
-});
-
-test('mergeDashboardGames omits stale legacy completed games when index is empty', () => {
-  const now = Date.now();
-  const staleSeen = now - COMPLETED_DASHBOARD_RETENTION_MS - 1000;
-  const legacy: DashboardGame[] = [
-    {
-      id: 'g-stale',
-      metaGame: 'chess',
-      players: [{ id: 'u1', name: 'A' }],
-      clockHard: false,
-      toMove: '',
-      lastMoveTime: 50,
-      seen: staleSeen,
-      lastChat: staleSeen,
-    },
-  ];
-  const overlays = new Map<string, UserGameOverlay>();
-
-  const merged = mergeDashboardGames([], [], overlays, legacy);
-
+test('mergeDashboardGames returns empty when indexes are empty', () => {
+  const merged = mergeDashboardGames([], [], new Map());
   assert.equal(merged.length, 0);
 });
 
-test('mergeDashboardGames prefers RECENTCOMPLETED# over stale legacy active', () => {
-  const staleActiveLegacy: DashboardGame = {
-    id: 'g-done',
-    metaGame: 'chess',
-    players: [{ id: 'u1', name: 'A' }, { id: 'u2', name: 'B' }],
-    clockHard: false,
-    toMove: '0',
-    lastMoveTime: 40,
-    numMoves: 9,
+test('mergeDashboardGames does not duplicate when same id in both indexes', () => {
+  const overlapCompleted: RecentCompletedIndexRow = {
+    ...completedRow,
+    sk: 'g-active',
+    toMove: '',
   };
-  const legacy: DashboardGame[] = [staleActiveLegacy, {
-    id: 'g-active',
-    metaGame: 'saltire',
-    players: [{ id: 'u1', name: 'A' }],
-    clockHard: true,
-    toMove: '0',
-    lastMoveTime: 10,
-  }];
-  const overlays = new Map<string, UserGameOverlay>([
-    ['g-done', { seen: 2 }],
-  ]);
 
-  const merged = mergeDashboardGames([activeRow], [completedRow], overlays, legacy);
-
-  assert.equal(merged.length, 2);
-  const completed = merged.find(g => g.id === 'g-done');
-  assert.ok(completed);
-  assert.equal(completed!.toMove, '');
-  assert.equal(completed!.gameEnded, 55);
-  assert.equal(completed!.seen, 2);
-});
-
-test('mergeDashboardGames omits stale legacy active ghost when CURRENTGAMES# exists', () => {
-  const legacy: DashboardGame[] = [{
-    id: 'g-ghost',
-    metaGame: 'chess',
-    players: [{ id: 'u1', name: 'A' }],
-    clockHard: true,
-    toMove: '0',
-    lastMoveTime: 20,
-  }];
-
-  const merged = mergeDashboardGames([activeRow], [], new Map(), legacy);
+  const merged = mergeDashboardGames([activeRow], [overlapCompleted], new Map());
 
   assert.equal(merged.length, 1);
   assert.equal(merged[0]!.id, 'g-active');
-});
-
-test('mergeDashboardGames shows completed from index when only RECENTCOMPLETED# exists', () => {
-  const staleActiveLegacy: DashboardGame = {
-    id: 'g-done',
-    metaGame: 'chess',
-    players: [{ id: 'u1', name: 'A' }],
-    clockHard: false,
-    toMove: '1',
-    lastMoveTime: 40,
-  };
-
-  const merged = mergeDashboardGames([], [completedRow], new Map(), [staleActiveLegacy]);
-
-  assert.equal(merged.length, 1);
-  assert.equal(merged[0]!.id, 'g-done');
-  assert.equal(merged[0]!.toMove, '');
-  assert.equal(merged[0]!.gameEnded, 55);
-});
-
-test('staleLegacyActiveGameIds finds legacy active rows replaced by indexes', () => {
-  const legacy: DashboardGame[] = [
-    {
-      id: 'g-done',
-      metaGame: 'chess',
-      players: [{ id: 'u1', name: 'A' }],
-      clockHard: false,
-      toMove: '0',
-      lastMoveTime: 40,
-    },
-    {
-      id: 'g-active',
-      metaGame: 'saltire',
-      players: [{ id: 'u1', name: 'A' }],
-      clockHard: true,
-      toMove: '0',
-      lastMoveTime: 10,
-    },
-    {
-      id: 'g-ghost',
-      metaGame: 'chess',
-      players: [{ id: 'u1', name: 'A' }],
-      clockHard: true,
-      toMove: '0',
-      lastMoveTime: 20,
-    },
-  ];
-
-  const stale = staleLegacyActiveGameIds(legacy, [activeRow], [completedRow]);
-
-  assert.deepEqual(new Set(stale), new Set(['g-done', 'g-ghost']));
+  assert.equal(merged[0]!.toMove, '0');
 });

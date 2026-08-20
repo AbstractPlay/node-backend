@@ -112,10 +112,9 @@ export async function deleteUserGameOverlay(
 export function applyOverlayFields<T extends OverlayGameFields>(
   game: T,
   overlay: UserGameOverlay | undefined,
-  legacy?: OverlayGameFields,
 ): T {
-  const seen = overlay?.seen ?? legacy?.seen;
-  const lastChat = overlay?.lastChat ?? legacy?.lastChat;
+  const seen = overlay?.seen;
+  const lastChat = overlay?.lastChat;
   const result = { ...game };
   if (seen !== undefined) {
     result.seen = seen;
@@ -128,16 +127,4 @@ export function applyOverlayFields<T extends OverlayGameFields>(
     delete result.lastChat;
   }
   return result;
-}
-
-/** Strip overlay fields before persisting USER.games[] (Phase 4a: USERGAME# is sole overlay store). */
-export function stripOverlayFields<T extends OverlayGameFields>(game: T): T {
-  const result = { ...game };
-  delete result.seen;
-  delete result.lastChat;
-  return result;
-}
-
-export function stripOverlayFieldsFromGames<T extends OverlayGameFields>(games: T[]): T[] {
-  return games.map(game => stripOverlayFields(game));
 }
