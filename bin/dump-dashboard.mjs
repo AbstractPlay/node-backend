@@ -162,7 +162,6 @@ async function main() {
   }
 
   const user = userData.Item;
-  const legacyGames = user.games ?? [];
 
   const [
     dashboardLoad,
@@ -177,7 +176,7 @@ async function main() {
     blocked,
     bots,
   ] = await Promise.all([
-    loadDashboardGameData(docClient, table, userId, legacyGames),
+    loadDashboardGameData(docClient, table, userId),
     getChallengesByIds(docClient, table, toIdArray(user.challenges_issued)),
     getChallengesByIds(docClient, table, toIdArray(user.challenges_received)),
     getChallengesByIds(docClient, table, toIdArray(user.challenges_accepted)),
@@ -201,7 +200,7 @@ async function main() {
   const realStanding = standingData.Item?.standing ?? [];
 
   if (verbose) {
-    console.error(`USER legacy games: ${legacyGames.length}`);
+    console.error(`USER legacy games (info): ${(user.games ?? []).length}`);
     console.error(`CURRENTGAMES# rows: ${dashboardLoad.currentRows.length}`);
     console.error(`RECENTCOMPLETED# rows: ${dashboardLoad.recentCompletedRows.length}`);
     console.error(`Merged games: ${dashboardLoad.games.length} → ${games.length} after prune`);

@@ -408,6 +408,7 @@ functions:
   authQuery:
     handler: api/abstractplay.authQuery
     memorySize: 1024
+    timeout: 120
     description: Abstract Play queries that need authorization.
     logRetentionInDays: 30
     events:

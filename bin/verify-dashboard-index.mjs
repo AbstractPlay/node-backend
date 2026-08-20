@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 /* eslint-env node */
 /**
- * Post–Phase 4b dashboard index health check (Phase 5 readiness).
+ * Post–Phase 5 dashboard index health check.
  *
  * Validates stream-maintained indexes and USERGAME# overlays only.
- * Does NOT gate on USER.games[] drift (legacy array is retired for reads).
+ * Does NOT read USER.games[] for dashboard membership.
  *
  * Fails when:
  *   - CURRENTGAMES# row is not active (empty toMove)
  *   - Same game id appears in CURRENTGAMES# and RECENTCOMPLETED#
  *   - RECENTCOMPLETED# row is not dashboard-eligible (merged USERGAME# overlays)
  *   - USERGAME# row is not on the user's index dashboard (orphan)
- *   - USER.games[] still carries seen/lastChat (Phase 4a regression)
  *   - User has USER.games[] entries but no index rows (unmigrated / legacy-only)
  *
  * Usage:
@@ -42,7 +41,7 @@ const COMPLETED_DASHBOARD_RETENTION_MS = 7 * 24 * 3600000;
 function usage() {
   console.error(`Usage: node bin/verify-dashboard-index.mjs <userid> [userid...] [--stage dev|prod] [--verbose]
 
-Post–Phase 4b index-only dashboard verify (Phase 5 readiness). USER.games[] drift is informational only.
+Post–Phase 5 index-only dashboard verify. USER.games[] is no longer read by the API.
 
 Options:
   --stage dev|prod   AWS profile + DynamoDB table (default: dev)
@@ -181,7 +180,6 @@ async function verifyUser(docClient, table, userId, verbose) {
 
   const now = Date.now();
   const games = userData.Item.games ?? [];
-  const legacyOverlayGames = games.filter(hasLegacyOverlayFields);
 
   const currentGames = await queryPartition(docClient, table, `CURRENTGAMES#${userId}`);
   const recentCompletedGames = await queryPartition(docClient, table, `RECENTCOMPLETED#${userId}`);
@@ -210,7 +208,7 @@ async function verifyUser(docClient, table, userId, verbose) {
   const hasIndexes = currentGames.length > 0 || recentCompletedGames.length > 0;
   const legacyOnly = !hasIndexes && games.length > 0;
 
-  const legacyOverlayClear = legacyOverlayGames.length === 0;
+  const legacyOverlayClear = true;
   const currentRowsActive = inactiveCurrentRows.length === 0;
   const noCurrentRecentOverlap = overlapIds.length === 0;
   const recentCompletedClean = ineligibleRecentRows.length === 0;
@@ -218,7 +216,6 @@ async function verifyUser(docClient, table, userId, verbose) {
   const indexMigrated = !legacyOnly;
 
   const healthy = indexMigrated
-    && legacyOverlayClear
     && currentRowsActive
     && noCurrentRecentOverlap
     && recentCompletedClean
@@ -242,7 +239,7 @@ async function verifyUser(docClient, table, userId, verbose) {
       recentCompleted: recentCompletedGames.length,
       eligibleRecent: eligibleRecentIds.size,
       userGameOverlays: userGameRows.length,
-      legacyOverlayFields: legacyOverlayGames.length,
+      legacyOverlayFields: games.filter(hasLegacyOverlayFields).length,
     },
     issues: [],
     info: [],
@@ -250,9 +247,6 @@ async function verifyUser(docClient, table, userId, verbose) {
 
   if (legacyOnly) {
     result.issues.push('legacy-only (no index rows)');
-  }
-  if (!legacyOverlayClear) {
-    result.issues.push(`legacy overlay fields (${legacyOverlayGames.length})`);
   }
   if (!currentRowsActive) {
     result.issues.push(`inactive CURRENTGAMES# (${inactiveCurrentRows.length})`);
@@ -273,7 +267,6 @@ async function verifyUser(docClient, table, userId, verbose) {
       overlapIds,
       ineligibleRecentRows,
       orphanUserGameRows,
-      legacyOverlayGames,
       userGameById,
     };
   }

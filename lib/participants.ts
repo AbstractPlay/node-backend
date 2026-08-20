@@ -77,8 +77,6 @@ export type Participant = {
   isBot: boolean;
   email?: string;
   language?: string;
-  games?: unknown[];
-  gamesUpdate?: number;
   settings?: unknown;
   ratings?: {
     [metaGame: string]: {
@@ -125,8 +123,6 @@ export async function getParticipant(id: string): Promise<Participant | undefine
     name: string;
     email?: string;
     language?: string;
-    games?: unknown[];
-    gamesUpdate?: number;
     settings?: unknown;
     ratings?: Participant['ratings'];
   };
@@ -136,8 +132,6 @@ export async function getParticipant(id: string): Promise<Participant | undefine
     isBot: false,
     email: user.email,
     language: user.language,
-    games: user.games,
-    gamesUpdate: user.gamesUpdate,
     settings: user.settings,
     ratings: user.ratings,
   };
@@ -163,7 +157,6 @@ export function botToFullUserStub(bot: BotRecord): {
   id: string;
   name: string;
   email: string;
-  games: never[];
   language: string;
   country: string;
   admin: false;
@@ -174,7 +167,6 @@ export function botToFullUserStub(bot: BotRecord): {
     id: bot.sk,
     name: bot.name,
     email: '',
-    games: [],
     language: 'en',
     country: '',
     admin: false,
