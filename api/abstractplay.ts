@@ -2313,6 +2313,12 @@ async function updateBot(
           headers
         };
       }
+      for (const entry of pars.supported) {
+        const variantErr = validateChallengeVariantUids(entry.meta, entry.variants);
+        if (variantErr) {
+          return variantErr;
+        }
+      }
       bot.supported = pars.supported;
     }
 
@@ -3557,8 +3563,33 @@ export async function botRespondToChallenge(
   });
 }
 
+function validateChallengeVariantUids(metaGame: string, variants: string[] | undefined) {
+  const info = gameinfo.get(metaGame);
+  if (!info) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: `Unknown metaGame: ${metaGame}` }),
+      headers,
+    };
+  }
+  const allowed = new Set((info.variants ?? []).map((v: { uid: string }) => v.uid));
+  const disallowed = (variants ?? []).filter((v) => !allowed.has(v));
+  if (disallowed.length > 0) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: `Variant(s) not allowed: ${disallowed.join(", ")}` }),
+      headers,
+    };
+  }
+  return undefined;
+}
+
 async function newChallenge(userid: string, challenge: FullChallenge) {
   console.log("newChallenge challenge:", challenge);
+  const variantErr = validateChallengeVariantUids(challenge.metaGame, challenge.variants);
+  if (variantErr) {
+    return variantErr;
+  }
   if (challenge.standing) {
     return await newStandingChallenge(userid, challenge);
   }
@@ -6079,6 +6110,10 @@ async function handleMove(claims: PartialClaims, pars: { gameid: string; move: s
 }
 
 async function newTournament(userid: string, pars: { metaGame: string, variants: string[] }) {
+  const variantErr = validateChallengeVariantUids(pars.metaGame, pars.variants);
+  if (variantErr) {
+    return variantErr;
+  }
   const variantsKey = pars.variants.sort().join("|");
   const sk = pars.metaGame + "#" + variantsKey;
   let tournamentN = 0;
