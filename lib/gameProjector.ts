@@ -272,6 +272,33 @@ async function deleteUserGameOverlaysForPlayers(
   ));
 }
 
+/** Admin hard-delete: active dashboard rows + currentgames count (stream REMOVE does not decrement). */
+export async function purgeActiveGameDashboardIndexes(
+  docClient: DynamoDBDocumentClient,
+  tableName: string,
+  game: GameRecord,
+  playerIds: string[],
+): Promise<void> {
+  await deleteCurrentGamesForPlayers(docClient, tableName, game.id, playerIds);
+  await deleteUserGameOverlaysForPlayers(docClient, tableName, game.id, playerIds);
+  await adjustShardedCounts(docClient, tableName, game.metaGame, { currentgames: -1 });
+}
+
+/**
+ * Admin hard-delete: completed dashboard rows without count adjustment.
+ * Deleting the GAME record lets the stream projector decrement completedgames once.
+ */
+export async function purgeCompletedGameDashboardIndexes(
+  docClient: DynamoDBDocumentClient,
+  tableName: string,
+  game: GameRecord,
+  playerIds: string[],
+): Promise<void> {
+  await deleteCompletedGameIndexes(docClient, tableName, game);
+  await deleteRecentCompletedForPlayers(docClient, tableName, game.id, playerIds);
+  await deleteUserGameOverlaysForPlayers(docClient, tableName, game.id, playerIds);
+}
+
 async function putCompletedGameIndexes(
   docClient: DynamoDBDocumentClient,
   tableName: string,

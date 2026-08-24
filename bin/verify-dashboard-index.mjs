@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-env node */
 /**
- * Post–Phase 5 dashboard index health check.
+ * Dashboard index health check (read-only).
  *
  * Validates stream-maintained indexes and USERGAME# overlays only.
  * Does NOT read USER.games[] for dashboard membership.
@@ -11,7 +11,6 @@
  *   - Same game id appears in CURRENTGAMES# and RECENTCOMPLETED#
  *   - RECENTCOMPLETED# row is not dashboard-eligible (merged USERGAME# overlays)
  *   - USERGAME# row is not on the user's index dashboard (orphan)
- *   - User has USER.games[] entries but no index rows (unmigrated / legacy-only)
  *
  * Usage:
  *   node bin/verify-dashboard-index.mjs <userid> [userid...] [--stage dev|prod] [--verbose]
@@ -41,11 +40,11 @@ const COMPLETED_DASHBOARD_RETENTION_MS = 7 * 24 * 3600000;
 function usage() {
   console.error(`Usage: node bin/verify-dashboard-index.mjs <userid> [userid...] [--stage dev|prod] [--verbose]
 
-Post–Phase 5 index-only dashboard verify. USER.games[] is no longer read by the API.
+Index-only dashboard verify (CURRENTGAMES#, RECENTCOMPLETED#, USERGAME#).
 
 Options:
   --stage dev|prod   AWS profile + DynamoDB table (default: dev)
-  --verbose          Print per-game details and legacy drift info
+  --verbose          Print per-game details
   --help, -h         Show this help
 `);
   process.exit(1);
@@ -85,10 +84,6 @@ function parseArgs(argv) {
 
 function isActiveDashboardGame(game) {
   return game.toMove !== '' && game.toMove !== null && game.toMove !== undefined;
-}
-
-function hasLegacyOverlayFields(game) {
-  return game.seen !== undefined || game.lastChat !== undefined;
 }
 
 function shouldBeOnCompletedDashboard(game, now) {
@@ -165,7 +160,7 @@ async function verifyUser(docClient, table, userId, verbose) {
   const userData = await docClient.send(new GetCommand({
     TableName: table,
     Key: { pk: 'USER', sk: userId },
-    ProjectionExpression: '#pk, #sk, #name, games',
+    ProjectionExpression: '#pk, #sk, #name',
     ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk', '#name': 'name' },
   }));
 
@@ -179,7 +174,6 @@ async function verifyUser(docClient, table, userId, verbose) {
   }
 
   const now = Date.now();
-  const games = userData.Item.games ?? [];
 
   const currentGames = await queryPartition(docClient, table, `CURRENTGAMES#${userId}`);
   const recentCompletedGames = await queryPartition(docClient, table, `RECENTCOMPLETED#${userId}`);
@@ -205,18 +199,12 @@ async function verifyUser(docClient, table, userId, verbose) {
   const dashboardIds = new Set([...currentIds, ...eligibleRecentIds]);
   const orphanUserGameRows = userGameRows.filter(row => !dashboardIds.has(row.sk));
 
-  const hasIndexes = currentGames.length > 0 || recentCompletedGames.length > 0;
-  const legacyOnly = !hasIndexes && games.length > 0;
-
-  const legacyOverlayClear = true;
   const currentRowsActive = inactiveCurrentRows.length === 0;
   const noCurrentRecentOverlap = overlapIds.length === 0;
   const recentCompletedClean = ineligibleRecentRows.length === 0;
   const userGameOrphansClear = orphanUserGameRows.length === 0;
-  const indexMigrated = !legacyOnly;
 
-  const healthy = indexMigrated
-    && currentRowsActive
+  const healthy = currentRowsActive
     && noCurrentRecentOverlap
     && recentCompletedClean
     && userGameOrphansClear;
@@ -226,28 +214,20 @@ async function verifyUser(docClient, table, userId, verbose) {
     name: userData.Item.name ?? userId,
     healthy,
     checks: {
-      indexMigrated,
-      legacyOverlayClear,
       currentRowsActive,
       noCurrentRecentOverlap,
       recentCompletedClean,
       userGameOrphansClear,
     },
     counts: {
-      legacyGames: games.length,
       currentGames: currentGames.length,
       recentCompleted: recentCompletedGames.length,
       eligibleRecent: eligibleRecentIds.size,
       userGameOverlays: userGameRows.length,
-      legacyOverlayFields: games.filter(hasLegacyOverlayFields).length,
     },
     issues: [],
-    info: [],
   };
 
-  if (legacyOnly) {
-    result.issues.push('legacy-only (no index rows)');
-  }
   if (!currentRowsActive) {
     result.issues.push(`inactive CURRENTGAMES# (${inactiveCurrentRows.length})`);
   }
@@ -280,7 +260,7 @@ function printUserReport(result, stage, table, verbose) {
   console.log(`Stage: ${stage}  Table: ${table}`);
   if (result.error) {
     console.log(`ERROR: ${result.error}`);
-    console.log(`READY FOR PHASE 5: NO`);
+    console.log(`DASHBOARD INDEX OK: NO`);
     console.log('');
     return;
   }
@@ -292,17 +272,14 @@ function printUserReport(result, stage, table, verbose) {
   console.log(`  CURRENTGAMES#:        ${c.currentGames}`);
   console.log(`  RECENTCOMPLETED#:     ${c.recentCompleted} (${c.eligibleRecent} eligible)`);
   console.log(`  USERGAME# overlays:   ${c.userGameOverlays}`);
-  console.log(`  USER.games[] (info):  ${c.legacyGames} total, ${c.legacyOverlayFields} with overlay fields`);
   console.log('');
-  console.log('Checks (index-only):');
-  console.log(`  index rows present:       ${ch.indexMigrated ? 'yes' : 'NO'}`);
+  console.log('Checks:');
   console.log(`  CURRENTGAMES# all active: ${ch.currentRowsActive ? 'yes' : 'NO'}`);
   console.log(`  no CURRENT∩RECENT:        ${ch.noCurrentRecentOverlap ? 'yes' : 'NO'}`);
   console.log(`  RECENTCOMPLETED# clean:   ${ch.recentCompletedClean ? 'yes' : 'NO'}`);
   console.log(`  USERGAME# no orphans:     ${ch.userGameOrphansClear ? 'yes' : 'NO'}`);
-  console.log(`  no legacy overlay fields: ${ch.legacyOverlayClear ? 'yes' : 'NO'}`);
   console.log('');
-  console.log(`READY FOR PHASE 5: ${result.healthy ? 'YES' : 'NO'}`);
+  console.log(`DASHBOARD INDEX OK: ${result.healthy ? 'YES' : 'NO'}`);
   if (result.issues.length > 0) {
     console.log(`Issues: ${result.issues.join('; ')}`);
   }
@@ -331,12 +308,6 @@ function printUserReport(result, stage, table, verbose) {
       console.log('\nUSERGAME# orphan rows:');
       for (const row of result.details.orphanUserGameRows) {
         console.log(`  ${row.sk} (${summarizeOverlay(row)})`);
-      }
-    }
-    if (result.details.legacyOverlayGames.length > 0) {
-      console.log('\nLegacy USER.games[] overlay fields (Phase 4a regression):');
-      for (const game of result.details.legacyOverlayGames) {
-        console.log(`  ${game.id} (${game.metaGame}): ${summarizeOverlay(game)}`);
       }
     }
   }
@@ -373,7 +344,7 @@ async function main() {
   if (multi) {
     const healthy = results.filter(r => r.healthy).length;
     console.log('═'.repeat(72));
-    console.log(`SUMMARY: ${healthy}/${results.length} READY FOR PHASE 5`);
+    console.log(`SUMMARY: ${healthy}/${results.length} DASHBOARD INDEX OK`);
     for (const r of results) {
       const status = r.healthy ? 'YES' : 'NO';
       const issues = r.issues?.length ? ` — ${r.issues.join('; ')}` : '';

@@ -2,7 +2,7 @@
 'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, ScanCommand, BatchWriteCommand, BatchGetCommand, QueryCommandInput, GetCommandOutput, PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, BatchGetCommand, QueryCommandInput, GetCommandOutput, PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageRequest } from "@aws-sdk/client-sqs";
 import { CognitoIdentityProviderClient, CreateUserPoolClientCommand, DeleteUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { v4 as uuid } from 'uuid';
@@ -83,6 +83,7 @@ import {
 import { testBotStatus, updateTestBot } from './testBot';
 import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } from '../lib/gameState';
 import { adjustShardedCounts, ensureShardedMetaGameCountEntry } from '../lib/gameProjector';
+import { adminDeleteGame } from '../lib/adminDeleteGame';
 import { filterExplorationTreeForSave, type ExplorationTreeNode } from '../lib/explorationMoves';
 import {
   loadDashboardGameData,
@@ -261,6 +262,8 @@ type FullUser = {
   publicRivalries?: boolean;
   bggid?: string;
   about?: string;
+  /** Set by abandoned-account dashboard cleanup cron; cleared on me() login. */
+  cleaned?: boolean;
 }
 
 export type UsersData = {
@@ -2641,6 +2644,14 @@ async function me(claim: PartialClaims, pars: { size: string, vars: string, upda
     if (user.email !== email)
       await updateUserEMail(claim);
     const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+    if (user.cleaned === true) {
+      await ddbDocClient.send(new UpdateCommand({
+        TableName: tableName,
+        Key: { pk: 'USER', sk: userId },
+        UpdateExpression: 'REMOVE cleaned',
+      }));
+      delete user.cleaned;
+    }
     let games = await loadDashboardGames(ddbDocClient, tableName, userId);
 
     // fetch tags
@@ -8631,7 +8642,7 @@ async function eventUpdates(pars: { eventid: string, gameid: string, winner: str
   return Promise.all(work);
 }
 
-// Delete every trace of a list of games. Only for admins and probably only for dev!
+// Delete every trace of a list of games. Admin only — dev/prod repair hammer.
 async function deleteGames(userId: string, pars: { metaGame: string, cbit: number, gameids: string }) {
   try {
     const user = await ddbDocClient.send(
@@ -8654,103 +8665,35 @@ async function deleteGames(userId: string, pars: { metaGame: string, cbit: numbe
     logGetItemError(error);
     return formatReturnError(`Unable to get user ${userId}. Error: ${error}`);
   }
-  const gameids = pars.gameids.split(",");
-  const work: Promise<any>[] = [];
-  const work2: Promise<any>[] = [];
+
+  if (pars.cbit !== 0 && pars.cbit !== 1) {
+    return formatReturnError('cbit must be 0 or 1');
+  }
+
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+  const preferredCbit = pars.cbit as 0 | 1;
+  const gameids = pars.gameids.split(",").map(id => id.trim()).filter(id => id.length > 0);
+  const results: Awaited<ReturnType<typeof adminDeleteGame>>[] = [];
+
   try {
     for (const gameid of gameids) {
-      work.push(ddbDocClient.send(
-        new GetCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "GAME",
-            "sk": pars.metaGame + "#" + pars.cbit + '#' + gameid.trim()
-          },
-        })
-      ));
-      work2.push(ddbDocClient.send(
-        new QueryCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          KeyConditionExpression: "#pk = :pk",
-          ExpressionAttributeValues: { ":pk": "GAMEEXPLORATION#" + gameid },
-          ExpressionAttributeNames: { "#pk": "pk" },
-        })));
-      if (pars.cbit === 1) {
-        work2.push(ddbDocClient.send(
-          new QueryCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            KeyConditionExpression: "#pk = :pk",
-            ExpressionAttributeValues: { ":pk": "PUBLICEXPLORATION#" + gameid },
-            ExpressionAttributeNames: { "#pk": "pk" },
-          })));
-      }
-    }
-    const gamesData = await Promise.all(work);
-    work.length = 0;
-    const games = gamesData.map(g => g.Item as FullGame);
-    // delete games
-    for (const game of games) {
-      work.push(ddbDocClient.send(
-        new DeleteCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "GAME",
-            "sk": pars.metaGame + "#" + pars.cbit + '#' + game.id
-          },
-        })
-      ));
-      // delete NOTES
-      for (const player of game.players) {
-        work.push(ddbDocClient.send(
-          new DeleteCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: {
-              "pk": "NOTE",
-              "sk": game.id + '#' + player.id
-            },
-          })
-        ));
-      }
-      // and COMMENTS
-      work.push(ddbDocClient.send(
-        new DeleteCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "GAMECOMMENTS",
-            "sk": game.id
-          },
-        })
+      results.push(await adminDeleteGame(
+        ddbDocClient,
+        tableName,
+        pars.metaGame,
+        gameid,
+        preferredCbit,
       ));
     }
-    // delete game explorations
-    const gameExplorationsData = await Promise.all(work2);
-    const gameExplorations = gameExplorationsData.map(g => g.Items).flat();
-    console.log("gameExplorations", gameExplorations);
-    if (gameExplorations !== undefined) {
-      const batches = Math.ceil(gameExplorations.length / 25);
-      for (let batch = 0; batch < batches; batch++) {
-        const subset = gameExplorations.slice(batch * 25, 25);
-        work.push(ddbDocClient.send(
-          new BatchWriteCommand({
-            "RequestItems": {
-              [process.env.ABSTRACT_PLAY_TABLE!]: subset.map(item => ({
-                DeleteRequest: {
-                  Key: {
-                    pk: item.pk,
-                    sk: item.sk,
-                  }
-                }
-              }))
-            }
-          })
-        ));
-      }
-    }
-    await Promise.all(work);
+
+    const notFound = results.filter(result => result.notFound).map(result => result.gameId);
     return {
       statusCode: 200,
       body: JSON.stringify({
-        message: "Done"
+        message: notFound.length > 0
+          ? `Deleted ${results.length - notFound.length} game(s); not found: ${notFound.join(', ')}`
+          : `Deleted ${results.length} game(s)`,
+        results,
       }),
       headers
     };
@@ -9231,7 +9174,6 @@ async function botManageChallenges() {
 }
 
 async function onetimeFix(userId: string) {
-  // Make sure people aren't getting clever
   try {
     const user = await ddbDocClient.send(
       new GetCommand({
@@ -9254,153 +9196,15 @@ async function onetimeFix(userId: string) {
     return formatReturnError(`Unable to onetimeFix ${userId}`);
   }
 
-  let totalUnits = 0;
-  // get all USER records
-  let data: any;
-  let users: FullUser[] = [];
-  try {
-    data = await ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "USER" },
-        ExpressionAttributeNames: { "#pk": "pk" },
-        ReturnConsumedCapacity: "INDEXES",
-      })
-    )
-    if ((data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined)) {
-      totalUnits += data.ConsumedCapacity.CapacityUnits;
-    } else {
-      console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
-    }
-    users = data?.Items as FullUser[];
-    console.log(JSON.stringify(users, null, 2));
-    console.log(`Total units used: ${totalUnits}`);
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to onetimeFix get all users`);
-  }
-
-  const work: Promise<any>[] = [];
-  for (const user of users) {
-    work.push(
-      ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USERS", "sk": user.id },
-        ExpressionAttributeValues: { ":ss": user.stars || [], ":ls": user.lastSeen || 0, ":country": user.country },
-        UpdateExpression: "set stars = :ss, lastSeen = :ls, country = :country",
-      }))
-    );
-  }
-  return Promise.all(work);
-  //   const memoGame = new Map<string, FullGame>();
-  //   const memoComments = new Map<string, Comment[]>();
-  //   // foreach USER
-  //   for (const user of users) {
-  //     // foreach game in USER.games
-  //     for (const game of user.games) {
-  //         // check if game is already loaded
-  //         if (! memoGame.has(game.id)) {
-  //             // load and memoize
-  //             let data: any;
-  //             let cbit = "0";
-  //             if ( (game.toMove === "") || (game.toMove === undefined) || ( (Array.isArray(game.toMove)) && (game.toMove.length === 0) ) ) {
-  //                 cbit = "1";
-  //             }
-  //             try {
-  //               data = await ddbDocClient.send(
-  //                 new GetCommand({
-  //                   TableName: process.env.ABSTRACT_PLAY_TABLE,
-  //                   Key: {
-  //                     "pk": "GAME",
-  //                     "sk": `${game.metaGame}#${cbit}#${game.id}`
-  //                   },
-  //                   ReturnConsumedCapacity: "INDEXES",
-  //                 }));
-  //             } catch (error) {
-  //               logGetItemError(error);
-  //               return formatReturnError(`Unable to get comments for game ${game.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-  //             }
-  //             if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
-  //                 totalUnits += data.ConsumedCapacity.CapacityUnits;
-  //             } else {
-  //               console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
-  //             }
-  //             const gameData = data.Item as FullGame;
-  //             console.log("got game in onetimeFix:");
-  //             console.log(gameData);
-  //             memoGame.set(game.id, gameData);
-  //         }
-  //         const gameObj = memoGame.get(game.id);
-  //         // check if comments already loaded
-  //         if (! memoComments.has(game.id)) {
-  //             // load and memoize
-  //             let data: any;
-  //             try {
-  //               data = await ddbDocClient.send(
-  //                 new GetCommand({
-  //                   TableName: process.env.ABSTRACT_PLAY_TABLE,
-  //                   Key: {
-  //                     "pk": "GAMECOMMENTS",
-  //                     "sk": game.id
-  //                   },
-  //                   ReturnConsumedCapacity: "INDEXES",
-  //                 }));
-  //             } catch (error) {
-  //               logGetItemError(error);
-  //               return formatReturnError(`Unable to get comments for game ${game.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
-  //             }
-  //             if ( (data !== undefined) && ("ConsumedCapacity" in data) && (data.ConsumedCapacity !== undefined) && ("CapacityUnits" in data.ConsumedCapacity) && (data.ConsumedCapacity.CapacityUnits !== undefined) ) {
-  //                 totalUnits += data.ConsumedCapacity.CapacityUnits;
-  //             } else {
-  //               console.log(`Could not add consumed capacity: ${JSON.stringify(data?.ConsumedCapacity)}`);
-  //             }
-  //             const commentsData = data.Item;
-  //             console.log("got comments in onetimeFix:");
-  //             console.log(commentsData);
-  //             let comments: Comment[];
-  //             if (commentsData === undefined)
-  //               comments= []
-  //             else
-  //               comments = commentsData.comments;
-  //             memoComments.set(game.id, comments);
-  //         }
-  //         const comments = memoComments.get(game.id)!;
-  //         // if for some reason the game ID doesn't match a record, skip entirely
-  //         if (gameObj === undefined) {
-  //             console.log(`Could not find a full game record for the following: ${JSON.stringify(game)}`);
-  //             continue;
-  //         }
-  //         let engine: GameBase|GameBaseSimultaneous|undefined;
-  //         try {
-  //             engine = GameFactory(gameObj.metaGame, gameObj.state);
-  //         } catch (err) {
-  //             console.log(`An error occured when trying to hydrate the following game: ${JSON.stringify(game)}`);
-  //             console.log(err);
-  //             continue;
-  //         }
-  //         if (engine === undefined) {
-  //             return formatReturnError(`Unable to get engine for ${gameObj.metaGame} with state ${gameObj.state}`);
-  //         }
-  //         // add gameStarted
-  //         game.gameStarted = new Date(engine.stack[0]._timestamp).getTime();
-  //         // add gameEnded, if applicable
-  //         if (engine.gameover) {
-  //             game.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
-  //         }
-  //         // add lastChat, if applicable
-  //         if (comments.length > 0) {
-  //             game.lastChat = Math.max(...comments.map(c => c.timeStamp));
-  //         }
-  //     }
-  //     console.log(`About to save updated USER record: ${JSON.stringify(user)}`);
-  //     // save updated USER record
-  //     await ddbDocClient.send(new PutCommand({
-  //         TableName: process.env.ABSTRACT_PLAY_TABLE,
-  //           Item: user
-  //     }));
-  //   }
-  //   console.log(`All done! Total units used: ${totalUnits}`);
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      deprecated: true,
+      message: 'onetime_fix is retired. It previously synced USER profile fields into the USERS directory index.',
+      useInstead: 'No replacement — run a targeted script or one-off repair if USERS directory fields are stale.',
+    }),
+    headers
+  };
 }
 
 async function fixGames(userId: string, pars: { targetId: string }) {
@@ -9429,7 +9233,14 @@ async function fixGames(userId: string, pars: { targetId: string }) {
   return {
     statusCode: 200,
     body: JSON.stringify({
-      message: `fix_games no longer rebuilds USER.games[]. Use bin/backfill-normalization-phase2.mjs --step purge-usergame-orphans|prune-stale-recent-completed --user-id ${pars.targetId}`,
+      deprecated: true,
+      message: 'fix_games no longer rebuilds USER.games[]. Dashboard membership is index-only (CURRENTGAMES#, RECENTCOMPLETED#, USERGAME#).',
+      useInstead: [
+        'Verify: node bin/verify-dashboard-index.mjs --stage prod --verbose <userId>',
+        'Prune stale RECENTCOMPLETED#: node bin/dashboard-index-maintenance.mjs --stage prod --step prune-stale-recent-completed --user-id <userId>',
+        'Purge USERGAME# orphans: node bin/dashboard-index-maintenance.mjs --stage prod --step purge-usergame-orphans --user-id <userId>',
+      ],
+      targetId: pars.targetId,
     }),
     headers
   };
@@ -9768,17 +9579,6 @@ async function* queryItemsGenerator(queryInput: QueryCommandInput): AsyncGenerat
   } while (lastEvaluatedKey !== undefined)
 }
 
-function isRetiredCompletedGamesPk(pk: string, metaGameUids: Set<string>): boolean {
-  if (pk === "COMPLETEDGAMES") {
-    return true;
-  }
-  const parts = pk.split("#");
-  if (parts.length !== 3 || parts[0] !== "COMPLETEDGAMES") {
-    return false;
-  }
-  return metaGameUids.has(parts[1]);
-}
-
 async function purgeRetiredCompletedGames(userId: string) {
   try {
     const user = await ddbDocClient.send(
@@ -9796,56 +9596,20 @@ async function purgeRetiredCompletedGames(userId: string) {
         headers
       };
     }
-
-    const metaGameUids = new Set<string>();
-    gameinfo.forEach(g => metaGameUids.add(g.uid));
-
-    let deleted = 0;
-    let lastEvaluatedKey: Record<string, unknown> | undefined;
-    do {
-      const scan = await ddbDocClient.send(new ScanCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        FilterExpression: "begins_with(#pk, :prefix)",
-        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        ExpressionAttributeValues: { ":prefix": "COMPLETEDGAMES" },
-        ProjectionExpression: "#pk, #sk",
-        ExclusiveStartKey: lastEvaluatedKey,
-      }));
-
-      const toDelete = (scan.Items ?? []).filter(item =>
-        isRetiredCompletedGamesPk(item.pk as string, metaGameUids)
-      );
-
-      for (let i = 0; i < toDelete.length; i += 25) {
-        const chunk = toDelete.slice(i, i + 25);
-        if (chunk.length === 0) {
-          continue;
-        }
-        await ddbDocClient.send(new BatchWriteCommand({
-          RequestItems: {
-            [process.env.ABSTRACT_PLAY_TABLE!]: chunk.map(item => ({
-              DeleteRequest: {
-                Key: { pk: item.pk, sk: item.sk }
-              }
-            }))
-          }
-        }));
-        deleted += chunk.length;
-      }
-
-      lastEvaluatedKey = scan.LastEvaluatedKey;
-    } while (lastEvaluatedKey !== undefined);
-
-    console.log(`purge_retired_completed_games deleted ${deleted} items`);
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ deleted }),
-      headers
-    };
   } catch (err) {
     logGetItemError(err);
     return formatReturnError(`Unable to purge retired completed games ${userId}`);
   }
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      deprecated: true,
+      message: 'purge_retired_completed_games is retired. One-time purge complete (no retired COMPLETEDGAMES pk shapes remain).',
+      useInstead: [],
+    }),
+    headers
+  };
 }
 
 async function updateMetaGameCounts(userId: string) {
