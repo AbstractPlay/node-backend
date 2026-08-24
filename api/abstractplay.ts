@@ -146,6 +146,7 @@ import {
   enqueueGameStartNotifications,
   loadNotificationsForDashboard,
   optionalNotificationNote,
+  resolveEventInvitationNotifyIds,
   type NotificationGame,
 } from '../lib/notifications';
 
@@ -8121,8 +8122,10 @@ async function eventUpdateInvites(userid: string, pars: { eventid: string, invit
       };
     }
     const previousInvited = new Set(eventRec.invited ?? []);
-    eventRec.invited = pars.invited;
-    eventRec.blocked = pars.blocked;
+    const invited = Array.isArray(pars.invited) ? pars.invited : [];
+    const blocked = Array.isArray(pars.blocked) ? pars.blocked : [];
+    eventRec.invited = invited;
+    eventRec.blocked = blocked;
     await ddbDocClient.send(
       new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -8130,11 +8133,18 @@ async function eventUpdateInvites(userid: string, pars: { eventid: string, invit
       })
     );
     const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-    const newlyInvited = pars.invited.filter(id => !previousInvited.has(id));
+    const newlyInvited = invited.filter(id => !previousInvited.has(id));
+    const toNotify = await resolveEventInvitationNotifyIds(
+      ddbDocClient,
+      tableName,
+      invited,
+      newlyInvited,
+      pars.eventid,
+    );
     await enqueueEventInvitationNotifications(
       ddbDocClient,
       tableName,
-      newlyInvited,
+      toNotify,
       {
         eventId: pars.eventid,
         eventName: eventRec.name,

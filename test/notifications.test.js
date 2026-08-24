@@ -96,6 +96,29 @@ function createMockDocClient(store) {
     strict_1.default.equal(item.body.organizerId, 'org-1');
     strict_1.default.equal(item.body.organizerName, 'Alice');
 });
+(0, node_test_1.test)('hasActiveEventInvitationNotification finds non-expired invite for event', async () => {
+    const eventId = 'evt-abc';
+    const store = new Map([
+        [itemKey({
+                pk: (0, notifications_1.notificationPk)(USER_ID),
+                sk: '2000#invite',
+            }), {
+                pk: (0, notifications_1.notificationPk)(USER_ID),
+                sk: '2000#invite',
+                body: {
+                    type: 'eventInvitation',
+                    eventId,
+                    eventName: 'Spring Open',
+                    organizerId: 'org-1',
+                    organizerName: 'Alice',
+                },
+                expiresAt: (0, notifications_1.notificationSeenExpiresAt)(),
+            }],
+    ]);
+    const client = createMockDocClient(store);
+    strict_1.default.equal(await (0, notifications_1.hasActiveEventInvitationNotification)(client, TABLE, USER_ID, eventId), true);
+    strict_1.default.equal(await (0, notifications_1.hasActiveEventInvitationNotification)(client, TABLE, USER_ID, 'other-event'), false);
+});
 (0, node_test_1.describe)('loadNotificationsForDashboard', () => {
     (0, node_test_1.it)('deletes expired items and returns survivors', async () => {
         const store = new Map([

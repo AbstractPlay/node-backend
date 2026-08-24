@@ -12,6 +12,7 @@ import {
   NOTIFICATION_SEEN_TTL_DAYS,
   buildNotificationItem,
   dismissNotification,
+  hasActiveEventInvitationNotification,
   loadNotificationsForDashboard,
   notificationInitialExpiresAt,
   notificationPk,
@@ -116,6 +117,37 @@ test('eventInvitation body carries event page link fields', () => {
   assert.equal(item.body.eventName, 'Spring Open');
   assert.equal(item.body.organizerId, 'org-1');
   assert.equal(item.body.organizerName, 'Alice');
+});
+
+test('hasActiveEventInvitationNotification finds non-expired invite for event', async () => {
+  const eventId = 'evt-abc';
+  const store: Store = new Map([
+    [itemKey({
+      pk: notificationPk(USER_ID),
+      sk: '2000#invite',
+    }), {
+      pk: notificationPk(USER_ID),
+      sk: '2000#invite',
+      body: {
+        type: 'eventInvitation',
+        eventId,
+        eventName: 'Spring Open',
+        organizerId: 'org-1',
+        organizerName: 'Alice',
+      },
+      expiresAt: notificationSeenExpiresAt(),
+    }],
+  ]);
+  const client = createMockDocClient(store);
+
+  assert.equal(
+    await hasActiveEventInvitationNotification(client as never, TABLE, USER_ID, eventId),
+    true,
+  );
+  assert.equal(
+    await hasActiveEventInvitationNotification(client as never, TABLE, USER_ID, 'other-event'),
+    false,
+  );
 });
 
 describe('loadNotificationsForDashboard', () => {

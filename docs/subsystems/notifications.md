@@ -45,7 +45,7 @@ Per-user notifications stored under `NOTIFICATION#<userid>` and returned on `me_
 | `gameStart` / `gameEnd` / `ratingChange` | Game lifecycle | `metaGame`, `gameId` → `/move/{metaGame}/0/{gameId}` |
 | `eventInvitation` | Organizer adds invitees on moderated event | `eventId`, `eventName`, `organizerId`, `organizerName` → `/event/{eventId}` |
 
-**Event invitations** apply only to human-moderated [organized events](/backend/subsystems/events/) (`ORGEVENT`) updated through `event_update_invites`. Newly added invitees receive one notification each (re-inviting someone already on the list does not re-notify). Automated tournament sign-up does not use this path.
+**Event invitations** apply only to human-moderated [organized events](/backend/subsystems/events/) (`ORGEVENT`) updated through `event_update_invites`. Each save notifies newly added invitees and any existing invitee who does not yet have an active `eventInvitation` for that event (for example, invited before this feature shipped). Re-saving an unchanged invite list does not duplicate notifications. Automated tournament sign-up does not use this path.
 
 Implementation: [`lib/notifications.ts`](../../lib/notifications.ts), wired from [`api/abstractplay.ts`](../../api/abstractplay.ts).
 

@@ -345,6 +345,61 @@ export async function enqueueGameEndNotifications(
 }
 
 /** In-app invite for moderated ORGEVENT records (not automated tournaments). */
+export async function hasActiveEventInvitationNotification(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  eventId: string,
+  nowSec = Math.floor(Date.now() / 1000),
+): Promise<boolean> {
+  const pk = notificationPk(userId);
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const result = await client.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'pk = :pk',
+      ExpressionAttributeValues: { ':pk': pk },
+      ExclusiveStartKey: lastKey,
+    }));
+    for (const item of result.Items ?? []) {
+      const rec = item as NotificationRecord;
+      if (rec.expiresAt <= nowSec) {
+        continue;
+      }
+      if (rec.body.type === 'eventInvitation' && rec.body.eventId === eventId) {
+        return true;
+      }
+    }
+    lastKey = result.LastEvaluatedKey;
+  } while (lastKey);
+  return false;
+}
+
+/** Notify newly added invitees and existing invitees missing an active notification. */
+export async function resolveEventInvitationNotifyIds(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  inviteeIds: string[],
+  newlyInvitedIds: string[],
+  eventId: string,
+): Promise<string[]> {
+  const humanInvitees = await filterHumanIds(inviteeIds);
+  const newlyInvited = new Set(await filterHumanIds(newlyInvitedIds));
+  const toNotify = new Set<string>();
+
+  for (const id of humanInvitees) {
+    if (newlyInvited.has(id)) {
+      toNotify.add(id);
+      continue;
+    }
+    if (!(await hasActiveEventInvitationNotification(client, tableName, id, eventId))) {
+      toNotify.add(id);
+    }
+  }
+
+  return [...toNotify];
+}
+
 export async function enqueueEventInvitationNotifications(
   client: DynamoDBDocumentClient,
   tableName: string,
