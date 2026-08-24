@@ -52,7 +52,7 @@ Implementation: [`lib/notifications.ts`](../../lib/notifications.ts), wired from
 
 ### Admin read-only dump
 
-[`bin/dump-dashboard.mjs`](../../bin/dump-dashboard.mjs) assembles dashboard-shaped data from DynamoDB without Cognito or writes. Pass `--include-notifications` to add the `NOTIFICATION#` feed using `loadNotificationsForDashboard(..., { refreshExpiry: false })` so TTL is not tightened during inspection.
+`bin/dump-dashboard.mjs` assembles dashboard-shaped data from DynamoDB without Cognito or writes. Pass `--include-notifications` to add the `NOTIFICATION#` feed using `loadNotificationsForDashboard(..., { refreshExpiry: false })` so TTL is not tightened during inspection.
 
 ## Related
 
