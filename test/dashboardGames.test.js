@@ -84,3 +84,17 @@ const completedRow = {
     strict_1.default.equal(merged[0].id, 'g-active');
     strict_1.default.equal(merged[0].toMove, '0');
 });
+(0, node_test_1.test)('listActiveGameKeys returns only active CURRENTGAMES# rows', async () => {
+    const completedActiveRow = {
+        ...activeRow,
+        sk: 'g-done-active',
+        toMove: '',
+    };
+    const client = {
+        send: async () => ({
+            Items: [activeRow, completedActiveRow],
+        }),
+    };
+    const keys = await (0, dashboardGames_1.listActiveGameKeys)(client, 'table', 'u1');
+    strict_1.default.deepEqual(keys, [{ metaGame: 'saltire', id: 'g-active' }]);
+});

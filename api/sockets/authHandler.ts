@@ -6,6 +6,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { connectionTtl, watchingGamesFromRefs } from '../../lib/wsConnectionStore';
 import { enqueuePresenceEvent, sendPresenceSnapshot } from '../../lib/wsPresence';
+import { touchUserLastSeen } from '../../lib/touchUserLastSeen';
 
 type WebSocketRequestContext = APIGatewayProxyEventV2["requestContext"] & {
   connectionId: string;
@@ -79,6 +80,12 @@ export const handler = async (event: WebSocketEvent) => {
     );
 
     await sendPresenceSnapshot(endpoint, connectionId);
+
+    await touchUserLastSeen(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+    );
 
     if (!invisible) {
       await enqueuePresenceEvent({ type: "join", userId, invisible });

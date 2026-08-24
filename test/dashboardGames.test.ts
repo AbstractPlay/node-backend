@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   currentRowToGame,
   isActiveDashboardGame,
+  listActiveGameKeys,
   mergeDashboardGames,
   type CurrentGameIndexRow,
 } from '../lib/dashboardGames';
@@ -99,4 +100,21 @@ test('mergeDashboardGames does not duplicate when same id in both indexes', () =
   assert.equal(merged.length, 1);
   assert.equal(merged[0]!.id, 'g-active');
   assert.equal(merged[0]!.toMove, '0');
+});
+
+test('listActiveGameKeys returns only active CURRENTGAMES# rows', async () => {
+  const completedActiveRow: CurrentGameIndexRow = {
+    ...activeRow,
+    sk: 'g-done-active',
+    toMove: '',
+  };
+  const client = {
+    send: async () => ({
+      Items: [activeRow, completedActiveRow],
+    }),
+  };
+
+  const keys = await listActiveGameKeys(client as never, 'table', 'u1');
+
+  assert.deepEqual(keys, [{ metaGame: 'saltire', id: 'g-active' }]);
 });

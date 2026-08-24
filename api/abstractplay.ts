@@ -86,12 +86,18 @@ import { adjustShardedCounts, ensureShardedMetaGameCountEntry } from '../lib/gam
 import { adminDeleteGame } from '../lib/adminDeleteGame';
 import { filterExplorationTreeForSave, type ExplorationTreeNode } from '../lib/explorationMoves';
 import {
-  loadDashboardGameData,
   loadDashboardGames,
-  isActiveDashboardGame,
+  listActiveGameKeys,
   shouldWriteGameOpenOverlay,
-  pruneSeenCompletedDashboardGames,
 } from '../lib/dashboardGames';
+import { runDashboardMaintenance, checkAndProcessGameTimeout } from '../lib/dashboardMaintenance';
+import {
+  buildMeDashboardPayload,
+  buildMeProfilePayload,
+  type MeAncillaryData,
+  type MeChallengeData,
+} from '../lib/meQuery';
+import { getUsersLastSeen } from '../lib/touchUserLastSeen';
 import {
   deleteRecentCompletedRow,
   hasCurrentGameRow,
@@ -738,6 +744,10 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
   switch (query) {
     case "me":
       return await me(event.cognitoPoolClaims, pars);
+    case "me_profile":
+      return await meProfile(event.cognitoPoolClaims);
+    case "me_dashboard":
+      return await meDashboard(event.cognitoPoolClaims, pars);
     case "create_bot":
     case "createBot":
       return await createBot(event.cognitoPoolClaims, pars);
@@ -1386,6 +1396,52 @@ async function game(userid: string, pars: { id: string, cbit: string | number, m
     }
     if (game === undefined) {
       throw new Error(`Game ${pars.id}, metaGame ${pars.metaGame}, completed bit ${pars.cbit} not found`);
+    }
+    if ((pars.cbit === 0 || pars.cbit === "0") && game.toMove && game.toMove !== '') {
+      const timeoutResult = await checkAndProcessGameTimeout({
+        id: game.id,
+        metaGame: game.metaGame,
+        players: game.players.map(p => ({
+          id: p.id,
+          name: p.name,
+          time: p.time,
+        })),
+        clockHard: game.clockHard,
+        toMove: game.toMove,
+        lastMoveTime: game.lastMoveTime,
+        variants: game.variants,
+      }, {
+        client: ddbDocClient,
+        tableName: process.env.ABSTRACT_PLAY_TABLE!,
+        timeloss,
+      });
+      if (timeoutResult.processed) {
+        const refreshed = await ddbDocClient.send(
+          new GetCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: {
+              pk: 'GAME',
+              sk: `${pars.metaGame}#0#${pars.id}`,
+            },
+          }),
+        );
+        if (refreshed.Item) {
+          game = hydrateGameState(refreshed.Item as FullGame);
+        } else {
+          const completed = await ddbDocClient.send(
+            new GetCommand({
+              TableName: process.env.ABSTRACT_PLAY_TABLE,
+              Key: {
+                pk: 'GAME',
+                sk: `${pars.metaGame}#1#${pars.id}`,
+              },
+            }),
+          );
+          if (completed.Item) {
+            game = hydrateGameState(completed.Item as FullGame);
+          }
+        }
+      }
     }
     // Always set seen time, not just when the game is over
     if (userid !== undefined && userid !== null && userid !== "") {
@@ -2612,359 +2668,241 @@ async function deleteBot(claim: PartialClaims, pars: { clientId: string }) {
   }
 }
 
-async function me(claim: PartialClaims, pars: { size: string, vars: string, update: string }) {
+async function loadMeUser(claim: PartialClaims): Promise<FullUser | undefined> {
   const userId = claim.sub;
   const email = claim.email;
-  if (!claim.email || claim.email.trim().length === 0) {
-    console.log(`How!?: claim.email is ${claim.email}`);
+  if (!email || email.trim().length === 0) {
+    console.log(`How!?: claim.email is ${email}`);
   }
-  if (!pars || !pars.size || pars.size !== "small")
-    console.log(`ME: Attempting to find data for user id ${userId}, vars ${pars?.vars}, update ${pars?.update}`);
-  else
-    console.log(`ME (small): Attempting to find data for user id ${userId}, vars ${pars.vars}, update ${pars.update}`);
+  console.log('Getting USER record');
+  const userData = await ddbDocClient.send(
+    new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        pk: 'USER',
+        sk: userId,
+      },
+    }),
+  );
+  if (userData.Item === undefined) {
+    return undefined;
+  }
+  const user = userData.Item as FullUser;
+  if (user.email !== email) {
+    await updateUserEMail(claim);
+  }
+  return user;
+}
 
+async function clearUserCleanedFlag(userId: string, user: FullUser): Promise<void> {
+  if (user.cleaned !== true) {
+    return;
+  }
+  await ddbDocClient.send(new UpdateCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE!,
+    Key: { pk: 'USER', sk: userId },
+    UpdateExpression: 'REMOVE cleaned',
+  }));
+  delete user.cleaned;
+}
+
+async function resolveMeAncillary(userId: string, user: FullUser): Promise<MeAncillaryData> {
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+  const tagWork = ddbDocClient.send(
+    new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { pk: 'TAG', sk: userId },
+    }),
+  );
+  const paletteWork = ddbDocClient.send(
+    new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { pk: 'PALETTES', sk: userId },
+    }),
+  );
+  const standingWork = ddbDocClient.send(
+    new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { pk: 'REALSTANDING', sk: userId },
+    }),
+  );
+  const customizationWork = ddbDocClient.send(
+    new QueryCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      KeyConditionExpression: '#pk = :pk',
+      ExpressionAttributeValues: { ':pk': `CUSTOMIZATION#${userId}` },
+      ExpressionAttributeNames: { '#pk': 'pk' },
+    }),
+  );
+  const botIds: string[] = Array.from(user?.bots ?? new Set());
+  const [
+    tagData,
+    paletteData,
+    standingData,
+    customizationData,
+    botData,
+    blocked,
+    watchedGames,
+    highlights,
+    representatives,
+  ] = await Promise.all([
+    tagWork,
+    paletteWork,
+    standingWork,
+    customizationWork,
+    getBots(botIds),
+    getPlayerRelationIds(userId, 'BLOCKED#'),
+    listWatchedGames(ddbDocClient, tableName, userId),
+    listHighlights(ddbDocClient, tableName, userId),
+    listUserRecommendations(ddbDocClient, tableName, userId),
+  ]);
+
+  let tags: TagList[] = [];
+  if (tagData.Item !== undefined) {
+    tags = (tagData.Item as TagRec).tags;
+  }
+  let palettes: Palette[] = [];
+  if (paletteData.Item !== undefined) {
+    palettes = (paletteData.Item as PaletteRec).palettes;
+  }
+  let realStanding: StandingChallenge[] = [];
+  if (standingData.Item !== undefined) {
+    realStanding = (standingData.Item as StandingChallengeRec).standing;
+  }
+  const customizations: { [key: string]: Customization } = {};
+  if (customizationData.Items !== undefined) {
+    for (const item of customizationData.Items as CustomizationRec[]) {
+      const settings: unknown = item.settings;
+      if (typeof settings === 'string') {
+        customizations[item.sk] = JSON.parse(settings);
+      } else {
+        customizations[item.sk] = settings as Customization;
+      }
+    }
+  }
+  const bots = (botData as { Item?: BotRecord }[])
+    .map(d => toClientBot(d.Item))
+    .filter((bot): bot is ClientBot => bot !== undefined);
+
+  return {
+    tags,
+    palettes,
+    realStanding,
+    customizations,
+    bots,
+    blocked,
+    watchedGames,
+    highlights,
+    representatives,
+  };
+}
+
+async function resolveMeChallenges(user: FullUser): Promise<MeChallengeData> {
+  const challengesIssuedIDs: string[] = Array.from(user?.challenges_issued ?? new Set());
+  const challengesReceivedIDs: string[] = Array.from(user?.challenges_received ?? new Set());
+  const challengesAcceptedIDs: string[] = Array.from(user?.challenges_accepted ?? new Set());
+  const standingChallengeIDs: string[] = Array.from(user?.challenges_standing ?? new Set());
+  const [
+    challengesIssued,
+    challengesReceived,
+    challengesAccepted,
+    standingChallenges,
+  ] = await Promise.all([
+    getChallenges(challengesIssuedIDs),
+    getChallenges(challengesReceivedIDs),
+    getChallenges(challengesAcceptedIDs),
+    getChallenges(standingChallengeIDs),
+  ]);
+  return {
+    challengesIssued: challengesIssued.map(d => d.Item),
+    challengesReceived: challengesReceived.map(d => d.Item),
+    challengesAccepted: challengesAccepted.map(d => d.Item),
+    standingChallenges: standingChallenges.map(d => d.Item),
+  };
+}
+
+async function meProfile(claim: PartialClaims) {
+  const userId = claim.sub;
+  console.log(`me_profile: user id ${userId}`);
   try {
-    console.log(`Getting USER record`);
-    const userData = await ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "USER",
-          "sk": userId
-        },
-      }));
-    if (userData.Item === undefined) {
+    const user = await loadMeUser(claim);
+    if (user === undefined) {
       return {
         statusCode: 200,
         body: JSON.stringify({}),
-        headers
+        headers,
       };
     }
-    const user = userData.Item as FullUser;
-    if (user.email !== email)
-      await updateUserEMail(claim);
     const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-    if (user.cleaned === true) {
-      await ddbDocClient.send(new UpdateCommand({
-        TableName: tableName,
-        Key: { pk: 'USER', sk: userId },
-        UpdateExpression: 'REMOVE cleaned',
-      }));
-      delete user.cleaned;
-    }
-    let games = await loadDashboardGames(ddbDocClient, tableName, userId);
-
-    // fetch tags
-    const tagWork = ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "TAG",
-          "sk": userId
-        },
-      })
-    );
-
-    // fetch palettes
-    const paletteWork = ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "PALETTES",
-          "sk": userId
-        },
-      })
-    );
-
-    // fetch "real" standing challenges
-    const standingWork = ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "REALSTANDING",
-          "sk": userId
-        },
-      })
-    );
-
-    // fetch customizations
-    const customizationWork = ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "CUSTOMIZATION#" + userId },
-        ExpressionAttributeNames: { "#pk": "pk" },
-      })
-    );
-
-    const botIds: string[] = Array.from(user?.bots ?? new Set());
-    const botsWork = getBots(botIds);
-    const blockedWork = getPlayerRelationIds(userId, "BLOCKED#");
-    const watchedGamesWork = listWatchedGames(ddbDocClient, tableName, userId);
-    const highlightsWork = listHighlights(ddbDocClient, tableName, userId);
-    const representativesWork = listUserRecommendations(ddbDocClient, tableName, userId);
-
-    const evictedGameIDs: string[] = [];
-    if (!pars || !pars.size || pars.size !== "small") {
-      // LogInOutButton calls "me" with "small". If we do the below from the dashboard (and then at the same time from LogInOutButton) we run into
-      // all kinds of race conditions. So we only do the below if we are not in "small" mode.
-
-      // Check for "recently completed games"
-      console.log(`Checking for recently completed games`);
-      // As soon as a game is over move it to archive status (game.type = 0).
-      // Remove the game from user's games list one week after they have seen it. "Seen it" means they clicked on the game (or they were the one that caused the end of the game).
-      const pruneResult = pruneSeenCompletedDashboardGames(games);
-      games = pruneResult.games;
-      evictedGameIDs.push(...pruneResult.evictedIds);
-      // Check for out-of-time games
-
-      console.log(`Checking for out-of-time games`);
-      for (const game of games) {
-        if (game.clockHard && game.toMove && game.toMove !== '') {
-          if (Array.isArray(game.toMove)) {
-            let minTime = 0;
-            let minIndex = -1;
-            const elapsed = Date.now() - game.lastMoveTime;
-            game.toMove.forEach((p: any, i: number) => {
-              if (p && game.players[i].time! - elapsed < minTime) {
-                minTime = game.players[i].time! - elapsed;
-                minIndex = i;
-              }
-            });
-            if (minIndex !== -1) {
-              const newLastMoveTime = game.lastMoveTime + game.players[minIndex].time!;
-
-              try {
-                // Build expected array for condition
-                const expectedToMove = [...game.toMove];
-
-                await ddbDocClient.send(new UpdateCommand({
-                  TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Key: {
-                    "pk": "GAME",
-                    "sk": game.metaGame + "#0#" + game.id
-                  },
-                  ConditionExpression: "toMove = :expectedToMove",
-                  ExpressionAttributeValues: {
-                    ":expectedToMove": expectedToMove,
-                    ":newToMove": '',
-                    ":newLastMoveTime": newLastMoveTime
-                  },
-                  UpdateExpression: "set toMove = :newToMove, lastMoveTime = :newLastMoveTime"
-                }));
-
-                console.log(`Successfully marked simultaneous game ${game.id} as timed out, processing...`);
-                game.toMove = '';
-                game.lastMoveTime = newLastMoveTime;
-                await timeloss(false, minIndex, game.id, game.metaGame, game.lastMoveTime);
-
-              } catch (err: any) {
-                if (err.name === 'ConditionalCheckFailedException') {
-                  console.log(`Simultaneous game ${game.id} already processed, skipping`);
-                  game.toMove = '';
-                  game.lastMoveTime = newLastMoveTime;
-                } else {
-                  throw err;
-                }
-              }
-            }
-          } else {
-            const toMove = parseInt(game.toMove);
-            if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
-              const newLastMoveTime = game.lastMoveTime + game.players[toMove].time!;
-              try {
-                // Conditional update: only succeed if toMove hasn't been cleared yet
-                await ddbDocClient.send(new UpdateCommand({
-                  TableName: process.env.ABSTRACT_PLAY_TABLE,
-                  Key: {
-                    "pk": "GAME",
-                    "sk": game.metaGame + "#0#" + game.id
-                  },
-                  ConditionExpression: "toMove = :expectedToMove",
-                  ExpressionAttributeValues: {
-                    ":expectedToMove": toMove.toString(),
-                    ":newToMove": '',
-                    ":newLastMoveTime": newLastMoveTime
-                  },
-                  UpdateExpression: "set toMove = :newToMove, lastMoveTime = :newLastMoveTime"
-                }));
-
-                // Only if the conditional update succeeded, process the timeout
-                console.log(`Successfully marked game ${game.id} as timed out, processing...`);
-                game.lastMoveTime = newLastMoveTime;
-                game.toMove = '';
-
-                // Now safe to process timeout - we "own" this timeout
-                await timeloss(false, toMove, game.id, game.metaGame, game.lastMoveTime);
-
-              } catch (err: any) {
-                if (err.name === 'ConditionalCheckFailedException') {
-                  // Another request already processed this timeout, skip
-                  console.log(`Game ${game.id} already processed by another request, skipping`);
-                  // Update local game object to reflect the change
-                  game.toMove = '';
-                  game.lastMoveTime = newLastMoveTime;
-                } else {
-                  throw err;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    // Update last seen date for user
-    console.log(`Updating last seen date for USER and USERS`);
-    const lastSeenUserWork = ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USER", "sk": userId },
-      ExpressionAttributeValues: { ":dt": Date.now() },
-      UpdateExpression: "set lastSeen = :dt"
-    }));
-    const lastSeenUsersWork = ddbDocClient.send(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USERS", "sk": userId },
-      ExpressionAttributeValues: { ":dt": Date.now() },
-      UpdateExpression: "set lastSeen = :dt"
-    }));
-
-    let data = null;
-    console.log(`Fetching challenges`);
-    if (evictedGameIDs.length > 0) {
-      await Promise.all(evictedGameIDs.flatMap(gameId => [
-        deleteUserGameOverlay(ddbDocClient, tableName, userId, gameId),
-        deleteRecentCompletedRow(ddbDocClient, tableName, userId, gameId),
-      ]));
-    }
-    let tagData, paletteData, standingData, customizationData, botData;
-    if (!pars || !pars.size || pars.size !== "small") {
-      const challengesIssuedIDs: string[] = Array.from(user?.challenges_issued ?? new Set());
-      const challengesReceivedIDs: string[] = Array.from(user?.challenges_received ?? new Set());
-      const challengesAcceptedIDs: string[] = Array.from(user?.challenges_accepted ?? new Set());
-      const standingChallengeIDs: string[] = Array.from(user?.challenges_standing ?? new Set());
-      const challengesIssued = getChallenges(challengesIssuedIDs);
-      const challengesReceived = getChallenges(challengesReceivedIDs);
-      const challengesAccepted = getChallenges(challengesAcceptedIDs);
-      const standingChallenges = getChallenges(standingChallengeIDs);
-      data = await Promise.all([challengesIssued, challengesReceived, challengesAccepted, standingChallenges, tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        standingWork, customizationWork, botsWork, watchedGamesWork, highlightsWork, representativesWork, blockedWork]);
-      tagData = data[4];
-      paletteData = data[5];
-      standingData = data[8];
-      customizationData = data[9];
-      botData = data[10];
-    } else {
-      data = await Promise.all([tagWork, paletteWork, lastSeenUserWork, lastSeenUsersWork,
-        standingWork, customizationWork, botsWork, watchedGamesWork, highlightsWork, representativesWork, blockedWork]);
-      tagData = data[0];
-      paletteData = data[1];
-      standingData = data[4];
-      customizationData = data[5];
-      botData = data[6];
-    }
-    const blocked: string[] = data[data.length - 1] as string[];
-    const watchedGames = data[data.length - 4] as GameMarkSummary[];
-    const highlights = data[data.length - 3] as HighlightEntry[];
-    const representatives = data[data.length - 2] as RepresentativeEntry[];
-    const bots = (botData as { Item?: BotRecord }[])
-      .map(d => toClientBot(d.Item))
-      .filter((bot): bot is ClientBot => bot !== undefined);
-    let tags: TagList[] = [];
-    if (tagData.Item !== undefined) {
-      const tagRec = tagData.Item as TagRec;
-      tags = tagRec.tags;
-    }
-    let palettes: Palette[] = [];
-    if (paletteData.Item !== undefined) {
-      const paletteRec = paletteData.Item as PaletteRec;
-      palettes = paletteRec.palettes;
-    }
-    let realStanding: StandingChallenge[] = [];
-    if (standingData.Item !== undefined) {
-      const standingRec = standingData.Item as StandingChallengeRec;
-      realStanding = standingRec.standing;
-    }
-    const customizations: { [key: string]: Customization } = {};
-    if (customizationData.Items !== undefined) {
-      for (const item of (customizationData.Items as CustomizationRec[])) {
-        const settings: any = item.settings;
-        if (typeof settings === "string") {
-          customizations[item.sk] = JSON.parse(settings);
-        } else {
-          customizations[item.sk] = settings;
-        }
-      }
-    }
-
-    if (data && (!pars || !pars.size || pars.size !== "small")) {
-      // Still trying to get to the bottom of games shown as "to move" when already moved.
-      console.log(`me returning for ${user.name}, id ${user.id} with games`, games);
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          "id": user.id,
-          "name": user.name,
-          "admin": (user.admin === true),
-          "organizer": (user.organizer === true),
-          "language": user.language,
-          "country": user.country,
-          "games": games,
-          "settings": user.settings,
-          "stars": user.stars,
-          "bggid": user.bggid,
-          "about": user.about,
-          tags,
-          palettes,
-          "mayPush": user.mayPush,
-          "publicRivalries": user.publicRivalries === true,
-          bots,
-          "challengesIssued": (data[0] as any[]).map(d => d.Item),
-          "challengesReceived": (data[1] as any[]).map(d => d.Item),
-          "challengesAccepted": (data[2] as any[]).map(d => d.Item),
-          "standingChallenges": (data[3] as any[]).map(d => d.Item),
-          "realStanding": realStanding,
-          customizations,
-          blocked,
-          watchedGames,
-          highlights,
-          representatives,
-        } as MeData, Set_toJSON),
-        headers
-      };
-    } else {
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          "id": user.id,
-          "name": user.name,
-          "admin": (user.admin === true),
-          "organizer": (user.organizer === true),
-          "language": user.language,
-          "country": user.country,
-          "games": games,
-          "settings": user.settings,
-          "stars": user.stars,
-          "bggid": user.bggid,
-          "about": user.about,
-          "mayPush": user.mayPush,
-          "publicRivalries": user.publicRivalries === true,
-          bots,
-          tags,
-          palettes,
-          "realStanding": realStanding,
-          customizations,
-          blocked,
-          watchedGames,
-          highlights,
-          representatives,
-        } as MeData, Set_toJSON),
-        headers
-      }
-    }
+    const [activeGames, ancillary] = await Promise.all([
+      listActiveGameKeys(ddbDocClient, tableName, userId),
+      resolveMeAncillary(userId, user),
+    ]);
+    return {
+      statusCode: 200,
+      body: JSON.stringify(buildMeProfilePayload(user, ancillary, activeGames), Set_toJSON),
+      headers,
+    };
   } catch (err) {
     logGetItemError(err);
-    return formatReturnError(`Unable to get user data for ${userId}`);
+    return formatReturnError(`Unable to get profile data for ${userId}`);
   }
+}
+
+async function meDashboard(claim: PartialClaims, pars: { size: string, vars: string, update: string }) {
+  const userId = claim.sub;
+  console.log(`me_dashboard: user id ${userId}, vars ${pars?.vars}, update ${pars?.update}`);
+  try {
+    const user = await loadMeUser(claim);
+    if (user === undefined) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers,
+      };
+    }
+    const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+    await clearUserCleanedFlag(userId, user);
+    let games = await loadDashboardGames(ddbDocClient, tableName, userId);
+    const maintenance = await runDashboardMaintenance(
+      ddbDocClient,
+      tableName,
+      userId,
+      games,
+      {
+        client: ddbDocClient,
+        tableName,
+        timeloss,
+      },
+    );
+    games = maintenance.games;
+    if (maintenance.evictedIds.length > 0) {
+      console.log(`me_dashboard evicted games for ${user.name}:`, maintenance.evictedIds);
+    }
+    console.log('Fetching challenges');
+    const [ancillary, challenges] = await Promise.all([
+      resolveMeAncillary(userId, user),
+      resolveMeChallenges(user),
+    ]);
+    console.log(`me_dashboard returning for ${user.name}, id ${user.id} with games`, games);
+    return {
+      statusCode: 200,
+      body: JSON.stringify(buildMeDashboardPayload(user, ancillary, games, challenges), Set_toJSON),
+      headers,
+    };
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to get dashboard data for ${userId}`);
+  }
+}
+
+async function me(claim: PartialClaims, pars: { size: string, vars: string, update: string }) {
+  if (pars?.size === 'small') {
+    console.log('me (legacy small): delegating to me_profile');
+    return meProfile(claim);
+  }
+  console.log('me (legacy): delegating to me_dashboard');
+  return meDashboard(claim, pars);
 }
 
 async function nextGame(userid: string) {
@@ -5137,14 +5075,20 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
 
   try {
     const game = hydrateGameState(data.Item as FullGame);
-    const playerIDs = game.players.map((p: { id: any; }) => p.id);
-    const players = await getPlayers(playerIDs);
+    const playerIDs = game.players.map((p: { id: string }) => p.id);
+    const humanIds = await filterHumanIds(playerIDs);
+    const lastSeenByUser = await getUsersLastSeen(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      humanIds,
+    );
     const now = Date.now();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
     if (
       game.toMove == ""
       || game.clockHard
-      || players.some(p => p.lastSeen !== undefined && p.lastSeen > now - 30 * 24 * 60 * 60 * 1000)
-      || game.lastMoveTime > now - 30 * 24 * 60 * 60 * 1000
+      || [...lastSeenByUser.values()].some(lastSeen => lastSeen !== undefined && lastSeen > now - thirtyDaysMs)
+      || game.lastMoveTime > now - thirtyDaysMs
     ) {
       return {
         statusCode: 200,

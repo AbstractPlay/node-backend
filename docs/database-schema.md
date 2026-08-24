@@ -24,7 +24,8 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `USER`
   - sk: `<userid>`
   - fields include `publicRivalries` (boolean, default false) — opt in to public rivalries table
-  - `cleaned` (boolean, optional) — set by [dashboard cruft cleanup](/crons/dashboard-cruft-cleanup/) for inactive users; cleared on `me()` login
+  - `cleaned` (boolean, optional) — set by [dashboard cruft cleanup](/crons/dashboard-cruft-cleanup/) for inactive users; cleared on `me_dashboard` (or legacy `me`) login
+  - `dashboardMaintAt` (number, optional) — lease timestamp for per-user dashboard maintenance lock (`me_dashboard` prune/timeout sweep)
   - **Retired (Phase 5):** `games[]`, `gamesUpdate` — removed from all USER records in prod (Aug 2025)
 
 - **Push subscriptions** — web push endpoints (one record per browser/device)

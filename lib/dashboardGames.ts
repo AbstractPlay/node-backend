@@ -190,6 +190,25 @@ export async function loadDashboardGameData(
   return { games, currentRows, recentCompletedRows };
 }
 
+export type ActiveGameKey = {
+  metaGame: string;
+  id: string;
+};
+
+export async function listActiveGameKeys(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+): Promise<ActiveGameKey[]> {
+  const rows = await listCurrentGameRows(client, tableName, userId);
+  return rows
+    .filter(row => isActiveDashboardGame(row))
+    .map(row => ({
+      metaGame: row.metaGame,
+      id: row.id ?? row.sk,
+    }));
+}
+
 export async function loadDashboardGames(
   client: DynamoDBDocumentClient,
   tableName: string,

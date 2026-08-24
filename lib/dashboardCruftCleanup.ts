@@ -1,10 +1,9 @@
 import {
-  DeleteCommand,
   DynamoDBDocumentClient,
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { removeDashboardGameMembership } from './dashboardEviction';
 import {
-  deleteRecentCompletedRow,
   listRecentCompletedRows,
   recentCompletedRowToGame,
   shouldBeOnCompletedDashboard,
@@ -78,13 +77,15 @@ export async function cleanupUserDashboardCruft(
       eligibleRecentIds.add(row.sk);
       continue;
     }
-    await Promise.all([
-      deleteRecentCompletedRow(client, tableName, userId, row.sk),
-      deleteUserGameOverlay(client, tableName, userId, row.sk),
-    ]);
+    const evicted = await removeDashboardGameMembership(
+      client,
+      tableName,
+      userId,
+      [row.sk],
+    );
     overlays.delete(row.sk);
-    recentCompletedDeleted += 1;
-    userGameDeleted += 1;
+    recentCompletedDeleted += evicted.recentCompletedDeleted;
+    userGameDeleted += evicted.userGameDeleted;
   }
 
   const dashboardIds = new Set([...currentIds, ...eligibleRecentIds]);
