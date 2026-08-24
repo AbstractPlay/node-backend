@@ -12,5 +12,3 @@ jspm_packages
 # Cursor — keep shared rules, ignore other local state
 .cursor/*
 !.cursor/rules/
-
-bin/purge-retired-completed-games.mjs

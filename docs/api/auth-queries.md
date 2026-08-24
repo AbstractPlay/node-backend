@@ -138,22 +138,52 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 
 ## Admin and maintenance
 
+Post–Phase 5 the dashboard is **index-only** (`CURRENTGAMES#`, `RECENTCOMPLETED#`, `USERGAME#`). Legacy `USER.games[]` is retired.
+
+### Still supported (authQuery)
+
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `update_meta_game_counts` | Recompute sharded `METAGAMES#<metaGame>/COUNTS` from live queries | — |
-| `purge_retired_completed_games` | Delete legacy completed-game rows (prefer local script; see below) | — |
+| `delete_games` | Hard-delete game records and all related dashboard / spectator / exploration rows | `metaGame`, `cbit` (`0` active / `1` completed), `gameids` (comma-separated) |
+| `set_game_state` | Replace in-progress game state (`GAME` only; stream refreshes `CURRENTGAMES#`) | `id`, `metaGame`, `newState` |
+| `test_push` | Send test push notification | — |
+| `test_async` | Async test hook | varies |
 
-For the one-time legacy completed-game purge, use the local script (no Lambda timeout):
+`delete_games` removes, per game id:
+
+- `GAME`, `NOTE`, `GAMECOMMENTS`, exploration branches
+- `CURRENTGAMES#` / `RECENTCOMPLETED#` / `USERGAME#` for human participants
+- `WATCHED#` / `GAMEWATCHERS#`, participant `HIGHLIGHT#`, `REPRESENTATIVE#` / `PLAYER#` recommendation rows
+- Sharded meta counts (`currentgames` for active deletes; completed deletes rely on the stream projector for `completedgames` after `GAME` removal)
+
+If `cbit` does not match the stored game, the handler tries the other completion bit automatically.
+
+### Retired — returns `{ deprecated: true, useInstead: ... }`
+
+Do **not** run these from the admin UI; use the replacement instead.
+
+| Query | Replacement |
+|-------|-------------|
+| `fix_games` | `bin/verify-dashboard-index.mjs` then `bin/dashboard-index-maintenance.mjs --step prune-stale-recent-completed` / `purge-usergame-orphans --user-id <cognitoSub>` |
+| `purge_retired_completed_games` | One-time purge complete (no retired rows remain) |
+| `onetime_fix` | No replacement (legacy `USERS` directory sync) |
+
+### Local scripts (not authQuery)
+
+| Task | Command |
+|------|---------|
+| Dashboard health check | `node bin/verify-dashboard-index.mjs --stage prod [--verbose] <userId>…` |
+| Prune stale `RECENTCOMPLETED#` | `node bin/dashboard-index-maintenance.mjs --stage prod --step prune-stale-recent-completed [--user-id <id>]` |
+| Purge `USERGAME#` orphans | `node bin/dashboard-index-maintenance.mjs --stage prod --step purge-usergame-orphans [--user-id <id>]` |
 
 ```bash
-node bin/purge-retired-completed-games.mjs --stage prod --dry-run
-node bin/purge-retired-completed-games.mjs --stage prod
+# Example dashboard repair for one user
+node bin/verify-dashboard-index.mjs --stage prod --verbose <cognitoSub>
+node bin/dashboard-index-maintenance.mjs --stage prod --step prune-stale-recent-completed --user-id <cognitoSub>
+node bin/dashboard-index-maintenance.mjs --stage prod --step purge-usergame-orphans --user-id <cognitoSub>
+node bin/verify-dashboard-index.mjs --stage prod <cognitoSub>
 ```
-| `onetime_fix` | One-off data repair | — |
-| `fix_games` | Deprecated — use `bin/backfill-normalization-phase2.mjs --step purge-usergame-orphans\|prune-stale-recent-completed` | `targetId` |
-| `delete_games` | Delete games (admin) | game ids |
-| `test_push` | Send test push | — |
-| `test_async` | Async test hook | varies |
 
 ## Related
 

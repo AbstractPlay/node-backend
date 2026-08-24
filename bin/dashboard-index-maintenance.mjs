@@ -1,18 +1,17 @@
 #!/usr/bin/env node
 /* eslint-env node */
 /**
- * Post-Phase 5 dashboard index maintenance (admin ops).
+ * Dashboard index maintenance (admin ops).
  *
  * Steps (index-only; does not read USER.games[]):
  *   prune-stale-recent-completed — Delete RECENTCOMPLETED# rows not dashboard-eligible (USERGAME# overlays)
- *   purge-usergame-orphans       — Delete USERGAME# rows for games not on CURRENTGAMES# / RECENTCOMPLETED#
- *   remove-legacy-games          — REMOVE games + gamesUpdate from USER records (run once after Phase 5 deploy)
+ *   purge-usergame-orphans       — Delete USERGAME# rows not on CURRENTGAMES# or eligible RECENTCOMPLETED#
  *
  * Meta game counts: use admin authQuery `update_meta_game_counts` (live recount to METAGAMES#), not this script.
  *
  * Usage:
- *   node bin/backfill-normalization-phase2.mjs [--stage dev|prod] [--dry-run]
- *     --step prune-stale-recent-completed|purge-usergame-orphans|remove-legacy-games [--user-id <cognitoSub>]
+ *   node bin/dashboard-index-maintenance.mjs [--stage dev|prod] [--dry-run]
+ *     --step prune-stale-recent-completed|purge-usergame-orphans [--user-id <cognitoSub>]
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -23,7 +22,6 @@ import {
   GetCommand,
   QueryCommand,
   ScanCommand,
-  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 
 const STAGES = {
@@ -42,11 +40,10 @@ const COMPLETED_DASHBOARD_RETENTION_MS = 7 * 24 * 3600000;
 const STEPS = [
   'prune-stale-recent-completed',
   'purge-usergame-orphans',
-  'remove-legacy-games',
 ];
 
 function usage() {
-  console.error(`Usage: node bin/backfill-normalization-phase2.mjs [options]
+  console.error(`Usage: node bin/dashboard-index-maintenance.mjs [options]
 
 Options:
   --stage dev|prod                    AWS profile + DynamoDB table (default: dev)
@@ -155,14 +152,14 @@ async function getUserRecord(docClient, tableName, userId) {
   const data = await docClient.send(new GetCommand({
     TableName: tableName,
     Key: { pk: 'USER', sk: userId },
-    ProjectionExpression: '#pk, #sk, games, gamesUpdate',
+    ProjectionExpression: '#pk, #sk',
     ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
   }));
   return data.Item;
 }
 
-async function scanAllUsers(docClient, tableName) {
-  const users = [];
+async function scanAllUserIds(docClient, tableName) {
+  const userIds = [];
   let lastEvaluatedKey;
 
   do {
@@ -171,25 +168,27 @@ async function scanAllUsers(docClient, tableName) {
       FilterExpression: '#pk = :pk',
       ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
       ExpressionAttributeValues: { ':pk': 'USER' },
-      ProjectionExpression: '#pk, #sk, games, gamesUpdate',
+      ProjectionExpression: '#pk, #sk',
       ExclusiveStartKey: lastEvaluatedKey,
     }));
 
     for (const item of page.Items ?? []) {
-      users.push(item);
+      if (item.sk) {
+        userIds.push(item.sk);
+      }
     }
     lastEvaluatedKey = page.LastEvaluatedKey;
 
-    if (users.length > 0 && users.length % 500 === 0) {
-      process.stdout.write(`\r  scanned users: ${users.length}`);
+    if (userIds.length > 0 && userIds.length % 500 === 0) {
+      process.stdout.write(`\r  scanned users: ${userIds.length}`);
     }
   } while (lastEvaluatedKey);
 
-  if (users.length >= 500) {
+  if (userIds.length >= 500) {
     process.stdout.write('\n');
   }
 
-  return users;
+  return userIds;
 }
 
 async function queryUserGameRows(docClient, tableName, userId) {
@@ -236,7 +235,7 @@ async function queryPartition(docClient, tableName, pk) {
   return items;
 }
 
-function dashboardGameIds(currentGameRows, recentCompletedRows) {
+function eligibleDashboardGameIds(currentGameRows, recentCompletedRows, overlayById, now = Date.now()) {
   const ids = new Set();
   for (const row of currentGameRows) {
     if (row.sk) {
@@ -244,7 +243,8 @@ function dashboardGameIds(currentGameRows, recentCompletedRows) {
     }
   }
   for (const row of recentCompletedRows) {
-    if (row.sk) {
+    const merged = completedGameForEligibility(row, overlayById);
+    if (row.sk && shouldBeOnCompletedDashboard(merged, now)) {
       ids.add(row.sk);
     }
   }
@@ -290,12 +290,12 @@ async function pruneStaleRecentCompleted(docClient, tableName, { dryRun, userId 
     return stats;
   }
 
-  const users = await scanAllUsers(docClient, tableName);
-  stats.users = users.length;
-  console.log(`  found ${users.length} USER records`);
+  const userIds = await scanAllUserIds(docClient, tableName);
+  stats.users = userIds.length;
+  console.log(`  found ${userIds.length} USER records`);
 
-  for (const user of users) {
-    await pruneStaleRecentCompletedForUser(docClient, tableName, user.sk, dryRun, stats);
+  for (const id of userIds) {
+    await pruneStaleRecentCompletedForUser(docClient, tableName, id, dryRun, stats);
   }
 
   return stats;
@@ -304,8 +304,9 @@ async function pruneStaleRecentCompleted(docClient, tableName, { dryRun, userId 
 async function purgeUserGameOrphansForUser(docClient, tableName, userId, dryRun, stats) {
   const currentRows = await queryPartition(docClient, tableName, `CURRENTGAMES#${userId}`);
   const recentCompletedRows = await queryPartition(docClient, tableName, `RECENTCOMPLETED#${userId}`);
-  const onDashboard = dashboardGameIds(currentRows, recentCompletedRows);
   const userGameRows = await queryUserGameRows(docClient, tableName, userId);
+  const overlayById = new Map(userGameRows.map(row => [row.sk, row]));
+  const onDashboard = eligibleDashboardGameIds(currentRows, recentCompletedRows, overlayById);
 
   for (const row of userGameRows) {
     if (onDashboard.has(row.sk)) {
@@ -326,7 +327,7 @@ async function purgeUserGameOrphansForUser(docClient, tableName, userId, dryRun,
 async function purgeUserGameOrphans(docClient, tableName, { dryRun, userId }) {
   const stats = { users: 0 };
 
-  console.log('\nPurging USERGAME# rows not on user dashboard (CURRENTGAMES# + RECENTCOMPLETED#)…');
+  console.log('\nPurging USERGAME# rows not on user dashboard (CURRENTGAMES# + eligible RECENTCOMPLETED#)…');
 
   if (userId) {
     const user = await getUserRecord(docClient, tableName, userId);
@@ -339,60 +340,12 @@ async function purgeUserGameOrphans(docClient, tableName, { dryRun, userId }) {
     return stats;
   }
 
-  const users = await scanAllUsers(docClient, tableName);
-  stats.users = users.length;
-  console.log(`  found ${users.length} USER records`);
+  const userIds = await scanAllUserIds(docClient, tableName);
+  stats.users = userIds.length;
+  console.log(`  found ${userIds.length} USER records`);
 
-  for (const user of users) {
-    await purgeUserGameOrphansForUser(docClient, tableName, user.sk, dryRun, stats);
-  }
-
-  return stats;
-}
-
-async function removeLegacyGamesForUser(docClient, tableName, userId, dryRun, stats) {
-  const user = await getUserRecord(docClient, tableName, userId);
-  if (!user) {
-    return;
-  }
-  if (user.games === undefined && user.gamesUpdate === undefined) {
-    stats.alreadyRemoved = (stats.alreadyRemoved ?? 0) + 1;
-    return;
-  }
-  if (dryRun) {
-    stats.removed = (stats.removed ?? 0) + 1;
-    return;
-  }
-  await docClient.send(new UpdateCommand({
-    TableName: tableName,
-    Key: { pk: 'USER', sk: userId },
-    UpdateExpression: 'REMOVE games, gamesUpdate',
-  }));
-  stats.removed = (stats.removed ?? 0) + 1;
-}
-
-async function removeLegacyGames(docClient, tableName, { dryRun, userId }) {
-  const stats = { users: 0 };
-
-  console.log('\nRemoving legacy USER.games[] and gamesUpdate fields…');
-
-  if (userId) {
-    const user = await getUserRecord(docClient, tableName, userId);
-    if (!user) {
-      console.error(`No USER record for ${userId}`);
-      return stats;
-    }
-    stats.users = 1;
-    await removeLegacyGamesForUser(docClient, tableName, userId, dryRun, stats);
-    return stats;
-  }
-
-  const users = await scanAllUsers(docClient, tableName);
-  stats.users = users.length;
-  console.log(`  found ${users.length} USER records`);
-
-  for (const user of users) {
-    await removeLegacyGamesForUser(docClient, tableName, user.sk, dryRun, stats);
+  for (const id of userIds) {
+    await purgeUserGameOrphansForUser(docClient, tableName, id, dryRun, stats);
   }
 
   return stats;
@@ -437,11 +390,6 @@ async function main() {
   if (step === 'purge-usergame-orphans') {
     const stats = await purgeUserGameOrphans(docClient, table, { dryRun, userId });
     printStats('USERGAME orphan purge', stats);
-  }
-
-  if (step === 'remove-legacy-games') {
-    const stats = await removeLegacyGames(docClient, table, { dryRun, userId });
-    printStats('Legacy games field removal', stats);
   }
 
   console.log('\nDone.');

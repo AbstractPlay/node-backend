@@ -9,9 +9,7 @@ pk: GAME
 sk: <metaGame>#0#<gameid>
 ```
 
-When a game completes, the completion bit becomes `1` and summary rows are written to `COMPLETEDGAMES*` families.
-
-Each `USER` record holds a denormalized `games` array for the dashboard (id, metaGame, toMove, players, clocks, etc.).
+When a game completes, the completion bit becomes `1` and summary rows are written to `COMPLETEDGAMES*` families. The live dashboard is built from per-user index rows (`CURRENTGAMES#`, `RECENTCOMPLETED#`) merged with `USERGAME#` overlays (`seen`, `lastChat`). Legacy `USER.games[]` on the `USER` record is retired (Phase 5).
 
 ## Lifecycle
 
@@ -38,7 +36,7 @@ Each `USER` record holds a denormalized `games` array for the dashboard (id, met
 
 ## Pie rule
 
-`invoke_pie` reverses the player list in the `GAME` record and in each participant's `USER.games` entry.
+`invoke_pie` reverses the player list in the `GAME` record and updates watcher summaries. The stream projector refreshes each participant's `CURRENTGAMES#` row on the next `GAME` modify.
 
 ## Playground
 

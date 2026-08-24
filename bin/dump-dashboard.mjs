@@ -200,7 +200,6 @@ async function main() {
   const realStanding = standingData.Item?.standing ?? [];
 
   if (verbose) {
-    console.error(`USER legacy games (info): ${(user.games ?? []).length}`);
     console.error(`CURRENTGAMES# rows: ${dashboardLoad.currentRows.length}`);
     console.error(`RECENTCOMPLETED# rows: ${dashboardLoad.recentCompletedRows.length}`);
     console.error(`Merged games: ${dashboardLoad.games.length} → ${games.length} after prune`);

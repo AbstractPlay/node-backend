@@ -24,7 +24,8 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `USER`
   - sk: `<userid>`
   - fields include `publicRivalries` (boolean, default false) — opt in to public rivalries table
-  - **Retired (Phase 5):** `games[]`, `gamesUpdate` — lazy-removed via `bin/backfill-normalization-phase2.mjs --step remove-legacy-games`
+  - `cleaned` (boolean, optional) — set by [dashboard cruft cleanup](/crons/dashboard-cruft-cleanup/) for inactive users; cleared on `me()` login
+  - **Retired (Phase 5):** `games[]`, `gamesUpdate` — removed from all USER records in prod (Aug 2025)
 
 - **Push subscriptions** — web push endpoints (one record per browser/device)
   - pk: `PUSH`
@@ -53,7 +54,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - sk: `<uuid>`
   - fields: `id`, `name`, `metaGame`, `date` (epoch ms), `body` (JSON string; gzip-compressed when large)
 
-**Retired (no longer written; purge via `node bin/purge-playground.mjs --stage prod`):**
+**Retired (no longer written; purged from prod Aug 2025):**
 
 - pk: `PLAYGROUND`, sk: `<userid>` — legacy single-slot sandbox
 
@@ -110,7 +111,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `COMPLETEDGAMES#<userid>`
   - sk: `<timestamp>#<gameid>`
 
-**Retired (no longer written; purge via `node bin/purge-retired-completed-games.mjs --stage prod`):**
+**Retired (no longer written; purged from prod — zero rows remain):**
 
 - pk: `COMPLETEDGAMES`, sk: `<timestamp>#<gameid>` — legacy global list
 - pk: `COMPLETEDGAMES#<metaGame>#<userid>`, sk: `<timestamp>#<gameid>` — legacy per-player-per-game index
