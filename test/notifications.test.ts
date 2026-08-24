@@ -1,0 +1,269 @@
+import { describe, it, test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  PutCommand,
+  QueryCommand,
+  DeleteCommand,
+  UpdateCommand,
+  GetCommand,
+} from '@aws-sdk/lib-dynamodb';
+import {
+  NOTIFICATION_INITIAL_TTL_DAYS,
+  NOTIFICATION_SEEN_TTL_DAYS,
+  buildNotificationItem,
+  dismissNotification,
+  hasActiveEventInvitationNotification,
+  loadNotificationsForDashboard,
+  notificationInitialExpiresAt,
+  notificationPk,
+  notificationSeenExpiresAt,
+  parseNotificationCreatedAt,
+} from '../lib/notifications';
+
+const TABLE = 'abstract-play-test';
+const USER_ID = '31af49bc-2030-4adb-aec9-dc8fa418fec1';
+const SEC_PER_DAY = 86_400;
+
+function itemKey(item: { pk: string; sk: string }): string {
+  return `${item.pk}:${item.sk}`;
+}
+
+type Store = Map<string, Record<string, unknown>>;
+
+function createMockDocClient(store: Store) {
+  return {
+    async send(command: unknown) {
+      if (command instanceof PutCommand) {
+        const item = command.input.Item as Record<string, unknown>;
+        store.set(itemKey(item as { pk: string; sk: string }), { ...item });
+        return {};
+      }
+      if (command instanceof DeleteCommand) {
+        const key = command.input.Key as { pk: string; sk: string };
+        store.delete(itemKey(key));
+        return {};
+      }
+      if (command instanceof UpdateCommand) {
+        const key = command.input.Key as { pk: string; sk: string };
+        const existing = store.get(itemKey(key));
+        assert.ok(existing, 'update target must exist');
+        const values = command.input.ExpressionAttributeValues as { ':exp': number };
+        existing.expiresAt = values[':exp'];
+        store.set(itemKey(key), existing);
+        return {};
+      }
+      if (command instanceof GetCommand) {
+        const key = command.input.Key as { pk: string; sk: string };
+        const item = store.get(itemKey(key));
+        return item ? { Item: { ...item } } : {};
+      }
+      if (command instanceof QueryCommand) {
+        const pk = command.input.ExpressionAttributeValues?.[':pk'] as string;
+        const sk = command.input.ExpressionAttributeValues?.[':sk'] as string | undefined;
+        let items = [...store.values()].filter(item => item.pk === pk);
+        if (sk !== undefined) {
+          items = items.filter(item => item.sk === sk);
+        }
+        if (command.input.ScanIndexForward === false) {
+          items.sort((a, b) => String(b.sk).localeCompare(String(a.sk)));
+        }
+        if (command.input.Limit === 1) {
+          items = items.slice(0, 1);
+        }
+        return { Items: items };
+      }
+      throw new Error(`Unexpected command: ${(command as { constructor?: { name?: string } }).constructor?.name ?? 'unknown'}`);
+    },
+  };
+}
+
+test('notificationPk uses NOTIFICATION# prefix', () => {
+  assert.equal(notificationPk(USER_ID), `NOTIFICATION#${USER_ID}`);
+});
+
+test('parseNotificationCreatedAt reads sk epoch prefix', () => {
+  assert.equal(parseNotificationCreatedAt('1700000000000#abc'), 1700000000000);
+});
+
+test('buildNotificationItem sets initial 6-month expiresAt', () => {
+  const now = Date.now();
+  const expected = notificationInitialExpiresAt(now);
+  const item = buildNotificationItem(USER_ID, {
+    type: 'challengeIssued',
+    challengeId: 'c1',
+    metaGame: 'go',
+    challengerId: 'u2',
+    challengerName: 'Bob',
+  }, now);
+
+  assert.equal(item.pk, notificationPk(USER_ID));
+  assert.equal(item.body.type, 'challengeIssued');
+  assert.ok(Math.abs(item.expiresAt - expected) <= 1);
+});
+
+test('eventInvitation body carries event page link fields', () => {
+  const item = buildNotificationItem(USER_ID, {
+    type: 'eventInvitation',
+    eventId: 'evt-abc',
+    eventName: 'Spring Open',
+    organizerId: 'org-1',
+    organizerName: 'Alice',
+  });
+  assert.equal(item.body.type, 'eventInvitation');
+  if (item.body.type !== 'eventInvitation') {
+    return;
+  }
+  assert.equal(item.body.eventId, 'evt-abc');
+  assert.equal(item.body.eventName, 'Spring Open');
+  assert.equal(item.body.organizerId, 'org-1');
+  assert.equal(item.body.organizerName, 'Alice');
+});
+
+test('hasActiveEventInvitationNotification finds non-expired invite for event', async () => {
+  const eventId = 'evt-abc';
+  const store: Store = new Map([
+    [itemKey({
+      pk: notificationPk(USER_ID),
+      sk: '2000#invite',
+    }), {
+      pk: notificationPk(USER_ID),
+      sk: '2000#invite',
+      body: {
+        type: 'eventInvitation',
+        eventId,
+        eventName: 'Spring Open',
+        organizerId: 'org-1',
+        organizerName: 'Alice',
+      },
+      expiresAt: notificationSeenExpiresAt(),
+    }],
+  ]);
+  const client = createMockDocClient(store);
+
+  assert.equal(
+    await hasActiveEventInvitationNotification(client as never, TABLE, USER_ID, eventId),
+    true,
+  );
+  assert.equal(
+    await hasActiveEventInvitationNotification(client as never, TABLE, USER_ID, 'other-event'),
+    false,
+  );
+});
+
+describe('loadNotificationsForDashboard', () => {
+  it('deletes expired items and returns survivors', async () => {
+    const store: Store = new Map([
+      [itemKey({ pk: notificationPk(USER_ID), sk: '1000#old' }), {
+        pk: notificationPk(USER_ID),
+        sk: '1000#old',
+        body: { type: 'gameEnd', gameId: 'g-old', metaGame: 'go', variants: [], result: 'lose' },
+        expiresAt: 1,
+      }],
+      [itemKey({ pk: notificationPk(USER_ID), sk: '2000#live' }), {
+        pk: notificationPk(USER_ID),
+        sk: '2000#live',
+        body: { type: 'gameEnd', gameId: 'g-live', metaGame: 'go', variants: [], result: 'win' },
+        expiresAt: notificationSeenExpiresAt(),
+      }],
+    ]);
+    const client = createMockDocClient(store);
+
+    const notifications = await loadNotificationsForDashboard(
+      client as never,
+      TABLE,
+      USER_ID,
+      { refreshExpiry: false },
+    );
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].sk, '2000#live');
+    assert.equal(notifications[0].createdAt, 2000);
+    assert.equal(store.size, 1);
+    assert.equal(store.has(itemKey({ pk: notificationPk(USER_ID), sk: '1000#old' })), false);
+  });
+
+  it('tightens long TTL only when refreshExpiry is true', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const longSk = '3000#long';
+    {
+      const store: Store = new Map([
+        [itemKey({ pk: notificationPk(USER_ID), sk: longSk }), {
+          pk: notificationPk(USER_ID),
+          sk: longSk,
+          body: { type: 'eventInvitation', eventId: 'e1', eventName: 'Cup', organizerId: 'o1', organizerName: 'Org' },
+          expiresAt: nowSec + NOTIFICATION_INITIAL_TTL_DAYS * SEC_PER_DAY,
+        }],
+        [itemKey({ pk: notificationPk(USER_ID), sk: '4000#short' }), {
+          pk: notificationPk(USER_ID),
+          sk: '4000#short',
+          body: { type: 'eventInvitation', eventId: 'e2', eventName: 'Cup2', organizerId: 'o1', organizerName: 'Org' },
+          expiresAt: notificationSeenExpiresAt(),
+        }],
+      ]);
+      const client = createMockDocClient(store);
+
+      const notifications = await loadNotificationsForDashboard(
+        client as never,
+        TABLE,
+        USER_ID,
+        { refreshExpiry: true },
+      );
+
+      assert.equal(notifications.length, 2);
+      const longItem = store.get(itemKey({ pk: notificationPk(USER_ID), sk: longSk }));
+      const shortItem = store.get(itemKey({ pk: notificationPk(USER_ID), sk: '4000#short' }));
+      assert.ok(longItem);
+      assert.ok(shortItem);
+      assert.ok(Math.abs((longItem.expiresAt as number) - notificationSeenExpiresAt()) <= 1);
+      assert.equal(shortItem.expiresAt, notificationSeenExpiresAt());
+    }
+  });
+
+  it('does not tighten TTL when refreshExpiry is false', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const longExpires = nowSec + NOTIFICATION_INITIAL_TTL_DAYS * SEC_PER_DAY;
+    const store: Store = new Map([
+      [itemKey({ pk: notificationPk(USER_ID), sk: '5000#long' }), {
+        pk: notificationPk(USER_ID),
+        sk: '5000#long',
+        body: { type: 'challengeRevoked', challengeId: 'c1', metaGame: 'go', revokerId: 'u2', revokerName: 'Bob' },
+        expiresAt: longExpires,
+      }],
+    ]);
+    const client = createMockDocClient(store);
+
+    await loadNotificationsForDashboard(client as never, TABLE, USER_ID, { refreshExpiry: false });
+
+    const item = store.get(itemKey({ pk: notificationPk(USER_ID), sk: '5000#long' }));
+    assert.equal(item?.expiresAt, longExpires);
+  });
+});
+
+describe('dismissNotification', () => {
+  it('deletes owned notification', async () => {
+    const sk = '6000#abc';
+    const store: Store = new Map([
+      [itemKey({ pk: notificationPk(USER_ID), sk }), {
+        pk: notificationPk(USER_ID),
+        sk,
+        body: { type: 'challengeDeclined', challengeId: 'c1', metaGame: 'go', declinerId: 'u2', declinerName: 'Bob' },
+        expiresAt: notificationSeenExpiresAt(),
+      }],
+    ]);
+    const client = createMockDocClient(store);
+
+    const ok = await dismissNotification(client as never, TABLE, USER_ID, sk);
+    assert.equal(ok, true);
+    assert.equal(store.size, 0);
+  });
+
+  it('returns false when notification is missing', async () => {
+    const ok = await dismissNotification(
+      createMockDocClient(new Map()) as never,
+      TABLE,
+      USER_ID,
+      'missing#sk',
+    );
+    assert.equal(ok, false);
+  });
+});

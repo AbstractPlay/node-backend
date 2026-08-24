@@ -3,6 +3,8 @@ import type { GameMarkSummary, HighlightEntry, RepresentativeEntry } from './pla
 import type { ActiveGameKey } from './dashboardGames';
 import type { DashboardGame } from './dashboardGames';
 
+import type { ClientNotification } from './notifications';
+
 export type MeAncillaryData = {
   tags: unknown[];
   palettes: unknown[];
@@ -49,6 +51,7 @@ export type MeProfilePayload = {
 
 export type MeDashboardPayload = Omit<MeProfilePayload, 'activeGames'> & MeChallengeData & {
   games: DashboardGame[];
+  notifications: ClientNotification[];
 };
 
 type MeUserFields = {
@@ -102,12 +105,14 @@ export function buildMeDashboardPayload(
   ancillary: MeAncillaryData,
   games: DashboardGame[],
   challenges: MeChallengeData,
+  notifications: ClientNotification[] = [],
 ): MeDashboardPayload {
   const profile = buildMeProfilePayload(user, ancillary, []);
   const { activeGames: _activeGames, ...profileWithoutActive } = profile;
   return {
     ...profileWithoutActive,
     games,
+    notifications,
     ...challenges,
   };
 }

@@ -91,6 +91,14 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - fields: `event`, `layoutId`, plus `rating`, `comment`, `toLayoutId`, `gameId`, `durationMs` as applicable
   - no GSI; **no TTL** (manual purge when experiment ends); no rate limit
 
+- **In-app dashboard notifications** — per-user feed shown on `me_dashboard` (distinct from email/push)
+  - pk: `NOTIFICATION#<userid>`
+  - sk: `<epochMs>#<random>`
+  - fields: `body` (typed JSON object), `expiresAt` (TTL seconds; 180 days on create, tightened to 7 days on first dashboard fetch)
+  - no GSI
+  - `body.type` values: `gameStart`, `gameEnd`, `ratingChange`, `challengeIssued`, `challengeDeclined`, `challengeRevoked`, `eventInvitation`
+  - `eventInvitation` is sent when an organizer updates invites on a moderated `ORGEVENT` (`event_update_invites`); not used for automated tournaments. Body includes `eventId` (front link: `/event/{eventId}`), `eventName`, `organizerId`, `organizerName`
+
 ## Game lists
 
 - **Current games by player** — per-player active game summaries (stream-maintained; Phase 3 reads from here)

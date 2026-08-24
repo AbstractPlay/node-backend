@@ -58,5 +58,30 @@ const ancillary = {
         strict_1.default.equal(payload.games.length, 1);
         strict_1.default.equal('activeGames' in payload, false);
         strict_1.default.equal(payload.challengesIssued.length, 1);
+        strict_1.default.deepEqual(payload.notifications, []);
+    });
+    (0, node_test_1.it)('includes notifications when provided', () => {
+        const payload = (0, meQuery_1.buildMeDashboardPayload)(user, ancillary, [], {
+            challengesIssued: [],
+            challengesReceived: [],
+            challengesAccepted: [],
+            standingChallenges: [],
+        }, [{
+                sk: '1700000000000#abc',
+                createdAt: 1700000000000,
+                body: {
+                    type: 'challengeIssued',
+                    challengeId: 'c1',
+                    metaGame: 'go',
+                    challengerId: 'u2',
+                    challengerName: 'Bob',
+                },
+            }]);
+        strict_1.default.equal(payload.notifications.length, 1);
+        strict_1.default.equal(payload.notifications[0].body.type, 'challengeIssued');
+    });
+    (0, node_test_1.it)('does not include notifications on profile payload', () => {
+        const payload = (0, meQuery_1.buildMeProfilePayload)(user, ancillary, []);
+        strict_1.default.equal('notifications' in payload, false);
     });
 });
