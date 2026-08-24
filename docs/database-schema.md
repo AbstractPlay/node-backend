@@ -97,7 +97,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - fields: `body` (typed JSON object), `expiresAt` (TTL seconds; 180 days on create, tightened to 7 days on first dashboard fetch)
   - no GSI
   - `body.type` values: `gameStart`, `gameEnd`, `ratingChange`, `challengeIssued`, `challengeDeclined`, `challengeRevoked`, `eventInvitation`
-  - `eventInvitation` is sent when an organizer updates invites on a moderated `ORGEVENT` (`event_update_invites`); not used for automated tournaments. Body includes `eventId` (front link: `/event/{eventId}`), `eventName`, `organizerId`, `organizerName`
+  - `eventInvitation` is sent when an organizer saves the invite list on a moderated `ORGEVENT` (`event_update_invites`); not used for automated tournaments. Body includes `eventId`, `eventName`, `organizerId`, `organizerName`. Inspect rows with [`bin/dump-dashboard.mjs`](../../bin/dump-dashboard.mjs) `--include-notifications` (read-only; does not refresh TTL)
 
 ## Game lists
 

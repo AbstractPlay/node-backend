@@ -36,18 +36,23 @@ Push messages use topics such as `challenges` and game-related channels. See `se
 
 ## In-app dashboard feed
 
-Per-user notifications stored under `NOTIFICATION#<userid>` and returned on `me_dashboard` (not on `me_profile`). Users dismiss items via `dismiss_notification` (`pars.sk`).
+Per-user notifications stored under `NOTIFICATION#<userid>` and returned on `me_dashboard` (not on `me_profile`). Users dismiss items via `dismiss_notification` (`pars.sk`). The navbar uses `me_profile` only — notification TTL is **not** refreshed on profile fetches.
 
-| `body.type` | When created | Link / action data |
-|-------------|--------------|-------------------|
-| `challengeIssued` | Direct challenge opened | `challengeId` → challenge response modal |
-| `challengeDeclined` / `challengeRevoked` | Direct challenge response | display only |
-| `gameStart` / `gameEnd` / `ratingChange` | Game lifecycle | `metaGame`, `gameId` → `/move/{metaGame}/0/{gameId}` |
-| `eventInvitation` | Organizer adds invitees on moderated event | `eventId`, `eventName`, `organizerId`, `organizerName` → `/event/{eventId}` |
+| `body.type` | When created | Front display |
+|-------------|--------------|---------------|
+| `challengeIssued` | Direct challenge opened | Game name links to `/games/{metaGame}`; **View** opens challenge response modal |
+| `challengeDeclined` / `challengeRevoked` | Direct challenge response | Game name links to `/games/{metaGame}` |
+| `gameStart` | Game begins | Game name links to `/move/{metaGame}/0/{gameId}` |
+| `gameEnd` / `ratingChange` | Game lifecycle | **View** links to `/move/{metaGame}/0/{gameId}` |
+| `eventInvitation` | Organizer saves invite list on moderated event | `{organizerName} has invited you to the event` with event name linking to `/event/{eventId}` |
 
 **Event invitations** apply only to human-moderated [organized events](/backend/subsystems/events/) (`ORGEVENT`) updated through `event_update_invites`. Each save notifies newly added invitees and any existing invitee who does not yet have an active `eventInvitation` for that event (for example, invited before this feature shipped). Re-saving an unchanged invite list does not duplicate notifications. Automated tournament sign-up does not use this path.
 
 Implementation: [`lib/notifications.ts`](../../lib/notifications.ts), wired from [`api/abstractplay.ts`](../../api/abstractplay.ts).
+
+### Admin read-only dump
+
+[`bin/dump-dashboard.mjs`](../../bin/dump-dashboard.mjs) assembles dashboard-shaped data from DynamoDB without Cognito or writes. Pass `--include-notifications` to add the `NOTIFICATION#` feed using `loadNotificationsForDashboard(..., { refreshExpiry: false })` so TTL is not tightened during inspection.
 
 ## Related
 

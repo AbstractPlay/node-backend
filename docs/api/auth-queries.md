@@ -22,6 +22,8 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 | `dismiss_notification` | Remove an in-app dashboard notification | `sk` |
 | `toggle_star` | Favorite a metaGame | `metaGame` |
 
+**`me_dashboard.notifications`:** array of `{ sk, createdAt, body }` items (see [Notifications — In-app dashboard feed](/backend/subsystems/notifications/)). Omitted from `me_profile`.
+
 ## Watch, highlight, and representative games
 
 | Query | Purpose | Key `pars` |
