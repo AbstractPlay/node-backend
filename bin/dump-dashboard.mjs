@@ -3,13 +3,13 @@
 /**
  * Dump a user's constructed dashboard payload (read-only).
  *
- * Assembles the same dashboard lists a full `me` auth query returns for games,
+ * Assembles the same dashboard lists a `me_dashboard` auth query returns for games,
  * challenges, watched/highlight/representative games, blocked players, and bots.
  * Uses DynamoDB reads only — no API calls, no writes, no Cognito login.
  *
  * Usage:
  *   npm run build-ts
- *   node bin/dump-dashboard.mjs <cognito-sub> [--stage dev|prod] [--no-prune-seen] [--verbose] [--include-index]
+ *   node bin/dump-dashboard.mjs <cognito-sub> [--stage dev|prod] [--no-prune-seen] [--verbose] [--include-index] [--include-notifications]
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -33,6 +33,7 @@ const REQUIRED_LIBS = [
   'playerGameMarks.js',
   'playerRelations.js',
   'participants.js',
+  'notifications.js',
 ];
 
 const STAGES = {
@@ -47,13 +48,14 @@ const STAGES = {
 };
 
 function usage() {
-  console.error(`Usage: node bin/dump-dashboard.mjs <cognito-sub> [--stage dev|prod] [--no-prune-seen] [--verbose] [--include-index]
+  console.error(`Usage: node bin/dump-dashboard.mjs <cognito-sub> [--stage dev|prod] [--no-prune-seen] [--verbose] [--include-index] [--include-notifications]
 
 Options:
   --stage dev|prod     AWS profile + DynamoDB table (default: dev)
-  --no-prune-seen      Keep completed games that me() would prune in-memory (seen >7d, no newer chat)
+  --no-prune-seen      Keep completed games that me_dashboard would prune in-memory (seen >7d, no newer chat)
   --verbose            Print source counts to stderr
   --include-index      Include currentRows and recentCompletedRows in output (debug)
+  --include-notifications  Include in-app NOTIFICATION# feed (refreshExpiry: false; read-only)
   --help, -h           Show this help
 
 Prerequisites:
@@ -77,6 +79,7 @@ function parseArgs(argv) {
   let pruneSeen = true;
   let verbose = false;
   let includeIndex = false;
+  let includeNotifications = false;
 
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
@@ -88,6 +91,8 @@ function parseArgs(argv) {
       verbose = true;
     } else if (arg === '--include-index') {
       includeIndex = true;
+    } else if (arg === '--include-notifications') {
+      includeNotifications = true;
     } else if (arg === '--help' || arg === '-h') {
       usage();
     } else if (!arg.startsWith('-')) {
@@ -106,7 +111,7 @@ function parseArgs(argv) {
     usage();
   }
 
-  return { userId, stage, pruneSeen, verbose, includeIndex };
+  return { userId, stage, pruneSeen, verbose, includeIndex, includeNotifications };
 }
 
 function toIdArray(value) {
@@ -123,7 +128,7 @@ function toIdArray(value) {
 }
 
 async function main() {
-  const { userId, stage, pruneSeen, verbose, includeIndex } = parseArgs(process.argv);
+  const { userId, stage, pruneSeen, verbose, includeIndex, includeNotifications } = parseArgs(process.argv);
   ensureCompiledLib();
 
   const {
@@ -138,6 +143,7 @@ async function main() {
   } = require('../lib/playerGameMarks.js');
   const { listBlockedPlayerIds } = require('../lib/playerRelations.js');
   const { getBotRecordsByIds } = require('../lib/participants.js');
+  const { loadNotificationsForDashboard } = require('../lib/notifications.js');
 
   const { profile, table } = STAGES[stage];
   const client = new DynamoDBClient({
@@ -199,6 +205,13 @@ async function main() {
 
   const realStanding = standingData.Item?.standing ?? [];
 
+  let notifications;
+  if (includeNotifications) {
+    notifications = await loadNotificationsForDashboard(docClient, table, userId, {
+      refreshExpiry: false,
+    });
+  }
+
   if (verbose) {
     console.error(`CURRENTGAMES# rows: ${dashboardLoad.currentRows.length}`);
     console.error(`RECENTCOMPLETED# rows: ${dashboardLoad.recentCompletedRows.length}`);
@@ -206,6 +219,9 @@ async function main() {
     console.error(`Challenges issued/received/accepted/standing: ${challengesIssued.length}/${challengesReceived.length}/${challengesAccepted.length}/${standingChallenges.length}`);
     console.error(`Watched/highlight/representative: ${watchedGames.length}/${highlights.length}/${representatives.length}`);
     console.error(`Blocked: ${blocked.length}, bots: ${bots.length}`);
+    if (includeNotifications) {
+      console.error(`Notifications: ${notifications.length}`);
+    }
   }
 
   const payload = {
@@ -227,6 +243,10 @@ async function main() {
   if (includeIndex) {
     payload.currentRows = dashboardLoad.currentRows;
     payload.recentCompletedRows = dashboardLoad.recentCompletedRows;
+  }
+
+  if (includeNotifications) {
+    payload.notifications = notifications;
   }
 
   console.log(JSON.stringify(payload, null, 2));
