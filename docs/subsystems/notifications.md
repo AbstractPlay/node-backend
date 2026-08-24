@@ -34,6 +34,21 @@ Implementation: [`utils/yourturn.ts`](../../utils/yourturn.ts).
 
 Push messages use topics such as `challenges` and game-related channels. See `sendPush()` usage in [`api/abstractplay.ts`](../../api/abstractplay.ts).
 
+## In-app dashboard feed
+
+Per-user notifications stored under `NOTIFICATION#<userid>` and returned on `me_dashboard` (not on `me_profile`). Users dismiss items via `dismiss_notification` (`pars.sk`).
+
+| `body.type` | When created | Link / action data |
+|-------------|--------------|-------------------|
+| `challengeIssued` | Direct challenge opened | `challengeId` → challenge response modal |
+| `challengeDeclined` / `challengeRevoked` | Direct challenge response | display only |
+| `gameStart` / `gameEnd` / `ratingChange` | Game lifecycle | `metaGame`, `gameId` → `/move/{metaGame}/0/{gameId}` |
+| `eventInvitation` | Organizer adds invitees on moderated event | `eventId`, `eventName`, `organizerId`, `organizerName` → `/event/{eventId}` |
+
+**Event invitations** apply only to human-moderated [organized events](/backend/subsystems/events/) (`ORGEVENT`) updated through `event_update_invites`. Newly added invitees receive one notification each (re-inviting someone already on the list does not re-notify). Automated tournament sign-up does not use this path.
+
+Implementation: [`lib/notifications.ts`](../../lib/notifications.ts), wired from [`api/abstractplay.ts`](../../api/abstractplay.ts).
+
 ## Related
 
 - [Getting started](/backend/getting-started/) — VAPID env vars

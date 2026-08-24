@@ -11,7 +11,7 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `me_profile` | Site-wide profile for navbar, settings, and game renderer: settings, bots, tags, `activeGames` (`CURRENTGAMES#` keys only). No dashboard maintenance, challenges, or `lastSeen` writes. | — |
-| `me_dashboard` | Dashboard tables: full `games`, challenges, maintenance (prune + timeout sweep). Clears `USER.cleaned` when set by abandoned-account cron. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
+| `me_dashboard` | Dashboard tables: full `games`, `notifications`, challenges, maintenance (prune + timeout sweep). Clears `USER.cleaned` when set by abandoned-account cron. Loads/refreshes in-app notification TTL on fetch. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
 | `me` | **Legacy** — delegates to `me_dashboard`. `size: small` delegates to `me_profile`. Prefer explicit queries in new clients. | `size` (`small` → `me_profile`), `vars`, `update` |
 | `next_game` | Next game id in user's list | — |
 | `my_settings` | Minimal profile for settings UI | — |
@@ -19,6 +19,7 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 | `new_profile` | Bulk profile update | profile fields |
 | `set_lastSeen` | Update last-seen timestamp (participating or watched game) | `gameId`, optional `interval` |
 | `dismiss_completed_game` | Remove a completed game from the dashboard (does not delete game history) | `id` or `gameId` |
+| `dismiss_notification` | Remove an in-app dashboard notification | `sk` |
 | `toggle_star` | Favorite a metaGame | `metaGame` |
 
 ## Watch, highlight, and representative games
@@ -119,7 +120,7 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `event_update_start` | Update start time | `id`, start |
 | `event_update_name` | Rename event | `id`, name |
 | `event_update_desc` | Update description | `id`, desc |
-| `event_update_invites` | Update invite list | `id`, invites |
+| `event_update_invites` | Update invite/block lists for a moderated event; newly added invitees receive an in-app `eventInvitation` notification | `eventid`, `invited`, `blocked` |
 | `event_update_result` | Record result | `id`, result |
 | `event_update_divisions` | Update divisions | `id`, divisions |
 | `event_create_games` | Create linked games | `id` |
