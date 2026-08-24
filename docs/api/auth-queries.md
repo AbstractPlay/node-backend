@@ -10,7 +10,9 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `me` | Dashboard payload: games, challenges, settings, bots, `blocked` list, `watchedGames`, `highlights`, `representatives` | `size` (`small` skips challenge fetch), `vars`, `update` |
+| `me_profile` | Site-wide profile for navbar, settings, and game renderer: settings, bots, tags, `activeGames` (`CURRENTGAMES#` keys only). No dashboard maintenance, challenges, or `lastSeen` writes. | — |
+| `me_dashboard` | Dashboard tables: full `games`, challenges, maintenance (prune + timeout sweep). Clears `USER.cleaned` when set by abandoned-account cron. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
+| `me` | **Legacy** — delegates to `me_dashboard`. `size: small` delegates to `me_profile`. Prefer explicit queries in new clients. | `size` (`small` → `me_profile`), `vars`, `update` |
 | `next_game` | Next game id in user's list | — |
 | `my_settings` | Minimal profile for settings UI | — |
 | `new_setting` | Update name, language, country, bggid, about | `attribute`, `value` |
