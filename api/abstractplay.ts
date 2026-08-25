@@ -764,7 +764,15 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
   const pars = event.body.pars;
   switch (query) {
     case "me":
-      return await me(event.cognitoPoolClaims, pars);
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          deprecated: true,
+          message: 'me is retired. Use me_profile for site-wide bootstrap and me_dashboard for the /me page.',
+          useInstead: ['me_profile', 'me_dashboard'],
+        }),
+        headers,
+      };
     case "me_profile":
       return await meProfile(event.cognitoPoolClaims);
     case "me_dashboard":
@@ -2925,15 +2933,6 @@ async function meDashboard(claim: PartialClaims, pars: { size: string, vars: str
     logGetItemError(err);
     return formatReturnError(`Unable to get dashboard data for ${userId}`);
   }
-}
-
-async function me(claim: PartialClaims, pars: { size: string, vars: string, update: string }) {
-  if (pars?.size === 'small') {
-    console.log('me (legacy small): delegating to me_profile');
-    return meProfile(claim);
-  }
-  console.log('me (legacy): delegating to me_dashboard');
-  return meDashboard(claim, pars);
 }
 
 async function nextGame(userid: string) {
