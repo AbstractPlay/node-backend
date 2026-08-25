@@ -1,0 +1,68 @@
+{
+  "highest": [
+    {
+      "user": "alice",
+      "game": "Chess (no variants)",
+      "rating": 1350,
+      "wld": [10, 5, 2],
+      "glicko": {
+        "rating": 1320,
+        "rd": 60,
+        "volatility": 0.06,
+        "ratingLow": 1200,
+        "ratingHigh": 1440,
+        "provisional": false,
+        "established": true,
+        "n": 17
+      }
+    },
+    {
+      "user": "bob",
+      "game": "Chess (no variants)",
+      "rating": 1280,
+      "wld": [8, 8, 1],
+      "glicko": {
+        "rating": 1250,
+        "rd": 80,
+        "volatility": 0.06,
+        "ratingLow": 1090,
+        "ratingHigh": 1410,
+        "provisional": false,
+        "established": false,
+        "n": 17
+      }
+    },
+    {
+      "user": "alice",
+      "game": "Go (9x9|handicap)",
+      "rating": 1400,
+      "wld": [3, 1, 0],
+      "glicko": {
+        "rating": 1380,
+        "rd": 90,
+        "volatility": 0.06,
+        "ratingLow": 1200,
+        "ratingHigh": 1560,
+        "provisional": true,
+        "established": false,
+        "n": 4
+      }
+    },
+    {
+      "user": "carol",
+      "game": "Go (9x9|handicap)",
+      "rating": 1300,
+      "wld": [2, 2, 0],
+      "glicko": {
+        "rating": 1310,
+        "rd": 70,
+        "volatility": 0.06,
+        "ratingLow": 1170,
+        "ratingHigh": 1450,
+        "provisional": false,
+        "established": false,
+        "n": 4
+      }
+    }
+  ]
+}

@@ -130,6 +130,8 @@ import {
   type PlayerRating,
   updateTwoPlayerRatings,
 } from '../lib/ratings';
+import { assignTournamentPlayerRatings, type UserGameRating } from '../lib/batchRatings';
+import { loadSummaryRatingsHighest } from '../lib/summaryRatings';
 import {
   logRecommendationEvent,
   type RecommendationEventPars,
@@ -6681,13 +6683,20 @@ async function startTournaments() {
     const oneWeek = 1000 * 60 * 60 * 24 * 7;
     const twoWeeks = oneWeek * 2;
     console.log(`Found ${tournaments.length} tournaments`);
+    let ratingsHighest: UserGameRating[];
+    try {
+      ratingsHighest = await loadSummaryRatingsHighest();
+    } catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to load summary ratings for tournament seeding: ${error}`);
+    }
     for (const tournament of tournaments) {
       if (
         !tournament.started && now > tournament.dateCreated + twoWeeks
         && (tournament.datePreviousEnded === 0 || now > tournament.datePreviousEnded + oneWeek)
       ) {
         console.log(`Starting tournament ${tournament.id}`);
-        const status = await startTournament(users, tournament);
+        const status = await startTournament(users, tournament, ratingsHighest);
         if (status === -1) {
           cancelledcount++;
         } else if (status === 0) {
@@ -6773,7 +6782,14 @@ async function startATournament(userId: string, pars: { tournamentid: string }) 
     if (data.Items)
       users = data.Items?.map(u => ({ "id": u.sk, "name": u.name, "lastSeen": u.lastSeen }));
     console.log(`Starting tournament ${tournament.id}`);
-    if (await startTournament(users, tournament)) {
+    let ratingsHighest: UserGameRating[];
+    try {
+      ratingsHighest = await loadSummaryRatingsHighest();
+    } catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to load summary ratings for tournament seeding: ${error}`);
+    }
+    if (await startTournament(users, tournament, ratingsHighest)) {
       return {
         statusCode: 200,
         body: JSON.stringify({
@@ -6800,7 +6816,7 @@ async function startATournament(userId: string, pars: { tournamentid: string }) 
   };
 }
 
-async function startTournament(users: UserLastSeen[], tournament: Tournament) {
+async function startTournament(users: UserLastSeen[], tournament: Tournament, ratingsHighest: UserGameRating[]) {
   // First, get the players
   let playersData;
   try {
@@ -6920,15 +6936,15 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     const clockStart = 72;
     const clockInc = 36;
     const clockMax = 120;
-    // Sort players into divisions by rating
-    const playersFull = await getPlayersSlowly(players.map(p => p.playerid));
-    for (let i = 0; i < playersFull.length; i++) {
-      players[i].rating = playersFull[i]?.ratings?.[tournament.metaGame]?.rating;
-      if (players[i].rating === undefined)
-        players[i].rating = 0;
-      players[i].score = 0;
-    }
+    const metaGameName = gameinfo.get(tournament.metaGame)?.name ?? tournament.metaGame;
+    assignTournamentPlayerRatings(
+      players,
+      ratingsHighest,
+      metaGameName,
+      tournament.variants ?? [],
+    );
     players.sort((a, b) => b.rating! - a.rating!);
+    const playersFull = await getPlayersSlowly(players.map(p => p.playerid));
     const allGamePlayers = players.map(p => { return { id: p.playerid, name: p.playername, time: clockStart * 3600000 } as User });
     // Sort playersFull in the same order as players
     const playersFull2: FullUser[] = [];
@@ -7141,7 +7157,6 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament) {
     }
     // Send e-mails to participants
     await initi18n('en');
-    const metaGameName = gameinfo.get(tournament.metaGame)?.name;
     for (const player of playersFull2) {
       console.log(`Determining whether to send tournamentStart email to the following player:\n${JSON.stringify(player)}`);
       // eslint-disable-next-line no-prototype-builtins
