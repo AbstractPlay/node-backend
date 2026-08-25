@@ -131,7 +131,7 @@ import {
   updateTwoPlayerRatings,
 } from '../lib/ratings';
 import { assignTournamentPlayerRatings, type UserGameRating } from '../lib/batchRatings';
-import { loadSummaryRatingsHighest } from '../lib/summaryRatings';
+import { loadSummaryPlayerCountsByUid, loadSummaryRatingsHighest } from '../lib/summaryRatings';
 import {
   logRecommendationEvent,
   type RecommendationEventPars,
@@ -1304,6 +1304,12 @@ async function metaGamesDetails() {
     const metaGames: string[] = [];
     gameinfo.forEach(g => metaGames.push(g.uid));
     const details: MetaGameCounts = {};
+    let playerCountsByUid: Record<string, number> = {};
+    try {
+      playerCountsByUid = await loadSummaryPlayerCountsByUid();
+    } catch (err) {
+      console.warn('metaGamesDetails: batch ratings counts unavailable', err);
+    }
 
     for (let i = 0; i < metaGames.length; i += 100) {
       const chunk = metaGames.slice(i, i + 100);
@@ -1321,14 +1327,17 @@ async function metaGamesDetails() {
           completedgames: item.completedgames ?? 0,
           standingchallenges: item.standingchallenges ?? 0,
           stars: item.stars ?? 0,
-          ratings: item.ratingsCount ?? 0,
+          ratings: playerCountsByUid[metaGame] ?? 0,
         };
       }
     }
 
     gameinfo.forEach(g => {
       if (!details[g.uid]) {
-        details[g.uid] = { ...DEFAULT_META_GAME_COUNTS, ratings: 0 };
+        details[g.uid] = {
+          ...DEFAULT_META_GAME_COUNTS,
+          ratings: playerCountsByUid[g.uid] ?? 0,
+        };
       }
     });
     // get list of tags
