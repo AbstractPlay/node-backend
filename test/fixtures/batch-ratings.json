@@ -64,5 +64,9 @@
         "n": 4
       }
     }
-  ]
+  ],
+  "playerCountsByUid": {
+    "chess": 2,
+    "go": 2
+  }
 }

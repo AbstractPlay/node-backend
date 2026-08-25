@@ -12,7 +12,7 @@ const summaryRatings_1 = require("../lib/summaryRatings");
 const fixture = JSON.parse((0, node_fs_1.readFileSync)((0, node_path_1.join)(__dirname, 'fixtures', 'batch-ratings.json'), 'utf8'));
 (0, node_test_1.describe)('loadSummaryRatingsHighest', () => {
     (0, node_test_1.before)(() => {
-        (0, summaryRatings_1.setSummaryRatingsHighestForTests)(fixture.highest);
+        (0, summaryRatings_1.setSummaryRatingsCacheForTests)(fixture.highest, fixture.playerCountsByUid ?? {});
     });
     (0, node_test_1.after)(() => {
         (0, summaryRatings_1.clearSummaryRatingsCacheForTests)();
@@ -24,5 +24,9 @@ const fixture = JSON.parse((0, node_fs_1.readFileSync)((0, node_path_1.join)(__d
         players.sort((a, b) => b.rating - a.rating);
         strict_1.default.equal(players[0]?.playerid, 'alice');
         strict_1.default.equal(players[0]?.rating, 1200);
+    });
+    (0, node_test_1.it)('returns playerCountsByUid from cache', async () => {
+        const counts = await (0, summaryRatings_1.loadSummaryPlayerCountsByUid)();
+        strict_1.default.deepEqual(counts, fixture.playerCountsByUid ?? {});
     });
 });
