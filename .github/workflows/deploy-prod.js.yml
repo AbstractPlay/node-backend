@@ -62,6 +62,9 @@ jobs:
     - name: Install NPM dependencies
       run: npm ci
 
+    - name: Check ci-deps manifests
+      run: node bin/check-ci-deps.mjs
+
     - name: Install pinned AP dependencies
       env:
         AP_GAMESLIB_VERSION: ${{ github.event.client_payload.gameslib_version }}
@@ -75,7 +78,7 @@ jobs:
       with:
         commit_message: "deps: sync AP versions [skip ci]"
         file_pattern: |
-          ci-deps.json
+          ci-deps.prod.json
           package-lock.json
           package.json
 
