@@ -130,6 +130,8 @@ import {
   logRecommendationEvent,
   type RecommendationEventPars,
 } from '../lib/recommendationEvents';
+import { validateAboutText } from '../lib/aboutText';
+import { checkAboutSaveAllowed } from '../lib/aboutSaves';
 import {
   logLayoutFeedbackEvent,
   type LayoutFeedbackEventPars,
@@ -292,7 +294,6 @@ export type UsersData = {
   lastSeen: number;
   stars: string[];
   bggid?: string;
-  about?: string;
   bot: boolean;
 };
 
@@ -694,6 +695,8 @@ module.exports.query = async (event: { queryStringParameters: any; body?: string
       return await eventGetEvents();
     case "player_highlights":
       return await playerHighlights(pars);
+    case "player_about":
+      return await playerAbout(pars);
     case "representative_games":
       return await representativeGames(pars);
     case "report_problem":
@@ -973,7 +976,7 @@ async function userNames() {
           KeyConditionExpression: "#pk = :pk",
           ExpressionAttributeValues: { ":pk": "USERS" },
           ExpressionAttributeNames: { "#pk": "pk", "#name": "name" },
-          ProjectionExpression: "sk, #name, lastSeen, country, stars, bggid, about",
+          ProjectionExpression: "sk, #name, lastSeen, country, stars, bggid",
           ReturnConsumedCapacity: "INDEXES"
         })),
       ddbDocClient.send(
@@ -997,14 +1000,13 @@ async function userNames() {
       users[idx].lastSeen = Date.now();
     }
 
-    const userResults = users.map(u => ({ id: u.sk, name: u.name, country: u.country, stars: u.stars, lastSeen: u.lastSeen, bggid: u.bggid, about: u.about, bot: false } as UsersData));
+    const userResults = users.map(u => ({ id: u.sk, name: u.name, country: u.country, stars: u.stars, lastSeen: u.lastSeen, bggid: u.bggid, bot: false } as UsersData));
     const botResults = (botData.Items ?? []).map(b => ({
       id: b.sk,
       name: b.name,
       country: "",
       stars: [...new Set(((b.supported ?? []) as { meta: string }[]).map(s => s.meta))],
       lastSeen: b.lastseen ?? 0,
-      about: b.description,
       bot: true,
     } as UsersData));
 
@@ -1880,6 +1882,51 @@ async function playerHighlights(pars: { userId: string }) {
   }
 }
 
+async function playerAbout(pars: { userId: string }) {
+  if (!pars?.userId) {
+    return formatReturnError('userId is required.');
+  }
+  try {
+    const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+    const userData = await ddbDocClient.send(new GetCommand({
+      TableName: tableName,
+      Key: { pk: 'USERS', sk: pars.userId },
+      ProjectionExpression: 'about',
+    }));
+    const userAbout = userData.Item?.about;
+    if (typeof userAbout === 'string' && userAbout.trim() !== '') {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ about: userAbout }),
+        headers,
+      };
+    }
+
+    const botData = await ddbDocClient.send(new GetCommand({
+      TableName: tableName,
+      Key: { pk: 'BOT', sk: pars.userId },
+      ProjectionExpression: 'description',
+    }));
+    const botAbout = botData.Item?.description;
+    if (typeof botAbout === 'string' && botAbout.trim() !== '') {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ about: botAbout }),
+        headers,
+      };
+    }
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({}),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get about text for ${pars.userId}`);
+  }
+}
+
 async function representativeGames(pars: { metaGame: string }) {
   if (!pars?.metaGame) {
     return formatReturnError('metaGame is required.');
@@ -2400,7 +2447,44 @@ async function updateBot(
       bot.endpoint = trimmedEndpoint;
     }
     if (pars.description !== undefined) {
-      bot.description = pars.description;
+      const validated = validateAboutText(pars.description);
+      if (!validated.ok) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ message: validated.message }),
+          headers,
+        };
+      }
+      const previousDescription = typeof bot.description === 'string' ? bot.description : undefined;
+      const saveState = await loadAboutSaveState(claim.sub);
+      const saveCheck = checkAboutSaveAllowed(
+        previousDescription,
+        validated.text,
+        saveState,
+      );
+      if (!saveCheck.ok) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ message: saveCheck.message }),
+          headers,
+        };
+      }
+      bot.description = validated.text;
+      if (!saveCheck.skip) {
+        await ddbDocClient.send(new UpdateCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          Key: { pk: 'USER', sk: claim.sub },
+          ExpressionAttributeValues: {
+            ':day': saveCheck.aboutSaveDay,
+            ':count': saveCheck.aboutSaveCount,
+          },
+          ExpressionAttributeNames: {
+            '#day': 'aboutSaveDay',
+            '#count': 'aboutSaveCount',
+          },
+          UpdateExpression: 'set #day = :day, #count = :count',
+        }));
+      }
     }
     if (pars.supported !== undefined) {
       if (!Array.isArray(pars.supported)) {
@@ -3038,7 +3122,97 @@ async function mySettings(claim: PartialClaims) {
   }
 }
 
+async function loadAboutSaveState(userId: string) {
+  const userData = await ddbDocClient.send(new GetCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE!,
+    Key: { pk: 'USER', sk: userId },
+    ProjectionExpression: 'aboutSaveDay, aboutSaveCount',
+  }));
+  return {
+    aboutSaveDay: userData.Item?.aboutSaveDay as string | undefined,
+    aboutSaveCount: userData.Item?.aboutSaveCount as number | undefined,
+  };
+}
+
+async function saveUserAbout(userId: string, rawValue: string) {
+  const validated = validateAboutText(rawValue);
+  if (!validated.ok) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: validated.message }),
+      headers,
+    };
+  }
+  const val = validated.text;
+
+  try {
+    const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+    const userData = await ddbDocClient.send(new GetCommand({
+      TableName: tableName,
+      Key: { pk: 'USER', sk: userId },
+      ProjectionExpression: 'about, aboutSaveDay, aboutSaveCount',
+    }));
+    const userItem = userData.Item ?? {};
+    const saveCheck = checkAboutSaveAllowed(
+      userItem.about,
+      val,
+      {
+        aboutSaveDay: userItem.aboutSaveDay,
+        aboutSaveCount: userItem.aboutSaveCount,
+      },
+    );
+    if (!saveCheck.ok) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ message: saveCheck.message }),
+        headers,
+      };
+    }
+
+    const userUpdateValues: Record<string, unknown> = { ':v': val };
+    const userUpdateNames: Record<string, string> = { '#a': 'about' };
+    let userUpdateExpression = 'set #a = :v';
+    if (!saveCheck.skip) {
+      userUpdateValues[':day'] = saveCheck.aboutSaveDay;
+      userUpdateValues[':count'] = saveCheck.aboutSaveCount;
+      userUpdateNames['#day'] = 'aboutSaveDay';
+      userUpdateNames['#count'] = 'aboutSaveCount';
+      userUpdateExpression += ', #day = :day, #count = :count';
+    }
+
+    await Promise.all([
+      ddbDocClient.send(new UpdateCommand({
+        TableName: tableName,
+        Key: { pk: 'USER', sk: userId },
+        ExpressionAttributeValues: userUpdateValues,
+        ExpressionAttributeNames: userUpdateNames,
+        UpdateExpression: userUpdateExpression,
+      })),
+      ddbDocClient.send(new UpdateCommand({
+        TableName: tableName,
+        Key: { pk: 'USERS', sk: userId },
+        ExpressionAttributeValues: { ':v': val },
+        ExpressionAttributeNames: { '#a': 'about' },
+        UpdateExpression: 'set #a = :v',
+      })),
+    ]);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ result: 'success' }, Set_toJSON),
+      headers,
+    };
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to update about for ${userId}`);
+  }
+}
+
 async function newSetting(userId: string, pars: { attribute: string; value: string; }) {
+  if (pars.attribute === 'about') {
+    return await saveUserAbout(userId, pars.value);
+  }
+
   let attr = '';
   let val = '';
   switch (pars.attribute) {
@@ -3057,10 +3231,6 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
     case "bggid":
       attr = "bggid";
       val = pars.value;
-      break;
-    case "about":
-      attr = "about";
-      val = pars.value.substring(0, 1000);
       break;
     default:
       return;
