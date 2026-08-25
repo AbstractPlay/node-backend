@@ -13,7 +13,6 @@
     "GameLink": "You can view the game at https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}}.",
     "GameOverBody": "Your {{- metaGame}} game has ended.",
     "GameOverLink": "For more details, including a game record you can archive, please visit https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}.",
-    "GameOverRating": "Your new rating is {{rating}}.",
     "GameOverResult_win": "You won!",
     "GameOverResult_lose": "You lost.",
     "GameOverResult_draw": "It was a draw.",

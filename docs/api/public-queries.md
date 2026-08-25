@@ -11,7 +11,6 @@ POST body: `{ "query": "<name>", "pars": { ... } }`
 | `user_names` | Player and bot directory for challenges | — |
 | `player_highlights` | Highlighted games for a player page | `userId` |
 | `meta_games` | Meta game counts and stats | — |
-| `ratings` | Leaderboard for a game | `metaGame` |
 
 ## Games
 

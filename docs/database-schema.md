@@ -133,7 +133,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 
 ## Ratings and meta games
 
-- **Ratings** — per metaGame leaderboard data
+- **Ratings (deprecated)** — legacy realtime Elo leaderboard rows; no longer written after batch Glicko migration. Existing `RATINGS#<metaGame>` items may remain in DynamoDB.
   - pk: `RATINGS#<metaGame>`
   - sk: `<userid>`
 
@@ -143,7 +143,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 - **Meta game counts (sharded, authoritative)** — per-metaGame live counters; stream + inline app writes; `meta_games` reads and admin `update_meta_game_counts` write here
   - pk: `METAGAMES#<metaGame>`
   - sk: `COUNTS`
-  - fields: `currentgames`, `completedgames`, `standingchallenges`, `stars`, `ratingsCount`
+  - fields: `currentgames`, `completedgames`, `standingchallenges`, `stars`, `ratingsCount` (distinct rated players per meta game; sourced from `_summary-ratings.json` `playerCountsByUid` on recount and served by `meta_games`)
 
 - **Per-user game overlay (Phase 5)** — per-user `seen` / `lastChat` on dashboard games; sole overlay store
   - pk: `USERGAME#<userid>`

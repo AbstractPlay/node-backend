@@ -44,6 +44,8 @@ Per-user notifications stored under `NOTIFICATION#<userid>` and returned on `me_
 | `challengeDeclined` / `challengeRevoked` | Direct challenge response | Game name links to `/games/{metaGame}` |
 | `gameStart` | Game begins | Game name links to `/move/{metaGame}/0/{gameId}` |
 | `gameEnd` / `ratingChange` | Game lifecycle | **View** links to `/move/{metaGame}/0/{gameId}` |
+
+`ratingChange` notifications are no longer enqueued at game end (realtime Elo removed). The notification type and front UI remain for historical rows and a future batch issuer after summarize (backend-crons, deferred).
 | `eventInvitation` | Organizer saves invite list on moderated event | `{organizerName} has invited you to the event` with event name linking to `/event/{eventId}` |
 
 **Event invitations** apply only to human-moderated [organized events](/backend/subsystems/events/) (`ORGEVENT`) updated through `event_update_invites`. Each save notifies newly added invitees and any existing invitee who does not yet have an active `eventInvitation` for that event (for example, invited before this feature shipped). Re-saving an unchanged invite list does not duplicate notifications. Automated tournament sign-up does not use this path.
