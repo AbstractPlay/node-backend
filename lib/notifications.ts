@@ -34,7 +34,7 @@ export type NotificationBody =
     type: 'ratingChange';
     metaGame: string;
     variants: string[];
-    gameId: string;
+    gameId?: string;
     oldRating: number;
     newRating: number;
     delta: number;
