@@ -7,7 +7,7 @@
     "test": "npm run typecheck && node --test test/gameState.test.js test/gameProjector.test.js test/dashboardGames.test.js test/recentCompletedGames.test.js test/push.test.js test/i18n.test.js test/commentAuth.test.js test/playerGameMarks.test.js test/wsAuth.test.js test/playgroundSaves.test.js test/recommendationEvents.test.js test/layoutFeedbackEvents.test.js test/batchRatings.test.js test/summaryRatings.test.js test/adminDeleteGame.test.js test/dashboardCruftCleanup.test.js test/dashboardEviction.test.js test/gameTimeout.test.js test/dashboardMaintenance.test.js test/meProfile.test.js test/touchUserLastSeen.test.js test/notifications.test.js",
     "typecheck": "tsc --noEmit",
     "build-ts": "tsc",
-    "lint": "eslint && npm run typecheck",
+    "lint": "node bin/check-ci-deps.mjs && eslint && npm run typecheck",
     "build": "npm run lint && npm run build-ts",
     "deploy-dev": "serverless deploy",
     "deploy-prod": "serverless --stage prod deploy",
@@ -29,9 +29,9 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-32391556688.0",
+    "@abstractplay/gameslib": "1.0.0-ci-32783108998.0",
     "@abstractplay/recranks": "latest",
-    "@abstractplay/renderer": "1.0.0-ci-30491195223.0",
+    "@abstractplay/renderer": "1.0.0-ci-32782926153.0",
     "@aws-sdk/client-apigatewaymanagementapi": "^3.957.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1065.0",
     "@aws-sdk/client-dynamodb": "3.1090.0",
@@ -72,6 +72,6 @@
     "@aws-sdk/lib-dynamodb": {
       "@aws-sdk/client-dynamodb": "$@aws-sdk/client-dynamodb"
     },
-    "@abstractplay/renderer": "1.0.0-ci-30491195223.0"
+    "@abstractplay/renderer": "1.0.0-ci-32782926153.0"
   }
 }
