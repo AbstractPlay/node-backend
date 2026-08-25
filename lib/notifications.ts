@@ -7,8 +7,6 @@ import {
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
 import { isBotId, filterHumanIds } from './participants';
-import type { PlayerRating } from './ratings';
-import { DEFAULT_PLAYER_RATING } from './ratings';
 
 export const NOTIFICATION_PK_PREFIX = 'NOTIFICATION#';
 export const NOTIFICATION_INITIAL_TTL_DAYS = 180;
@@ -307,8 +305,6 @@ export async function enqueueGameEndNotifications(
   client: DynamoDBDocumentClient,
   tableName: string,
   game: NotificationGame,
-  newRatings: { [metaGame: string]: PlayerRating }[] | null,
-  playersWithRatings?: Array<NotificationGamePlayer & { ratings?: Record<string, PlayerRating> }>,
 ): Promise<void> {
   const variants = gameVariants(game);
   const work: Promise<void>[] = [];
@@ -322,23 +318,6 @@ export async function enqueueGameEndNotifications(
       variants,
       result: gameEndResult(game, player.id),
     }));
-
-    if (newRatings !== null && newRatings[ind] !== undefined) {
-      const ratingEntry = newRatings[ind][game.metaGame];
-      if (ratingEntry !== undefined && playersWithRatings !== undefined) {
-        const oldRating = playersWithRatings[ind]?.ratings?.[game.metaGame]?.rating ?? DEFAULT_PLAYER_RATING.rating;
-        const newRating = ratingEntry.rating;
-        work.push(createNotification(client, tableName, player.id, {
-          type: 'ratingChange',
-          metaGame: game.metaGame,
-          variants,
-          gameId: game.id,
-          oldRating,
-          newRating,
-          delta: newRating - oldRating,
-        }));
-      }
-    }
   }
 
   await Promise.all(work);

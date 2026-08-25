@@ -124,12 +124,6 @@ import {
   validatePlaygroundSaveInput,
   type PlaygroundSaveInput,
 } from '../lib/playgroundSaves';
-import {
-  DEFAULT_PLAYER_RATING,
-  expectedScorePlayer1,
-  type PlayerRating,
-  updateTwoPlayerRatings,
-} from '../lib/ratings';
 import { assignTournamentPlayerRatings, type UserGameRating } from '../lib/batchRatings';
 import { loadSummaryPlayerCountsByUid, loadSummaryRatingsHighest } from '../lib/summaryRatings';
 import {
@@ -271,8 +265,14 @@ type FullUser = {
   country: string;
   lastSeen?: number;
   settings: UserSettings;
+  /** @deprecated Legacy realtime Elo on USER records; no longer updated. Batch ratings live in summary CDN. */
   ratings?: {
-    [metaGame: string]: PlayerRating
+    [metaGame: string]: {
+      rating: number;
+      N: number;
+      wins: number;
+      draws: number;
+    };
   };
   stars?: string[];
   tags?: TagList[];
@@ -670,8 +670,6 @@ module.exports.query = async (event: { queryStringParameters: any; body?: string
       return await standingChallenges(pars);
     case "games":
       return await games(pars);
-    case "ratings":
-      return await ratings(pars);
     case "meta_games":
       return await metaGamesDetails();
     case "get_game":
@@ -1095,30 +1093,6 @@ async function games(pars: { metaGame: string, type: string; }) {
     }
   } else {
     return formatReturnError(`Unknown type ${pars.type}`);
-  }
-}
-
-async function ratings(pars: { metaGame: string }) {
-  const game = pars.metaGame;
-
-  try {
-    const ratingsData = await ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "RATINGS#" + game },
-        ExpressionAttributeNames: { "#pk": "pk" }
-      }));
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify(ratingsData.Items),
-      headers
-    };
-  }
-  catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to get ratings for ${pars.metaGame}`);
   }
 }
 
@@ -4462,48 +4436,6 @@ async function getPlayersSlowly(playerIDs: string[]) {
   return players;
 }
 
-async function scheduleRatingUpdates(
-  game: FullGame,
-  player: { id: string; name: string },
-  ind: number,
-  newRatings: { [metaGame: string]: PlayerRating }[] | null,
-  list: Promise<any>[]
-) {
-  if (newRatings === null || await isBotId(player.id)) {
-    return;
-  }
-  list.push(
-    sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "USER", "sk": player.id },
-      ExpressionAttributeValues: { ":rs": newRatings[ind] },
-      UpdateExpression: "set ratings = :rs"
-    }))
-  );
-
-  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-  const existingRating = await ddbDocClient.send(new GetCommand({
-    TableName: tableName,
-    Key: { pk: `RATINGS#${game.metaGame}`, sk: player.id },
-    ProjectionExpression: '#pk',
-    ExpressionAttributeNames: { '#pk': 'pk' },
-  }));
-  if (!existingRating.Item) {
-    list.push(adjustShardedCounts(ddbDocClient, tableName, game.metaGame, { ratingsCount: 1 }));
-  }
-
-  list.push(sendCommandWithRetry<PutCommandOutput>(new PutCommand({
-    TableName: tableName,
-    Item: {
-      "pk": "RATINGS#" + game.metaGame,
-      "sk": player.id,
-      "id": player.id,
-      "name": player.name,
-      "rating": newRatings[ind][game.metaGame]
-    }
-  })));
-}
-
 async function submitMove(userid: string, pars: {
   id: string, move: string, draw: string, metaGame: string, cbit: number, moveNumber?: number, opponentId?: string,
   exploration?: Exploration[]
@@ -4652,9 +4584,7 @@ async function submitMove(userid: string, pars: {
       playerGame.gameEnded = new Date(engine.stack[engine.stack.length - 1]._timestamp).getTime();
       playerGame.winner = engine.winner;
     }
-    let newRatings: { [metaGame: string]: PlayerRating }[] | null = null;
     if ((game.toMove === "" || game.toMove === null)) {
-      newRatings = updateRatings(game, players as unknown as FullUser[]);
       // delete at old sk
       list.push(sendCommandWithRetry<DeleteCommandOutput>(
         new DeleteCommand({
@@ -4714,8 +4644,6 @@ async function submitMove(userid: string, pars: {
         ddbDocClient,
         process.env.ABSTRACT_PLAY_TABLE!,
         toNotificationGame({ ...game, winner: engine.winner, variants: engine.variants }),
-        newRatings,
-        players as unknown as FullUser[],
       ));
     }
     setGameEndedFromEngine(game, engine);
@@ -4743,7 +4671,6 @@ async function submitMove(userid: string, pars: {
           { seen },
         ));
       }
-      await scheduleRatingUpdates(game, player, ind, newRatings, list);
     }
 
     list.push(updateWatcherSummaries(
@@ -4756,7 +4683,7 @@ async function submitMove(userid: string, pars: {
     if (simultaneous)
       game.partialMove = game.players.map((p: User, i: number) => (p.id === userid ? game.partialMove!.split(',')[i] : '')).join(',');
 
-    list.push(sendSubmittedMoveEmails(game, players.filter(p => !p.isBot) as unknown as FullUser[], simultaneous, newRatings));
+    list.push(sendSubmittedMoveEmails(game, players.filter(p => !p.isBot) as unknown as FullUser[], simultaneous));
     console.log("Scheduled emails");
 
     await realPingBot(game.metaGame, game.id, game);
@@ -4846,51 +4773,7 @@ async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: n
   return Promise.all(work);
 }
 
-function updateRatings(game: FullGame, players: FullUser[]) {
-  console.log("game.numMoves", game.numMoves);
-  if (!game.rated || (game.numMoves && game.numMoves <= game.numPlayers))
-    return null;
-  if (game.numPlayers !== 2)
-    throw new Error(`Only 2 player games can be rated, game ${game.id}`);
-  let rating1: PlayerRating = { ...DEFAULT_PLAYER_RATING };
-  let rating2: PlayerRating = { ...DEFAULT_PLAYER_RATING };
-  if (players[0].ratings !== undefined && players[0].ratings[game.metaGame] !== undefined)
-    rating1 = players[0].ratings[game.metaGame];
-  if (players[1].ratings !== undefined && players[1].ratings[game.metaGame] !== undefined)
-    rating2 = players[1].ratings[game.metaGame];
-  let player1Score: number;
-  if (Array.isArray(game.winner)) {
-    if (game.winner.length == 1) {
-      if (game.winner[0] === 1) {
-        player1Score = 1;
-      } else if (game.winner[0] === 2) {
-        player1Score = 0;
-      } else {
-        throw new Error(`Winner ([${game.winner[0]}]) not in expected format, game ${game.id}`);
-      }
-    } else if (game.winner.length == 2) {
-      if (game.winner.includes(1) && game.winner.includes(2)) {
-        player1Score = 0.5;
-      } else {
-        throw new Error(`Winner ([${game.winner[0]}, ${game.winner[1]}]) not in expected format, game ${game.id}`);
-      }
-    } else {
-      throw new Error(`Winner has length ${game.winner.length}, this is not expected, game ${game.id}`);
-    }
-  } else {
-    throw new Error(`Winner is not an array!? Game ${game.id}`);
-  }
-  const expectedScore = expectedScorePlayer1(rating1.rating, rating2.rating);
-  console.log(`E = ${expectedScore}, E2 = ${1 - expectedScore}`);
-  const [updated1, updated2] = updateTwoPlayerRatings(rating1, rating2, player1Score);
-  const ratings1 = players[0].ratings === undefined ? {} : players[0].ratings;
-  const ratings2 = players[1].ratings === undefined ? {} : players[1].ratings;
-  ratings1[game.metaGame] = updated1;
-  ratings2[game.metaGame] = updated2;
-  return [ratings1, ratings2];
-}
-
-async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], simultaneous: any, newRatings: any[] | null) {
+async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], simultaneous: any) {
   await initi18n('en');
   const work: Promise<any>[] = [];
   if (game.toMove !== '') {
@@ -4929,7 +4812,7 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
       }
     }
 
-    for (const [ind, player] of players.entries()) {
+    for (const player of players) {
       await changeLanguageForPlayer(player);
       // The Game Over email has a few components:
       const body = [];
@@ -4946,10 +4829,6 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
         }
       }
       body.push(i18n.t("GameOverResult", { context: result }));
-      //   - Rating, if applicable
-      if (newRatings != null) {
-        body.push(i18n.t("GameOverRating", { "rating": `${Math.round(newRatings[ind][game.metaGame].rating)}` }));
-      }
       //   - Final scores, if applicable
       if (scores.length > 0) {
         body.push(i18n.t("GameOverScores", { scores: scores.join(", ") }))
@@ -5160,13 +5039,6 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
     Item: prepareGameStateForStorage(game)
   })));
 
-  const newRatings = updateRatings(game, players as unknown as FullUser[]);
-
-  // Update players
-  for (let ind = 0; ind < players.length; ind++) {
-    const player = players[ind];
-    await scheduleRatingUpdates(game, player, ind, newRatings, work);
-  }
   work.push(updateWatcherSummaries(
     ddbDocClient,
     process.env.ABSTRACT_PLAY_TABLE!,
@@ -5180,8 +5052,6 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
     ddbDocClient,
     process.env.ABSTRACT_PLAY_TABLE!,
     toNotificationGame(game),
-    newRatings,
-    players as unknown as FullUser[],
   ));
   await Promise.all(work);
   return game;
@@ -5285,7 +5155,6 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
       ddbDocClient,
       process.env.ABSTRACT_PLAY_TABLE!,
       toNotificationGame(game),
-      null,
     ));
     await Promise.all(work);
     return {
@@ -9031,7 +8900,7 @@ async function invokePie(userid: string, pars: { id: string, metaGame: string, c
       const thisPlayer = players.find(p => p.id === userid)!;
       list.push(submitComment("", { id: game.id, metaGame: pars.metaGame, comment: `${thisPlayer.name} elected to switch seats. As a result, the game record for ply 1 has been retroactively changed to look as if ${thisPlayer.name} made that move.`, moveNumber: 2 }));
 
-      list.push(sendSubmittedMoveEmails(game, players.filter(p => p.email) as FullUser[], false, []));
+      list.push(sendSubmittedMoveEmails(game, players.filter(p => p.email) as FullUser[], false));
       console.log("Scheduled emails");
       await Promise.all(list);
       console.log("All updates complete");
@@ -9799,20 +9668,17 @@ async function updateMetaGameCounts(userId: string) {
         ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
         ProjectionExpression: "#pk, #sk"
       })));
-    const ratingsCounts = metaGames.map(game => ddbDocClient.send(
-      new QueryCommand({
-        TableName: tableName,
-        KeyConditionExpression: "#pk = :pk",
-        ExpressionAttributeValues: { ":pk": "RATINGS#" + game },
-        ExpressionAttributeNames: { "#pk": "pk" },
-        Select: 'COUNT',
-      })));
+    let playerCountsByUid: Record<string, number> = {};
+    try {
+      playerCountsByUid = await loadSummaryPlayerCountsByUid();
+    } catch (err) {
+      console.warn('updateMetaGameCounts: batch ratings counts unavailable', err);
+    }
 
     const work = await Promise.all([
       Promise.all(currentgames),
       Promise.all(completedgames),
       Promise.all(standingchallenges),
-      Promise.all(ratingsCounts),
     ]);
     console.log("updateMetaGameCounts recount complete");
 
@@ -9847,7 +9713,7 @@ async function updateMetaGameCounts(userId: string) {
         completedgames: work[1][ind].Items ? work[1][ind].Items!.length : 0,
         standingchallenges: work[2][ind].Items ? work[2][ind].Items!.length : 0,
         stars: starCounts.has(game) ? starCounts.get(game)! : 0,
-        ratingsCount: work[3][ind].Count ?? 0,
+        ratingsCount: playerCountsByUid[game] ?? 0,
       };
     });
 
