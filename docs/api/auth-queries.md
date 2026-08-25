@@ -12,9 +12,8 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 |-------|---------|------------|
 | `me_profile` | Site-wide profile for navbar, settings, and game renderer: settings, bots, tags, `activeGames` (`CURRENTGAMES#` keys only). No dashboard maintenance, challenges, or `lastSeen` writes. | — |
 | `me_dashboard` | Dashboard tables: full `games`, `notifications`, challenges, maintenance (prune + timeout sweep). Clears `USER.cleaned` when set by abandoned-account cron. Loads/refreshes in-app notification TTL on fetch. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
-| `me` | **Legacy** — delegates to `me_dashboard`. `size: small` delegates to `me_profile`. Prefer explicit queries in new clients. | `size` (`small` → `me_profile`), `vars`, `update` |
 | `next_game` | Next game id in user's list | — |
-| `my_settings` | Minimal profile for settings UI | — |
+| `my_settings` | **Deprecated** — minimal id/name/email/language; use `me_profile` instead | — |
 | `new_setting` | Update name, language, country, bggid, about | `attribute`, `value` |
 | `new_profile` | Bulk profile update | profile fields |
 | `set_lastSeen` | Update last-seen timestamp (participating or watched game) | `gameId`, optional `interval` |
@@ -170,6 +169,7 @@ Do **not** run these from the admin UI; use the replacement instead.
 
 | Query | Replacement |
 |-------|-------------|
+| `me` | `me_profile` (site-wide bootstrap) and `me_dashboard` (`/me` page). `size: small` is not supported. |
 | `fix_games` | `bin/verify-dashboard-index.mjs` then `bin/dashboard-index-maintenance.mjs --step prune-stale-recent-completed` / `purge-usergame-orphans --user-id <cognitoSub>` |
 | `purge_retired_completed_games` | One-time purge complete (no retired rows remain) |
 | `onetime_fix` | No replacement (legacy `USERS` directory sync) |
