@@ -73,6 +73,15 @@ export type NotificationBody =
     eventName: string;
     organizerId: string;
     organizerName: string;
+  }
+  | {
+    type: 'completedGameChat';
+    gameId: string;
+    metaGame: string;
+    variants: string[];
+    commenterId: string;
+    commenterName: string;
+    backfill?: boolean;
   };
 
 export type NotificationRecord = {
@@ -397,4 +406,81 @@ export async function enqueueEventInvitationNotifications(
     organizerId: invitation.organizerId,
     organizerName: invitation.organizerName,
   })));
+}
+
+export type CompletedGameChatPlayer = {
+  id: string;
+  name: string;
+};
+
+export async function hasActiveCompletedGameChatNotification(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  gameId: string,
+  nowSec = Math.floor(Date.now() / 1000),
+): Promise<boolean> {
+  const pk = notificationPk(userId);
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const result = await client.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'pk = :pk',
+      ExpressionAttributeValues: { ':pk': pk },
+      ExclusiveStartKey: lastKey,
+    }));
+    for (const item of result.Items ?? []) {
+      const rec = item as NotificationRecord;
+      if (rec.expiresAt <= nowSec) {
+        continue;
+      }
+      if (rec.body.type === 'completedGameChat' && rec.body.gameId === gameId) {
+        return true;
+      }
+    }
+    lastKey = result.LastEvaluatedKey;
+  } while (lastKey);
+  return false;
+}
+
+/** Notify opponents when someone comments on a completed game (post-game exploration). */
+export async function enqueueCompletedGameChatNotifications(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  gameId: string,
+  metaGame: string,
+  variants: string[] | undefined,
+  players: CompletedGameChatPlayer[],
+  commenterId: string,
+  options?: { backfill?: boolean },
+): Promise<void> {
+  const variantList = variants ?? [];
+  const commenter = players.find(p => p.id === commenterId);
+  const commenterName = commenter?.name ?? 'Someone';
+  const work: Promise<void>[] = [];
+
+  for (const player of players) {
+    if (player.id === commenterId) {
+      continue;
+    }
+    work.push((async () => {
+      if (await isBotId(player.id)) {
+        return;
+      }
+      if (await hasActiveCompletedGameChatNotification(client, tableName, player.id, gameId)) {
+        return;
+      }
+      await createNotification(client, tableName, player.id, {
+        type: 'completedGameChat',
+        gameId,
+        metaGame,
+        variants: variantList,
+        commenterId,
+        commenterName,
+        ...(options?.backfill ? { backfill: true } : {}),
+      });
+    })());
+  }
+
+  await Promise.all(work);
 }

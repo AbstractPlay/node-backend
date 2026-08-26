@@ -44,6 +44,7 @@ Per-user notifications stored under `NOTIFICATION#<userid>` and returned on `me_
 | `challengeDeclined` / `challengeRevoked` | Direct challenge response | Game name links to `/games/{metaGame}` |
 | `gameStart` | Game begins | Game name links to `/move/{metaGame}/0/{gameId}` |
 | `gameEnd` | Game ends | **View** links to `/move/{metaGame}/0/{gameId}` |
+| `completedGameChat` | Post-game comment on completed game (`save_exploration` with `updateLastChat`) | **View** links to `/move/{metaGame}/1/{gameId}`; one active notification per game until dismissed |
 | `ratingChange` | Daily batch Glicko diff after summarize (backend-crons) | Game name links to `/ratings/{metaGame}`; variant labels in message when applicable |
 
 ### Batch `ratingChange` issuer (backend-crons)

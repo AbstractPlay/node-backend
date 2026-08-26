@@ -12,6 +12,7 @@ import {
   NOTIFICATION_SEEN_TTL_DAYS,
   buildNotificationItem,
   dismissNotification,
+  hasActiveCompletedGameChatNotification,
   hasActiveEventInvitationNotification,
   loadNotificationsForDashboard,
   notificationInitialExpiresAt,
@@ -22,6 +23,8 @@ import {
 
 const TABLE = 'abstract-play-test';
 const USER_ID = '31af49bc-2030-4adb-aec9-dc8fa418fec1';
+const OTHER_USER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+const GAME_ID = 'game-chat-1';
 const SEC_PER_DAY = 86_400;
 
 function itemKey(item: { pk: string; sk: string }): string {
@@ -117,6 +120,57 @@ test('eventInvitation body carries event page link fields', () => {
   assert.equal(item.body.eventName, 'Spring Open');
   assert.equal(item.body.organizerId, 'org-1');
   assert.equal(item.body.organizerName, 'Alice');
+});
+
+test('completedGameChat body carries game link fields', () => {
+  const item = buildNotificationItem(USER_ID, {
+    type: 'completedGameChat',
+    gameId: GAME_ID,
+    metaGame: 'go',
+    variants: ['small'],
+    commenterId: OTHER_USER_ID,
+    commenterName: 'Bob',
+  });
+  assert.equal(item.body.type, 'completedGameChat');
+  if (item.body.type !== 'completedGameChat') {
+    return;
+  }
+  assert.equal(item.body.gameId, GAME_ID);
+  assert.equal(item.body.metaGame, 'go');
+  assert.deepEqual(item.body.variants, ['small']);
+  assert.equal(item.body.commenterId, OTHER_USER_ID);
+  assert.equal(item.body.commenterName, 'Bob');
+});
+
+test('hasActiveCompletedGameChatNotification finds non-expired notification for game', async () => {
+  const store: Store = new Map([
+    [itemKey({
+      pk: notificationPk(USER_ID),
+      sk: '2000#chat',
+    }), {
+      pk: notificationPk(USER_ID),
+      sk: '2000#chat',
+      body: {
+        type: 'completedGameChat',
+        gameId: GAME_ID,
+        metaGame: 'go',
+        variants: [],
+        commenterId: OTHER_USER_ID,
+        commenterName: 'Bob',
+      },
+      expiresAt: notificationSeenExpiresAt(),
+    }],
+  ]);
+  const client = createMockDocClient(store);
+
+  assert.equal(
+    await hasActiveCompletedGameChatNotification(client as never, TABLE, USER_ID, GAME_ID),
+    true,
+  );
+  assert.equal(
+    await hasActiveCompletedGameChatNotification(client as never, TABLE, USER_ID, 'other-game'),
+    false,
+  );
 });
 
 test('hasActiveEventInvitationNotification finds non-expired invite for event', async () => {
