@@ -18,7 +18,7 @@
 
 1. **Create** — auth `new_tournament` (organizer). Requires the meta game to support `playercount: 2` in gameslib (`playercounts` includes `2`).
 2. **Join / withdraw** — `join_tournament`, `withdraw_tournament`. Join is rejected for the same 2-player requirement.
-3. **Start** — public `start_tournaments` (scheduler) or auth/public `start_tournament` for one tournament. Signup tournaments for ineligible games are cancelled (same path as zero participants).
+3. **Start** — [`starttournaments`](/crons/live-crons/) Lambda (EventBridge 10:00/22:00 UTC). Admins can also invoke it for one tournament (including resume after a partial start). Signup tournaments for ineligible games are cancelled (same path as zero participants).
 4. **Play** — games are normal `GAME` records linked via `TOURNAMENTGAME`.
 5. **End** — auth `end_tournament`; public `archive_tournaments` moves completed tournaments.
 
@@ -27,7 +27,7 @@
 These are called by cron or external schedulers (no user auth):
 
 - `get_tournaments`, `get_tournament`, `get_old_tournaments`
-- `start_tournaments`, `archive_tournaments`, `start_tournament`
+- `archive_tournaments`
 
 ## Player blocking
 
