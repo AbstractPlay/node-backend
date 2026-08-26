@@ -98,14 +98,8 @@ import {
   type MeChallengeData,
 } from '../lib/meQuery';
 import { getUsersLastSeen } from '../lib/touchUserLastSeen';
+import { hasCurrentGameRow } from '../lib/dashboardGames';
 import {
-  deleteRecentCompletedRow,
-  hasCurrentGameRow,
-  hasRecentCompletedRow,
-  putRecentCompletedRow,
-} from '../lib/recentCompletedGames';
-import {
-  deleteUserGameOverlay,
   upsertUserGameOverlay,
 } from '../lib/userGameOverlay';
 import {
@@ -852,8 +846,6 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await updateCommented(event.cognitoPoolClaims.sub, pars);
     case "set_lastSeen":
       return await setLastSeen(event.cognitoPoolClaims.sub, pars);
-    case "dismiss_completed_game":
-      return await dismissCompletedGame(event.cognitoPoolClaims.sub, pars);
     case "dismiss_notification":
       return await dismissNotificationAuth(event.cognitoPoolClaims.sub, pars);
     case "submit_comment":
@@ -2153,56 +2145,6 @@ async function setSeenTime(userid: string, gameid: any) {
     gameid,
     { seen: now },
   );
-}
-
-async function dismissCompletedGame(userid: string, pars: { id?: string; gameId?: string }) {
-  const gameId = pars.id ?? pars.gameId;
-  if (!gameId) {
-    return formatReturnError('game id is required');
-  }
-
-  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-  let user: FullUser;
-  try {
-    const userData = await ddbDocClient.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: { "pk": "USER", "sk": userid },
-      }));
-    if (userData.Item === undefined) {
-      return formatReturnError(`User ${userid} not found`);
-    }
-    user = userData.Item as FullUser;
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to dismiss completed game ${gameId}`);
-  }
-
-  const onRecentCompleted = await hasRecentCompletedRow(ddbDocClient, tableName, userid, gameId);
-  if (!onRecentCompleted) {
-    return formatReturnError(`Game ${gameId} is not on your completed dashboard`);
-  }
-
-  const recentData = await ddbDocClient.send(new GetCommand({
-    TableName: tableName,
-    Key: { pk: `RECENTCOMPLETED#${userid}`, sk: gameId },
-    ProjectionExpression: 'players',
-  }));
-  const players = recentData.Item?.players as { id: string }[] | undefined;
-  if (players !== undefined && !players.some(p => p.id === userid)) {
-    return formatReturnError(`You are not a player in game ${gameId}`);
-  }
-
-  await Promise.all([
-    deleteRecentCompletedRow(ddbDocClient, tableName, userid, gameId),
-    deleteUserGameOverlay(ddbDocClient, tableName, userid, gameId),
-  ]);
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ success: true }),
-    headers,
-  };
 }
 
 async function dismissNotificationAuth(userid: string, pars: { sk?: string }) {
@@ -5608,22 +5550,17 @@ function isInterestingComment(comment: string): boolean {
   return true;
 }
 
-// Helper function to update lastChat and seen for all players of a game
-// Used by both submitComment (for in-game chats) and saveExploration (for completed game comments)
+// Helper function to update lastChat and seen for active dashboard games
 async function updateLastChatForPlayers(
   gameId: string,
   metaGame: string,
   players: { [k: string]: any; id: string }[],
   currentUserId: string,
-  allowReAdd = false  // Only true for completed games via saveExploration
 ) {
   console.log(`Updating lastChat for all players of game ${gameId}`);
 
-  // Lazy-loaded only if needed (when a player doesn't have the game in their list)
-  let fullGame: FullGame | undefined;
-  let gameEngine: any | undefined;
-
   const now = Date.now();
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
 
   for (const pid of players.map(p => p.id)) {
     if (await isBotId(pid)) {
@@ -5647,21 +5584,17 @@ async function updateLastChatForPlayers(
     } catch (err) {
       logGetItemError(err);
       console.log(`Unable to get user data for user ${pid} when updating lastChat`);
-      continue; // Don't fail the whole operation
+      continue;
     }
 
     if (user === undefined) {
       console.log(`Unable to get user data for user ${pid} when updating lastChat`);
-      continue; // Don't fail the whole operation
+      continue;
     }
 
-    const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-    const [onRecentCompleted, onCurrent] = await Promise.all([
-      hasRecentCompletedRow(ddbDocClient, tableName, pid, gameId),
-      hasCurrentGameRow(ddbDocClient, tableName, pid, gameId),
-    ]);
+    const onCurrent = await hasCurrentGameRow(ddbDocClient, tableName, pid, gameId);
 
-    if (onCurrent || onRecentCompleted) {
+    if (onCurrent) {
       const overlay = { lastChat: now } as { lastChat: number; seen?: number };
       if (pid === currentUserId) {
         overlay.seen = now + 10;
@@ -5674,82 +5607,8 @@ async function updateLastChatForPlayers(
         overlay,
       );
       console.log(`Updated lastChat for user ${user.name} on game ${gameId}`);
-    } else if (allowReAdd) {
-      // Re-add completed game to dashboard when opponent chats on an evicted/dismissed game
-      console.log(`User ${user.name} does not have a game entry for ${gameId}, re-adding to completed dashboard`);
-
-      // Fetch the full game only once (lazy loading)
-      if (fullGame === undefined) {
-        try {
-          const gameData = await ddbDocClient.send(
-            new GetCommand({
-              TableName: tableName,
-              Key: {
-                "pk": "GAME",
-                "sk": `${metaGame}#1#${gameId}`
-              },
-            })
-          );
-          if (gameData.Item !== undefined) {
-            fullGame = hydrateGameState(gameData.Item as FullGame);
-            gameEngine = GameFactory(metaGame, fullGame.state);
-            if (gameEngine === undefined) {
-              console.log(`Unable to hydrate state for ${metaGame}`);
-              fullGame = undefined; // Mark as invalid
-            }
-          }
-        } catch (err) {
-          console.log(`Failed to get completed game ${gameId} for re-adding to user's list:`, err);
-        }
-      }
-
-      if (fullGame !== undefined && gameEngine !== undefined) {
-        const numMoves = gameEngine.stack.length - 1;
-        const newGame: Game = {
-          id: gameId,
-          metaGame: metaGame,
-          players: [...fullGame.players],
-          lastMoveTime: fullGame.lastMoveTime,
-          clockHard: fullGame.clockHard,
-          toMove: fullGame.toMove || "",
-          numMoves,
-          gameStarted: fullGame.gameStarted || new Date(gameEngine.stack[0]._timestamp).getTime(),
-          gameEnded: fullGame.gameEnded || new Date(gameEngine.stack[gameEngine.stack.length - 1]._timestamp).getTime(),
-        };
-
-        await putRecentCompletedRow(ddbDocClient, tableName, pid, {
-          id: gameId,
-          metaGame,
-          players: newGame.players,
-          clockHard: newGame.clockHard,
-          noExplore: fullGame.noExplore ?? false,
-          toMove: '',
-          lastMoveTime: newGame.lastMoveTime,
-          numMoves,
-          gameStarted: newGame.gameStarted,
-          gameEnded: newGame.gameEnded,
-          winner: fullGame.winner,
-          variants: fullGame.variants,
-          commented: fullGame.commented,
-        });
-        await upsertUserGameOverlay(
-          ddbDocClient,
-          tableName,
-          pid,
-          gameId,
-          {
-            lastChat: now,
-            ...(pid === currentUserId ? { seen: now + 10 } : {}),
-          },
-        );
-
-        console.log(`Re-added completed game ${gameId} to user ${user.name}'s completed dashboard`);
-      } else {
-        console.log(`Could not re-add game ${gameId} to user ${user.name}'s list - failed to fetch game data`);
-      }
     } else {
-      // In-game comment but user doesn't have the game - this shouldn't happen
-      console.log(`Warning: User ${user.name} doesn't have in-progress game ${gameId} in their list`);
+      console.log(`User ${user.name} does not have active game ${gameId} on dashboard; skipping overlay update`);
     }
   }
   await updateLastChatForWatchers(
@@ -5862,7 +5721,6 @@ async function submitComment(userid: string, pars: { id: string; metaGame: strin
       pars.metaGame,
       pars.players,
       userid,
-      false  // Don't re-add game to list for in-game comments
     );
   }
 
@@ -5927,15 +5785,8 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
     }
   }
 
-  // If we need to update lastChat and seen for all players (completed games only)
+  // Post-game chat: notify opponents via in-app notifications (no completed-dashboard overlay)
   if (pars.updateLastChat && pars.public && pars.players) {
-    await updateLastChatForPlayers(
-      pars.game,
-      pars.metaGame,
-      pars.players,
-      userid,
-      true  // Allow re-adding game to list for completed games
-    );
     await enqueueCompletedGameChatNotifications(
       ddbDocClient,
       process.env.ABSTRACT_PLAY_TABLE!,
@@ -9207,11 +9058,8 @@ async function setLastSeen(userId: string, pars: { gameId: string; interval?: nu
   }
   if (user !== undefined) {
     const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-    const [onCurrent, onRecent] = await Promise.all([
-      hasCurrentGameRow(ddbDocClient, tableName, userId, pars.gameId),
-      hasRecentCompletedRow(ddbDocClient, tableName, userId, pars.gameId),
-    ]);
-    if (onCurrent || onRecent) {
+    const onCurrent = await hasCurrentGameRow(ddbDocClient, tableName, userId, pars.gameId);
+    if (onCurrent) {
       // set lastSeen to "now" + interval
       let interval = 8;
       if (pars.interval !== undefined) {
@@ -9427,10 +9275,10 @@ async function fixGames(userId: string, pars: { targetId: string }) {
     statusCode: 200,
     body: JSON.stringify({
       deprecated: true,
-      message: 'fix_games no longer rebuilds USER.games[]. Dashboard membership is index-only (CURRENTGAMES#, RECENTCOMPLETED#, USERGAME#).',
+      message: 'fix_games no longer rebuilds USER.games[]. Dashboard membership is index-only (CURRENTGAMES#, USERGAME#).',
       useInstead: [
         'Verify: node bin/verify-dashboard-index.mjs --stage prod --verbose <userId>',
-        'Prune stale RECENTCOMPLETED#: node bin/dashboard-index-maintenance.mjs --stage prod --step prune-stale-recent-completed --user-id <userId>',
+        'Purge legacy RECENTCOMPLETED#: node bin/dashboard-index-maintenance.mjs --stage prod --step purge-all-recent-completed',
         'Purge USERGAME# orphans: node bin/dashboard-index-maintenance.mjs --stage prod --step purge-usergame-orphans --user-id <userId>',
       ],
       targetId: pars.targetId,

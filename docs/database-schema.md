@@ -108,11 +108,9 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - sk: `<gameid>`
   - summary fields mirror dashboard `Game` objects (`id`, `metaGame`, `players`, `toMove`, `lastMoveTime`, `numMoves`, etc.)
 
-- **Recent completed games by player** — transient completed-dashboard membership (Phase 3b; stream-maintained on game complete)
+- **Recent completed games by player** — **deprecated** legacy completed-dashboard index. No longer written; purge with `purge-all-recent-completed`. Post-game chat uses `completedGameChat` notifications.
   - pk: `RECENTCOMPLETED#<userid>`
   - sk: `<gameid>`
-  - summary fields mirror completed dashboard `Game` objects (`toMove` empty, `gameEnded`, `winner`, `numMoves`, etc.)
-  - evicted from dashboard after seen + 7 days (when `lastChat <= seen`), manual dismiss, or absent after backfill cleanup; opponent chat can re-add
 
 - **Completed games by metaGame** — summary rows for the completed-games page
   - pk: `COMPLETEDGAMES#<metaGame>`

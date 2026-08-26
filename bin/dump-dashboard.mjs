@@ -133,7 +133,6 @@ async function main() {
 
   const {
     loadDashboardGameData,
-    pruneSeenCompletedDashboardGames,
   } = require('../lib/dashboardGames.js');
   const { getChallengesByIds } = require('../lib/challenges.js');
   const {
@@ -199,9 +198,6 @@ async function main() {
   ]);
 
   let games = dashboardLoad.games;
-  if (pruneSeen) {
-    ({ games } = pruneSeenCompletedDashboardGames(games));
-  }
 
   const realStanding = standingData.Item?.standing ?? [];
 
@@ -214,8 +210,7 @@ async function main() {
 
   if (verbose) {
     console.error(`CURRENTGAMES# rows: ${dashboardLoad.currentRows.length}`);
-    console.error(`RECENTCOMPLETED# rows: ${dashboardLoad.recentCompletedRows.length}`);
-    console.error(`Merged games: ${dashboardLoad.games.length} → ${games.length} after prune`);
+    console.error(`Merged games: ${dashboardLoad.games.length}`);
     console.error(`Challenges issued/received/accepted/standing: ${challengesIssued.length}/${challengesReceived.length}/${challengesAccepted.length}/${standingChallenges.length}`);
     console.error(`Watched/highlight/representative: ${watchedGames.length}/${highlights.length}/${representatives.length}`);
     console.error(`Blocked: ${blocked.length}, bots: ${bots.length}`);
@@ -242,7 +237,6 @@ async function main() {
 
   if (includeIndex) {
     payload.currentRows = dashboardLoad.currentRows;
-    payload.recentCompletedRows = dashboardLoad.recentCompletedRows;
   }
 
   if (includeNotifications) {

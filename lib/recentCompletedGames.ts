@@ -2,7 +2,6 @@ import {
   DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
-  PutCommand,
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb';
 import type { DashboardGame } from './dashboardGames';
@@ -119,39 +118,6 @@ export async function hasRecentCompletedRow(
     ExpressionAttributeNames: { '#pk': 'pk' },
   }));
   return data.Item !== undefined;
-}
-
-export async function hasCurrentGameRow(
-  client: DynamoDBDocumentClient,
-  tableName: string,
-  userId: string,
-  gameId: string,
-): Promise<boolean> {
-  const data = await client.send(new GetCommand({
-    TableName: tableName,
-    Key: { pk: `CURRENTGAMES#${userId}`, sk: gameId },
-    ProjectionExpression: '#pk',
-    ExpressionAttributeNames: { '#pk': 'pk' },
-  }));
-  return data.Item !== undefined;
-}
-
-export async function putRecentCompletedRow(
-  client: DynamoDBDocumentClient,
-  tableName: string,
-  userId: string,
-  summary: RecentCompletedSummary,
-): Promise<void> {
-  const { id, ...fields } = summary;
-  await client.send(new PutCommand({
-    TableName: tableName,
-    Item: {
-      pk: recentCompletedPk(userId),
-      sk: id,
-      id,
-      ...fields,
-    },
-  }));
 }
 
 export async function deleteRecentCompletedRow(

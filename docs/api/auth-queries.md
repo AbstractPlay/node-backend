@@ -11,13 +11,12 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `me_profile` | Site-wide profile for navbar, settings, and game renderer: settings, bots, tags, `activeGames` (`CURRENTGAMES#` keys only). No dashboard maintenance, challenges, or `lastSeen` writes. | — |
-| `me_dashboard` | Dashboard tables: full `games`, `notifications`, challenges, maintenance (prune + timeout sweep). Clears `USER.cleaned` when set by abandoned-account cron. Loads/refreshes in-app notification TTL on fetch. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
+| `me_dashboard` | Dashboard tables: active `games`, `notifications`, challenges, timeout sweep. Clears `USER.cleaned` when set by abandoned-account cron. Loads/refreshes in-app notification TTL on fetch. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
 | `next_game` | Next game id in user's list | — |
 | `my_settings` | **Deprecated** — minimal id/name/email/language; use `me_profile` instead | — |
 | `new_setting` | Update name, language, country, bggid, about | `attribute`, `value` |
 | `new_profile` | Bulk profile update | profile fields |
-| `set_lastSeen` | Update last-seen timestamp (participating or watched game) | `gameId`, optional `interval` |
-| `dismiss_completed_game` | Remove a completed game from the dashboard (does not delete game history) | `id` or `gameId` |
+| `set_lastSeen` | Update last-seen timestamp (active dashboard game or watched game) | `gameId`, optional `interval` |
 | `dismiss_notification` | Remove an in-app dashboard notification | `sk` |
 | `toggle_star` | Favorite a metaGame | `metaGame` |
 
@@ -170,7 +169,7 @@ Do **not** run these from the admin UI; use the replacement instead.
 | Query | Replacement |
 |-------|-------------|
 | `me` | `me_profile` (site-wide bootstrap) and `me_dashboard` (`/me` page). `size: small` is not supported. |
-| `fix_games` | `bin/verify-dashboard-index.mjs` then `bin/dashboard-index-maintenance.mjs --step prune-stale-recent-completed` / `purge-usergame-orphans --user-id <cognitoSub>` |
+| `fix_games` | `bin/verify-dashboard-index.mjs` then `bin/dashboard-index-maintenance.mjs --step purge-all-recent-completed` / `purge-usergame-orphans --user-id <cognitoSub>` |
 | `purge_retired_completed_games` | One-time purge complete (no retired rows remain) |
 | `onetime_fix` | No replacement (legacy `USERS` directory sync) |
 
@@ -179,8 +178,10 @@ Do **not** run these from the admin UI; use the replacement instead.
 | Task | Command |
 |------|---------|
 | Dashboard health check | `node bin/verify-dashboard-index.mjs --stage prod [--verbose] <userId>…` |
-| Prune stale `RECENTCOMPLETED#` | `node bin/dashboard-index-maintenance.mjs --stage prod --step prune-stale-recent-completed [--user-id <id>]` |
+| Prune stale `RECENTCOMPLETED#` (legacy eligibility) | `node bin/dashboard-index-maintenance.mjs --stage prod --step prune-stale-recent-completed [--user-id <id>]` |
+| Purge all `RECENTCOMPLETED#` | `node bin/dashboard-index-maintenance.mjs --stage prod --step purge-all-recent-completed [--user-id <id>]` |
 | Purge `USERGAME#` orphans | `node bin/dashboard-index-maintenance.mjs --stage prod --step purge-usergame-orphans [--user-id <id>]` |
+| Backfill completed-game chat notifications | `npm run build-ts` then `node bin/backfill-completed-game-chat-notifications.mjs --stage prod [--dry-run] [--user-id <id>]` |
 
 ```bash
 # Example dashboard repair for one user

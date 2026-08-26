@@ -2,14 +2,8 @@ import {
   DynamoDBDocumentClient,
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb';
-import { removeDashboardGameMembership } from './dashboardEviction';
+import { deleteRecentCompletedRow, listRecentCompletedRows } from './recentCompletedGames';
 import {
-  listRecentCompletedRows,
-  recentCompletedRowToGame,
-  shouldBeOnCompletedDashboard,
-} from './recentCompletedGames';
-import {
-  applyOverlayFields,
   deleteUserGameOverlay,
   listUserGameOverlays,
 } from './userGameOverlay';
@@ -56,7 +50,6 @@ export async function cleanupUserDashboardCruft(
   client: DynamoDBDocumentClient,
   tableName: string,
   userId: string,
-  now = Date.now(),
 ): Promise<DashboardCruftCleanupStats> {
   const [currentIds, recentRows, overlays] = await Promise.all([
     listCurrentGameIds(client, tableName, userId),
@@ -66,31 +59,19 @@ export async function cleanupUserDashboardCruft(
 
   let recentCompletedDeleted = 0;
   let userGameDeleted = 0;
-  const eligibleRecentIds = new Set<string>();
 
   for (const row of recentRows) {
-    const merged = applyOverlayFields(
-      recentCompletedRowToGame(row),
-      overlays.get(row.sk),
-    );
-    if (shouldBeOnCompletedDashboard(merged, now)) {
-      eligibleRecentIds.add(row.sk);
-      continue;
+    await deleteRecentCompletedRow(client, tableName, userId, row.sk);
+    recentCompletedDeleted += 1;
+    if (overlays.has(row.sk)) {
+      await deleteUserGameOverlay(client, tableName, userId, row.sk);
+      overlays.delete(row.sk);
+      userGameDeleted += 1;
     }
-    const evicted = await removeDashboardGameMembership(
-      client,
-      tableName,
-      userId,
-      [row.sk],
-    );
-    overlays.delete(row.sk);
-    recentCompletedDeleted += evicted.recentCompletedDeleted;
-    userGameDeleted += evicted.userGameDeleted;
   }
 
-  const dashboardIds = new Set([...currentIds, ...eligibleRecentIds]);
   for (const gameId of overlays.keys()) {
-    if (dashboardIds.has(gameId)) {
+    if (currentIds.has(gameId)) {
       continue;
     }
     await deleteUserGameOverlay(client, tableName, userId, gameId);

@@ -12,6 +12,7 @@ import {
   NOTIFICATION_SEEN_TTL_DAYS,
   buildNotificationItem,
   dismissNotification,
+  backfillCompletedGameChatNotification,
   hasActiveCompletedGameChatNotification,
   hasActiveEventInvitationNotification,
   loadNotificationsForDashboard,
@@ -140,6 +141,37 @@ test('completedGameChat body carries game link fields', () => {
   assert.deepEqual(item.body.variants, ['small']);
   assert.equal(item.body.commenterId, OTHER_USER_ID);
   assert.equal(item.body.commenterName, 'Bob');
+});
+
+test('backfillCompletedGameChatNotification writes backfill flag and skips dup', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store);
+
+  const first = await backfillCompletedGameChatNotification(
+    client as never,
+    TABLE,
+    USER_ID,
+    GAME_ID,
+    'go',
+    [],
+  );
+  assert.equal(first, 'created');
+  assert.equal(store.size, 1);
+  const item = [...store.values()][0];
+  const body = item.body as { type: string; backfill?: boolean; commenterName: string };
+  assert.equal(body.type, 'completedGameChat');
+  assert.equal(body.backfill, true);
+  assert.equal(body.commenterName, '');
+
+  const second = await backfillCompletedGameChatNotification(
+    client as never,
+    TABLE,
+    USER_ID,
+    GAME_ID,
+    'go',
+  );
+  assert.equal(second, 'skipped_dup');
+  assert.equal(store.size, 1);
 });
 
 test('hasActiveCompletedGameChatNotification finds non-expired notification for game', async () => {

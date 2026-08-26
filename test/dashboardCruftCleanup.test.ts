@@ -7,7 +7,6 @@ const USER_ID = 'user-1';
 const GAME_STALE = 'stale-game';
 const GAME_ACTIVE = 'active-game';
 const GAME_ORPHAN = 'orphan-overlay';
-const NOW = Date.parse('2026-08-24T12:00:00.000Z');
 
 type Store = Map<string, Record<string, unknown>>;
 
@@ -35,7 +34,7 @@ function makeClient(store: Store) {
 }
 
 describe('cleanupUserDashboardCruft', () => {
-  it('deletes stale RECENTCOMPLETED# rows and orphan USERGAME# overlays', async () => {
+  it('deletes all RECENTCOMPLETED# rows and orphan USERGAME# overlays', async () => {
     const store: Store = new Map([
       [key(`CURRENTGAMES#${USER_ID}`, GAME_ACTIVE), {
         pk: `CURRENTGAMES#${USER_ID}`,
@@ -55,7 +54,7 @@ describe('cleanupUserDashboardCruft', () => {
       [key(`USERGAME#${USER_ID}`, GAME_STALE), {
         pk: `USERGAME#${USER_ID}`,
         sk: GAME_STALE,
-        seen: NOW - 30 * 24 * 3600000,
+        seen: Date.parse('2026-07-01T12:00:00.000Z'),
       }],
       [key(`USERGAME#${USER_ID}`, GAME_ORPHAN), {
         pk: `USERGAME#${USER_ID}`,
@@ -68,7 +67,6 @@ describe('cleanupUserDashboardCruft', () => {
       makeClient(store) as never,
       TABLE,
       USER_ID,
-      NOW,
     );
 
     assert.equal(stats.recentCompletedDeleted, 1);

@@ -1,12 +1,8 @@
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import {
-  hasCurrentGameRow,
-  hasRecentCompletedRow,
-  listRecentCompletedRows,
-  recentCompletedRowToGame,
-  COMPLETED_DASHBOARD_RETENTION_MS,
-  type RecentCompletedIndexRow,
-} from './recentCompletedGames';
+  DynamoDBDocumentClient,
+  GetCommand,
+  QueryCommand,
+} from '@aws-sdk/lib-dynamodb';
 import {
   applyOverlayFields,
   listUserGameOverlays,
@@ -95,85 +91,44 @@ async function listCurrentGameRows(
   return items;
 }
 
-export function mergeDashboardGames(
-  currentRows: CurrentGameIndexRow[],
-  recentCompletedRows: RecentCompletedIndexRow[],
-  overlays: Map<string, UserGameOverlay>,
-): DashboardGame[] {
-  const activeById = new Map(
-    currentRows.map(row => {
-      const game = currentRowToGame(row);
-      return [game.id, applyOverlayFields(game, overlays.get(game.id))];
-    }),
-  );
-  const completedById = new Map(
-    recentCompletedRows.map(row => {
-      const game = recentCompletedRowToGame(row);
-      return [game.id, applyOverlayFields(game, overlays.get(game.id))];
-    }),
-  );
-
-  const result: DashboardGame[] = [];
-  const emitted = new Set<string>();
-
-  for (const [id, game] of activeById) {
-    result.push(game);
-    emitted.add(id);
-  }
-
-  for (const [id, game] of completedById) {
-    if (!emitted.has(id)) {
-      result.push(game);
-      emitted.add(id);
-    }
-  }
-
-  return result;
+export async function hasCurrentGameRow(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  gameId: string,
+): Promise<boolean> {
+  const data = await client.send(new GetCommand({
+    TableName: tableName,
+    Key: { pk: `CURRENTGAMES#${userId}`, sk: gameId },
+    ProjectionExpression: '#pk',
+    ExpressionAttributeNames: { '#pk': 'pk' },
+  }));
+  return data.Item !== undefined;
 }
 
-/**
- * In-memory prune of completed dashboard games seen >7 days ago with no newer chat.
- * Matches the eviction loop in me() before side-effect writes.
- */
-export function pruneSeenCompletedDashboardGames(
-  games: DashboardGame[],
-  now = Date.now(),
-): { games: DashboardGame[]; evictedIds: string[] } {
-  const evictedIds: string[] = [];
-  const kept: DashboardGame[] = [];
-  for (const game of games) {
-    if (
-      (game.toMove === '' || game.toMove === null) &&
-      game.seen !== undefined &&
-      now - (game.seen || 0) > COMPLETED_DASHBOARD_RETENTION_MS &&
-      (game.lastChat || 0) <= (game.seen || 0)
-    ) {
-      evictedIds.push(game.id);
-    } else {
-      kept.push(game);
-    }
-  }
-  return { games: kept, evictedIds };
+export function mergeDashboardGames(
+  currentRows: CurrentGameIndexRow[],
+  overlays: Map<string, UserGameOverlay>,
+): DashboardGame[] {
+  return currentRows.map(row => {
+    const game = currentRowToGame(row);
+    return applyOverlayFields(game, overlays.get(game.id));
+  });
 }
 
 export type DashboardGameLoad = {
   games: DashboardGame[];
   currentRows: CurrentGameIndexRow[];
-  recentCompletedRows: RecentCompletedIndexRow[];
 };
 
-/** Whether opening a game (setSeenTime) may update USERGAME# seen. Index membership only. */
+/** Whether opening a game (setSeenTime) may update USERGAME# seen. Active dashboard membership only. */
 export async function shouldWriteGameOpenOverlay(
   client: DynamoDBDocumentClient,
   tableName: string,
   userId: string,
   gameId: string,
 ): Promise<boolean> {
-  const [onCurrent, onRecent] = await Promise.all([
-    hasCurrentGameRow(client, tableName, userId, gameId),
-    hasRecentCompletedRow(client, tableName, userId, gameId),
-  ]);
-  return onCurrent || onRecent;
+  return hasCurrentGameRow(client, tableName, userId, gameId);
 }
 
 export async function loadDashboardGameData(
@@ -181,13 +136,12 @@ export async function loadDashboardGameData(
   tableName: string,
   userId: string,
 ): Promise<DashboardGameLoad> {
-  const [currentRows, recentCompletedRows, overlays] = await Promise.all([
+  const [currentRows, overlays] = await Promise.all([
     listCurrentGameRows(client, tableName, userId),
-    listRecentCompletedRows(client, tableName, userId),
     listUserGameOverlays(client, tableName, userId),
   ]);
-  const games = mergeDashboardGames(currentRows, recentCompletedRows, overlays);
-  return { games, currentRows, recentCompletedRows };
+  const games = mergeDashboardGames(currentRows, overlays);
+  return { games, currentRows };
 }
 
 export type ActiveGameKey = {
