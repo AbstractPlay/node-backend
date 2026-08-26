@@ -38,9 +38,7 @@ Logged-in clients should use the auth `standing_challenges` query instead so blo
 | `get_tournaments` | Active automated tournaments | — |
 | `get_old_tournaments` | Archived tournaments | `metaGame` (optional) |
 | `get_tournament` | Single tournament | `id` |
-| `start_tournaments` | Scheduler: start due tournaments | — |
 | `archive_tournaments` | Scheduler: archive completed tournaments | — |
-| `start_tournament` | Start one tournament | `id` |
 
 ## Events
 

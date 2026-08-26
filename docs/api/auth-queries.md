@@ -106,7 +106,6 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `new_tournament` | Create automated tournament (meta game must support `playercount: 2`) | tournament spec |
 | `join_tournament` | Enter tournament (same 2-player requirement) | `id` |
 | `withdraw_tournament` | Leave tournament | `id` |
-| `start_tournament` | Start one tournament (organizer) | `id` |
 | `end_tournament` | End tournament | `id` |
 
 ## Organizer events
