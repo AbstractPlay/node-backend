@@ -228,24 +228,6 @@ async function deleteCurrentGamesForPlayers(
   ));
 }
 
-async function putRecentCompletedForPlayers(
-  docClient: DynamoDBDocumentClient,
-  tableName: string,
-  summary: ReturnType<typeof toCompletedSummary>,
-  playerIds: string[],
-): Promise<void> {
-  await Promise.all(playerIds.map(playerId =>
-    docClient.send(new PutCommand({
-      TableName: tableName,
-      Item: {
-        pk: `RECENTCOMPLETED#${playerId}`,
-        sk: summary.id,
-        ...summary,
-      },
-    }))
-  ));
-}
-
 async function deleteRecentCompletedForPlayers(
   docClient: DynamoDBDocumentClient,
   tableName: string,
@@ -260,7 +242,7 @@ async function deleteRecentCompletedForPlayers(
   ));
 }
 
-/** Short completions skip RECENTCOMPLETED#; overlays would otherwise orphan forever. */
+/** Short completed games skip COMPLETEDGAMES# archive; overlays would otherwise orphan forever. */
 async function deleteUserGameOverlaysForPlayers(
   docClient: DynamoDBDocumentClient,
   tableName: string,
@@ -382,7 +364,6 @@ async function handleCompletedGameInsert(
   if (keepgame) {
     const summary = toCompletedSummary(game, numMoves);
     await putCompletedGameIndexes(docClient, tableName, game, summary);
-    await putRecentCompletedForPlayers(docClient, tableName, summary, playerIds);
   } else {
     await deleteUserGameOverlaysForPlayers(docClient, tableName, game.id, playerIds);
   }

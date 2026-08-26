@@ -1,9 +1,5 @@
 import { UpdateCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import {
-  pruneSeenCompletedDashboardGames,
-  type DashboardGame,
-} from './dashboardGames';
-import { removeDashboardGameMembership } from './dashboardEviction';
+import type { DashboardGame } from './dashboardGames';
 import {
   checkAndProcessGameTimeout,
   sweepUserGameTimeouts,
@@ -77,8 +73,7 @@ export async function runDashboardMaintenance(
     return { games, evictedIds: [], maintenanceRan: false };
   }
 
-  const pruneResult = pruneSeenCompletedDashboardGames(games, now);
-  let maintainedGames = await sweepUserGameTimeouts(pruneResult.games, {
+  const maintainedGames = await sweepUserGameTimeouts(games, {
     client: deps.client,
     tableName: deps.tableName,
     timeloss: deps.timeloss,
@@ -86,18 +81,9 @@ export async function runDashboardMaintenance(
     log: deps.log,
   });
 
-  if (pruneResult.evictedIds.length > 0) {
-    await removeDashboardGameMembership(
-      client,
-      tableName,
-      userId,
-      pruneResult.evictedIds,
-    );
-  }
-
   return {
     games: maintainedGames,
-    evictedIds: pruneResult.evictedIds,
+    evictedIds: [],
     maintenanceRan: true,
   };
 }

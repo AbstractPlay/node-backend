@@ -198,6 +198,16 @@ export async function createNotification(
   if (await isBotId(userId)) {
     return;
   }
+  await putNotificationItem(client, tableName, userId, body);
+}
+
+/** Write in-app notification item (no bot filter; for admin backfill scripts). */
+export async function putNotificationItem(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  body: NotificationBody,
+): Promise<void> {
   await client.send(new PutCommand({
     TableName: tableName,
     Item: buildNotificationItem(userId, body),
@@ -483,4 +493,28 @@ export async function enqueueCompletedGameChatNotifications(
   }
 
   await Promise.all(work);
+}
+
+/** One-time backfill: unread completed-game chat → in-app notification (generic message). */
+export async function backfillCompletedGameChatNotification(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  gameId: string,
+  metaGame: string,
+  variants?: string[],
+): Promise<'created' | 'skipped_dup'> {
+  if (await hasActiveCompletedGameChatNotification(client, tableName, userId, gameId)) {
+    return 'skipped_dup';
+  }
+  await putNotificationItem(client, tableName, userId, {
+    type: 'completedGameChat',
+    gameId,
+    metaGame,
+    variants: variants ?? [],
+    commenterId: '',
+    commenterName: '',
+    backfill: true,
+  });
+  return 'created';
 }

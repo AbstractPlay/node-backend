@@ -117,6 +117,21 @@ function createMockDocClient(store) {
     strict_1.default.equal(item.body.commenterId, OTHER_USER_ID);
     strict_1.default.equal(item.body.commenterName, 'Bob');
 });
+(0, node_test_1.test)('backfillCompletedGameChatNotification writes backfill flag and skips dup', async () => {
+    const store = new Map();
+    const client = createMockDocClient(store);
+    const first = await (0, notifications_1.backfillCompletedGameChatNotification)(client, TABLE, USER_ID, GAME_ID, 'go', []);
+    strict_1.default.equal(first, 'created');
+    strict_1.default.equal(store.size, 1);
+    const item = [...store.values()][0];
+    const body = item.body;
+    strict_1.default.equal(body.type, 'completedGameChat');
+    strict_1.default.equal(body.backfill, true);
+    strict_1.default.equal(body.commenterName, '');
+    const second = await (0, notifications_1.backfillCompletedGameChatNotification)(client, TABLE, USER_ID, GAME_ID, 'go');
+    strict_1.default.equal(second, 'skipped_dup');
+    strict_1.default.equal(store.size, 1);
+});
 (0, node_test_1.test)('hasActiveCompletedGameChatNotification finds non-expired notification for game', async () => {
     const store = new Map([
         [itemKey({

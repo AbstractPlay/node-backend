@@ -4,8 +4,9 @@
  * Dashboard index maintenance (admin ops).
  *
  * Steps (index-only; does not read USER.games[]):
- *   prune-stale-recent-completed — Delete RECENTCOMPLETED# rows not dashboard-eligible (USERGAME# overlays)
- *   purge-usergame-orphans       — Delete USERGAME# rows not on CURRENTGAMES# or eligible RECENTCOMPLETED#
+ *   prune-stale-recent-completed — Delete RECENTCOMPLETED# rows not dashboard-eligible (legacy; prefer purge-all-recent-completed)
+ *   purge-all-recent-completed   — Delete every RECENTCOMPLETED# row
+ *   purge-usergame-orphans       — Delete USERGAME# rows not on CURRENTGAMES#
  *
  * Meta game counts: use admin authQuery `update_meta_game_counts` (live recount to METAGAMES#), not this script.
  *
@@ -39,6 +40,7 @@ const COMPLETED_DASHBOARD_RETENTION_MS = 7 * 24 * 3600000;
 
 const STEPS = [
   'prune-stale-recent-completed',
+  'purge-all-recent-completed',
   'purge-usergame-orphans',
 ];
 
@@ -50,6 +52,7 @@ Options:
   --dry-run                           Count actions only; do not write
   --step ${STEPS.join('|')}   Required
   --prune-stale-recent-completed      Shorthand for --step prune-stale-recent-completed
+  --purge-all-recent-completed        Shorthand for --step purge-all-recent-completed
   --purge-usergame-orphans            Shorthand for --step purge-usergame-orphans
   --user-id <cognitoSub>              Single user (all steps)
   --help, -h                          Show this help
@@ -75,6 +78,8 @@ function parseArgs(argv) {
       userId = argv[++i];
     } else if (arg === '--prune-stale-recent-completed') {
       step = 'prune-stale-recent-completed';
+    } else if (arg === '--purge-all-recent-completed') {
+      step = 'purge-all-recent-completed';
     } else if (arg === '--purge-usergame-orphans') {
       step = 'purge-usergame-orphans';
     } else if (arg === '--help' || arg === '-h') {
@@ -301,12 +306,53 @@ async function pruneStaleRecentCompleted(docClient, tableName, { dryRun, userId 
   return stats;
 }
 
+async function purgeAllRecentCompletedForUser(docClient, tableName, userId, dryRun, stats) {
+  const recentCompletedRows = await queryPartition(docClient, tableName, `RECENTCOMPLETED#${userId}`);
+
+  for (const row of recentCompletedRows) {
+    if (dryRun) {
+      stats.recentCompletedDeleted = (stats.recentCompletedDeleted ?? 0) + 1;
+      continue;
+    }
+    await docClient.send(new DeleteCommand({
+      TableName: tableName,
+      Key: { pk: row.pk, sk: row.sk },
+    }));
+    stats.recentCompletedDeleted = (stats.recentCompletedDeleted ?? 0) + 1;
+  }
+}
+
+async function purgeAllRecentCompleted(docClient, tableName, { dryRun, userId }) {
+  const stats = { users: 0 };
+
+  console.log('\nDeleting all RECENTCOMPLETED# rows (legacy completed-dashboard index)…');
+
+  if (userId) {
+    const user = await getUserRecord(docClient, tableName, userId);
+    if (!user) {
+      console.error(`No USER record for ${userId}`);
+      return stats;
+    }
+    stats.users = 1;
+    await purgeAllRecentCompletedForUser(docClient, tableName, userId, dryRun, stats);
+    return stats;
+  }
+
+  const userIds = await scanAllUserIds(docClient, tableName);
+  stats.users = userIds.length;
+  console.log(`  found ${userIds.length} USER records`);
+
+  for (const id of userIds) {
+    await purgeAllRecentCompletedForUser(docClient, tableName, id, dryRun, stats);
+  }
+
+  return stats;
+}
+
 async function purgeUserGameOrphansForUser(docClient, tableName, userId, dryRun, stats) {
   const currentRows = await queryPartition(docClient, tableName, `CURRENTGAMES#${userId}`);
-  const recentCompletedRows = await queryPartition(docClient, tableName, `RECENTCOMPLETED#${userId}`);
   const userGameRows = await queryUserGameRows(docClient, tableName, userId);
-  const overlayById = new Map(userGameRows.map(row => [row.sk, row]));
-  const onDashboard = eligibleDashboardGameIds(currentRows, recentCompletedRows, overlayById);
+  const onDashboard = new Set(currentRows.map(row => row.sk).filter(Boolean));
 
   for (const row of userGameRows) {
     if (onDashboard.has(row.sk)) {
@@ -327,7 +373,7 @@ async function purgeUserGameOrphansForUser(docClient, tableName, userId, dryRun,
 async function purgeUserGameOrphans(docClient, tableName, { dryRun, userId }) {
   const stats = { users: 0 };
 
-  console.log('\nPurging USERGAME# rows not on user dashboard (CURRENTGAMES# + eligible RECENTCOMPLETED#)…');
+  console.log('\nPurging USERGAME# rows not on CURRENTGAMES#…');
 
   if (userId) {
     const user = await getUserRecord(docClient, tableName, userId);
@@ -385,6 +431,11 @@ async function main() {
   if (step === 'prune-stale-recent-completed') {
     const stats = await pruneStaleRecentCompleted(docClient, table, { dryRun, userId });
     printStats('RECENTCOMPLETED prune', stats);
+  }
+
+  if (step === 'purge-all-recent-completed') {
+    const stats = await purgeAllRecentCompleted(docClient, table, { dryRun, userId });
+    printStats('RECENTCOMPLETED purge-all', stats);
   }
 
   if (step === 'purge-usergame-orphans') {

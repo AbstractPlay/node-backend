@@ -43,26 +43,19 @@ function makeClient(store: Store) {
         }
         throw new Error(`Unhandled UpdateCommand condition: ${condition}`);
       }
-      if (command.constructor.name === 'DeleteCommand') {
-        const itemKey = input.Key as { pk: string; sk: string };
-        store.delete(key(itemKey.pk, itemKey.sk));
-        return {};
-      }
       throw new Error(`Unhandled ${command.constructor.name}`);
     },
   };
 }
 
-function staleCompletedGame(): DashboardGame {
+function activeGame(): DashboardGame {
   return {
-    id: 'stale',
+    id: 'active',
     metaGame: 'saltire',
     players: [{ id: 'p0', name: 'Alice' }],
     clockHard: false,
-    toMove: '',
+    toMove: '0',
     lastMoveTime: 1,
-    seen: NOW - 30 * 24 * 3600000,
-    lastChat: 0,
   };
 }
 
@@ -117,18 +110,17 @@ describe('acquireDashboardMaintenanceLock', () => {
 });
 
 describe('runDashboardMaintenance', () => {
-  it('prunes stale completed games and deletes index rows', async () => {
+  it('runs timeout sweep without evicting completed games', async () => {
     const store: Store = new Map([
       [key('USER', USER_ID), { pk: 'USER', sk: USER_ID }],
-      [key(`RECENTCOMPLETED#${USER_ID}`, 'stale'), { pk: `RECENTCOMPLETED#${USER_ID}`, sk: 'stale' }],
-      [key(`USERGAME#${USER_ID}`, 'stale'), { pk: `USERGAME#${USER_ID}`, sk: 'stale' }],
     ]);
+    const games = [activeGame()];
 
     const result = await runDashboardMaintenance(
       makeClient(store) as never,
       TABLE,
       USER_ID,
-      [staleCompletedGame()],
+      games,
       {
         client: makeClient(store) as never,
         tableName: TABLE,
@@ -138,10 +130,9 @@ describe('runDashboardMaintenance', () => {
     );
 
     assert.equal(result.maintenanceRan, true);
-    assert.deepEqual(result.evictedIds, ['stale']);
-    assert.equal(result.games.length, 0);
-    assert.equal(store.has(key(`RECENTCOMPLETED#${USER_ID}`, 'stale')), false);
-    assert.equal(store.has(key(`USERGAME#${USER_ID}`, 'stale')), false);
+    assert.deepEqual(result.evictedIds, []);
+    assert.equal(result.games.length, 1);
+    assert.equal(result.games[0]!.id, 'active');
   });
 
   it('skips maintenance when lock is not acquired', async () => {
@@ -151,9 +142,8 @@ describe('runDashboardMaintenance', () => {
         sk: USER_ID,
         dashboardMaintAt: NOW,
       }],
-      [key(`RECENTCOMPLETED#${USER_ID}`, 'stale'), { pk: `RECENTCOMPLETED#${USER_ID}`, sk: 'stale' }],
     ]);
-    const games = [staleCompletedGame()];
+    const games = [activeGame()];
 
     const result = await runDashboardMaintenance(
       makeClient(store) as never,
@@ -171,6 +161,5 @@ describe('runDashboardMaintenance', () => {
     assert.equal(result.maintenanceRan, false);
     assert.equal(result.games, games);
     assert.deepEqual(result.evictedIds, []);
-    assert.equal(store.has(key(`RECENTCOMPLETED#${USER_ID}`, 'stale')), true);
   });
 });

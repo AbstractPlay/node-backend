@@ -44,7 +44,7 @@ Per-user notifications stored under `NOTIFICATION#<userid>` and returned on `me_
 | `challengeDeclined` / `challengeRevoked` | Direct challenge response | Game name links to `/games/{metaGame}` |
 | `gameStart` | Game begins | Game name links to `/move/{metaGame}/0/{gameId}` |
 | `gameEnd` | Game ends | **View** links to `/move/{metaGame}/0/{gameId}` |
-| `completedGameChat` | Post-game comment on completed game (`save_exploration` with `updateLastChat`) | **View** links to `/move/{metaGame}/1/{gameId}`; one active notification per game until dismissed |
+| `completedGameChat` | Post-game comment on completed game (`save_exploration` with `updateLastChat`) or one-time backfill (`bin/backfill-completed-game-chat-notifications.mjs`) | **View** links to `/move/{metaGame}/1/{gameId}`; one active notification per game until dismissed; backfill uses generic message when `body.backfill` |
 | `ratingChange` | Daily batch Glicko diff after summarize (backend-crons) | Game name links to `/ratings/{metaGame}`; variant labels in message when applicable |
 
 ### Batch `ratingChange` issuer (backend-crons)
@@ -70,6 +70,7 @@ Realtime Elo at game end was removed in Phase 4. `ratingChange` rows are now wri
 **DynamoDB item** (`NOTIFICATION#userId`): `body.type = ratingChange`, `metaGame`, `variants`, `gameId` empty (batch has no causal game), rounded `oldRating` / `newRating` on `ratingLow`, `oldRd` / `newRd`, `oldProvisional` / `newProvisional`, and `delta`.
 
 Implementation: backend-crons `rating-change-notifications` Lambda (`src/functions/rating-change-notifications.ts`) and `src/lib/ratingChangeNotifications.ts`.
+
 | `eventInvitation` | Organizer saves invite list on moderated event | `{organizerName} has invited you to the event` with event name linking to `/event/{eventId}` |
 
 **Event invitations** apply only to human-moderated [organized events](/backend/subsystems/events/) (`ORGEVENT`) updated through `event_update_invites`. Each save notifies newly added invitees and any existing invitee who does not yet have an active `eventInvitation` for that event (for example, invited before this feature shipped). Re-saving an unchanged invite list does not duplicate notifications. Automated tournament sign-up does not use this path.
@@ -79,6 +80,10 @@ Implementation: [`lib/notifications.ts`](../../lib/notifications.ts), wired from
 ### Admin read-only dump
 
 `bin/dump-dashboard.mjs` assembles dashboard-shaped data from DynamoDB without Cognito or writes. Pass `--include-notifications` to add the `NOTIFICATION#` feed using `loadNotificationsForDashboard(..., { refreshExpiry: false })` so TTL is not tightened during inspection.
+
+### Backfill completed-game chat notifications
+
+Before hiding the Completed Games dashboard section, run `bin/backfill-completed-game-chat-notifications.mjs` to create `completedGameChat` notifications for users with unread post-game chat (`lastChat > seen` on `RECENTCOMPLETED#` + `USERGAME#` overlay). Use `--dry-run` first; supports `--user-id` for a single account.
 
 ## Related
 
