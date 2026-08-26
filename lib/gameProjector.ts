@@ -100,6 +100,9 @@ export function resolveNumMoves(game: GameRecord): number {
 }
 
 export function shouldKeepCompletedGame(game: GameRecord, numMoves: number): boolean {
+  if (game.numPlayers === 1) {
+    return numMoves > 0;
+  }
   return numMoves > game.numPlayers;
 }
 

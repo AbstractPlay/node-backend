@@ -72,6 +72,7 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `new_challenge` | Issue direct or standing challenge | `FullChallenge` fields |
 | `challenge_revoke` | Cancel a challenge | `id`, `metaGame`, `standing`, `comment` |
 | `challenge_response` | Accept or decline | `response`, `id`, `standing`, `metaGame`, `comment` |
+| `start_solo_game` | Start a 1-player solo run (`rated: false`; optional `challengeSeed`, server assigns if omitted) | `metaGame`, optional `variants`, `challengeSeed`, clock fields |
 | `standing_challenges` | Open challenges (filters blocked issuers) | `metaGame` |
 | `submit_move` | Play a move | `metaGame`, `id`, `move`, … |
 | `timeloss` | Report time loss | game ids |
@@ -102,8 +103,8 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `new_tournament` | Create automated tournament | tournament spec |
-| `join_tournament` | Enter tournament | `id` |
+| `new_tournament` | Create automated tournament (meta game must support `playercount: 2`) | tournament spec |
+| `join_tournament` | Enter tournament (same 2-player requirement) | `id` |
 | `withdraw_tournament` | Leave tournament | `id` |
 | `start_tournament` | Start one tournament (organizer) | `id` |
 | `end_tournament` | End tournament | `id` |

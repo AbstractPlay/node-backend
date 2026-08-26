@@ -66,6 +66,23 @@ describe('shouldKeepCompletedGame', () => {
     assert.equal(shouldKeepCompletedGame(game, 3), true);
     assert.equal(shouldKeepCompletedGame(game, 2), false);
   });
+
+  it('keeps 1-player games with any completed move', () => {
+    const solo = {
+      pk: 'GAME',
+      sk: 'saltire#1#g1',
+      id: 'g1',
+      metaGame: 'saltire',
+      numPlayers: 1,
+      players: [],
+      clockHard: false,
+      toMove: '',
+      lastMoveTime: 1,
+      state: '{}',
+    };
+    assert.equal(shouldKeepCompletedGame(solo, 1), true);
+    assert.equal(shouldKeepCompletedGame(solo, 0), false);
+  });
 });
 
 describe('toCompletedSummary', () => {

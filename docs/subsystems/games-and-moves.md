@@ -13,7 +13,7 @@ When a game completes, the completion bit becomes `1` and summary rows are writt
 
 ## Lifecycle
 
-1. **Created** — from an accepted challenge or tournament/event pairing.
+1. **Created** — from an accepted challenge, tournament/event pairing, or **`start_solo_game`** (1-player, always unrated).
 2. **In progress** — `submit_move` validates via `@abstractplay/gameslib`, updates state, clocks, and `toMove`.
 3. **Automove** — for games with the `automove` flag, if the next player has only one legal move, the backend plays it automatically.
 4. **Time loss** — `timeloss` (auth or internal) ends games when clocks expire.
@@ -29,6 +29,7 @@ When a game completes, the completion bit becomes `1` and summary rows are writt
 | `timeloss` | auth | Report timeout |
 | `abandoned` | auth | Abandon game |
 | `invoke_pie` | auth | Pie rule — reverse player order |
+| `start_solo_game` | auth | Start solo play (`numPlayers: 1`, `rated: false`, optional `challengeSeed`) |
 | `set_game_state` | auth | Admin state injection |
 | `update_game_settings` | auth | Per-game settings |
 | `submit_comment` | auth | Game chat (`GAMECOMMENTS`) |
