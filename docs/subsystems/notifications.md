@@ -66,7 +66,7 @@ Realtime Elo at game end was removed in Phase 4. `ratingChange` rows are now wri
 | Magnitude | `|round(new.ratingLow) - round(old.ratingLow)| >= 5` (env `MIN_RATING_DELTA`) |
 | Established enough | Skip provisional players with `n < minGamesProvisional` |
 
-**DynamoDB item** (`NOTIFICATION#userId`): `body.type = ratingChange`, `metaGame`, `variants`, `gameId` empty (batch has no causal game), `oldRating`, `newRating`, `delta` on rounded `ratingLow`.
+**DynamoDB item** (`NOTIFICATION#userId`): `body.type = ratingChange`, `metaGame`, `variants`, `gameId` empty (batch has no causal game), rounded `oldRating` / `newRating` on `ratingLow`, `oldRd` / `newRd`, `oldProvisional` / `newProvisional`, and `delta`.
 
 Implementation: backend-crons `rating-change-notifications` Lambda (`src/functions/rating-change-notifications.ts`) and `src/lib/ratingChangeNotifications.ts`.
 | `eventInvitation` | Organizer saves invite list on moderated event | `{organizerName} has invited you to the event` with event name linking to `/event/{eventId}` |
