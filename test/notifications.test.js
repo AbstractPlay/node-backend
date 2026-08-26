@@ -9,6 +9,8 @@ const lib_dynamodb_1 = require("@aws-sdk/lib-dynamodb");
 const notifications_1 = require("../lib/notifications");
 const TABLE = 'abstract-play-test';
 const USER_ID = '31af49bc-2030-4adb-aec9-dc8fa418fec1';
+const OTHER_USER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+const GAME_ID = 'game-chat-1';
 const SEC_PER_DAY = 86400;
 function itemKey(item) {
     return `${item.pk}:${item.sk}`;
@@ -95,6 +97,48 @@ function createMockDocClient(store) {
     strict_1.default.equal(item.body.eventName, 'Spring Open');
     strict_1.default.equal(item.body.organizerId, 'org-1');
     strict_1.default.equal(item.body.organizerName, 'Alice');
+});
+(0, node_test_1.test)('completedGameChat body carries game link fields', () => {
+    const item = (0, notifications_1.buildNotificationItem)(USER_ID, {
+        type: 'completedGameChat',
+        gameId: GAME_ID,
+        metaGame: 'go',
+        variants: ['small'],
+        commenterId: OTHER_USER_ID,
+        commenterName: 'Bob',
+    });
+    strict_1.default.equal(item.body.type, 'completedGameChat');
+    if (item.body.type !== 'completedGameChat') {
+        return;
+    }
+    strict_1.default.equal(item.body.gameId, GAME_ID);
+    strict_1.default.equal(item.body.metaGame, 'go');
+    strict_1.default.deepEqual(item.body.variants, ['small']);
+    strict_1.default.equal(item.body.commenterId, OTHER_USER_ID);
+    strict_1.default.equal(item.body.commenterName, 'Bob');
+});
+(0, node_test_1.test)('hasActiveCompletedGameChatNotification finds non-expired notification for game', async () => {
+    const store = new Map([
+        [itemKey({
+                pk: (0, notifications_1.notificationPk)(USER_ID),
+                sk: '2000#chat',
+            }), {
+                pk: (0, notifications_1.notificationPk)(USER_ID),
+                sk: '2000#chat',
+                body: {
+                    type: 'completedGameChat',
+                    gameId: GAME_ID,
+                    metaGame: 'go',
+                    variants: [],
+                    commenterId: OTHER_USER_ID,
+                    commenterName: 'Bob',
+                },
+                expiresAt: (0, notifications_1.notificationSeenExpiresAt)(),
+            }],
+    ]);
+    const client = createMockDocClient(store);
+    strict_1.default.equal(await (0, notifications_1.hasActiveCompletedGameChatNotification)(client, TABLE, USER_ID, GAME_ID), true);
+    strict_1.default.equal(await (0, notifications_1.hasActiveCompletedGameChatNotification)(client, TABLE, USER_ID, 'other-game'), false);
 });
 (0, node_test_1.test)('hasActiveEventInvitationNotification finds non-expired invite for event', async () => {
     const eventId = 'evt-abc';

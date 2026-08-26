@@ -140,6 +140,7 @@ import {
   createNotification,
   dismissNotification as deleteUserNotification,
   enqueueEventInvitationNotifications,
+  enqueueCompletedGameChatNotifications,
   enqueueGameEndNotifications,
   enqueueGameStartNotifications,
   loadNotificationsForDashboard,
@@ -5877,8 +5878,9 @@ async function submitComment(userid: string, pars: { id: string; metaGame: strin
   };
 }
 
-async function saveExploration(userid: string, pars: { public: boolean, game: string; metaGame: string; move: number; version: number; tree: ExplorationTreeNode | ExplorationTreeNode[]; updateCommentedFlag?: number; gameEnded?: number; updateLastChat?: boolean; players?: { [k: string]: any; id: string }[]; }) {
+async function saveExploration(userid: string, pars: { public: boolean, game: string; metaGame: string; move: number; version: number; tree: ExplorationTreeNode | ExplorationTreeNode[]; updateCommentedFlag?: number; gameEnded?: number; updateLastChat?: boolean; players?: { [k: string]: any; id: string; name?: string }[]; }) {
   let treeToSave: ExplorationTreeNode | ExplorationTreeNode[] = pars.tree;
+  let gameVariants: string[] | undefined;
   try {
     const gameData = await ddbDocClient.send(new GetCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -5887,6 +5889,9 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
         sk: pars.metaGame + '#' + (pars.public ? '1' : '0') + '#' + pars.game,
       },
     }));
+    if (gameData.Item !== undefined) {
+      gameVariants = (gameData.Item as FullGame).variants;
+    }
     if (gameData.Item?.state) {
       const game = hydrateGameState(gameData.Item as FullGame);
       treeToSave = filterExplorationTreeForSave(
@@ -5930,6 +5935,15 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
       pars.players,
       userid,
       true  // Allow re-adding game to list for completed games
+    );
+    await enqueueCompletedGameChatNotifications(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      pars.game,
+      pars.metaGame,
+      gameVariants,
+      pars.players.map(p => ({ id: p.id, name: p.name ?? 'Someone' })),
+      userid,
     );
   }
 
