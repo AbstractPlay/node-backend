@@ -16,9 +16,9 @@
 
 ## Lifecycle
 
-1. **Create** — auth `new_tournament` (organizer).
-2. **Join / withdraw** — `join_tournament`, `withdraw_tournament`.
-3. **Start** — public `start_tournaments` (scheduler) or auth/public `start_tournament` for one tournament.
+1. **Create** — auth `new_tournament` (organizer). Requires the meta game to support `playercount: 2` in gameslib (`playercounts` includes `2`).
+2. **Join / withdraw** — `join_tournament`, `withdraw_tournament`. Join is rejected for the same 2-player requirement.
+3. **Start** — public `start_tournaments` (scheduler) or auth/public `start_tournament` for one tournament. Signup tournaments for ineligible games are cancelled (same path as zero participants).
 4. **Play** — games are normal `GAME` records linked via `TOURNAMENTGAME`.
 5. **End** — auth `end_tournament`; public `archive_tournaments` moves completed tournaments.
 

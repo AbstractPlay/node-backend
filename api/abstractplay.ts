@@ -86,6 +86,12 @@ import { adjustShardedCounts, ensureShardedMetaGameCountEntry } from '../lib/gam
 import { adminDeleteGame } from '../lib/adminDeleteGame';
 import { filterExplorationTreeForSave, type ExplorationTreeNode } from '../lib/explorationMoves';
 import {
+  buildStartSoloGame,
+  normalizeSoloClocks,
+  soloPlaySupported,
+} from '../lib/soloGame';
+import { tournamentPlaySupported } from '../lib/tournamentGame';
+import {
   loadDashboardGames,
   listActiveGameKeys,
   shouldWriteGameOpenOverlay,
@@ -832,6 +838,8 @@ module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cog
       return await revokeChallenge(event.cognitoPoolClaims.sub, pars);
     case "challenge_response":
       return await respondedChallenge(event.cognitoPoolClaims.sub, pars);
+    case "start_solo_game":
+      return await startSoloGame(event.cognitoPoolClaims.sub, pars);
     case "submit_move":
       return await submitMove(event.cognitoPoolClaims.sub, pars);
     case "timeloss":
@@ -3676,6 +3684,124 @@ function validateChallengeVariantUids(metaGame: string, variants: string[] | und
   return undefined;
 }
 
+async function startSoloGame(userid: string, pars: {
+  metaGame?: string;
+  variants?: string[];
+  challengeSeed?: string;
+  clockStart?: number;
+  clockInc?: number;
+  clockMax?: number;
+  clockHard?: boolean;
+  noExplore?: boolean;
+}) {
+  const metaGame = pars.metaGame;
+  if (metaGame === undefined || metaGame.length === 0) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: "metaGame is required" }),
+      headers,
+    };
+  }
+  if (!soloPlaySupported(metaGame)) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: `Game ${metaGame} does not support solo play` }),
+      headers,
+    };
+  }
+  const variantErr = validateChallengeVariantUids(metaGame, pars.variants);
+  if (variantErr) {
+    return variantErr;
+  }
+
+  let built;
+  try {
+    built = buildStartSoloGame({
+      metaGame,
+      variants: pars.variants,
+      challengeSeed: pars.challengeSeed,
+      noExplore: pars.noExplore,
+      ...normalizeSoloClocks(pars),
+    });
+  } catch (error) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: `${error}` }),
+      headers,
+    };
+  }
+
+  const info = gameinfo.get(metaGame)!;
+  const playersFull = await getParticipants([userid]);
+  const player = playersFull[0];
+  if (player === undefined) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: "Could not load player profile" }),
+      headers,
+    };
+  }
+
+  const clocks = normalizeSoloClocks(pars);
+  const now = Date.now();
+  let whoseTurn: string | boolean[] = "0";
+  if (info.flags !== undefined && info.flags.includes('simultaneous')) {
+    whoseTurn = [true];
+  }
+
+  const gamePlayers = [{
+    id: player.id,
+    name: player.name,
+    time: clocks.clockStart * 3600000,
+  }] as User[];
+
+  await ddbDocClient.send(new PutCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Item: prepareGameStateForStorage({
+      pk: "GAME",
+      sk: `${metaGame}#0#${built.gameId}`,
+      id: built.gameId,
+      metaGame,
+      numPlayers: 1,
+      rated: false,
+      players: gamePlayers,
+      clockStart: clocks.clockStart,
+      clockInc: clocks.clockInc,
+      clockMax: clocks.clockMax,
+      clockHard: clocks.clockHard,
+      noExplore: pars.noExplore || false,
+      state: built.state,
+      toMove: whoseTurn,
+      lastMoveTime: now,
+      gameStarted: now,
+      variants: built.variants,
+    }),
+  }));
+
+  await enqueueGameStartNotifications(
+    ddbDocClient,
+    process.env.ABSTRACT_PLAY_TABLE!,
+    {
+      id: built.gameId,
+      metaGame,
+      variants: built.variants,
+      players: gamePlayers.map(p => ({ id: p.id, name: p.name })),
+    },
+  );
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      gameId: built.gameId,
+      metaGame: info.name,
+      metaGameUid: metaGame,
+      challengeSeed: built.challengeSeed,
+      simultaneous: info.flags !== undefined && info.flags.includes('simultaneous'),
+    }),
+    headers,
+  };
+}
+
 async function newChallenge(userid: string, challenge: FullChallenge) {
   console.log("newChallenge challenge:", challenge);
   const variantErr = validateChallengeVariantUids(challenge.metaGame, challenge.variants);
@@ -6111,6 +6237,9 @@ async function newTournament(userid: string, pars: { metaGame: string, variants:
   if (variantErr) {
     return variantErr;
   }
+  if (!tournamentPlaySupported(pars.metaGame)) {
+    return formatReturnError(`Game ${pars.metaGame} does not support automated tournaments (requires playercount 2)`);
+  }
   const variantsKey = pars.variants.sort().join("|");
   const sk = pars.metaGame + "#" + variantsKey;
   let tournamentN = 0;
@@ -6227,6 +6356,9 @@ async function joinTournament(userid: string, pars: { tournamentid: string, once
   }
   if (tournament.started)
     return formatReturnError(`Tournament ${pars.tournamentid} has already started`);
+  if (!tournamentPlaySupported(tournament.metaGame)) {
+    return formatReturnError(`Game ${tournament.metaGame} does not support automated tournaments (requires playercount 2)`);
+  }
   const sk = `${pars.tournamentid}#1#${userid}`;
   const data: TournamentPlayer = {
     "pk": "TOURNAMENTPLAYER",
@@ -6244,6 +6376,27 @@ async function joinTournament(userid: string, pars: { tournamentid: string, once
     logGetItemError(err);
     return formatReturnError(`Unable to add player ${userid} to tournament ${pars.tournamentid}`);
   }
+}
+
+async function cancelSignupTournament(tournament: Tournament) {
+  console.log(`Deleting tournament ${tournament.id}`);
+  await ddbDocClient.send(
+    new DeleteCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: {
+        "pk": "TOURNAMENT",
+        "sk": tournament.id
+      },
+    }));
+  const sk = tournament.metaGame + "#" + tournament.variants.sort().join("|");
+  await ddbDocClient.send(
+    new UpdateCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { "pk": "TOURNAMENTSCOUNTER", "sk": sk },
+      ExpressionAttributeValues: { ":t": true },
+      ExpressionAttributeNames: { "#o": "over" },
+      UpdateExpression: "set #o = :t"
+    }));
 }
 
 async function withdrawTournament(userid: string, pars: { tournamentid: string }) {
@@ -6763,27 +6916,20 @@ async function startTournament(users: UserLastSeen[], tournament: Tournament, ra
       return true;
   });
   let returnvalue = 0;
-  if (players.length == 0) {
+  if (!tournamentPlaySupported(tournament.metaGame)) {
+    try {
+      console.log(`Cancelling tournament ${tournament.id}: ${tournament.metaGame} does not support playercount 2`);
+      await cancelSignupTournament(tournament);
+    }
+    catch (error) {
+      logGetItemError(error);
+      return formatReturnError(`Unable to delete tournament ${tournament.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    }
+    returnvalue = -1;
+  } else if (players.length == 0) {
     // Cancel tournament. Everyone is gone.
     try {
-      console.log(`Deleting tournament ${tournament.id}`);
-      await ddbDocClient.send(
-        new DeleteCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "TOURNAMENT",
-            "sk": tournament.id
-          },
-        }));
-      const sk = tournament.metaGame + "#" + tournament.variants.sort().join("|");
-      await ddbDocClient.send(
-        new UpdateCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "TOURNAMENTSCOUNTER", "sk": sk },
-          ExpressionAttributeValues: { ":t": true },
-          ExpressionAttributeNames: { "#o": "over" },
-          UpdateExpression: "set #o = :t"
-        }));
+      await cancelSignupTournament(tournament);
     }
     catch (error) {
       logGetItemError(error);
