@@ -37,6 +37,10 @@ export type NotificationBody =
     gameId?: string;
     oldRating: number;
     newRating: number;
+    oldRd: number;
+    newRd: number;
+    oldProvisional: boolean;
+    newProvisional: boolean;
     delta: number;
   }
   | {
