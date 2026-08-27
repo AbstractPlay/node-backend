@@ -9,7 +9,7 @@
  *
  * Usage:
  *   npm run build-ts
- *   node bin/dump-dashboard.mjs <cognito-sub> [--stage dev|prod] [--no-prune-seen] [--verbose] [--include-index] [--include-notifications]
+ *   node bin/dump-dashboard.mjs <cognito-sub> [--stage dev|prod] [--verbose] [--include-index] [--include-notifications]
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -48,13 +48,12 @@ const STAGES = {
 };
 
 function usage() {
-  console.error(`Usage: node bin/dump-dashboard.mjs <cognito-sub> [--stage dev|prod] [--no-prune-seen] [--verbose] [--include-index] [--include-notifications]
+  console.error(`Usage: node bin/dump-dashboard.mjs <cognito-sub> [--stage dev|prod] [--verbose] [--include-index] [--include-notifications]
 
 Options:
   --stage dev|prod     AWS profile + DynamoDB table (default: dev)
-  --no-prune-seen      Keep completed games that me_dashboard would prune in-memory (seen >7d, no newer chat)
   --verbose            Print source counts to stderr
-  --include-index      Include currentRows and recentCompletedRows in output (debug)
+  --include-index      Include raw CURRENTGAMES# rows in output (debug)
   --include-notifications  Include in-app NOTIFICATION# feed (refreshExpiry: false; read-only)
   --help, -h           Show this help
 
@@ -76,7 +75,6 @@ function ensureCompiledLib() {
 function parseArgs(argv) {
   let userId;
   let stage = 'dev';
-  let pruneSeen = true;
   let verbose = false;
   let includeIndex = false;
   let includeNotifications = false;
@@ -85,8 +83,6 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--stage' && argv[i + 1]) {
       stage = argv[++i];
-    } else if (arg === '--no-prune-seen') {
-      pruneSeen = false;
     } else if (arg === '--verbose') {
       verbose = true;
     } else if (arg === '--include-index') {
@@ -111,7 +107,7 @@ function parseArgs(argv) {
     usage();
   }
 
-  return { userId, stage, pruneSeen, verbose, includeIndex, includeNotifications };
+  return { userId, stage, verbose, includeIndex, includeNotifications };
 }
 
 function toIdArray(value) {
@@ -128,7 +124,7 @@ function toIdArray(value) {
 }
 
 async function main() {
-  const { userId, stage, pruneSeen, verbose, includeIndex, includeNotifications } = parseArgs(process.argv);
+  const { userId, stage, verbose, includeIndex, includeNotifications } = parseArgs(process.argv);
   ensureCompiledLib();
 
   const {

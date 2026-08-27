@@ -4,15 +4,14 @@
  * Dashboard index maintenance (admin ops).
  *
  * Steps (index-only; does not read USER.games[]):
- *   prune-stale-recent-completed — Delete RECENTCOMPLETED# rows not dashboard-eligible (legacy; prefer purge-all-recent-completed)
- *   purge-all-recent-completed   — Delete every RECENTCOMPLETED# row
- *   purge-usergame-orphans       — Delete USERGAME# rows not on CURRENTGAMES#
+ *   purge-all-recent-completed — Delete every legacy RECENTCOMPLETED# row (should be empty after Phase 4)
+ *   purge-usergame-orphans     — Delete USERGAME# rows not on CURRENTGAMES#
  *
  * Meta game counts: use admin authQuery `update_meta_game_counts` (live recount to METAGAMES#), not this script.
  *
  * Usage:
  *   node bin/dashboard-index-maintenance.mjs [--stage dev|prod] [--dry-run]
- *     --step prune-stale-recent-completed|purge-usergame-orphans [--user-id <cognitoSub>]
+ *     --step purge-all-recent-completed|purge-usergame-orphans [--user-id <cognitoSub>]
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -36,10 +35,7 @@ const STAGES = {
   },
 };
 
-const COMPLETED_DASHBOARD_RETENTION_MS = 7 * 24 * 3600000;
-
 const STEPS = [
-  'prune-stale-recent-completed',
   'purge-all-recent-completed',
   'purge-usergame-orphans',
 ];
@@ -51,7 +47,6 @@ Options:
   --stage dev|prod                    AWS profile + DynamoDB table (default: dev)
   --dry-run                           Count actions only; do not write
   --step ${STEPS.join('|')}   Required
-  --prune-stale-recent-completed      Shorthand for --step prune-stale-recent-completed
   --purge-all-recent-completed        Shorthand for --step purge-all-recent-completed
   --purge-usergame-orphans            Shorthand for --step purge-usergame-orphans
   --user-id <cognitoSub>              Single user (all steps)
@@ -76,8 +71,6 @@ function parseArgs(argv) {
       step = argv[++i];
     } else if (arg === '--user-id' && argv[i + 1]) {
       userId = argv[++i];
-    } else if (arg === '--prune-stale-recent-completed') {
-      step = 'prune-stale-recent-completed';
     } else if (arg === '--purge-all-recent-completed') {
       step = 'purge-all-recent-completed';
     } else if (arg === '--purge-usergame-orphans') {
@@ -104,53 +97,6 @@ function parseArgs(argv) {
   }
 
   return { stage, dryRun, step, userId };
-}
-
-function isActiveDashboardGame(game) {
-  return game.toMove !== '' && game.toMove !== null && game.toMove !== undefined;
-}
-
-function shouldBeOnCompletedDashboard(game, now = Date.now()) {
-  if (isActiveDashboardGame(game)) {
-    return false;
-  }
-  if (game.seen === undefined) {
-    return true;
-  }
-  if ((game.lastChat || 0) > game.seen) {
-    return true;
-  }
-  return now - game.seen <= COMPLETED_DASHBOARD_RETENTION_MS;
-}
-
-function recentCompletedRowToGame(row) {
-  return {
-    id: row.id ?? row.sk,
-    metaGame: row.metaGame,
-    toMove: row.toMove ?? '',
-    lastMoveTime: row.lastMoveTime,
-    seen: row.seen,
-    lastChat: row.lastChat,
-  };
-}
-
-function completedGameForEligibility(row, overlayById) {
-  const base = recentCompletedRowToGame(row);
-  const overlay = overlayById.get(row.sk);
-  const result = { ...base };
-  const seen = overlay?.seen ?? base.seen;
-  const lastChat = overlay?.lastChat ?? base.lastChat;
-  if (seen !== undefined) {
-    result.seen = seen;
-  } else {
-    delete result.seen;
-  }
-  if (lastChat !== undefined) {
-    result.lastChat = lastChat;
-  } else {
-    delete result.lastChat;
-  }
-  return result;
 }
 
 async function getUserRecord(docClient, tableName, userId) {
@@ -238,72 +184,6 @@ async function queryPartition(docClient, tableName, pk) {
   } while (lastEvaluatedKey);
 
   return items;
-}
-
-function eligibleDashboardGameIds(currentGameRows, recentCompletedRows, overlayById, now = Date.now()) {
-  const ids = new Set();
-  for (const row of currentGameRows) {
-    if (row.sk) {
-      ids.add(row.sk);
-    }
-  }
-  for (const row of recentCompletedRows) {
-    const merged = completedGameForEligibility(row, overlayById);
-    if (row.sk && shouldBeOnCompletedDashboard(merged, now)) {
-      ids.add(row.sk);
-    }
-  }
-  return ids;
-}
-
-async function pruneStaleRecentCompletedForUser(docClient, tableName, userId, dryRun, stats) {
-  const recentCompletedRows = await queryPartition(docClient, tableName, `RECENTCOMPLETED#${userId}`);
-  const userGameRows = await queryUserGameRows(docClient, tableName, userId);
-  const overlayById = new Map(userGameRows.map(row => [row.sk, row]));
-  const now = Date.now();
-
-  for (const row of recentCompletedRows) {
-    const merged = completedGameForEligibility(row, overlayById);
-    if (shouldBeOnCompletedDashboard(merged, now)) {
-      continue;
-    }
-    if (dryRun) {
-      stats.recentCompletedPruned = (stats.recentCompletedPruned ?? 0) + 1;
-      continue;
-    }
-    await docClient.send(new DeleteCommand({
-      TableName: tableName,
-      Key: { pk: row.pk, sk: row.sk },
-    }));
-    stats.recentCompletedPruned = (stats.recentCompletedPruned ?? 0) + 1;
-  }
-}
-
-async function pruneStaleRecentCompleted(docClient, tableName, { dryRun, userId }) {
-  const stats = { users: 0 };
-
-  console.log('\nPruning stale RECENTCOMPLETED# rows (not dashboard-eligible with USERGAME# overlays)…');
-
-  if (userId) {
-    const user = await getUserRecord(docClient, tableName, userId);
-    if (!user) {
-      console.error(`No USER record for ${userId}`);
-      return stats;
-    }
-    stats.users = 1;
-    await pruneStaleRecentCompletedForUser(docClient, tableName, userId, dryRun, stats);
-    return stats;
-  }
-
-  const userIds = await scanAllUserIds(docClient, tableName);
-  stats.users = userIds.length;
-  console.log(`  found ${userIds.length} USER records`);
-
-  for (const id of userIds) {
-    await pruneStaleRecentCompletedForUser(docClient, tableName, id, dryRun, stats);
-  }
-
-  return stats;
 }
 
 async function purgeAllRecentCompletedForUser(docClient, tableName, userId, dryRun, stats) {
@@ -426,11 +306,6 @@ async function main() {
   console.log(`Step: ${step}`);
   if (userId) {
     console.log(`User id: ${userId}`);
-  }
-
-  if (step === 'prune-stale-recent-completed') {
-    const stats = await pruneStaleRecentCompleted(docClient, table, { dryRun, userId });
-    printStats('RECENTCOMPLETED prune', stats);
   }
 
   if (step === 'purge-all-recent-completed') {

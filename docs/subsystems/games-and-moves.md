@@ -9,7 +9,7 @@ pk: GAME
 sk: <metaGame>#0#<gameid>
 ```
 
-When a game completes, the completion bit becomes `1` and summary rows are written to `COMPLETEDGAMES*` families. The live dashboard is built from per-user index rows (`CURRENTGAMES#`, `RECENTCOMPLETED#`) merged with `USERGAME#` overlays (`seen`, `lastChat`). Legacy `USER.games[]` on the `USER` record is retired (Phase 5).
+When a game completes, the completion bit becomes `1` and summary rows are written to `COMPLETEDGAMES*` families. The live dashboard is built from `CURRENTGAMES#` merged with `USERGAME#` overlays (`seen`, `lastChat`) for active games. Legacy `USER.games[]` on the `USER` record is retired (Phase 5).
 
 ## Lifecycle
 
