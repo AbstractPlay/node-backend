@@ -93,6 +93,9 @@ jobs:
       env:
         CI: false
 
+    - name: Test (Lambda init smoke)
+      run: npm test
+
     - name: Configure AWS credentials
       uses: Fooji/create-aws-profile-action@v1
       with:
