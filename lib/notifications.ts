@@ -14,6 +14,80 @@ export const NOTIFICATION_SEEN_TTL_DAYS = 7;
 
 const SEC_PER_DAY = 86_400;
 
+export const IN_APP_NOTIFICATION_CATEGORIES = [
+  'challenges',
+  'gameStart',
+  'gameEnd',
+  'ratingChange',
+  'eventInvitation',
+  'completedGameChat',
+] as const;
+
+export type InAppNotificationCategory = typeof IN_APP_NOTIFICATION_CATEGORIES[number];
+
+export type InAppNotificationUserSettings = {
+  all?: {
+    inAppNotifications?: Partial<Record<InAppNotificationCategory, boolean>>;
+    [k: string]: unknown;
+  };
+  [k: string]: unknown;
+};
+
+export type InAppSettingsByUserId = ReadonlyMap<
+  string,
+  InAppNotificationUserSettings | undefined
+>;
+
+export function inAppSettingsMapFromUsers(
+  users: ReadonlyArray<{ id: string; settings?: unknown }>,
+): Map<string, InAppNotificationUserSettings | undefined> {
+  return new Map(users.map(u => [u.id, u.settings as InAppNotificationUserSettings | undefined]));
+}
+
+export function inAppCategoryForBody(body: NotificationBody): InAppNotificationCategory {
+  switch (body.type) {
+    case 'challengeIssued':
+    case 'challengeDeclined':
+    case 'challengeRevoked':
+      return 'challenges';
+    case 'gameStart':
+      return 'gameStart';
+    case 'gameEnd':
+      return 'gameEnd';
+    case 'ratingChange':
+      return 'ratingChange';
+    case 'eventInvitation':
+      return 'eventInvitation';
+    case 'completedGameChat':
+      return 'completedGameChat';
+    default: {
+      const _exhaustive: never = body;
+      return _exhaustive;
+    }
+  }
+}
+
+export function wantsInAppNotification(
+  settings: InAppNotificationUserSettings | undefined,
+  category: InAppNotificationCategory,
+): boolean {
+  const prefs = settings?.all?.inAppNotifications;
+  if (prefs === undefined) {
+    return true;
+  }
+  if (!Object.prototype.hasOwnProperty.call(prefs, category)) {
+    return true;
+  }
+  return prefs[category] === true;
+}
+
+function userSettingsFromMap(
+  settingsByUserId: InAppSettingsByUserId | undefined,
+  userId: string,
+): InAppNotificationUserSettings | undefined {
+  return settingsByUserId?.get(userId);
+}
+
 export type NotificationBody =
   | {
     type: 'gameStart';
@@ -189,13 +263,22 @@ export function buildNotificationItem(
   };
 }
 
+export type CreateNotificationOptions = {
+  userSettings?: InAppNotificationUserSettings;
+};
+
 export async function createNotification(
   client: DynamoDBDocumentClient,
   tableName: string,
   userId: string,
   body: NotificationBody,
+  options?: CreateNotificationOptions,
 ): Promise<void> {
   if (await isBotId(userId)) {
+    return;
+  }
+  const category = inAppCategoryForBody(body);
+  if (!wantsInAppNotification(options?.userSettings, category)) {
     return;
   }
   await putNotificationItem(client, tableName, userId, body);
@@ -303,6 +386,7 @@ export async function enqueueGameStartNotifications(
   client: DynamoDBDocumentClient,
   tableName: string,
   game: NotificationGame,
+  settingsByUserId?: InAppSettingsByUserId,
 ): Promise<void> {
   const humanIds = await filterHumanIds(game.players.map(p => p.id));
   const humanPlayers = game.players.filter(p => humanIds.includes(p.id));
@@ -320,6 +404,8 @@ export async function enqueueGameStartNotifications(
       variants,
       opponentId: opponent.id,
       opponentName: opponent.name,
+    }, {
+      userSettings: userSettingsFromMap(settingsByUserId, player.id),
     });
   }));
 }
@@ -328,6 +414,7 @@ export async function enqueueGameEndNotifications(
   client: DynamoDBDocumentClient,
   tableName: string,
   game: NotificationGame,
+  settingsByUserId?: InAppSettingsByUserId,
 ): Promise<void> {
   const variants = gameVariants(game);
   const work: Promise<void>[] = [];
@@ -340,6 +427,8 @@ export async function enqueueGameEndNotifications(
       metaGame: game.metaGame,
       variants,
       result: gameEndResult(game, player.id),
+    }, {
+      userSettings: userSettingsFromMap(settingsByUserId, player.id),
     }));
   }
 
@@ -407,6 +496,7 @@ export async function enqueueEventInvitationNotifications(
   tableName: string,
   inviteeIds: string[],
   invitation: EventInvitationNotification,
+  settingsByUserId?: InAppSettingsByUserId,
 ): Promise<void> {
   const humanIds = await filterHumanIds(inviteeIds);
   await Promise.all(humanIds.map(inviteeId => createNotification(client, tableName, inviteeId, {
@@ -415,6 +505,8 @@ export async function enqueueEventInvitationNotifications(
     eventName: invitation.eventName,
     organizerId: invitation.organizerId,
     organizerName: invitation.organizerName,
+  }, {
+    userSettings: userSettingsFromMap(settingsByUserId, inviteeId),
   })));
 }
 
@@ -462,7 +554,7 @@ export async function enqueueCompletedGameChatNotifications(
   variants: string[] | undefined,
   players: CompletedGameChatPlayer[],
   commenterId: string,
-  options?: { backfill?: boolean },
+  options?: { backfill?: boolean; settingsByUserId?: InAppSettingsByUserId },
 ): Promise<void> {
   const variantList = variants ?? [];
   const commenter = players.find(p => p.id === commenterId);
@@ -488,6 +580,8 @@ export async function enqueueCompletedGameChatNotifications(
         commenterId,
         commenterName,
         ...(options?.backfill ? { backfill: true } : {}),
+      }, {
+        userSettings: userSettingsFromMap(options?.settingsByUserId, player.id),
       });
     })());
   }
