@@ -98,7 +98,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - sk: `<epochMs>#<random>`
   - fields: `body` (typed JSON object), `expiresAt` (TTL seconds; 180 days on create, tightened to 7 days on first dashboard fetch)
   - no GSI
-  - `body.type` values: `gameStart`, `gameEnd`, `ratingChange`, `challengeIssued`, `challengeDeclined`, `challengeRevoked`, `eventInvitation`
+  - `body.type` values: `gameStart`, `gameEnd`, `ratingChange`, `challengeIssued`, `challengeDeclined`, `challengeRevoked`, `eventInvitation`, `completedGameChat`
   - `eventInvitation` is sent when an organizer saves the invite list on a moderated `ORGEVENT` (`event_update_invites`); not used for automated tournaments. Body includes `eventId`, `eventName`, `organizerId`, `organizerName`. Inspect rows with `bin/dump-dashboard.mjs` `--include-notifications` (read-only; does not refresh TTL)
 
 ## Game lists
@@ -108,9 +108,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - sk: `<gameid>`
   - summary fields mirror dashboard `Game` objects (`id`, `metaGame`, `players`, `toMove`, `lastMoveTime`, `numMoves`, etc.)
 
-- **Recent completed games by player** — **deprecated** legacy completed-dashboard index. No longer written; purge with `purge-all-recent-completed`. Post-game chat uses `completedGameChat` notifications.
-  - pk: `RECENTCOMPLETED#<userid>`
-  - sk: `<gameid>`
+- **Recent completed games by player** — moved to **Retired** below
 
 - **Completed games by metaGame** — summary rows for the completed-games page
   - pk: `COMPLETEDGAMES#<metaGame>`
@@ -122,6 +120,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 
 **Retired (no longer written; purged from prod — zero rows remain):**
 
+- pk: `RECENTCOMPLETED#<userid>`, sk: `<gameid>` — legacy completed-dashboard index; post-game chat uses `completedGameChat` notifications
 - pk: `COMPLETEDGAMES`, sk: `<timestamp>#<gameid>` — legacy global list
 - pk: `COMPLETEDGAMES#<metaGame>#<userid>`, sk: `<timestamp>#<gameid>` — legacy per-player-per-game index
 

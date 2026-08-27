@@ -8885,8 +8885,8 @@ async function fixGames(userId: string, pars: { targetId: string }) {
       message: 'fix_games no longer rebuilds USER.games[]. Dashboard membership is index-only (CURRENTGAMES#, USERGAME#).',
       useInstead: [
         'Verify: node bin/verify-dashboard-index.mjs --stage prod --verbose <userId>',
-        'Purge legacy RECENTCOMPLETED#: node bin/dashboard-index-maintenance.mjs --stage prod --step purge-all-recent-completed',
         'Purge USERGAME# orphans: node bin/dashboard-index-maintenance.mjs --stage prod --step purge-usergame-orphans --user-id <userId>',
+        'If legacy RECENTCOMPLETED# rows reappear: node bin/dashboard-index-maintenance.mjs --stage prod --step purge-all-recent-completed',
       ],
       targetId: pars.targetId,
     }),

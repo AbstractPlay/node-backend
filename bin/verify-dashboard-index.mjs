@@ -8,9 +8,8 @@
  *
  * Fails when:
  *   - CURRENTGAMES# row is not active (empty toMove)
- *   - Same game id appears in CURRENTGAMES# and RECENTCOMPLETED#
- *   - RECENTCOMPLETED# row is not dashboard-eligible (merged USERGAME# overlays)
- *   - USERGAME# row is not on the user's index dashboard (orphan)
+ *   - Any RECENTCOMPLETED# row remains (legacy index retired; use purge-all-recent-completed)
+ *   - USERGAME# row is not on CURRENTGAMES# (orphan overlay)
  *
  * Usage:
  *   node bin/verify-dashboard-index.mjs <userid> [userid...] [--stage dev|prod] [--verbose]
@@ -35,12 +34,10 @@ const STAGES = {
   },
 };
 
-const COMPLETED_DASHBOARD_RETENTION_MS = 7 * 24 * 3600000;
-
 function usage() {
   console.error(`Usage: node bin/verify-dashboard-index.mjs <userid> [userid...] [--stage dev|prod] [--verbose]
 
-Index-only dashboard verify (CURRENTGAMES#, RECENTCOMPLETED#, USERGAME#).
+Index-only dashboard verify (CURRENTGAMES#, USERGAME#; RECENTCOMPLETED# must be empty).
 
 Options:
   --stage dev|prod   AWS profile + DynamoDB table (default: dev)
@@ -84,43 +81,6 @@ function parseArgs(argv) {
 
 function isActiveDashboardGame(game) {
   return game.toMove !== '' && game.toMove !== null && game.toMove !== undefined;
-}
-
-function shouldBeOnCompletedDashboard(game, now) {
-  if (isActiveDashboardGame(game)) {
-    return false;
-  }
-  if (game.seen === undefined) {
-    return true;
-  }
-  if ((game.lastChat || 0) > game.seen) {
-    return true;
-  }
-  return now - game.seen <= COMPLETED_DASHBOARD_RETENTION_MS;
-}
-
-function applyOverlayFields(game, overlayRow) {
-  const result = { ...game };
-  if (overlayRow?.seen !== undefined) {
-    result.seen = overlayRow.seen;
-  } else {
-    delete result.seen;
-  }
-  if (overlayRow?.lastChat !== undefined) {
-    result.lastChat = overlayRow.lastChat;
-  } else {
-    delete result.lastChat;
-  }
-  return result;
-}
-
-function recentCompletedRowToGame(row) {
-  return {
-    id: row.id ?? row.sk,
-    metaGame: row.metaGame,
-    toMove: row.toMove ?? '',
-    lastMoveTime: row.lastMoveTime,
-  };
 }
 
 function summarizeOverlay(source) {
@@ -173,40 +133,21 @@ async function verifyUser(docClient, table, userId, verbose) {
     };
   }
 
-  const now = Date.now();
-
   const currentGames = await queryPartition(docClient, table, `CURRENTGAMES#${userId}`);
   const recentCompletedGames = await queryPartition(docClient, table, `RECENTCOMPLETED#${userId}`);
   const userGameRows = await queryPartition(docClient, table, `USERGAME#${userId}`);
 
   const currentIds = new Set(currentGames.map(row => row.sk));
-  const userGameById = new Map(userGameRows.map(row => [row.sk, row]));
 
   const inactiveCurrentRows = currentGames.filter(row => !isActiveDashboardGame(row));
-  const overlapIds = [...currentIds].filter(id => recentCompletedGames.some(row => row.sk === id));
-
-  const eligibleRecentIds = new Set();
-  const ineligibleRecentRows = [];
-  for (const row of recentCompletedGames) {
-    const merged = applyOverlayFields(recentCompletedRowToGame(row), userGameById.get(row.sk));
-    if (shouldBeOnCompletedDashboard(merged, now)) {
-      eligibleRecentIds.add(row.sk);
-    } else {
-      ineligibleRecentRows.push(row);
-    }
-  }
-
-  const dashboardIds = new Set([...currentIds, ...eligibleRecentIds]);
-  const orphanUserGameRows = userGameRows.filter(row => !dashboardIds.has(row.sk));
+  const orphanUserGameRows = userGameRows.filter(row => !currentIds.has(row.sk));
 
   const currentRowsActive = inactiveCurrentRows.length === 0;
-  const noCurrentRecentOverlap = overlapIds.length === 0;
-  const recentCompletedClean = ineligibleRecentRows.length === 0;
+  const recentCompletedEmpty = recentCompletedGames.length === 0;
   const userGameOrphansClear = orphanUserGameRows.length === 0;
 
   const healthy = currentRowsActive
-    && noCurrentRecentOverlap
-    && recentCompletedClean
+    && recentCompletedEmpty
     && userGameOrphansClear;
 
   const result = {
@@ -215,14 +156,12 @@ async function verifyUser(docClient, table, userId, verbose) {
     healthy,
     checks: {
       currentRowsActive,
-      noCurrentRecentOverlap,
-      recentCompletedClean,
+      recentCompletedEmpty,
       userGameOrphansClear,
     },
     counts: {
       currentGames: currentGames.length,
       recentCompleted: recentCompletedGames.length,
-      eligibleRecent: eligibleRecentIds.size,
       userGameOverlays: userGameRows.length,
     },
     issues: [],
@@ -231,11 +170,8 @@ async function verifyUser(docClient, table, userId, verbose) {
   if (!currentRowsActive) {
     result.issues.push(`inactive CURRENTGAMES# (${inactiveCurrentRows.length})`);
   }
-  if (!noCurrentRecentOverlap) {
-    result.issues.push(`CURRENT+RECENT overlap (${overlapIds.length})`);
-  }
-  if (!recentCompletedClean) {
-    result.issues.push(`stale RECENTCOMPLETED# (${ineligibleRecentRows.length})`);
+  if (!recentCompletedEmpty) {
+    result.issues.push(`legacy RECENTCOMPLETED# (${recentCompletedGames.length})`);
   }
   if (!userGameOrphansClear) {
     result.issues.push(`USERGAME# orphans (${orphanUserGameRows.length})`);
@@ -244,10 +180,8 @@ async function verifyUser(docClient, table, userId, verbose) {
   if (verbose) {
     result.details = {
       inactiveCurrentRows,
-      overlapIds,
-      ineligibleRecentRows,
+      recentCompletedGames,
       orphanUserGameRows,
-      userGameById,
     };
   }
 
@@ -270,14 +204,13 @@ function printUserReport(result, stage, table, verbose) {
   console.log('');
   console.log('Index counts:');
   console.log(`  CURRENTGAMES#:        ${c.currentGames}`);
-  console.log(`  RECENTCOMPLETED#:     ${c.recentCompleted} (${c.eligibleRecent} eligible)`);
+  console.log(`  RECENTCOMPLETED#:     ${c.recentCompleted} (legacy; expect 0)`);
   console.log(`  USERGAME# overlays:   ${c.userGameOverlays}`);
   console.log('');
   console.log('Checks:');
-  console.log(`  CURRENTGAMES# all active: ${ch.currentRowsActive ? 'yes' : 'NO'}`);
-  console.log(`  no CURRENT∩RECENT:        ${ch.noCurrentRecentOverlap ? 'yes' : 'NO'}`);
-  console.log(`  RECENTCOMPLETED# clean:   ${ch.recentCompletedClean ? 'yes' : 'NO'}`);
-  console.log(`  USERGAME# no orphans:     ${ch.userGameOrphansClear ? 'yes' : 'NO'}`);
+  console.log(`  CURRENTGAMES# all active:   ${ch.currentRowsActive ? 'yes' : 'NO'}`);
+  console.log(`  RECENTCOMPLETED# empty:     ${ch.recentCompletedEmpty ? 'yes' : 'NO'}`);
+  console.log(`  USERGAME# no orphans:       ${ch.userGameOrphansClear ? 'yes' : 'NO'}`);
   console.log('');
   console.log(`DASHBOARD INDEX OK: ${result.healthy ? 'YES' : 'NO'}`);
   if (result.issues.length > 0) {
@@ -291,17 +224,10 @@ function printUserReport(result, stage, table, verbose) {
         console.log(`  ${row.sk} (${row.metaGame}) toMove=${JSON.stringify(row.toMove)}`);
       }
     }
-    if (result.details.overlapIds.length > 0) {
-      console.log('\nGame ids in both CURRENTGAMES# and RECENTCOMPLETED#:');
-      for (const id of result.details.overlapIds) {
-        console.log(`  ${id}`);
-      }
-    }
-    if (result.details.ineligibleRecentRows.length > 0) {
-      console.log('\nStale RECENTCOMPLETED# (not dashboard-eligible):');
-      for (const row of result.details.ineligibleRecentRows) {
-        const overlay = result.details.userGameById.get(row.sk) ?? {};
-        console.log(`  ${row.sk} (${row.metaGame}) ${summarizeOverlay(overlay)}`);
+    if (result.details.recentCompletedGames.length > 0) {
+      console.log('\nLegacy RECENTCOMPLETED# rows (should be purged):');
+      for (const row of result.details.recentCompletedGames) {
+        console.log(`  ${row.sk} (${row.metaGame})`);
       }
     }
     if (result.details.orphanUserGameRows.length > 0) {

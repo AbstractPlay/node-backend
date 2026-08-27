@@ -141,7 +141,7 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 
 ## Admin and maintenance
 
-Post–Phase 5 the dashboard is **index-only** (`CURRENTGAMES#`, `RECENTCOMPLETED#`, `USERGAME#`). Legacy `USER.games[]` is retired.
+Post–Phase 5 the dashboard is **index-only** (`CURRENTGAMES#`, `USERGAME#`). Legacy `USER.games[]` and `RECENTCOMPLETED#` are retired.
 
 ### Still supported (authQuery)
 
@@ -156,7 +156,7 @@ Post–Phase 5 the dashboard is **index-only** (`CURRENTGAMES#`, `RECENTCOMPLETE
 `delete_games` removes, per game id:
 
 - `GAME`, `NOTE`, `GAMECOMMENTS`, exploration branches
-- `CURRENTGAMES#` / `RECENTCOMPLETED#` / `USERGAME#` for human participants
+- `CURRENTGAMES#` / `USERGAME#` for human participants (stream projector also deletes legacy `RECENTCOMPLETED#` on game remove)
 - `WATCHED#` / `GAMEWATCHERS#`, participant `HIGHLIGHT#`, `REPRESENTATIVE#` / `PLAYER#` recommendation rows
 - Sharded meta counts (`currentgames` for active deletes; completed deletes rely on the stream projector for `completedgames` after `GAME` removal)
 
@@ -169,7 +169,7 @@ Do **not** run these from the admin UI; use the replacement instead.
 | Query | Replacement |
 |-------|-------------|
 | `me` | `me_profile` (site-wide bootstrap) and `me_dashboard` (`/me` page). `size: small` is not supported. |
-| `fix_games` | `bin/verify-dashboard-index.mjs` then `bin/dashboard-index-maintenance.mjs --step purge-all-recent-completed` / `purge-usergame-orphans --user-id <cognitoSub>` |
+| `fix_games` | `bin/verify-dashboard-index.mjs` then `bin/dashboard-index-maintenance.mjs --step purge-usergame-orphans --user-id <cognitoSub>` |
 | `purge_retired_completed_games` | One-time purge complete (no retired rows remain) |
 | `onetime_fix` | No replacement (legacy `USERS` directory sync) |
 
@@ -178,15 +178,12 @@ Do **not** run these from the admin UI; use the replacement instead.
 | Task | Command |
 |------|---------|
 | Dashboard health check | `node bin/verify-dashboard-index.mjs --stage prod [--verbose] <userId>…` |
-| Prune stale `RECENTCOMPLETED#` (legacy eligibility) | `node bin/dashboard-index-maintenance.mjs --stage prod --step prune-stale-recent-completed [--user-id <id>]` |
-| Purge all `RECENTCOMPLETED#` | `node bin/dashboard-index-maintenance.mjs --stage prod --step purge-all-recent-completed [--user-id <id>]` |
+| Purge legacy `RECENTCOMPLETED#` (if rows reappear) | `node bin/dashboard-index-maintenance.mjs --stage prod --step purge-all-recent-completed [--user-id <id>]` |
 | Purge `USERGAME#` orphans | `node bin/dashboard-index-maintenance.mjs --stage prod --step purge-usergame-orphans [--user-id <id>]` |
-| Backfill completed-game chat notifications | `npm run build-ts` then `node bin/backfill-completed-game-chat-notifications.mjs --stage prod [--dry-run] [--user-id <id>]` |
 
 ```bash
 # Example dashboard repair for one user
 node bin/verify-dashboard-index.mjs --stage prod --verbose <cognitoSub>
-node bin/dashboard-index-maintenance.mjs --stage prod --step prune-stale-recent-completed --user-id <cognitoSub>
 node bin/dashboard-index-maintenance.mjs --stage prod --step purge-usergame-orphans --user-id <cognitoSub>
 node bin/verify-dashboard-index.mjs --stage prod <cognitoSub>
 ```
