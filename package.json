@@ -26,8 +26,10 @@
   },
   "homepage": "https://github.com/AbstractPlay/node-backend#readme",
   "engines": {
-    "node": ">=24"
+    "node": ">=24",
+    "npm": "11.6.2"
   },
+  "packageManager": "npm@11.6.2",
   "dependencies": {
     "@abstractplay/gameslib": "1.0.0-ci-32781458213.0",
     "@abstractplay/recranks": "latest",
@@ -61,7 +63,6 @@
     "eslint": "^8.39.0",
     "i": "^0.3.7",
     "i18next-parser": "^7.7.0",
-    "npm": "^9.6.6",
     "serverless-esbuild": "^1.57.0",
     "serverless-plugin-common-excludes": "^4.0.0",
     "serverless-plugin-include-dependencies": "^5.1.0",

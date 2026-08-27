@@ -21,6 +21,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Pin npm
+        run: npm install -g npm@11.6.2
+
       - name: Create .npmrc
         run: echo "@abstractplay:registry=https://npm.pkg.github.com/" > .npmrc
       - run: echo "//npm.pkg.github.com/:_authToken=${{secrets.PAT_READ_PACKAGES}}" >> .npmrc

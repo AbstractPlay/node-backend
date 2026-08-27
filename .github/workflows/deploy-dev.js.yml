@@ -46,6 +46,9 @@ jobs:
       with:
         node-version: 24
 
+    - name: Pin npm
+      run: npm install -g npm@11.6.2
+
     - name: Install Serverless Framework
       run: npm install -g serverless@3.40.0
 
