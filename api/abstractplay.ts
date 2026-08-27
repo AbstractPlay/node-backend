@@ -142,9 +142,11 @@ import {
   enqueueCompletedGameChatNotifications,
   enqueueGameEndNotifications,
   enqueueGameStartNotifications,
+  inAppSettingsMapFromUsers,
   loadNotificationsForDashboard,
   optionalNotificationNote,
   resolveEventInvitationNotifyIds,
+  type InAppNotificationUserSettings,
   type NotificationGame,
 } from '../lib/notifications';
 
@@ -230,6 +232,14 @@ export type UserSettings = {
       yourturn: boolean;
       tournamentStart: boolean;
       tournamentEnd: boolean;
+    };
+    inAppNotifications?: {
+      challenges: boolean;
+      gameStart: boolean;
+      gameEnd: boolean;
+      ratingChange: boolean;
+      eventInvitation: boolean;
+      completedGameChat: boolean;
     }
   }
 };
@@ -3782,6 +3792,7 @@ async function startSoloGame(userid: string, pars: {
       variants: built.variants,
       players: gamePlayers.map(p => ({ id: p.id, name: p.name })),
     },
+    inAppSettingsMapFromUsers([{ id: player.id, settings: player.settings }]),
   );
 
   return {
@@ -3866,6 +3877,8 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
         list.push(sendChallengedEmail(challenge.challenger.name, humanChallengees as User[], challenge.metaGame, challenge.comment));
         const tableName = process.env.ABSTRACT_PLAY_TABLE!;
         const challengeNote = optionalNotificationNote(challenge.comment);
+        const challengeePlayers = await getPlayers(humanChallengees.map(c => c.id));
+        const challengeeSettings = inAppSettingsMapFromUsers(challengeePlayers);
         for (const challengee of humanChallengees) {
           list.push(createNotification(ddbDocClient, tableName, challengee.id, {
             type: 'challengeIssued',
@@ -3874,6 +3887,8 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
             challengerId: challenge.challenger.id,
             challengerName: challenge.challenger.name,
             ...(challengeNote ? { note: challengeNote } : {}),
+          }, {
+            userSettings: challengeeSettings.get(challengee.id),
           }));
         }
       }
@@ -4074,6 +4089,8 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
             revokerId: userid,
             revokerName,
             ...(revokeNote ? { note: revokeNote } : {}),
+          }, {
+            userSettings: player.settings as InAppNotificationUserSettings | undefined,
           }));
         }
       }
@@ -4115,6 +4132,8 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
             revokerId: userid,
             revokerName,
             ...(revokeNote ? { note: revokeNote } : {}),
+          }, {
+            userSettings: player.settings as InAppNotificationUserSettings | undefined,
           }));
         }
       }
@@ -4257,6 +4276,8 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
             declinerId: userid,
             declinerName: quitter,
             ...(declineNote ? { note: declineNote } : {}),
+          }, {
+            userSettings: player.settings as InAppNotificationUserSettings | undefined,
           }));
         }
       }
@@ -4513,6 +4534,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
           variants: engine.variants,
           players: gamePlayers.map(p => ({ id: p.id, name: p.name })),
         },
+        inAppSettingsMapFromUsers(playersFull),
       );
       return {
         metaGame: info.name,
@@ -4636,6 +4658,11 @@ async function getPlayers(playerIDs: string[]) {
     }
   }
   return players;
+}
+
+async function inAppSettingsMapForUserIds(userIds: string[]) {
+  const players = await getPlayers(await filterHumanIds(userIds));
+  return inAppSettingsMapFromUsers(players);
 }
 
 async function getPlayersSlowly(playerIDs: string[]) {
@@ -4877,6 +4904,7 @@ async function submitMove(userid: string, pars: {
         ddbDocClient,
         process.env.ABSTRACT_PLAY_TABLE!,
         toNotificationGame({ ...game, winner: engine.winner, variants: engine.variants }),
+        inAppSettingsMapFromUsers(players),
       ));
     }
     setGameEndedFromEngine(game, engine);
@@ -5285,6 +5313,7 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
     ddbDocClient,
     process.env.ABSTRACT_PLAY_TABLE!,
     toNotificationGame(game),
+    inAppSettingsMapFromUsers(players),
   ));
   await Promise.all(work);
   return game;
@@ -5384,10 +5413,14 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
       game.id,
       playerGame as GameMarkSummary,
     ));
+    const abandonedGameEndSettings = await inAppSettingsMapForUserIds(
+      game.players.map((p: { id: string }) => p.id),
+    );
     work.push(enqueueGameEndNotifications(
       ddbDocClient,
       process.env.ABSTRACT_PLAY_TABLE!,
       toNotificationGame(game),
+      abandonedGameEndSettings,
     ));
     await Promise.all(work);
     return {
@@ -5908,6 +5941,8 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
 
   // Post-game chat: notify opponents via in-app notifications (no completed-dashboard overlay)
   if (pars.updateLastChat && pars.public && pars.players) {
+    const chatPlayerIds = pars.players.map(p => p.id);
+    const chatSettings = await inAppSettingsMapForUserIds(chatPlayerIds);
     await enqueueCompletedGameChatNotifications(
       ddbDocClient,
       process.env.ABSTRACT_PLAY_TABLE!,
@@ -5916,6 +5951,7 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
       gameVariants,
       pars.players.map(p => ({ id: p.id, name: p.name ?? 'Someone' })),
       userid,
+      { settingsByUserId: chatSettings },
     );
   }
 
@@ -7633,6 +7669,7 @@ async function eventUpdateInvites(userid: string, pars: { eventid: string, invit
       newlyInvited,
       pars.eventid,
     );
+    const inviteeSettings = await inAppSettingsMapForUserIds(toNotify);
     await enqueueEventInvitationNotifications(
       ddbDocClient,
       tableName,
@@ -7643,6 +7680,7 @@ async function eventUpdateInvites(userid: string, pars: { eventid: string, invit
         organizerId: userid,
         organizerName: userRec!.name,
       },
+      inviteeSettings,
     );
     return {
       statusCode: 200,
@@ -8149,10 +8187,14 @@ async function eventCreateGames(userid: string, pars: { eventid: string; pairs: 
   // execute all updates
   try {
     await Promise.all(list);
+    const createdGameSettings = await inAppSettingsMapForUserIds(
+      createdGames.flatMap(game => game.players.map(p => p.id)),
+    );
     await Promise.all(createdGames.map(game => enqueueGameStartNotifications(
       ddbDocClient,
       process.env.ABSTRACT_PLAY_TABLE!,
       game,
+      createdGameSettings,
     )));
     return {
       statusCode: 200,

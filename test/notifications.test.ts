@@ -15,11 +15,14 @@ import {
   backfillCompletedGameChatNotification,
   hasActiveCompletedGameChatNotification,
   hasActiveEventInvitationNotification,
+  inAppCategoryForBody,
   loadNotificationsForDashboard,
   notificationInitialExpiresAt,
   notificationPk,
   notificationSeenExpiresAt,
   parseNotificationCreatedAt,
+  putNotificationItem,
+  wantsInAppNotification,
 } from '../lib/notifications';
 
 const TABLE = 'abstract-play-test';
@@ -58,6 +61,9 @@ function createMockDocClient(store: Store) {
       }
       if (command instanceof GetCommand) {
         const key = command.input.Key as { pk: string; sk: string };
+        if (key.pk === 'BOT') {
+          return {};
+        }
         const item = store.get(itemKey(key));
         return item ? { Item: { ...item } } : {};
       }
@@ -87,6 +93,70 @@ test('notificationPk uses NOTIFICATION# prefix', () => {
 
 test('parseNotificationCreatedAt reads sk epoch prefix', () => {
   assert.equal(parseNotificationCreatedAt('1700000000000#abc'), 1700000000000);
+});
+
+describe('inApp notification prefs', () => {
+  test('wantsInAppNotification defaults to true when prefs missing', () => {
+    assert.equal(wantsInAppNotification(undefined, 'gameStart'), true);
+    assert.equal(wantsInAppNotification({}, 'ratingChange'), true);
+    assert.equal(wantsInAppNotification({ all: {} }, 'challenges'), true);
+  });
+
+  test('wantsInAppNotification respects explicit false', () => {
+    assert.equal(
+      wantsInAppNotification({
+        all: { inAppNotifications: { gameEnd: false } },
+      }, 'gameEnd'),
+      false,
+    );
+  });
+
+  test('inAppCategoryForBody maps challenge types to challenges', () => {
+    assert.equal(
+      inAppCategoryForBody({
+        type: 'challengeIssued',
+        challengeId: 'c1',
+        metaGame: 'go',
+        challengerId: 'u2',
+        challengerName: 'Bob',
+      }),
+      'challenges',
+    );
+    assert.equal(
+      inAppCategoryForBody({
+        type: 'ratingChange',
+        metaGame: 'go',
+        variants: [],
+        oldRating: 1000,
+        newRating: 1010,
+        oldRd: 80,
+        newRd: 70,
+        oldProvisional: false,
+        newProvisional: false,
+        delta: 10,
+      }),
+      'ratingChange',
+    );
+  });
+});
+
+describe('putNotificationItem', () => {
+  it('writes without in-app pref gating', async () => {
+    const store: Store = new Map();
+    const client = createMockDocClient(store);
+
+    await putNotificationItem(client as never, TABLE, USER_ID, {
+      type: 'completedGameChat',
+      gameId: GAME_ID,
+      metaGame: 'go',
+      variants: [],
+      commenterId: '',
+      commenterName: '',
+      backfill: true,
+    });
+
+    assert.equal(store.size, 1);
+  });
 });
 
 test('buildNotificationItem sets initial 6-month expiresAt', () => {

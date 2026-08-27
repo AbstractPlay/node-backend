@@ -38,6 +38,17 @@ Push messages use topics such as `challenges` and game-related channels. See `se
 
 Per-user notifications stored under `NOTIFICATION#<userid>` and returned on `me_dashboard` (not on `me_profile`). Users dismiss items via `dismiss_notification` (`pars.sk`). The navbar uses `me_profile` only — notification TTL is **not** refreshed on profile fetches.
 
+Users control which in-app categories are created via `settings.all.inAppNotifications` (separate from email/push `settings.all.notifications`). Toggles live in User Settings on the front end. Missing keys default to enabled (opt-out). `createNotification()` skips writes when a category is disabled; admin backfill uses `putNotificationItem()` and is not gated.
+
+| Pref key | `body.type` values |
+|----------|-------------------|
+| `challenges` | `challengeIssued`, `challengeDeclined`, `challengeRevoked` |
+| `gameStart` | `gameStart` |
+| `gameEnd` | `gameEnd` |
+| `ratingChange` | `ratingChange` (backend-crons daily batch) |
+| `eventInvitation` | `eventInvitation` |
+| `completedGameChat` | `completedGameChat` |
+
 | `body.type` | When created | Front display |
 |-------------|--------------|---------------|
 | `challengeIssued` | Direct challenge opened | Game name links to `/games/{metaGame}`; **View** opens challenge response modal |
