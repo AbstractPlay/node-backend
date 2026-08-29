@@ -240,6 +240,8 @@ export type UserSettings = {
       ratingChange: boolean;
       eventInvitation: boolean;
       completedGameChat: boolean;
+      tournamentStart: boolean;
+      tournamentEnd: boolean;
     }
   }
 };
@@ -5047,16 +5049,18 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
     }
     const players = players0.filter(p => playerIds.includes(p.id));
     const metaGame = gameinfo.get(game.metaGame).name;
-    // Realtime YourTurn notifications are only sent by push
-    for (const player of players) {
-      await changeLanguageForPlayer(player);
-      work.push(sendPush({
-        userId: player.id,
-        topic: "yourturn",
-        title: i18n.t("PUSH.titles.yourturn"),
-        body: i18n.t("YourMoveBody", { metaGame }),
-        url: `/move/${game.metaGame}/0/${game.id}`,
-      }));
+    // Realtime YourTurn notifications are only sent by push (not for solo games — always your turn)
+    if (game.numPlayers !== 1) {
+      for (const player of players) {
+        await changeLanguageForPlayer(player);
+        work.push(sendPush({
+          userId: player.id,
+          topic: "yourturn",
+          title: i18n.t("PUSH.titles.yourturn"),
+          body: i18n.t("YourMoveBody", { metaGame }),
+          url: `/move/${game.metaGame}/0/${game.id}`,
+        }));
+      }
     }
   } else {
     // Game over
@@ -6790,6 +6794,30 @@ async function endATournament(userId: string, pars: { tournamentid: string }) {
   return endTournament(tournament);
 }
 
+function tournamentDivisionNumber(player: TournamentPlayer): number | undefined {
+  if (player.division !== undefined) {
+    return player.division;
+  }
+  const parts = player.sk.split('#');
+  if (parts.length >= 2) {
+    const division = Number(parts[1]);
+    if (Number.isFinite(division) && division > 0) {
+      return division;
+    }
+  }
+  return undefined;
+}
+
+function tournamentDivisionWinnerName(
+  tournament: Tournament,
+  divisionNumber: number | undefined,
+): string | undefined {
+  if (divisionNumber === undefined || tournament.divisions === undefined) {
+    return undefined;
+  }
+  return tournament.divisions[divisionNumber]?.winner;
+}
+
 async function endTournament(tournament: Tournament) {
   try {
     if (tournament.divisions) {
@@ -6939,11 +6967,28 @@ async function endTournament(tournament: Tournament) {
               KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
             }));
           const players = playersData.Items as TournamentPlayer[];
+          const playersById = new Map(players.map(p => [p.playerid, p]));
           // And, in fact, full players (just for e-mail!? and language... Don't want to put these in the tournament player because then those will have to be maintained if e-mail or language changes)
           const playersFull = await getPlayers(players.map(p => p.playerid));
           await initi18n('en');
           const metaGameName = gameinfo.get(tournament.metaGame)?.name;
+          const tableName = process.env.ABSTRACT_PLAY_TABLE!;
           for (const player of playersFull) {
+            const tournamentPlayer = playersById.get(player.id);
+            const divisionNumber = tournamentPlayer
+              ? tournamentDivisionNumber(tournamentPlayer)
+              : undefined;
+            const winnerName = tournamentDivisionWinnerName(tournament, divisionNumber);
+            work.push(createNotification(ddbDocClient, tableName, player.id, {
+              type: 'tournamentEnd',
+              tournamentId: tournament.id,
+              metaGame: tournament.metaGame,
+              number: tournament.number,
+              variants: tournament.variants ?? [],
+              ...(winnerName ? { winnerName } : {}),
+            }, {
+              userSettings: player.settings,
+            }));
             console.log(`Determining whether to send tournamentEnd email to the following player:\n${JSON.stringify(player)}`);
             // eslint-disable-next-line no-prototype-builtins
             if ((player.settings?.all?.notifications === undefined) || (!player.settings.all.notifications.hasOwnProperty("tournamentEnd")) || (player.settings.all.notifications.tournamentEnd)) {
