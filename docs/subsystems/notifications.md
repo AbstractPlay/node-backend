@@ -34,6 +34,8 @@ Implementation: [`utils/yourturn.ts`](../../utils/yourturn.ts).
 
 Push messages use topics such as `challenges` and game-related channels. See `sendPush()` usage in [`api/abstractplay.ts`](../../api/abstractplay.ts).
 
+Realtime `yourturn` push is sent after each move when it becomes a player's turn. Solo games (`numPlayers === 1`) are skipped — the player is always on move.
+
 ## In-app dashboard feed
 
 Per-user notifications stored under `NOTIFICATION#<userid>` and returned on `me_dashboard` (not on `me_profile`). Users dismiss items via `dismiss_notification` (`pars.sk`). The navbar uses `me_profile` only — notification TTL is **not** refreshed on profile fetches.
@@ -48,6 +50,8 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `ratingChange` | `ratingChange` (backend-crons daily batch) |
 | `eventInvitation` | `eventInvitation` |
 | `completedGameChat` | `completedGameChat` |
+| `tournamentStart` | `tournamentStart` (backend-crons `starttournaments`) |
+| `tournamentEnd` | `tournamentEnd` (node-backend `endTournament`) |
 
 | `body.type` | When created | Front display |
 |-------------|--------------|---------------|
@@ -57,6 +61,8 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `gameEnd` | Game ends | **View** links to `/move/{metaGame}/0/{gameId}` |
 | `completedGameChat` | Post-game comment on completed game (`save_exploration` with `updateLastChat`) | **View** links to `/move/{metaGame}/1/{gameId}`; one active notification per game until dismissed; legacy backfill rows use generic message when `body.backfill` |
 | `ratingChange` | Daily batch Glicko diff after summarize (backend-crons) | Game name links to `/ratings/{metaGame}`; variant labels in message when applicable |
+| `tournamentStart` | Tournament series starts (`starttournaments` cron) | Tournament name links to `/tournament/{tournamentId}`; variant labels when applicable; dismiss only |
+| `tournamentEnd` | All tournament divisions complete (`endTournament`) | Tournament name links to `/tournament/{tournamentId}`; includes division winner name when available; dismiss only |
 
 ### Batch `ratingChange` issuer (backend-crons)
 

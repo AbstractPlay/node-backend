@@ -101,6 +101,21 @@ function createMockDocClient(store) {
             newProvisional: false,
             delta: 10,
         }), 'ratingChange');
+        strict_1.default.equal((0, notifications_1.inAppCategoryForBody)({
+            type: 'tournamentStart',
+            tournamentId: 'tour-1',
+            metaGame: 'go',
+            number: 3,
+            variants: [],
+        }), 'tournamentStart');
+        strict_1.default.equal((0, notifications_1.inAppCategoryForBody)({
+            type: 'tournamentEnd',
+            tournamentId: 'tour-1',
+            metaGame: 'go',
+            number: 3,
+            variants: ['small'],
+            winnerName: 'Alice',
+        }), 'tournamentEnd');
     });
 });
 (0, node_test_1.describe)('putNotificationItem', () => {
@@ -132,6 +147,25 @@ function createMockDocClient(store) {
     strict_1.default.equal(item.pk, (0, notifications_1.notificationPk)(USER_ID));
     strict_1.default.equal(item.body.type, 'challengeIssued');
     strict_1.default.ok(Math.abs(item.expiresAt - expected) <= 1);
+});
+(0, node_test_1.test)('tournamentEnd body carries tournament page link fields and optional winner', () => {
+    const item = (0, notifications_1.buildNotificationItem)(USER_ID, {
+        type: 'tournamentEnd',
+        tournamentId: 'tour-abc',
+        metaGame: 'go',
+        number: 5,
+        variants: ['small'],
+        winnerName: 'Alice',
+    });
+    strict_1.default.equal(item.body.type, 'tournamentEnd');
+    if (item.body.type !== 'tournamentEnd') {
+        return;
+    }
+    strict_1.default.equal(item.body.tournamentId, 'tour-abc');
+    strict_1.default.equal(item.body.metaGame, 'go');
+    strict_1.default.equal(item.body.number, 5);
+    strict_1.default.deepEqual(item.body.variants, ['small']);
+    strict_1.default.equal(item.body.winnerName, 'Alice');
 });
 (0, node_test_1.test)('eventInvitation body carries event page link fields', () => {
     const item = (0, notifications_1.buildNotificationItem)(USER_ID, {
