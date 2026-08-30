@@ -12,8 +12,8 @@ import { fileURLToPath } from "url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 
-const ESM_ONLY_PACKAGES = new Set(["nanoid"]);
-const NANOID_MAX_CJS_MAJOR = 3;
+/** @deprecated Phase 4: nanoid v5 is ESM-only; backends that still use CJS will drop this guard in Phase 6. */
+const ESM_ONLY_PACKAGES = new Set([]);
 
 function fail(message) {
   console.error(`check-cjs-runtime-deps: ${message}`);
@@ -55,12 +55,6 @@ function checkKnownEsmOnlyPackages() {
     const version = resolveInstalledVersion(name);
     if (!version) {
       continue;
-    }
-    const major = Number.parseInt(version.split(".")[0], 10);
-    if (name === "nanoid" && major > NANOID_MAX_CJS_MAJOR && !overrides.nanoid) {
-      fail(
-        `${name}@${version} is ESM-only; pin overrides.nanoid to 3.3.x for Lambda CJS`,
-      );
     }
     const moduleDir = path.dirname(require.resolve(`${name}/package.json`));
     if (packageType(moduleDir) === "module" && !overrides[name]) {

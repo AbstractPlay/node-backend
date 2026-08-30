@@ -17,7 +17,7 @@ Downstream repos (e.g. gameslib) can trigger backend redeploys after package pub
 
 Deploy workflows run `npm test` after `npm run build`. `test/lambdaInit.test.js` requires `@abstractplay/gameslib` and `api/abstractplay` the same way Lambda cold-starts do (CommonJS, unbundled `node_modules`).
 
-`npm run lint` also runs `bin/check-cjs-runtime-deps.mjs`, which rejects ESM-only packages such as `nanoid` v4+ without an npm override.
+`npm run lint` also runs `bin/check-cjs-runtime-deps.mjs`, which guards against unexpected ESM-only packages in the Lambda CJS graph (policy is relaxed as libs migrate to ESM).
 
 New dependencies must be `require()`-able from CommonJS on Node 24. The handler packaging uses `serverless-plugin-include-dependencies` (not esbuild).
 

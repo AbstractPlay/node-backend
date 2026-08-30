@@ -31,9 +31,9 @@
   },
   "packageManager": "npm@11.6.2",
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-32781458213.0",
+    "@abstractplay/gameslib": "1.0.0-ci-33324159274.0",
     "@abstractplay/recranks": "latest",
-    "@abstractplay/renderer": "1.0.0-ci-32780767588.0",
+    "@abstractplay/renderer": "1.0.0-ci-33323903690.0",
     "@aws-sdk/client-apigatewaymanagementapi": "^3.957.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1065.0",
     "@aws-sdk/client-dynamodb": "3.1090.0",
@@ -69,11 +69,10 @@
     "typescript": "^5.0.4"
   },
   "overrides": {
-    "nanoid": "3.3.11",
     "splaytree": "3.1.2",
     "@aws-sdk/lib-dynamodb": {
       "@aws-sdk/client-dynamodb": "$@aws-sdk/client-dynamodb"
     },
-    "@abstractplay/renderer": "1.0.0-ci-32780767588.0"
+    "@abstractplay/renderer": "1.0.0-ci-33323903690.0"
   }
 }
