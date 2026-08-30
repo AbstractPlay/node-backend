@@ -646,7 +646,7 @@ async function ensureMissingMetaGameCounts(): Promise<void> {
   await Promise.all(missing.map(metaGame => ensureMetaGameCountEntry(metaGame)));
 }
 
-module.exports.query = async (event: { queryStringParameters: any; body?: string; httpMethod: string; }) => {
+export const query = async (event: { queryStringParameters: any; body?: string; httpMethod: string; }) => {
   console.log(event);
 
   let pars;
@@ -732,7 +732,7 @@ function parseLambdaIntegrationBody(body: string | Record<string, unknown> | und
   return body;
 }
 
-module.exports.botQuery = async (event: { body: string | Record<string, unknown>; cognitoPoolClaims: PartialClaims; }) => {
+export const botQuery = async (event: { body: string | Record<string, unknown>; cognitoPoolClaims: PartialClaims; }) => {
   console.log("botQuery: ", event.body);
   console.log("botQuery claims:", {
     sub: event.cognitoPoolClaims?.sub,
@@ -771,7 +771,7 @@ type PartialClaims = { sub: string; email: string; email_verified: boolean };
 
 // It looks like there is no way to "run and forget", you need to finish all work before returning a response to the front end. :(
 // Make sure the @typescript-eslint/no-floating-promises linter rule passes, otherwise promise might (at best?) only be fullfilled on the next call to the API...
-module.exports.authQuery = async (event: { body: { query: any; pars: any; }; cognitoPoolClaims: PartialClaims; }) => {
+export const authQuery = async (event: { body: { query: any; pars: any; }; cognitoPoolClaims: PartialClaims; }) => {
   console.log("authQuery: ", event.body.query);
   const query = event.body.query;
   const pars = event.body.pars;

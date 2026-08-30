@@ -1,4 +1,27 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -8,8 +31,11 @@ const path_1 = require("path");
 const zlib_1 = require("zlib");
 const node_test_1 = require("node:test");
 const strict_1 = __importDefault(require("node:assert/strict"));
-const gameslib_1 = require("@abstractplay/gameslib");
 const gameState_1 = require("../lib/gameState");
+let GameFactory;
+(0, node_test_1.before)(async () => {
+    ({ GameFactory } = await Promise.resolve().then(() => __importStar(require('@abstractplay/gameslib'))));
+});
 function loadFixture(name) {
     return (0, fs_1.readFileSync)((0, path_1.join)(__dirname, 'fixtures', name), 'utf8').trim();
 }
@@ -34,7 +60,7 @@ const storisendeGz = loadFixture('storisende-gz.txt');
 });
 (0, node_test_1.test)('GameFactory accepts decompressed saltire state', () => {
     const restored = (0, gameState_1.decompressGameState)((0, gameState_1.compressGameStateIfNeeded)(saltireState));
-    const engine = (0, gameslib_1.GameFactory)('saltire', restored);
+    const engine = GameFactory('saltire', restored);
     strict_1.default.ok(engine);
     strict_1.default.equal(engine.gameover, true);
     strict_1.default.deepEqual(engine.winner, [2]);
@@ -49,7 +75,7 @@ const storisendeGz = loadFixture('storisende-gz.txt');
     strict_1.default.equal((0, gameState_1.decompressGameState)(storisendeGz), storisendeRaw);
 });
 (0, node_test_1.test)('GameFactory accepts gameslib-compressed storisende state after hydration', () => {
-    const engine = (0, gameslib_1.GameFactory)('storisende', (0, gameState_1.decompressGameState)(storisendeGz));
+    const engine = GameFactory('storisende', (0, gameState_1.decompressGameState)(storisendeGz));
     strict_1.default.ok(engine);
     strict_1.default.equal(engine.gameover, true);
 });
@@ -97,7 +123,7 @@ const storisendeGz = loadFixture('storisende-gz.txt');
     strict_1.default.equal(hydrated.pk, 'GAME');
 });
 (0, node_test_1.test)('setGameEndedFromEngine sets gameEnded and winner when game is over', () => {
-    const engine = (0, gameslib_1.GameFactory)('saltire', saltireState);
+    const engine = GameFactory('saltire', saltireState);
     strict_1.default.ok(engine);
     const game = {};
     (0, gameState_1.setGameEndedFromEngine)(game, engine);
@@ -117,7 +143,7 @@ const storisendeGz = loadFixture('storisende-gz.txt');
     strict_1.default.equal(game.winner, undefined);
 });
 (0, node_test_1.test)('setGameEndedFromEngine preserves existing gameStarted', () => {
-    const engine = (0, gameslib_1.GameFactory)('saltire', saltireState);
+    const engine = GameFactory('saltire', saltireState);
     strict_1.default.ok(engine);
     const game = { gameStarted: 42 };
     (0, gameState_1.setGameEndedFromEngine)(game, engine);

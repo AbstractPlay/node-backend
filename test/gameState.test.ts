@@ -1,9 +1,9 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { gzipSync } from 'zlib';
-import { test } from 'node:test';
+import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { GameFactory } from '@abstractplay/gameslib';
+import type { GameFactory as GameFactoryFn } from '@abstractplay/gameslib';
 import {
   GAME_STATE_COMPRESS_THRESHOLD_BYTES,
   compressGameStateIfNeeded,
@@ -13,6 +13,12 @@ import {
   prepareGameStateForStorage,
   setGameEndedFromEngine,
 } from '../lib/gameState';
+
+let GameFactory: typeof GameFactoryFn;
+
+before(async () => {
+  ({ GameFactory } = await import('@abstractplay/gameslib'));
+});
 
 function loadFixture(name: string): string {
   return readFileSync(join(__dirname, 'fixtures', name), 'utf8').trim();

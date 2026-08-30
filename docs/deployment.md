@@ -15,11 +15,9 @@ Downstream repos (e.g. gameslib) can trigger backend redeploys after package pub
 
 ## Lambda module-load checks (CI)
 
-Deploy workflows run `npm test` after `npm run build`. `test/lambdaInit.test.js` requires `@abstractplay/gameslib` and `api/abstractplay` the same way Lambda cold-starts do (CommonJS, unbundled `node_modules`).
+Deploy workflows run `npm test` after `npm run build`. `test/lambdaInit.test.js` dynamically imports `@abstractplay/gameslib` and `api/abstractplay.js` the same way Lambda cold-starts do (ESM gameslib from the shared layer, esbuild-bundled handler).
 
-`npm run lint` also runs `bin/check-cjs-runtime-deps.mjs`, which guards against unexpected ESM-only packages in the Lambda CJS graph (policy is relaxed as libs migrate to ESM).
-
-New dependencies must be `require()`-able from CommonJS on Node 24. The handler packaging uses `serverless-plugin-include-dependencies` (not esbuild).
+Handlers are packaged with **serverless-esbuild** (ESM `.mjs` bundles). Heavy `@abstractplay/*` dependencies live in a shared Lambda layer built by `npm run build:layers` before `serverless package` / deploy.
 
 ## Manual deploy
 

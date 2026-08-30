@@ -41,6 +41,29 @@ custom:
 
   dumpbucket: "abstractplay-db-dump"
 
+  esbuild:
+    tsconfig: "./tsconfig.json"
+    bundle: true
+    sourcemap: false
+    format: "esm"
+    outExtension:
+      ".js": ".mjs"
+    platform: "node"
+    target: "node24"
+    external:
+      - "@abstractplay/gameslib"
+      - "@abstractplay/recranks"
+      - "@abstractplay/renderer"
+      - "@aws-sdk/*"
+      - "@smithy/*"
+    exclude:
+      - "@abstractplay/gameslib"
+      - "@abstractplay/recranks"
+      - "@abstractplay/renderer"
+  scriptable:
+    hooks:
+      before:package:createDeploymentArtifacts: npm run build:layers
+
   websocketDomain:
     Fn::Join:
       - ""
@@ -77,18 +100,21 @@ custom:
       wsSqs: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-ws-messages-prod
 
 package:
-  # individually: true
-  excludeDevDependencies: false
-  exclude:
-    - node_modules/@aws-sdk/**
+  excludeDevDependencies: true
+  patterns:
+    - "!node_modules/@abstractplay/**"
+    - "!node_modules/@aws-sdk/**"
 
 plugins:
+  - serverless-esbuild
+  - serverless-scriptable-plugin
   - serverless-plugin-common-excludes
-  - serverless-plugin-include-dependencies
 
 provider:
   name: aws
   runtime: nodejs24.x
+  layers:
+    - !Ref AbstractplayLibsLambdaLayer
   versionFunctions: false
   stage: ${opt:stage, 'dev'}
   profile: ${self:custom.stageConfig.${self:provider.stage}.profile}
@@ -581,3 +607,12 @@ functions:
   #   handler: utils/scratch.handler
   #   description: For testing only
   #   timeout: 60
+
+layers:
+  abstractplayLibs:
+    path: .serverless/layers/abstractplay-libs
+    name: abstractplay-libs-${sls:stage}
+    description: "@abstractplay/gameslib, recranks, and renderer"
+    compatibleRuntimes:
+      - nodejs24.x
+    retain: false
