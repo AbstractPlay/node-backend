@@ -56,6 +56,9 @@ custom:
       - "@abstractplay/renderer"
       - "@aws-sdk/*"
       - "@smithy/*"
+      - "web-push"
+      - "@sunknudsen/totp"
+      - "i18next"
     exclude:
       - "@abstractplay/gameslib"
       - "@abstractplay/recranks"

@@ -19,6 +19,8 @@ Deploy workflows run `npm test` after `npm run build`. `test/lambdaInit.test.js`
 
 Handlers are packaged with **serverless-esbuild** (ESM `.mjs` bundles). Heavy `@abstractplay/*` dependencies live in a shared Lambda layer built by `npm run build:layers` before `serverless package` / deploy.
 
+CJS packages that use dynamic `require()` (e.g. `web-push`, `@sunknudsen/totp`, `i18next`) must stay in the esbuild `external` list so they load from `node_modules` at runtime — bundling them into ESM output causes init errors like `Dynamic require of "crypto" is not supported`.
+
 ## Manual deploy
 
 With AWS profiles configured:
