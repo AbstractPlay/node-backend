@@ -37,7 +37,7 @@ When a game completes, the completion bit becomes `1` and summary rows are writt
 
 ## Pie rule
 
-`invoke_pie` reverses the player list in the `GAME` record and updates watcher summaries. The stream projector refreshes each participant's `CURRENTGAMES#` row on the next `GAME` modify.
+`invoke_pie` reverses the player list in the `GAME` record and updates watcher summaries. Pie eligibility uses `engine.getFlags()` (not static `gameinfo.flags`) so variant-gated `pie` / `pie-even` matches the front. The stream projector refreshes each participant's `CURRENTGAMES#` row on the next `GAME` modify.
 
 ## Playground
 

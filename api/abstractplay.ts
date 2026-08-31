@@ -7,6 +7,7 @@ import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageReq
 import { CognitoIdentityProviderClient, CreateUserPoolClientCommand, DeleteUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
+import { effectiveFlags, flagSetIncludes, structuralFlags } from '../lib/effectiveGameFlags';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush from "web-push";
 import { validateToken } from '@sunknudsen/totp';
@@ -4769,8 +4770,9 @@ async function submitMove(userid: string, pars: {
       }
     }
 
-    const flags = gameinfo.get(game.metaGame).flags;
-    const simultaneous = flags !== undefined && flags.includes('simultaneous');
+    const flags = structuralFlags(game.metaGame);
+    const simultaneous = flagSetIncludes(flags, "simultaneous");
+    const sessionFlags = effectiveFlags(engine, game.metaGame);
     const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
     let autoMoves = 0;
     let autoMovesPerPlayer: number[] = [];
@@ -4786,7 +4788,7 @@ async function submitMove(userid: string, pars: {
       } else if (simultaneous) {
         applySimultaneousMove(userid, pars.move, engine as GameBaseSimultaneous, game);
       } else {
-        const result = applyMove(userid, pars.move, currentMoveNumber, engine, game, flags, opponentExploration, pars.exploration);
+        const result = applyMove(userid, pars.move, currentMoveNumber, engine, game, [...sessionFlags], opponentExploration, pars.exploration);
         autoMoves = result.autoMoves;
         autoMovesPerPlayer = result.autoMovesPerPlayer;
         for (const workItem of result.work) {
@@ -5136,12 +5138,12 @@ function resign(userid: any, engine: GameBase, game: FullGame) {
     game.winner = engine.winner;
     game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   } else {
-    const flags = gameinfo.get(game.metaGame).flags;
-    const simultaneous = flags !== undefined && flags.includes('simultaneous');
+    const flags = structuralFlags(game.metaGame);
+    const simultaneous = flagSetIncludes(flags, "simultaneous");
     if (simultaneous) {
       applySimultaneousMove(userid, "resign", engine as GameBaseSimultaneous, game);
     } else {
-      applyMove(userid, "resign", -1, engine, game, flags);
+      applyMove(userid, "resign", -1, engine, game, [...effectiveFlags(engine, game.metaGame)]);
     }
   }
 }
@@ -5181,12 +5183,12 @@ function timeout(userid: string, engine: GameBase | GameBaseSimultaneous, game: 
     game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   } else {
     const loserid = game.players[loser].id;
-    const flags = gameinfo.get(game.metaGame).flags;
-    const simultaneous = flags !== undefined && flags.includes('simultaneous');
+    const flags = structuralFlags(game.metaGame);
+    const simultaneous = flagSetIncludes(flags, "simultaneous");
     if (simultaneous) {
       applySimultaneousMove(loserid, "timeout", engine as GameBaseSimultaneous, game);
     } else {
-      applyMove(loserid, "timeout", -1, engine, game, flags);
+      applyMove(loserid, "timeout", -1, engine, game, [...effectiveFlags(engine, game.metaGame)]);
     }
   }
 }
@@ -8507,8 +8509,8 @@ async function invokePie(userid: string, pars: { id: string, metaGame: string, c
       const engine = GameFactory(game.metaGame, game.state);
       if (!engine)
         throw new Error(`Unknown metaGame ${game.metaGame}`);
-      const flags = gameinfo.get(game.metaGame).flags;
-      if ((flags === undefined) || ((!flags.includes("pie")) && (!flags.includes("pie-even")))) {
+      const flags = effectiveFlags(engine, game.metaGame);
+      if (!flagSetIncludes(flags, "pie") && !flagSetIncludes(flags, "pie-even")) {
         throw new Error(`Metagame ${pars.metaGame} does not have the "pie" flag. Aborting.`);
       }
       const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
@@ -8536,7 +8538,7 @@ async function invokePie(userid: string, pars: { id: string, metaGame: string, c
       game.pieInvoked = true;
 
       // if flag is `pie-even`, issue a "pass" command
-      if (flags.includes("pie-even")) {
+      if (flagSetIncludes(flags, "pie-even")) {
         try {
           engine.move("pass")
           game.state = engine.serialize();

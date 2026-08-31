@@ -4,7 +4,7 @@
   "description": "node.js lambda with DynamoDB",
   "main": "??",
   "scripts": {
-    "test": "npm run typecheck && npm run build-ts && node --test test/gameState.test.js test/gameProjector.test.js test/dashboardGames.test.js test/push.test.js test/i18n.test.js test/commentAuth.test.js test/playerGameMarks.test.js test/wsAuth.test.js test/playgroundSaves.test.js test/recommendationEvents.test.js test/layoutFeedbackEvents.test.js test/batchRatings.test.js test/summaryRatings.test.js test/adminDeleteGame.test.js test/gameTimeout.test.js test/dashboardMaintenance.test.js test/meProfile.test.js test/touchUserLastSeen.test.js test/notifications.test.js test/aboutText.test.js test/aboutSaves.test.js test/soloGame.test.js test/tournamentGame.test.js test/lambdaInit.test.js test/scripts/locale-prune.test.mjs",
+    "test": "npm run typecheck && npm run build-ts && node --test test/gameState.test.js test/gameProjector.test.js test/dashboardGames.test.js test/push.test.js test/i18n.test.js test/commentAuth.test.js test/playerGameMarks.test.js test/wsAuth.test.js test/playgroundSaves.test.js test/recommendationEvents.test.js test/layoutFeedbackEvents.test.js test/batchRatings.test.js test/summaryRatings.test.js test/adminDeleteGame.test.js test/gameTimeout.test.js test/dashboardMaintenance.test.js test/meProfile.test.js test/touchUserLastSeen.test.js test/notifications.test.js test/aboutText.test.js test/aboutSaves.test.js test/soloGame.test.js test/tournamentGame.test.js test/lambdaInit.test.js test/effectiveGameFlags.test.js test/scripts/locale-prune.test.mjs",
     "test:scripts": "node --test test/scripts/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "build-ts": "tsc",
@@ -36,7 +36,7 @@
   },
   "packageManager": "npm@11.6.2",
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-33332750336.0",
+    "@abstractplay/gameslib": "1.0.0-ci-33416906683.0",
     "@abstractplay/recranks": "latest",
     "@abstractplay/renderer": "1.0.0-ci-33332479192.0",
     "@aws-sdk/client-apigatewaymanagementapi": "^3.957.0",
