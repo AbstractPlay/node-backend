@@ -13,7 +13,6 @@
   "GameLink": "Puoi visualizzare la partita su https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}}.",
   "GameOverBody": "La tua partita a {{- metaGame}} è terminata.",
   "GameOverLink": "Per maggiori dettagli, inclusa una trascrizione della partita che puoi archiviare, visita https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}.",
-  "GameOverRating": "Il tuo nuovo rating è {{rating}}.",
   "GameOverResult_win": "Hai vinto!",
   "GameOverResult_lose": "Hai perso.",
   "GameOverResult_draw": "È stato un pareggio.",
