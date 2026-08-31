@@ -57,3 +57,21 @@ export function flagSetIncludes(
 ): boolean {
   return flags !== undefined && Array.isArray(flags) && flags.includes(name);
 }
+
+/** Set per-seat board rotation when perspective (and optionally rotate90) are active. */
+export function applyPerspectivePlayerRotations(
+  gamePlayers: Array<{ settings?: { rotate?: number } }>,
+  playerCount: number,
+  flags: readonly string[],
+): void {
+  if (!flagSetIncludes(flags, "perspective")) {
+    return;
+  }
+  let rot = 180;
+  if (playerCount > 2 && flagSetIncludes(flags, "rotate90")) {
+    rot = -90;
+  }
+  for (let i = 1; i < gamePlayers.length; i++) {
+    gamePlayers[i].settings = { rotate: i * rot };
+  }
+}

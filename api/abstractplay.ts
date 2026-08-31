@@ -7,7 +7,7 @@ import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageReq
 import { CognitoIdentityProviderClient, CreateUserPoolClientCommand, DeleteUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
-import { effectiveFlags, flagSetIncludes, structuralFlags } from '../lib/effectiveGameFlags';
+import { effectiveFlags, flagSetIncludes, structuralFlags, applyPerspectivePlayerRotations } from '../lib/effectiveGameFlags';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush from "web-push";
 import { validateToken } from '@sunknudsen/totp';
@@ -4490,15 +4490,11 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     const state = engine.serialize();
     const now = Date.now();
     const gamePlayers = playersFull.map(p => { return { "id": p.id, "name": p.name, "time": challenge.clockStart * 3600000 } }) as User[];
-    if (info.flags !== undefined && info.flags.includes('perspective')) {
-      let rot = 180;
-      if (playerIDs.length > 2 && info.flags !== undefined && info.flags.includes('rotate90')) {
-        rot = -90;
-      }
-      for (let i = 1; i < playerIDs.length; i++) {
-        gamePlayers[i].settings = { "rotate": i * rot };
-      }
-    }
+    applyPerspectivePlayerRotations(
+      gamePlayers as Array<{ settings?: { rotate?: number } }>,
+      playerIDs.length,
+      effectiveFlags(engine, challenge.metaGame),
+    );
     const addGame = ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Item: prepareGameStateForStorage({
@@ -5073,7 +5069,7 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
     if (!engine)
       throw new Error(`Unknown metaGame ${game.metaGame}`);
     const scores = [];
-    if (gameinfo.get(game.metaGame).flags.includes("scores")) {
+    if (flagSetIncludes(effectiveFlags(engine, game.metaGame), "scores")) {
       for (let p = 1; p <= engine.numplayers; p++) {
         scores.push(engine.getPlayerScore(p));
       }
@@ -8170,15 +8166,11 @@ async function eventCreateGames(userid: string, pars: { eventid: string; pairs: 
         throw new Error("Could not find one of the players! This should never happen!");
       }
       const gamePlayers = pInvolved.map(p => { return { "id": p.id, "name": p.name, "time": pair.clockStart * 3600000 } }) as User[];
-      if (info.flags !== undefined && info.flags.includes('perspective')) {
-        let rot = 180;
-        if (playerIDs.length > 2 && info.flags !== undefined && info.flags.includes('rotate90')) {
-          rot = -90;
-        }
-        for (let i = 1; i < playerIDs.length; i++) {
-          gamePlayers[i].settings = { "rotate": i * rot };
-        }
-      }
+      applyPerspectivePlayerRotations(
+        gamePlayers as Array<{ settings?: { rotate?: number } }>,
+        playerIDs.length,
+        effectiveFlags(engine, pair.metagame),
+      );
       // queue for update
       const addGame = sendCommandWithRetry(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
