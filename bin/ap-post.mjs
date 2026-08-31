@@ -199,63 +199,54 @@ function promptPassword(prompt) {
 }
 
 /**
- * Browser-style Cognito login (USER_SRP_AUTH via amazon-cognito-identity-js).
+ * Cognito USER_SRP_AUTH login via aws-amplify v6 (CLI use).
  *
  * @param {{ region: string; userPoolId: string; clientId: string }} pool
  * @param {string} username
  * @param {string} password
  */
 async function fetchIdToken(pool, username, password) {
-  const {
-    AuthenticationDetails,
-    CognitoUser,
-    CognitoUserPool,
-  } = await import('amazon-cognito-identity-js');
+  const { Amplify } = await import('aws-amplify');
+  const { fetchAuthSession, signIn } = await import('aws-amplify/auth');
 
-  const userPool = new CognitoUserPool({
-    UserPoolId: pool.userPoolId,
-    ClientId: pool.clientId,
-    endpoint: `https://cognito-idp.${pool.region}.amazonaws.com/`,
-  });
-  const cognitoUser = new CognitoUser({
-    Username: username,
-    Pool: userPool,
-  });
-  const authDetails = new AuthenticationDetails({
-    Username: username,
-    Password: password,
+  Amplify.configure({
+    Auth: {
+      Cognito: {
+        userPoolId: pool.userPoolId,
+        userPoolClientId: pool.clientId,
+      },
+    },
   });
 
-  return new Promise((resolve, reject) => {
-    cognitoUser.authenticateUser(authDetails, {
-      onSuccess: (session) => {
-        const token = session.getIdToken().getJwtToken();
-        if (!token) {
-          reject(new Error('Cognito session did not include an IdToken.'));
-          return;
-        }
-        resolve(token);
-      },
-      onFailure: (err) => {
-        reject(err instanceof Error ? err : new Error(String(err)));
-      },
-      newPasswordRequired: () => {
-        reject(new Error(
-          'Cognito requires a new password (first login or reset). '
-          + 'Set a permanent password in the web UI, then retry.',
-        ));
-      },
-      mfaRequired: () => {
-        reject(new Error('MFA is enabled on this account; this script does not handle MFA yet.'));
-      },
-      totpRequired: () => {
-        reject(new Error('TOTP MFA is enabled on this account; this script does not handle MFA yet.'));
-      },
-      selectMFAType: () => {
-        reject(new Error('MFA selection is required; this script does not handle MFA yet.'));
-      },
-    });
-  });
+  const { isSignedIn, nextStep } = await signIn({ username, password });
+  if (!isSignedIn) {
+    throw signInFailure(nextStep);
+  }
+
+  const session = await fetchAuthSession();
+  const token = session.tokens?.idToken?.toString();
+  if (!token) {
+    throw new Error('Cognito session did not include an IdToken.');
+  }
+  return token;
+}
+
+/** @param {{ signInStep: string }} nextStep */
+function signInFailure(nextStep) {
+  switch (nextStep.signInStep) {
+    case 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED':
+      return new Error(
+        'Cognito requires a new password (first login or reset). '
+        + 'Set a permanent password in the web UI, then retry.',
+      );
+    case 'CONFIRM_SIGN_IN_WITH_SMS_CODE':
+    case 'CONFIRM_SIGN_IN_WITH_TOTP_CODE':
+    case 'CONTINUE_SIGN_IN_WITH_MFA_SELECTION':
+    case 'CONFIRM_SIGN_IN_WITH_CUSTOM_CHALLENGE':
+      return new Error('MFA is enabled on this account; this script does not handle MFA yet.');
+    default:
+      return new Error(`Sign-in did not complete (${nextStep.signInStep}).`);
+  }
 }
 
 /**
