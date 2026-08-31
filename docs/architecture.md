@@ -6,9 +6,9 @@ The API uses an RPC-style envelope rather than REST resources. Clients POST (or 
 
 | Endpoint | Auth | Handler | Purpose |
 |----------|------|---------|---------|
-| `/query` | None | `module.exports.query` | Public reads, schedulers, maintenance |
-| `/authQuery` | Cognito user JWT | `module.exports.authQuery` | Player actions and authenticated reads |
-| `/botQuery` | Cognito M2M (bot pool) | `module.exports.botQuery` | Bots submit moves |
+| `/query` | None | `export const query` | Public reads, schedulers, maintenance |
+| `/authQuery` | Cognito user JWT | `export const authQuery` | Player actions and authenticated reads |
+| `/botQuery` | Cognito M2M (bot pool) | `export const botQuery` | Bots submit moves |
 
 Source of truth for query names: switch statements in [`api/abstractplay.ts`](../api/abstractplay.ts).
 

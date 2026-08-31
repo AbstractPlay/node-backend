@@ -1,8 +1,14 @@
 "use strict";
-const { describe, it } = require('node:test');
+const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
-const { gameinfo } = require('@abstractplay/gameslib');
 const { tournamentPlaySupported } = require('../lib/tournamentGame');
+
+/** @type {import('@abstractplay/gameslib').gameinfo} */
+let gameinfo;
+
+before(async () => {
+  ({ gameinfo } = await import('@abstractplay/gameslib'));
+});
 
 describe('tournamentPlaySupported', () => {
   it('is false for unknown games', () => {
