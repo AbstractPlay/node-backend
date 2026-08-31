@@ -13,6 +13,16 @@ GitHub Actions deploy via Serverless Framework:
 
 Downstream repos (e.g. gameslib) can trigger backend redeploys after package publishes.
 
+## AP dependency pins (`ci-deps.*.json`)
+
+Canonical pins live in `ci-deps.dev.json` and `ci-deps.prod.json`. CI runs `npm ci` → manifest validation → `bin/install-ap-deps.mjs --stage dev|prod` → strict sync check → build/test.
+
+After a merge that touches dependency files, run `npm run sync-deps` on `develop` (or `npm run sync-deps:prod` on `main`) and commit `ci-deps.*.json`, `package.json`, and `package-lock.json` together. Do not hand-merge AP version strings in `package.json`.
+
+`ci-deps.prod.json` is protected on `main` via `.gitattributes` (`merge=ours`). `package.json` and `package-lock.json` are regenerated via `sync-deps`, not merge=ours.
+
+Prod deploys may fail at build when code on `main` uses a gameslib API not yet in the prod pin — wait for `dep_update_prod` or bump `ci-deps.prod.json` when releasing.
+
 ## Lambda module-load checks (CI)
 
 Deploy workflows run `npm test` after `npm run build`. `test/lambdaInit.test.js` dynamically imports `@abstractplay/gameslib` and `api/abstractplay.js` the same way Lambda cold-starts do (ESM gameslib from the shared layer, esbuild-bundled handler).
