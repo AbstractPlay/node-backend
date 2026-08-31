@@ -25,6 +25,8 @@ params:
   default:
     # Set true on the deploy AFTER streams are enabled on the DynamoDB table (see docs/deployment.md).
     enableGameProjectorStream: 'false'
+    # Ops email for CloudWatch → SNS alerts (confirm subscription once after first deploy).
+    opsAlertEmail: ${env:OPS_ALERT_EMAIL, ''}
 
 custom:
   scheduleEnabled:
@@ -244,6 +246,15 @@ resources:
       Fn::Equals:
         - Ref: EnableGameProjectorStream
         - 'true'
+    OpsAlertsEnabled:
+      Fn::Not:
+        - Fn::Equals:
+            - '${param:opsAlertEmail}'
+            - ''
+    GameProjectorOpsAlertsEnabled:
+      Fn::And:
+        - Condition: GameProjectorStreamEnabled
+        - Condition: OpsAlertsEnabled
 
   Resources:
     # One table design
@@ -310,6 +321,21 @@ resources:
         QueueName: abstractplay-game-projector-dlq-${self:provider.stage}
         MessageRetentionPeriod: 1209600
 
+    OpsAlertsTopic:
+      Type: AWS::SNS::Topic
+      Condition: OpsAlertsEnabled
+      Properties:
+        DisplayName: AbstractPlay Ops Alerts (${self:provider.stage})
+        TopicName: abstractplay-ops-alerts-${self:provider.stage}
+
+    OpsAlertsEmailSubscription:
+      Type: AWS::SNS::Subscription
+      Condition: OpsAlertsEnabled
+      Properties:
+        Protocol: email
+        TopicArn: !Ref OpsAlertsTopic
+        Endpoint: ${param:opsAlertEmail}
+
     GameProjectorDLQAlarm:
       Type: AWS::CloudWatch::Alarm
       Properties:
@@ -320,12 +346,64 @@ resources:
         Dimensions:
           - Name: QueueName
             Value: !GetAtt GameProjectorDLQ.QueueName
-        Statistic: Sum
+        Statistic: Maximum
         Period: 300
         EvaluationPeriods: 1
         Threshold: 1
         ComparisonOperator: GreaterThanOrEqualToThreshold
         TreatMissingData: notBreaching
+        AlarmActions: !If
+          - GameProjectorOpsAlertsEnabled
+          - [!Ref OpsAlertsTopic]
+          - !Ref AWS::NoValue
+        OKActions: !If
+          - GameProjectorOpsAlertsEnabled
+          - [!Ref OpsAlertsTopic]
+          - !Ref AWS::NoValue
+
+    GameProjectorErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: GameProjectorOpsAlertsEnabled
+      Properties:
+        AlarmName: abstractplay-game-projector-errors-${self:provider.stage}
+        AlarmDescription: gameProjector Lambda errors (including init failures)
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref GameProjectorLambdaFunction
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - !Ref OpsAlertsTopic
+        OKActions:
+          - !Ref OpsAlertsTopic
+
+    GameProjectorIteratorAgeAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: GameProjectorOpsAlertsEnabled
+      Properties:
+        AlarmName: abstractplay-game-projector-iterator-age-${self:provider.stage}
+        AlarmDescription: gameProjector stream iterator age high (projection falling behind)
+        Namespace: AWS/Lambda
+        MetricName: IteratorAge
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref GameProjectorLambdaFunction
+        Statistic: Maximum
+        Period: 300
+        EvaluationPeriods: 2
+        Threshold: 300000
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - !Ref OpsAlertsTopic
+        OKActions:
+          - !Ref OpsAlertsTopic
 
     GameProjectorDLQPolicy:
       Type: AWS::SQS::QueuePolicy
@@ -399,6 +477,12 @@ resources:
     #       LoggingLevel: ERROR
 
   Outputs:
+    OpsAlertsTopicArn:
+      Condition: OpsAlertsEnabled
+      Description: SNS topic for ops CloudWatch alarms (email subscription requires one-time confirm)
+      Value: !Ref OpsAlertsTopic
+      Export:
+        Name: ${self:service}-${self:provider.stage}-OpsAlertsTopicArn
     DynamoDbStreamArn:
       Condition: GameProjectorStreamEnabled
       Value: !GetAtt AbstractGamesDynamoDbTable.StreamArn
