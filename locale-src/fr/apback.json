@@ -55,10 +55,6 @@
     "src": "For more details, including a game record you can archive, please visit https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}.",
     "out": "Pour plus de détails ou pour récupérer un enregistrement de la partie, merci de visiter https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}."
   },
-  "GameOverRating": {
-    "src": "Your new rating is {{rating}}.",
-    "out": "Votre nouveau classement est {{rating}}."
-  },
   "GameOverResult_draw": {
     "src": "It was a draw.",
     "out": "Partie nulle."

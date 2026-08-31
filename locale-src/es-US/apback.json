@@ -55,10 +55,6 @@
     "src": "For more details, including a game record you can archive, please visit https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}.",
     "out": "Para ver más detalles, incluyendo un registro de la partida que puedes archivar, visita https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}."
   },
-  "GameOverRating": {
-    "src": "Your new rating is {{rating}}.",
-    "out": "Tu nueva clasificación es {{rating}}."
-  },
   "GameOverResult_draw": {
     "src": "It was a draw.",
     "out": "Fue un empate."
