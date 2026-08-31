@@ -88,6 +88,31 @@ jobs:
           package-lock.json
           package.json
 
+# --- MACHINE TRANSLATION PIPELINE START ---
+    - name: Prune stale managed locale keys
+      run: node bin/locale-prune.mjs locales/en/apback.json
+
+    - name: Run Machine Translation on Locales
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      run: node bin/translate.mjs locales/en/apback.json
+
+    - name: Auto-commit Updated Translations Back to Branch
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "i18n: Auto-translate locale files [skip ci]"
+        file_pattern: locales/de/ locales/fr/ locales/it/ locales/es-US/ locale-src/de/ locale-src/fr/ locale-src/it/ locale-src/es-US/
+        disable_globbing: true
+
+    - name: Verify locale-src was committed
+      run: |
+        if git status --porcelain locale-src/ | grep -q .; then
+          echo "::error::locale-src/ has unstaged changes after auto-commit — sidecar stamps were not pushed"
+          git status --porcelain locale-src/
+          exit 1
+        fi
+# --- MACHINE TRANSLATION PIPELINE END ---
+
     - name: Set CI version
       run: npm version prerelease --preid=ci-$GITHUB_RUN_ID --no-git-tag-version
 

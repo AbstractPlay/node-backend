@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import fs from "fs";
 import path from "path";
+import { pruneManagedLocale, pruneToSourceShape } from "./locale-prune.mjs";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -205,15 +206,10 @@ function getDiffLeaves(sourceData, targetData, srcTracking) {
   return diff;
 }
 
-function buildCleanTargetData(sourceData, targetData) {
-  const cleanTargetData = {};
-  for (const key of Object.keys(sourceData)) {
-    if (key.startsWith("_")) continue;
-    if (targetData[key] !== undefined) {
-      cleanTargetData[key] = targetData[key];
-    }
-  }
-  return cleanTargetData;
+function writeTargetFile(targetPath, repoRoot, langCode, fileName, sourceData, targetData, srcTracking) {
+  const cleanTargetData = pruneToSourceShape(sourceData, targetData) ?? {};
+  fs.writeFileSync(targetPath, JSON.stringify(cleanTargetData, null, 2) + "\n");
+  writeSrcTracking(repoRoot, langCode, fileName, srcTracking);
 }
 
 function buildPrompt(lang) {
@@ -258,6 +254,21 @@ async function translateFile(sourcePath) {
     }
 
     let srcTracking = loadSrcTracking(repoRoot, lang.code, fileName, targetData);
+    const pruneResult = pruneManagedLocale({ sourceData, targetData, srcTracking });
+    targetData = pruneResult.targetData;
+    srcTracking = pruneResult.srcTracking;
+    if (pruneResult.changed) {
+      writeTargetFile(targetPath, repoRoot, lang.code, fileName, sourceData, targetData, srcTracking);
+      const parts = [];
+      if (pruneResult.removedLeaves > 0) {
+        parts.push(`${pruneResult.removedLeaves} stale translation leaf${pruneResult.removedLeaves === 1 ? "" : "ves"}`);
+      }
+      if (pruneResult.removedTracking > 0) {
+        parts.push(`${pruneResult.removedTracking} locale-src entr${pruneResult.removedTracking === 1 ? "y" : "ies"}`);
+      }
+      console.log(`[${lang.code}] ${fileName}: Pruned ${parts.join(", ")}.`);
+    }
+
     const diffLeaves = getDiffLeaves(sourceData, targetData, srcTracking);
     const keysToTranslate = Object.keys(diffLeaves);
 
@@ -300,9 +311,7 @@ async function translateFile(sourcePath) {
         srcTracking[leafPath] = makeTrackingEntry(sourceValue, translatedValue);
       }
 
-      const cleanTargetData = buildCleanTargetData(sourceData, targetData);
-      fs.writeFileSync(targetPath, JSON.stringify(cleanTargetData, null, 2) + "\n");
-      writeSrcTracking(repoRoot, lang.code, fileName, srcTracking);
+      writeTargetFile(targetPath, repoRoot, lang.code, fileName, sourceData, targetData, srcTracking);
       console.log(`[${lang.code}] ${fileName}: Updated successfully.`);
     } catch (err) {
       console.error(`[${lang.code}] ${fileName}: Error translating:`, err);
@@ -311,7 +320,17 @@ async function translateFile(sourcePath) {
 }
 
 async function run() {
+  if (!process.env.GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY environment variable is required.");
+    process.exit(1);
+  }
+
   const files = process.argv.slice(2);
+  if (files.length === 0) {
+    console.error("Usage: node bin/translate.mjs <source.json> [...]");
+    process.exit(1);
+  }
+
   for (const file of files) {
     await translateFile(file);
   }
