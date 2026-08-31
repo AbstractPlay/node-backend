@@ -65,11 +65,33 @@ bash bin/serverless-deploy.sh dev AbstractPlayDev
 
 Once a stage has a stream, always deploy with `true` (or use the script) so CloudFormation does not remove the event source mapping.
 
+## Ops alerts (email)
+
+When `OPS_ALERT_EMAIL` is set at deploy time, CloudFormation creates an SNS topic (`abstractplay-ops-alerts-${stage}`) and wires **gameProjector** alarms to it:
+
+| Alarm | Signal |
+|-------|--------|
+| `abstractplay-game-projector-errors-${stage}` | Lambda `Errors` ≥ 1 in 1 minute (catches init crashes) |
+| `abstractplay-game-projector-dlq-${stage}` | DLQ depth ≥ 1 message |
+| `abstractplay-game-projector-iterator-age-${stage}` | Stream `IteratorAge` > 5 minutes for 10 minutes |
+
+**First deploy:** SNS sends a subscription confirmation email — you must click **Confirm subscription** once or alarms will not arrive.
+
+**Local / manual deploy:**
+
+```bash
+export OPS_ALERT_EMAIL=you@example.com
+bash bin/serverless-deploy.sh prod AbstractPlayProd
+```
+
+Omit `OPS_ALERT_EMAIL` to skip the topic and alarm actions (dev deploys by default).
+
 ## Required GitHub secrets
 
 - `AWS_KEY`, `AWS_SECRET` — deploy credentials
 - `PAT_READ_PACKAGES` — npm install from GitHub Packages
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `TOTP_KEY`, `OPENSSH_PRIVATE_KEY`
+- `OPS_ALERT_EMAIL` — ops CloudWatch alarm notifications (prod workflow)
 - `TEST_BOT_CLIENT_ID`, `TEST_BOT_CLIENT_SECRET` (dev workflow)
 
 ## Cognito setup (essentials)
