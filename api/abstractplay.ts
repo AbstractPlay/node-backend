@@ -6,7 +6,7 @@ import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCo
 import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageRequest } from "@aws-sdk/client-sqs";
 import { CognitoIdentityProviderClient, CreateUserPoolClientCommand, DeleteUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { v4 as uuid } from 'uuid';
-import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
+import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, validateVariantSelection } from '@abstractplay/gameslib';
 import { effectiveFlags, flagSetIncludes, structuralFlags, applyPerspectivePlayerRotations } from '../lib/effectiveGameFlags';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush from "web-push";
@@ -3686,6 +3686,14 @@ function validateChallengeVariantUids(metaGame: string, variants: string[] | und
     return {
       statusCode: 400,
       body: JSON.stringify({ message: `Variant(s) not allowed: ${disallowed.join(", ")}` }),
+      headers,
+    };
+  }
+  const constraintResult = validateVariantSelection(info.variants ?? [], variants ?? []);
+  if (!constraintResult.ok) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: "INVALID_VARIANT_COMBINATION" }),
       headers,
     };
   }
