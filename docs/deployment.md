@@ -19,7 +19,7 @@ Canonical pins live in `ci-deps.dev.json` and `ci-deps.prod.json`. CI runs `npm 
 
 After a merge that touches dependency files, run `npm run sync-deps` on `develop` (or `npm run sync-deps:prod` on `main`) and commit `ci-deps.*.json`, `package.json`, and `package-lock.json` together. Do not hand-merge AP version strings in `package.json`.
 
-`ci-deps.prod.json` is protected on `main` via `.gitattributes` (`merge=ours`). `package.json` and `package-lock.json` are regenerated via `sync-deps`, not merge=ours.
+`ci-deps.prod.json` is protected on `main` via `.gitattributes` (`merge=ours`). `ci-deps.dev.json` is protected on `develop` the same way (e.g. when merging `l10n/weblate`). `package.json` and `package-lock.json` are regenerated via `sync-deps`, not merge=ours.
 
 Prod deploys may fail at build when code on `main` uses a gameslib API not yet in the prod pin — wait for `dep_update_prod` or bump `ci-deps.prod.json` when releasing.
 

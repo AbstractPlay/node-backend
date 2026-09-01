@@ -19,6 +19,8 @@
     "extract": "i18next 'api/**/*.ts' 'utils/**/*.ts'",
     "translate": "node bin/translate.mjs locales/en/apback.json",
     "prune-locales": "node bin/locale-prune.mjs locales/en/apback.json",
+    "check-weblate-branch": "node bin/check-weblate-branch.mjs",
+    "merge-weblate-branch": "node bin/merge-weblate-branch.mjs",
     "sync-deps": "node bin/install-ap-deps.mjs --stage dev",
     "sync-deps:prod": "node bin/install-ap-deps.mjs --stage prod"
   },
