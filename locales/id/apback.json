@@ -1,1 +1,9 @@
-{}
+{
+"YourMove": "Sekarang gliranmu.",
+"ChallengeBody": "{{challenger}} telah menantang Anda bermain di {{-metaGame}}. Kunjungi https://play.abstractplay.com/ untuk informasi lebih lanjut.",
+"ChallengeBodyComment": "{{challenger}} menantang Anda di game {{- metaGame}} dengan komentar: \"{{- comment}}\" Kunjungi https://play.abstractplay.com/ untuk informasi lebih lanjut.",
+"ChallengeResponseComment": "Lawanmu berkomentar: \"{{- comment}}\"",
+"GameLink": "Anda bisa mengunjungi game melalui https://play.abstractplay.com/move/{{metaGame/0/{{gameId}}.",
+"GameOverResult_win": "Anda menang!",
+"GameOverResult_draw": "Permainan berakhir seri."
+}
