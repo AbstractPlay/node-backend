@@ -41,7 +41,7 @@ const STEP_LABELS = {
   import: "Import locale files only from l10n/weblate",
   commit: "Commit imported locales on develop",
   push: "Push develop to origin",
-  "reset-branch": "Reset origin/l10n/weblate to match develop",
+  "reset-branch": "Force-update origin/l10n/weblate to match develop",
   verify: "Re-run review (expect no_changes)",
 };
 
@@ -191,9 +191,19 @@ function stepPush() {
 function stepResetBranch() {
   const { remote, baseBranch, weblateBranch } = WEBLATE_BRANCH_CONFIG;
   const developRef = `${remote}/${baseBranch}`;
-  line(`Resetting ${remote}/${weblateBranch} to ${developRef}...`);
+  line(
+    `Force-updating ${remote}/${weblateBranch} to ${developRef} (--force-with-lease)...`,
+  );
+  line(
+    "(Locale import creates a new commit on develop; l10n/weblate history diverges until reset.)",
+  );
   runGit(
-    ["push", remote, `${developRef}:refs/heads/${weblateBranch}`],
+    [
+      "push",
+      "--force-with-lease",
+      remote,
+      `${developRef}:refs/heads/${weblateBranch}`,
+    ],
     { inherit: true },
   );
 }
