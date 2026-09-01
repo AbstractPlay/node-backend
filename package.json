@@ -10,7 +10,7 @@
     "build-ts": "tsc",
     "build:layers": "node scripts/build-layers.mjs",
     "test:layers": "npm run build:layers && node scripts/smoke-layer-modules.mjs",
-    "lint": "node bin/check-ci-deps.mjs && eslint && npm run typecheck",
+    "lint": "eslint && npm run typecheck",
     "build": "npm run lint && npm run build-ts",
     "deploy-dev": "serverless deploy",
     "deploy-prod": "serverless --stage prod deploy",
@@ -18,7 +18,9 @@
     "full-prod": "npm run build && serverless --stage prod deploy",
     "extract": "i18next 'api/**/*.ts' 'utils/**/*.ts'",
     "translate": "node bin/translate.mjs locales/en/apback.json",
-    "prune-locales": "node bin/locale-prune.mjs locales/en/apback.json"
+    "prune-locales": "node bin/locale-prune.mjs locales/en/apback.json",
+    "sync-deps": "node bin/install-ap-deps.mjs --stage dev",
+    "sync-deps:prod": "node bin/install-ap-deps.mjs --stage prod"
   },
   "repository": {
     "type": "git",

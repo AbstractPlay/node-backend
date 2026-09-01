@@ -28,14 +28,24 @@ jobs:
         run: echo "@abstractplay:registry=https://npm.pkg.github.com/" > .npmrc
       - run: echo "//npm.pkg.github.com/:_authToken=${{secrets.PAT_READ_PACKAGES}}" >> .npmrc
 
+      - name: Reject merge conflict markers in dep files
+        run: |
+          if grep -r '^<<<<<<<' package.json package-lock.json ci-deps.dev.json ci-deps.prod.json 2>/dev/null; then
+            echo "Conflict markers found in dependency files"
+            exit 1
+          fi
+
       - name: Install NPM dependencies
         run: npm ci
 
-      - name: Check ci-deps manifests
+      - name: Validate ci-deps manifests
         run: node bin/check-ci-deps.mjs
 
-      - name: Install pinned AP dependencies (for tests)
-        run: node bin/install-ap-deps.mjs --stage dev --for-tests
+      - name: Install pinned AP dependencies
+        run: node bin/install-ap-deps.mjs --stage dev
+
+      - name: Verify package.json matches ci-deps
+        run: node bin/check-ci-deps.mjs --stage dev --strict
 
       - name: Build
         run: npm run build
