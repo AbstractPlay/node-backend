@@ -25,7 +25,9 @@ Prod deploys may fail at build when code on `main` uses a gameslib API not yet i
 
 ## Lambda module-load checks (CI)
 
-Deploy workflows run `npm test` after `npm run build`. `pretest` runs `npm run build:lambda-bundles`, which esbuilds every Lambda handler entry with the same options as serverless-esbuild (ESM `.mjs`, same `external` list). `test/lambdaInit.test.mjs` dynamically imports those bundles plus `@abstractplay/gameslib` — matching Lambda cold-start module loading, not the TypeScript `tsc` CommonJS output under `api/*.js`.
+Deploy workflows run `npm test` after `npm run build`. `pretest` runs `npm run build:lambda-bundles`, which esbuilds every Lambda handler entry with the same options as serverless-esbuild (ESM `.mjs`, same `external` list). `vitest run` executes unit tests from `test/**/*.test.ts`. `test/lambdaInit.test.mjs` dynamically imports those bundles plus `@abstractplay/gameslib` — matching Lambda cold-start module loading.
+
+If vitest fails with `exports is not defined` loading `lib/*.js`, delete stale local `tsc` sidecars (`lib/*.js`, `utils/*.js`) left over from before the ESM flip — they are gitignored and must not remain on disk beside the `.ts` sources.
 
 Handlers are packaged with **serverless-esbuild** (ESM `.mjs` bundles). Heavy `@abstractplay/*` dependencies live in a shared Lambda layer built by `npm run build:layers` before `serverless package` / deploy.
 

@@ -1,9 +1,9 @@
 import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
-import { getConnections } from "./getConnections";
-import { listAllConnections, wantsPresenceUpdates } from "./wsConnectionStore";
-import { postToConnection, postToMany } from "./wsPost";
+import { getConnections } from "./getConnections.js";
+import { listAllConnections, wantsPresenceUpdates } from "./wsConnectionStore.js";
+import { postToConnection, postToMany } from "./wsPost.js";
 
 const REGION = "us-east-1";
 const ddbLow = new DynamoDBClient({ region: REGION });

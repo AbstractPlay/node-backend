@@ -6,7 +6,7 @@ import {
   UpdateCommand,
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
-import { isBotId, filterHumanIds } from './participants';
+import { isBotId, filterHumanIds } from './participants.js';
 
 export const NOTIFICATION_PK_PREFIX = 'NOTIFICATION#';
 export const NOTIFICATION_INITIAL_TTL_DAYS = 180;

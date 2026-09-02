@@ -8,9 +8,9 @@ import {
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { GameFactory } from '@abstractplay/gameslib';
 import type { DynamoDBRecord } from 'aws-lambda';
-import { decompressGameState } from './gameState';
-import { isBotId } from './participants';
-import { deleteUserGameOverlay } from './userGameOverlay';
+import { decompressGameState } from './gameState.js';
+import { isBotId } from './participants.js';
+import { deleteUserGameOverlay } from './userGameOverlay.js';
 
 export type GameRecord = {
   pk: string;

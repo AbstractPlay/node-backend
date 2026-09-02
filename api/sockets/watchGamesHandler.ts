@@ -7,7 +7,7 @@ import {
   connectionTtl,
   getConnection,
   watchingGamesFromRefs,
-} from "../../lib/wsConnectionStore";
+} from "../../lib/wsConnectionStore.js";
 
 type WebSocketRequestContext = APIGatewayProxyEventV2["requestContext"] & {
   connectionId: string;

@@ -1,12 +1,11 @@
-'use strict';
 
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
-import { connectionTtl, watchingGamesFromRefs } from '../../lib/wsConnectionStore';
-import { enqueuePresenceEvent, sendPresenceSnapshot } from '../../lib/wsPresence';
-import { touchUserLastSeen } from '../../lib/touchUserLastSeen';
+import { connectionTtl, watchingGamesFromRefs } from '../../lib/wsConnectionStore.js';
+import { enqueuePresenceEvent, sendPresenceSnapshot } from '../../lib/wsPresence.js';
+import { touchUserLastSeen } from '../../lib/touchUserLastSeen.js';
 
 type WebSocketRequestContext = APIGatewayProxyEventV2["requestContext"] & {
   connectionId: string;

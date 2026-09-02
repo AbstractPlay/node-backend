@@ -7,7 +7,7 @@ import {
   applyOverlayFields,
   listUserGameOverlays,
   type UserGameOverlay,
-} from './userGameOverlay';
+} from './userGameOverlay.js';
 
 export type DashboardGame = {
   id: string;

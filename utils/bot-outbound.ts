@@ -3,7 +3,7 @@ import {
   BotOutboundMessage,
   processBotChallengeMessage,
   processBotMoveMessage,
-} from '../lib/botOutbound';
+} from '../lib/botOutbound.js';
 
 async function processRecord(record: SQSRecord): Promise<void> {
   let message: BotOutboundMessage;

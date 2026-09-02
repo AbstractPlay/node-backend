@@ -1,9 +1,9 @@
-import { beforeEach, test } from 'node:test';
+import { beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
-import i18n from 'i18next';
+import i18n from '../lib/i18nInstance.js';
 import { gameinfo } from '@abstractplay/gameslib';
-import { localizedGameName } from '../lib/gameDisplayName';
-import { changeLanguageForPlayer, initi18n } from '../api/abstractplay';
+import { localizedGameName } from '../lib/gameDisplayName.js';
+import { changeLanguageForPlayer, initi18n } from '../api/abstractplay.js';
 
 beforeEach(async () => {
   if (i18n.isInitialized) {

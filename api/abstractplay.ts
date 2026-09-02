@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
-'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, BatchGetCommand, QueryCommandInput, GetCommandOutput, PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
@@ -7,13 +6,13 @@ import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageReq
 import { CognitoIdentityProviderClient, CreateUserPoolClientCommand, DeleteUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, validateVariantSelection } from '@abstractplay/gameslib';
-import { localizedGameName } from '../lib/gameDisplayName';
-import { applyGameslibBundlesTo } from '../lib/gameslibLocales';
-import { effectiveFlags, flagSetIncludes, structuralFlags, applyPerspectivePlayerRotations } from '../lib/effectiveGameFlags';
+import { localizedGameName } from '../lib/gameDisplayName.js';
+import { applyGameslibBundlesTo } from '../lib/gameslibLocales.js';
+import { effectiveFlags, flagSetIncludes, structuralFlags, applyPerspectivePlayerRotations } from '../lib/effectiveGameFlags.js';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush from "web-push";
 import { validateToken } from '@sunknudsen/totp';
-import i18n from 'i18next';
+import i18n from '../lib/i18nInstance.js';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
 import de from '../locales/de/apback.json';
@@ -37,8 +36,8 @@ function resolvePlayerLanguage(language: string | undefined): string {
   }
   return "en";
 }
-import { wsBroadcast } from '../lib/wsBroadcast';
-import { checkInGameCommentAuth } from '../lib/commentAuth';
+import { wsBroadcast } from '../lib/wsBroadcast.js';
+import { checkInGameCommentAuth } from '../lib/commentAuth.js';
 import {
   highlightGame,
   listHighlights,
@@ -58,7 +57,7 @@ import {
   updateWatcherSummaries,
   watchGame,
   setWatchedSeen,
-} from '../lib/playerGameMarks';
+} from '../lib/playerGameMarks.js';
 import {
   isBotId,
   getParticipants,
@@ -68,13 +67,13 @@ import {
   toClientBot,
   ClientBot,
   BotRecord,
-} from '../lib/participants';
-import { enqueueBotOutbound, getToMovePlayerIds, loadGameRecord } from '../lib/botOutbound';
+} from '../lib/participants.js';
+import { enqueueBotOutbound, getToMovePlayerIds, loadGameRecord } from '../lib/botOutbound.js';
 import {
   beginBotSecretRotation as cognitoBeginBotSecretRotation,
   finalizeBotSecretRotation as cognitoFinalizeBotSecretRotation,
-} from '../lib/botSecrets';
-import { buildCreateBotClientInput } from '../lib/botCognito';
+} from '../lib/botSecrets.js';
+import { buildCreateBotClientInput } from '../lib/botCognito.js';
 import {
   BotNameTakenError,
   BotNameValidationError,
@@ -82,35 +81,35 @@ import {
   releaseBotDisplayName,
   renameBotDisplayName,
   validateBotDisplayName,
-} from '../lib/botNames';
-import { testBotStatus, updateTestBot } from './testBot';
-import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } from '../lib/gameState';
-import { adjustShardedCounts, ensureShardedMetaGameCountEntry } from '../lib/gameProjector';
-import { adminDeleteGame } from '../lib/adminDeleteGame';
-import { filterExplorationTreeForSave, type ExplorationTreeNode } from '../lib/explorationMoves';
+} from '../lib/botNames.js';
+import { testBotStatus, updateTestBot } from './testBot.js';
+import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } from '../lib/gameState.js';
+import { adjustShardedCounts, ensureShardedMetaGameCountEntry } from '../lib/gameProjector.js';
+import { adminDeleteGame } from '../lib/adminDeleteGame.js';
+import { filterExplorationTreeForSave, type ExplorationTreeNode } from '../lib/explorationMoves.js';
 import {
   buildStartSoloGame,
   normalizeSoloClocks,
   soloPlaySupported,
-} from '../lib/soloGame';
-import { tournamentPlaySupported } from '../lib/tournamentGame';
+} from '../lib/soloGame.js';
+import { tournamentPlaySupported } from '../lib/tournamentGame.js';
 import {
   loadDashboardGames,
   listActiveGameKeys,
   shouldWriteGameOpenOverlay,
-} from '../lib/dashboardGames';
-import { runDashboardMaintenance, checkAndProcessGameTimeout } from '../lib/dashboardMaintenance';
+} from '../lib/dashboardGames.js';
+import { runDashboardMaintenance, checkAndProcessGameTimeout } from '../lib/dashboardMaintenance.js';
 import {
   buildMeDashboardPayload,
   buildMeProfilePayload,
   type MeAncillaryData,
   type MeChallengeData,
-} from '../lib/meQuery';
-import { getUsersLastSeen } from '../lib/touchUserLastSeen';
-import { hasCurrentGameRow } from '../lib/dashboardGames';
+} from '../lib/meQuery.js';
+import { getUsersLastSeen } from '../lib/touchUserLastSeen.js';
+import { hasCurrentGameRow } from '../lib/dashboardGames.js';
 import {
   upsertUserGameOverlay,
-} from '../lib/userGameOverlay';
+} from '../lib/userGameOverlay.js';
 import {
   type PushOptions,
   deleteAllPushSubscriptions,
@@ -118,7 +117,7 @@ import {
   queryPushSubscriptions,
   savePushSubscription,
   sendPushToSubscriptions,
-} from '../lib/pushSubscriptions';
+} from '../lib/pushSubscriptions.js';
 import {
   deletePlaygroundSave,
   getPlaygroundSave,
@@ -126,18 +125,18 @@ import {
   putPlaygroundSave,
   validatePlaygroundSaveInput,
   type PlaygroundSaveInput,
-} from '../lib/playgroundSaves';
-import { loadSummaryPlayerCountsByUid } from '../lib/summaryRatings';
+} from '../lib/playgroundSaves.js';
+import { loadSummaryPlayerCountsByUid } from '../lib/summaryRatings.js';
 import {
   logRecommendationEvent,
   type RecommendationEventPars,
-} from '../lib/recommendationEvents';
-import { validateAboutText } from '../lib/aboutText';
-import { checkAboutSaveAllowed } from '../lib/aboutSaves';
+} from '../lib/recommendationEvents.js';
+import { validateAboutText } from '../lib/aboutText.js';
+import { checkAboutSaveAllowed } from '../lib/aboutSaves.js';
 import {
   logLayoutFeedbackEvent,
   type LayoutFeedbackEventPars,
-} from '../lib/layoutFeedbackEvents';
+} from '../lib/layoutFeedbackEvents.js';
 import {
   createNotification,
   dismissNotification as deleteUserNotification,
@@ -151,7 +150,7 @@ import {
   resolveEventInvitationNotifyIds,
   type InAppNotificationUserSettings,
   type NotificationGame,
-} from '../lib/notifications';
+} from '../lib/notifications.js';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });

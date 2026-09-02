@@ -2,18 +2,18 @@
   "name": "abstractplay-backend",
   "version": "1.0.0-beta",
   "description": "node.js lambda with DynamoDB",
-  "main": "??",
+  "type": "module",
   "scripts": {
     "build:lambda-bundles": "node scripts/build-lambda-test-bundles.mjs",
     "pretest": "npm run build:lambda-bundles",
-    "test": "npm run typecheck && npm run build-ts && node --test test/gameState.test.js test/gameProjector.test.js test/dashboardGames.test.js test/push.test.js test/i18n.test.js test/commentAuth.test.js test/playerGameMarks.test.js test/wsAuth.test.js test/playgroundSaves.test.js test/recommendationEvents.test.js test/layoutFeedbackEvents.test.js test/batchRatings.test.js test/summaryRatings.test.js test/adminDeleteGame.test.js test/gameTimeout.test.js test/dashboardMaintenance.test.js test/meProfile.test.js test/touchUserLastSeen.test.js test/notifications.test.js test/aboutText.test.js test/aboutSaves.test.js test/soloGame.test.js test/tournamentGame.test.js test/lambdaInit.test.mjs test/effectiveGameFlags.test.js test/challengeVariants.test.js test/scripts/locale-prune.test.mjs",
+    "test": "npm run typecheck && vitest run && node --test test/lambdaInit.test.mjs test/scripts/locale-prune.test.mjs test/scripts/check-weblate-branch.test.mjs",
+    "test:watch": "vitest",
     "test:scripts": "node --test test/scripts/*.test.mjs",
     "typecheck": "tsc --noEmit",
-    "build-ts": "tsc",
     "build:layers": "node scripts/build-layers.mjs",
     "test:layers": "npm run build:layers && node scripts/smoke-layer-modules.mjs",
     "lint": "eslint && npm run typecheck",
-    "build": "npm run lint && npm run build-ts",
+    "build": "npm run lint",
     "deploy-dev": "serverless deploy",
     "deploy-prod": "serverless --stage prod deploy",
     "full-dev": "npm run build && serverless deploy",
@@ -78,7 +78,8 @@
     "serverless-esbuild": "^1.57.0",
     "serverless-plugin-common-excludes": "^4.0.0",
     "serverless-scriptable-plugin": "^1.3.1",
-    "typescript": "^5.0.4"
+    "typescript": "^5.0.4",
+    "vitest": "^3.2.4"
   },
   "overrides": {
     "splaytree": "3.1.2",

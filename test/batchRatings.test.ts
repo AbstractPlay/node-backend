@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   assignTournamentPlayerRatings,
@@ -13,7 +14,9 @@ import {
   lookupBatchRating,
   type TournamentSeedPlayer,
   type UserGameRating,
-} from '../lib/batchRatings';
+} from '../lib/batchRatings.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const fixture = JSON.parse(
   readFileSync(join(__dirname, 'fixtures', 'batch-ratings.json'), 'utf8'),

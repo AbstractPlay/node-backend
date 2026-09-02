@@ -116,10 +116,10 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { GameFactory } from '@abstractplay/gameslib';
-import { verifyBotRequest } from '../lib/botVerify';
-import { submitBotMove } from '../lib/botClient';
-import { getBotRecord } from '../lib/participants';
-import { ddbDocClient } from '../lib/ddb';
+import { verifyBotRequest } from '../lib/botVerify.js';
+import { submitBotMove } from '../lib/botClient.js';
+import { getBotRecord } from '../lib/participants.js';
+import { ddbDocClient } from '../lib/ddb.js';
 
 // =============================================================================
 // Test-bot dashboard state (dev only — production bots use their own storage)

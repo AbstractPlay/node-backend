@@ -1,5 +1,5 @@
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import type { UserGameRating } from './batchRatings';
+import type { UserGameRating } from './batchRatings.js';
 
 const REC_BUCKET = 'records.abstractplay.com';
 const SUMMARY_RATINGS_KEY = '_summary-ratings.json';

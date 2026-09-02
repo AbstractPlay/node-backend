@@ -1,5 +1,5 @@
 import { DeleteCommand, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
-import { ddbDocClient } from './ddb';
+import { ddbDocClient } from './ddb.js';
 
 const BOTNAME_PK = 'BOTNAME';
 const MAX_BOT_DISPLAY_NAME_LENGTH = 64;

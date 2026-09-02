@@ -1,10 +1,9 @@
-import { createRequire } from 'module';
-import { existsSync, readFileSync } from 'fs';
-import path from 'path';
+import { createRequire } from 'node:module';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { i18n } from 'i18next';
 
-/** Anchor resolution on package.json so this works in ESM bundles (no __filename / import.meta). */
-const cjsRequire = createRequire(path.join(process.cwd(), 'package.json'));
+const cjsRequire = createRequire(import.meta.url);
 const gameslibRoot = path.dirname(
   cjsRequire.resolve('@abstractplay/gameslib/package.json'),
 );

@@ -8,9 +8,9 @@ import {
   type DynamoDBDocumentClient,
   type QueryCommandInput,
 } from '@aws-sdk/lib-dynamodb';
-import { gameRecordSk, isGameParticipant, type GameForCommentAuth } from './commentAuth';
-import { decompressGameState } from './gameState';
-import { shouldKeepCompletedGame, type GameRecord } from './gameProjector';
+import { gameRecordSk, isGameParticipant, type GameForCommentAuth } from './commentAuth.js';
+import { decompressGameState } from './gameState.js';
+import { shouldKeepCompletedGame, type GameRecord } from './gameProjector.js';
 
 export type GameMarkPlayer = { id: string; name: string; time?: number };
 

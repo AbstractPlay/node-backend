@@ -1,14 +1,17 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { describe, it, before, after } from 'node:test';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, it, beforeAll, afterAll } from 'vitest';
 import assert from 'node:assert/strict';
-import { assignTournamentPlayerRatings, type TournamentSeedPlayer, type UserGameRating } from '../lib/batchRatings';
+import { assignTournamentPlayerRatings, type TournamentSeedPlayer, type UserGameRating } from '../lib/batchRatings.js';
 import {
   clearSummaryRatingsCacheForTests,
   loadSummaryPlayerCountsByUid,
   loadSummaryRatingsHighest,
   setSummaryRatingsCacheForTests,
-} from '../lib/summaryRatings';
+} from '../lib/summaryRatings.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const fixture = JSON.parse(
   readFileSync(join(__dirname, 'fixtures', 'batch-ratings.json'), 'utf8'),
@@ -18,11 +21,11 @@ const fixture = JSON.parse(
 };
 
 describe('loadSummaryRatingsHighest', () => {
-  before(() => {
+  beforeAll(() => {
     setSummaryRatingsCacheForTests(fixture.highest, fixture.playerCountsByUid ?? {});
   });
 
-  after(() => {
+  afterAll(() => {
     clearSummaryRatingsCacheForTests();
   });
 
