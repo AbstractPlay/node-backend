@@ -5,6 +5,7 @@ jspm_packages
 # Serverless directories
 .serverless
 .esbuild/
+.test-artifacts/
 /api/**/*.js
 /utils/*.js
 /lib/*.js
