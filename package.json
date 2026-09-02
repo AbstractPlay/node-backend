@@ -19,6 +19,8 @@
     "extract": "i18next 'api/**/*.ts' 'utils/**/*.ts'",
     "translate": "node bin/translate.mjs locales/en/apback.json",
     "prune-locales": "node bin/locale-prune.mjs locales/en/apback.json",
+    "check-weblate-branch": "node bin/check-weblate-branch.mjs",
+    "merge-weblate-branch": "node bin/merge-weblate-branch.mjs",
     "sync-deps": "node bin/install-ap-deps.mjs --stage dev",
     "sync-deps:prod": "node bin/install-ap-deps.mjs --stage prod"
   },
@@ -38,7 +40,7 @@
   },
   "packageManager": "npm@11.6.2",
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-33452193426.0",
+    "@abstractplay/gameslib": "1.0.0-ci-33562782651.0",
     "@abstractplay/recranks": "latest",
     "@abstractplay/renderer": "1.0.0-ci-33416463329.0",
     "@aws-sdk/client-apigatewaymanagementapi": "^3.957.0",

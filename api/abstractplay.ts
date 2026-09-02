@@ -7,6 +7,12 @@ import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageReq
 import { CognitoIdentityProviderClient, CreateUserPoolClientCommand, DeleteUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, validateVariantSelection } from '@abstractplay/gameslib';
+import enApgames from '@abstractplay/gameslib/locales/en/apgames.json';
+import frApgames from '@abstractplay/gameslib/locales/fr/apgames.json';
+import deApgames from '@abstractplay/gameslib/locales/de/apgames.json';
+import itApgames from '@abstractplay/gameslib/locales/it/apgames.json';
+import esUSApgames from '@abstractplay/gameslib/locales/es-US/apgames.json';
+import { localizedGameName } from '../lib/gameDisplayName';
 import { effectiveFlags, flagSetIncludes, structuralFlags, applyPerspectivePlayerRotations } from '../lib/effectiveGameFlags';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush from "web-push";
@@ -22,6 +28,16 @@ import ta from '../locales/ta/apback.json';
 
 const LOCALE_RESOURCES = { en, fr, de, it, "es-US": esUS, pt, ta } as const;
 const REGISTERED_LANGUAGES = Object.keys(LOCALE_RESOURCES);
+
+const APGAMES_BY_LANG: Record<string, object> = {
+  en: enApgames,
+  fr: frApgames,
+  de: deApgames,
+  it: itApgames,
+  "es-US": esUSApgames,
+  pt: enApgames,
+  ta: enApgames,
+};
 
 function resolvePlayerLanguage(language: string | undefined): string {
   if (language && REGISTERED_LANGUAGES.includes(language)) {
@@ -3997,10 +4013,9 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
   }
 }
 
-async function sendChallengedEmail(challengerName: string, opponents: User[], metaGame: string, comment: string | undefined) {
+async function sendChallengedEmail(challengerName: string, opponents: User[], metaGameUid: string, comment: string | undefined) {
   const humanIds = await filterHumanIds(opponents.map((o: { id: any; }) => o.id));
   const players: FullUser[] = await getPlayers(humanIds);
-  metaGame = gameinfo.get(metaGame).name;
   await initi18n('en');
   const work: Promise<any>[] = [];
   comment = comment ? comment.trim() : "";
@@ -4008,6 +4023,7 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
     comment += ".";
   for (const player of players) {
     await changeLanguageForPlayer(player);
+    const metaGame = localizedGameName(metaGameUid);
     let body;
     if (comment === ".") {
       body = i18n.t("ChallengeBody", { "challenger": challengerName, metaGame });
@@ -4053,7 +4069,6 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
     let comment = pars.comment ? pars.comment.trim() : "";
     if (!comment.endsWith(".") && !comment.endsWith("!") && !comment.endsWith("?"))
       comment += ".";
-    const metaGame = gameinfo.get(challenge.metaGame).name;
     await initi18n('en');
     const tableName = process.env.ABSTRACT_PLAY_TABLE!;
     let revokerName: string | undefined;
@@ -4068,6 +4083,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
       const players: FullUser[] = await getPlayers(await filterHumanIds(challenge.challengees.map((c: { id: any; }) => c.id)));
       for (const player of players) {
         await changeLanguageForPlayer(player);
+        const metaGame = localizedGameName(challenge.metaGame);
         let body;
         if (comment === ".") {
           body = i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame });
@@ -4111,6 +4127,7 @@ async function revokeChallenge(userid: any, pars: { id: string; metaGame: string
       const players = await getPlayers(await filterHumanIds(challenge.players.map((c: { id: any; }) => c.id).filter((id: any) => id !== challenge!.challenger.id)));
       for (const player of players) {
         await changeLanguageForPlayer(player);
+        const metaGame = localizedGameName(challenge.metaGame);
         let body;
         if (comment === ".") {
           body = i18n.t("ChallengeRevokedBody", { name: challenge.challenger.name, metaGame });
@@ -4196,7 +4213,8 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       try {
         for (const [ind, player] of email.players.entries()) {
           await changeLanguageForPlayer(player);
-          let body = i18n.t("GameStartedBody", { metaGame: email.metaGame });
+          const metaGameDisplay = localizedGameName(metaGame);
+          let body = i18n.t("GameStartedBody", { metaGame: metaGameDisplay });
           if (ind === 0 || email.simultaneous) {
             body += " " + i18n.t("YourMove");
           }
@@ -4252,11 +4270,11 @@ async function respondedChallenge(userid: string, pars: { response: boolean; id:
       // Inform everyone (except the decliner, he knows).
       const players: FullUser[] = await getPlayers(await filterHumanIds(challenge.challengees!.map(c => c.id).filter(id => id !== userid).concat(challenge.players.map(c => c.id))));
       const quitter = challenge.challengees!.find(c => c.id === userid)!.name;
-      const metaGame = gameinfo.get(challenge.metaGame).name;
       const tableName = process.env.ABSTRACT_PLAY_TABLE!;
       const declineNote = !standing ? optionalNotificationNote(pars.comment) : undefined;
       for (const player of players) {
         await changeLanguageForPlayer(player);
+        const metaGame = localizedGameName(challenge.metaGame);
         let body = i18n.t("ChallengeRejectedBody", { quitter, metaGame });
         if (comment !== ".") {
           body += " " + i18n.t("ChallengeResponseComment", { comment });
@@ -5054,11 +5072,11 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
       playerIds = game.players.map(p => p.id);
     }
     const players = players0.filter(p => playerIds.includes(p.id));
-    const metaGame = gameinfo.get(game.metaGame).name;
     // Realtime YourTurn notifications are only sent by push (not for solo games — always your turn)
     if (game.numPlayers !== 1) {
       for (const player of players) {
         await changeLanguageForPlayer(player);
+        const metaGame = localizedGameName(game.metaGame);
         work.push(sendPush({
           userId: player.id,
           topic: "yourturn",
@@ -5072,7 +5090,6 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
     // Game over
     const playerIds = game.players.map((p: { id: any; }) => p.id);
     const players = players0.filter((p: { id: any; }) => playerIds.includes(p.id));
-    const metaGame = gameinfo.get(game.metaGame).name;
     const engine = GameFactory(game.metaGame, game.state);
     if (!engine)
       throw new Error(`Unknown metaGame ${game.metaGame}`);
@@ -5085,6 +5102,7 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
 
     for (const player of players) {
       await changeLanguageForPlayer(player);
+      const metaGame = localizedGameName(game.metaGame);
       // The Game Over email has a few components:
       const body = [];
       //   - Initial line
@@ -6977,7 +6995,6 @@ async function endTournament(tournament: Tournament) {
           // And, in fact, full players (just for e-mail!? and language... Don't want to put these in the tournament player because then those will have to be maintained if e-mail or language changes)
           const playersFull = await getPlayers(players.map(p => p.playerid));
           await initi18n('en');
-          const metaGameName = gameinfo.get(tournament.metaGame)?.name;
           const tableName = process.env.ABSTRACT_PLAY_TABLE!;
           for (const player of playersFull) {
             const tournamentPlayer = playersById.get(player.id);
@@ -7000,6 +7017,7 @@ async function endTournament(tournament: Tournament) {
             if ((player.settings?.all?.notifications === undefined) || (!player.settings.all.notifications.hasOwnProperty("tournamentEnd")) || (player.settings.all.notifications.tournamentEnd)) {
               console.log("Sending email");
               await changeLanguageForPlayer(player);
+              const metaGameName = localizedGameName(tournament.metaGame);
               let body = '';
               if (tournament.variants.length === 0)
                 body = i18n.t("TournamentEndBody", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id });
@@ -9177,7 +9195,13 @@ export async function initi18n(language: string) {
     lng: language,
     fallbackLng: 'en',
     resources: Object.fromEntries(
-      Object.entries(LOCALE_RESOURCES).map(([lng, translation]) => [lng, { translation }])
+      Object.entries(LOCALE_RESOURCES).map(([lng, translation]) => [
+        lng,
+        {
+          translation,
+          apgames: APGAMES_BY_LANG[lng] ?? enApgames,
+        },
+      ]),
     ),
   });
 }

@@ -1,6 +1,8 @@
 import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import i18n from 'i18next';
+import { gameinfo } from '@abstractplay/gameslib';
+import { localizedGameName } from '../lib/gameDisplayName';
 import { changeLanguageForPlayer, initi18n } from '../api/abstractplay';
 
 beforeEach(async () => {
@@ -8,6 +10,21 @@ beforeEach(async () => {
     await i18n.changeLanguage('en');
   }
   await initi18n('en');
+});
+
+test('initi18n loads apgames bundles for managed languages', async () => {
+  assert.ok(i18n.hasResourceBundle('de', 'apgames'));
+  assert.ok(i18n.hasResourceBundle('en', 'apgames'));
+});
+
+test('localizedGameName resolves via active language after changeLanguageForPlayer', async () => {
+  const uid = 'hex';
+  const fallback = gameinfo.get(uid)?.name ?? uid;
+  await changeLanguageForPlayer({ language: 'en' });
+  assert.equal(localizedGameName(uid), fallback);
+  await changeLanguageForPlayer({ language: 'de' });
+  assert.equal(typeof localizedGameName(uid), 'string');
+  assert.ok(localizedGameName(uid).length > 0);
 });
 
 test('changeLanguageForPlayer uses German when registered', async () => {
