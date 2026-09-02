@@ -10,7 +10,7 @@ Transactional email is sent via AWS SES for:
 
 Users can disable most email categories in `settings.all.notifications`; push notifications for challenges and tournaments follow the same preference flags where applicable (challenge/game push still sends regardless of email toggles for challenges).
 
-Language follows the recipient's `language` field (`locales/*/apback.json`). At send time, if the user's language is not yet registered in i18next, notifications fall back to English while the stored preference is kept unchanged — adding a locale later will apply automatically for users who already selected that language.
+Language follows the recipient's `language` field (`locales/*/apback.json` for email template strings). Game titles in `{{metaGame}}` interpolation use `apgames:names.{uid}` from gameslib locale bundles loaded in `initi18n` (`localizedGameName()` in `lib/gameDisplayName.ts`). If the user's language is not yet registered in i18next, notification copy falls back to English while the stored preference is kept unchanged.
 
 ## Web push
 
