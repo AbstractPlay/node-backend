@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, test } from 'node:test';
+import { afterEach, beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   DeleteCommand,
@@ -16,7 +16,7 @@ import {
   savePushSubscription,
   sendPushToSubscriptions,
   type PushCredentials,
-} from '../lib/pushSubscriptions';
+} from '../lib/pushSubscriptions.js';
 
 const TABLE = 'abstract-play-test';
 const USER_ID = 'user-123';

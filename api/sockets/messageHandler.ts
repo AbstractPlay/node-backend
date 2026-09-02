@@ -8,8 +8,8 @@ import {
   watchingGamesHas,
   wantsPresenceUpdates,
   type WsConnectionItem,
-} from "../../lib/wsConnectionStore";
-import { postToMany } from "../../lib/wsPost";
+} from "../../lib/wsConnectionStore.js";
+import { postToMany } from "../../lib/wsPost.js";
 
 type MsgBody = {
   domainName: string;

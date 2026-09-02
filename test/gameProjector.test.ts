@@ -1,13 +1,12 @@
-"use strict";
-const { describe, it } = require('node:test');
-const assert = require('node:assert/strict');
-const {
+import { describe, it } from 'vitest';
+import assert from 'node:assert/strict';
+import {
   parseGameSk,
   resolveNumMoves,
   shouldKeepCompletedGame,
   toCompletedSummary,
   toCurrentSummary,
-} = require('../lib/gameProjector');
+} from '../lib/gameProjector.js';
 
 describe('parseGameSk', () => {
   it('parses metaGame#cbit#gameId', () => {

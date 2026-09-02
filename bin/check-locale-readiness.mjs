@@ -1,24 +1,24 @@
 #!/usr/bin/env node
-"use strict";
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const fs = require("fs");
-const path = require("path");
-
-const LOCALES_DIR = path.join(__dirname, "..", "locales");
-const REFERENCE_LOCALE = "en";
-const LOCALE_FILE = "apback.json";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const LOCALES_DIR = path.join(__dirname, '..', 'locales');
+const REFERENCE_LOCALE = 'en';
+const LOCALE_FILE = 'apback.json';
 
 const PLACEHOLDER_PREFIX_RE = /^\[[A-Za-z_]+\]\s*/;
 const I18N_PLACEHOLDER_RE = /\{\{[-\s]*[^}]+\}\}/g;
 const URL_RE = /https?:\/\/\S+/g;
 
-function flattenStrings(obj, prefix = "") {
+function flattenStrings(obj, prefix = '') {
   const out = {};
   for (const [key, value] of Object.entries(obj)) {
     const pathKey = prefix ? `${prefix}.${key}` : key;
-    if (typeof value === "string") {
+    if (typeof value === 'string') {
       out[pathKey] = value;
-    } else if (value && typeof value === "object" && !Array.isArray(value)) {
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
       Object.assign(out, flattenStrings(value, pathKey));
     }
   }
@@ -27,10 +27,10 @@ function flattenStrings(obj, prefix = "") {
 
 function normalizeForComparison(value) {
   return value
-    .replace(I18N_PLACEHOLDER_RE, "")
-    .replace(URL_RE, "")
-    .replace(/abstractplay/gi, "")
-    .replace(/\s+/g, " ")
+    .replace(I18N_PLACEHOLDER_RE, '')
+    .replace(URL_RE, '')
+    .replace(/abstractplay/gi, '')
+    .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
 }
@@ -40,7 +40,7 @@ function hasPlaceholderPrefix(value) {
 }
 
 function stripPlaceholderPrefix(value) {
-  return value.trim().replace(PLACEHOLDER_PREFIX_RE, "");
+  return value.trim().replace(PLACEHOLDER_PREFIX_RE, '');
 }
 
 function looksLikeEnglish(value, englishValue) {
@@ -61,12 +61,12 @@ function loadLocaleStrings(locale) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Missing locale file: ${filePath}`);
   }
-  const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
   return flattenStrings(data);
 }
 
 function isTranslationKey(key) {
-  return !key.startsWith("_src_");
+  return !key.startsWith('_src_');
 }
 
 function auditLocale(locale, reference) {
@@ -119,70 +119,70 @@ function auditLocale(locale, reference) {
 
 function formatIssueList(items, formatter) {
   if (items.length === 0) {
-    return "    (none)";
+    return '    (none)';
   }
-  return items.map((item) => `    - ${formatter(item)}`).join("\n");
+  return items.map((item) => `    - ${formatter(item)}`).join('\n');
 }
 
 function printReport(results, verbose) {
   const ready = results.filter((r) => r.ready);
   const notReady = results.filter((r) => !r.ready);
 
-  console.log("Locale readiness report");
-  console.log("=======================");
+  console.log('Locale readiness report');
+  console.log('=======================');
   console.log(`Reference: ${REFERENCE_LOCALE}/${LOCALE_FILE}`);
   console.log(`Checked: ${results.length} locale(s)\n`);
 
-  console.log("Ready:");
+  console.log('Ready:');
   if (ready.length === 0) {
-    console.log("  (none)");
+    console.log('  (none)');
   } else {
     for (const result of ready) {
       console.log(`  - ${result.locale} (${result.presentKeys}/${result.totalKeys} keys)`);
     }
   }
 
-  console.log("\nNot ready:");
+  console.log('\nNot ready:');
   if (notReady.length === 0) {
-    console.log("  (none)");
+    console.log('  (none)');
   } else {
     for (const result of notReady) {
       console.log(
-        `  - ${result.locale} (${result.presentKeys}/${result.totalKeys} keys, ${result.issueCount} issue(s))`
+        `  - ${result.locale} (${result.presentKeys}/${result.totalKeys} keys, ${result.issueCount} issue(s))`,
       );
       if (!verbose) {
         continue;
       }
       if (result.missing.length) {
-        console.log("    missing:");
+        console.log('    missing:');
         console.log(formatIssueList(result.missing, (key) => key));
       }
       if (result.empty.length) {
-        console.log("    empty:");
+        console.log('    empty:');
         console.log(formatIssueList(result.empty, (key) => key));
       }
       if (result.placeholderPrefix.length) {
-        console.log("    [XX] prefix:");
+        console.log('    [XX] prefix:');
         console.log(
-          formatIssueList(result.placeholderPrefix, ({ key, value }) => `${key}: ${JSON.stringify(value)}`)
+          formatIssueList(result.placeholderPrefix, ({ key, value }) => `${key}: ${JSON.stringify(value)}`),
         );
       }
       if (result.englishLike.length) {
-        console.log("    looks English:");
+        console.log('    looks English:');
         console.log(
-          formatIssueList(result.englishLike, ({ key, value }) => `${key}: ${JSON.stringify(value)}`)
+          formatIssueList(result.englishLike, ({ key, value }) => `${key}: ${JSON.stringify(value)}`),
         );
       }
-      console.log("");
+      console.log('');
     }
   }
 }
 
 function main() {
   const args = process.argv.slice(2);
-  const verbose = args.includes("--verbose") || args.includes("-v");
-  const failOnNotReady = args.includes("--fail");
-  const onlyLocales = args.filter((arg) => !arg.startsWith("-"));
+  const verbose = args.includes('--verbose') || args.includes('-v');
+  const failOnNotReady = args.includes('--fail');
+  const onlyLocales = args.filter((arg) => !arg.startsWith('-'));
 
   const reference = loadLocaleStrings(REFERENCE_LOCALE);
   const localeDirs = fs

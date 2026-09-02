@@ -2,7 +2,7 @@ import {
   ApiGatewayManagementApiClient,
   PostToConnectionCommand,
 } from "@aws-sdk/client-apigatewaymanagementapi";
-import { deleteConnection } from "./wsConnectionStore";
+import { deleteConnection } from "./wsConnectionStore.js";
 
 const clientCache = new Map<string, ApiGatewayManagementApiClient>();
 

@@ -3,9 +3,9 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { getConnection } from "../../lib/wsConnectionStore";
-import { sendPresenceSnapshot } from "../../lib/wsPresence";
-import { touchUserLastSeen } from "../../lib/touchUserLastSeen";
+import { getConnection } from "../../lib/wsConnectionStore.js";
+import { sendPresenceSnapshot } from "../../lib/wsPresence.js";
+import { touchUserLastSeen } from "../../lib/touchUserLastSeen.js";
 
 const REGION = "us-east-1";
 const clnt = new DynamoDBClient({ region: REGION });

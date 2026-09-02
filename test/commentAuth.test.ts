@@ -1,11 +1,11 @@
-import { afterEach, beforeEach, test } from 'node:test';
+import { afterEach, beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import {
   checkInGameCommentAuth,
   gameRecordSk,
   isGameParticipant,
-} from '../lib/commentAuth';
+} from '../lib/commentAuth.js';
 
 const TABLE = 'abstract-play-test';
 const META = 'emu';

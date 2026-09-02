@@ -1,12 +1,10 @@
-"use strict";
-const { describe, it, before } = require('node:test');
-const assert = require('node:assert/strict');
-const { tournamentPlaySupported } = require('../lib/tournamentGame');
+import { beforeAll, describe, it } from 'vitest';
+import assert from 'node:assert/strict';
+import { tournamentPlaySupported } from '../lib/tournamentGame.js';
 
-/** @type {import('@abstractplay/gameslib').gameinfo} */
-let gameinfo;
+let gameinfo: Awaited<typeof import('@abstractplay/gameslib')>['gameinfo'];
 
-before(async () => {
+beforeAll(async () => {
   ({ gameinfo } = await import('@abstractplay/gameslib'));
 });
 

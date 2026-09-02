@@ -1,4 +1,4 @@
-import { describe, it, test } from 'node:test';
+import { describe, it, test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   PutCommand,
@@ -23,7 +23,7 @@ import {
   parseNotificationCreatedAt,
   putNotificationItem,
   wantsInAppNotification,
-} from '../lib/notifications';
+} from '../lib/notifications.js';
 
 const TABLE = 'abstract-play-test';
 const USER_ID = '31af49bc-2030-4adb-aec9-dc8fa418fec1';

@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import webpush, { RequestOptions } from 'web-push';
-import { ddbDocClient } from './ddb';
+import { ddbDocClient } from './ddb.js';
 
 let docClient: DynamoDBDocumentClient = ddbDocClient;
 

@@ -7,7 +7,7 @@ import {
   summarizeJwtForLog,
   summarizeUrlForLog,
   type JwtLogSummary,
-} from './botClientLog';
+} from './botClientLog.js';
 
 type TokenCache = {  accessToken: string;
   expiresAtMs: number;

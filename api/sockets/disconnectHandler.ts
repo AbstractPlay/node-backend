@@ -1,7 +1,6 @@
-'use strict';
 
-import { getConnection, deleteConnection } from '../../lib/wsConnectionStore';
-import { enqueuePresenceEvent } from '../../lib/wsPresence';
+import { getConnection, deleteConnection } from '../../lib/wsConnectionStore.js';
+import { enqueuePresenceEvent } from '../../lib/wsPresence.js';
 
 interface WebSocketDisconnectEvent {
   requestContext: {

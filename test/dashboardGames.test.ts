@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   currentRowToGame,
@@ -6,8 +6,8 @@ import {
   listActiveGameKeys,
   mergeDashboardGames,
   type CurrentGameIndexRow,
-} from '../lib/dashboardGames';
-import type { UserGameOverlay } from '../lib/userGameOverlay';
+} from '../lib/dashboardGames.js';
+import type { UserGameOverlay } from '../lib/userGameOverlay.js';
 
 const activeRow: CurrentGameIndexRow = {
   pk: 'CURRENTGAMES#u1',

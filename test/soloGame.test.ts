@@ -1,12 +1,11 @@
-"use strict";
-const { describe, it } = require('node:test');
-const assert = require('node:assert/strict');
-const {
+import { describe, it } from 'vitest';
+import assert from 'node:assert/strict';
+import {
   resolveChallengeSeed,
   soloPlaySupported,
   normalizeSoloClocks,
-} = require('../lib/soloGame');
-const { shouldKeepCompletedGame } = require('../lib/gameProjector');
+} from '../lib/soloGame.js';
+import { shouldKeepCompletedGame } from '../lib/gameProjector.js';
 
 describe('resolveChallengeSeed', () => {
   it('returns trimmed client seed when provided', () => {

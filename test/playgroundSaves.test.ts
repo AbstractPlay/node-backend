@@ -1,12 +1,12 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   GAME_STATE_COMPRESS_THRESHOLD_BYTES,
   hydratePlaygroundBody,
   isCompressedGameState,
   preparePlaygroundBodyForStorage,
-} from '../lib/gameState';
-import { validatePlaygroundSaveInput } from '../lib/playgroundSaves';
+} from '../lib/gameState.js';
+import { validatePlaygroundSaveInput } from '../lib/playgroundSaves.js';
 
 const smallBody = JSON.stringify({ board: [[1, 2], [3, 4]] });
 

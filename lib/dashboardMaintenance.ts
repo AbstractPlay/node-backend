@@ -1,10 +1,10 @@
 import { UpdateCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { DashboardGame } from './dashboardGames';
+import type { DashboardGame } from './dashboardGames.js';
 import {
   checkAndProcessGameTimeout,
   sweepUserGameTimeouts,
   type TimelossFn,
-} from './gameTimeout';
+} from './gameTimeout.js';
 
 export const DASHBOARD_MAINTENANCE_LEASE_MS = 30_000;
 

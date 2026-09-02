@@ -1,4 +1,4 @@
-import i18n from 'i18next';
+import i18n from './i18nInstance.js';
 import { gameinfo } from '@abstractplay/gameslib';
 
 /** Localized meta-game title for the active i18next language (email/push copy). */

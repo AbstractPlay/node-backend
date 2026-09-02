@@ -1,9 +1,9 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const {
+import { test } from 'vitest';
+import assert from 'node:assert/strict';
+import {
   gameWatchKey,
   watchingGamesFromRefs,
-} = require('../lib/wsConnectionStore');
+} from '../lib/wsConnectionStore.js';
 
 test('watchingGamesFromRefs builds meta#id keys', () => {
   const refs = [
