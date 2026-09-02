@@ -40,7 +40,7 @@
   },
   "packageManager": "npm@11.6.2",
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-33452193426.0",
+    "@abstractplay/gameslib": "1.0.0-ci-33562782651.0",
     "@abstractplay/recranks": "latest",
     "@abstractplay/renderer": "1.0.0-ci-33416463329.0",
     "@aws-sdk/client-apigatewaymanagementapi": "^3.957.0",
