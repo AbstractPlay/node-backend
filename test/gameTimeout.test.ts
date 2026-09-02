@@ -1,11 +1,11 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   checkAndProcessGameTimeout,
   sweepUserGameTimeouts,
   type TimelossFn,
-} from '../lib/gameTimeout';
-import type { DashboardGame } from '../lib/dashboardGames';
+} from '../lib/gameTimeout.js';
+import type { DashboardGame } from '../lib/dashboardGames.js';
 
 const TABLE = 'test-table';
 const NOW = Date.parse('2026-08-24T12:00:00.000Z');

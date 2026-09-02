@@ -6,9 +6,7 @@ jspm_packages
 .serverless
 .esbuild/
 .test-artifacts/
-/api/**/*.js
-/utils/*.js
-/lib/*.js
+dist/
 .vscode/
 
 # Cursor — keep shared rules, ignore other local state

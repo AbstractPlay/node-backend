@@ -1,10 +1,10 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   getUsersLastSeen,
   touchUserLastSeen,
   TOUCH_USER_LAST_SEEN_INTERVAL_MS,
-} from '../lib/touchUserLastSeen';
+} from '../lib/touchUserLastSeen.js';
 
 const TABLE = 'test-table';
 const USER_ID = 'user-1';

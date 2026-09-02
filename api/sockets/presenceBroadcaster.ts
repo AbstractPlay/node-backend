@@ -3,7 +3,7 @@ import {
   broadcastPresenceDelta,
   mergePresenceBatch,
   type PresenceEvent,
-} from "../../lib/wsPresence";
+} from "../../lib/wsPresence.js";
 
 export const handler = async (event: SQSEvent) => {
   const events: PresenceEvent[] = [];

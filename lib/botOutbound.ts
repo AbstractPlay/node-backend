@@ -1,10 +1,10 @@
 import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { GameFactory } from '@abstractplay/gameslib';
-import { ddbDocClient } from './ddb';
-import { hydrateGameState } from './gameState';
-import { signBotPayload } from './botSigning';
-import { BotRecord, getBotRecord } from './participants';
+import { ddbDocClient } from './ddb.js';
+import { hydrateGameState } from './gameState.js';
+import { signBotPayload } from './botSigning.js';
+import { BotRecord, getBotRecord } from './participants.js';
 
 const REGION = 'us-east-1';
 const BOT_HTTP_TIMEOUT_MS = 30_000;
@@ -246,7 +246,7 @@ export async function processBotChallengeMessage(message: BotOutboundChallengeMe
   const result = await postToBot(bot, payload, 'POST', 200);
   const accepted = result.statusCode === 200;
 
-  const { botRespondToChallenge } = await import('../api/abstractplay');
+  const { botRespondToChallenge } = await import('../api/abstractplay.js');
   await botRespondToChallenge(
     message.botId,
     message.challengeId,

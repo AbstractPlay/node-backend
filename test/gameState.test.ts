@@ -1,7 +1,8 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-import { gzipSync } from 'zlib';
-import { test, before } from 'node:test';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
+import { test, beforeAll } from 'vitest';
 import assert from 'node:assert/strict';
 import type { GameFactory as GameFactoryFn } from '@abstractplay/gameslib';
 import {
@@ -12,11 +13,13 @@ import {
   isCompressedGameState,
   prepareGameStateForStorage,
   setGameEndedFromEngine,
-} from '../lib/gameState';
+} from '../lib/gameState.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 let GameFactory: typeof GameFactoryFn;
 
-before(async () => {
+beforeAll(async () => {
   ({ GameFactory } = await import('@abstractplay/gameslib'));
 });
 

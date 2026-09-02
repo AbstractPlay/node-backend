@@ -1,4 +1,4 @@
-import { countryCodeList } from './countryCodeList'
+import { countryCodeList } from './countryCodeList.js'
 
 function isoToCountryCode(isoCode: string, keyToGet: 'alpha2' | 'alpha3' | 'numeric' | 'countryName' = 'alpha2'): string|undefined {
   if (isoCode !== undefined) {

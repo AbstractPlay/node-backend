@@ -1,11 +1,11 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   acquireDashboardMaintenanceLock,
   runDashboardMaintenance,
   DASHBOARD_MAINTENANCE_LEASE_MS,
-} from '../lib/dashboardMaintenance';
-import type { DashboardGame } from '../lib/dashboardGames';
+} from '../lib/dashboardMaintenance.js';
+import type { DashboardGame } from '../lib/dashboardGames.js';
 
 const TABLE = 'test-table';
 const USER_ID = 'user-1';

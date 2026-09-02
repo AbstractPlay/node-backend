@@ -1,6 +1,6 @@
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { ddbDocClient } from './ddb';
+import { ddbDocClient } from './ddb.js';
 
 export type BotRecord = {
   pk?: string;

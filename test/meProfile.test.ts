@@ -1,10 +1,10 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   buildMeDashboardPayload,
   buildMeProfilePayload,
   type MeAncillaryData,
-} from '../lib/meQuery';
+} from '../lib/meQuery.js';
 
 const user = {
   id: 'u1',

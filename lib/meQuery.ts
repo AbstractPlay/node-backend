@@ -1,9 +1,9 @@
-import type { ClientBot } from './participants';
-import type { GameMarkSummary, HighlightEntry, RepresentativeEntry } from './playerGameMarks';
-import type { ActiveGameKey } from './dashboardGames';
-import type { DashboardGame } from './dashboardGames';
+import type { ClientBot } from './participants.js';
+import type { GameMarkSummary, HighlightEntry, RepresentativeEntry } from './playerGameMarks.js';
+import type { ActiveGameKey } from './dashboardGames.js';
+import type { DashboardGame } from './dashboardGames.js';
 
-import type { ClientNotification } from './notifications';
+import type { ClientNotification } from './notifications.js';
 
 export type MeAncillaryData = {
   tags: unknown[];

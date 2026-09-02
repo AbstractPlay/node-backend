@@ -10,8 +10,8 @@ import {
   purgeActiveGameDashboardIndexes,
   purgeCompletedGameDashboardIndexes,
   type GameRecord,
-} from './gameProjector';
-import { unwatchGame } from './playerGameMarks';
+} from './gameProjector.js';
+import { unwatchGame } from './playerGameMarks.js';
 
 export type AdminDeleteGameSummary = {
   gameId: string;

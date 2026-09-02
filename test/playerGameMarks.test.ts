@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, test } from 'node:test';
+import { afterEach, beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   DeleteCommand,
@@ -7,7 +7,7 @@ import {
   QueryCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
-import { gameRecordSk } from '../lib/commentAuth';
+import { gameRecordSk } from '../lib/commentAuth.js';
 import {
   buildGameSummary,
   countGameWatchers,
@@ -18,7 +18,7 @@ import {
   updateLastChatForWatchers,
   watchGame,
   type GameMarkSource,
-} from '../lib/playerGameMarks';
+} from '../lib/playerGameMarks.js';
 
 const TABLE = 'abstract-play-test';
 const META = 'emu';

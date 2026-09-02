@@ -1,5 +1,5 @@
 import { UpdateCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { DashboardGame } from './dashboardGames';
+import type { DashboardGame } from './dashboardGames.js';
 
 export type TimelossFn = (
   check: boolean,

@@ -1,6 +1,6 @@
 import type { DynamoDBStreamEvent } from 'aws-lambda';
-import { ddbDocClient } from '../lib/ddb';
-import { processGameStreamRecord } from '../lib/gameProjector';
+import { ddbDocClient } from '../lib/ddb.js';
+import { processGameStreamRecord } from '../lib/gameProjector.js';
 
 export const handler = async (event: DynamoDBStreamEvent): Promise<void> => {
   const tableName = process.env.ABSTRACT_PLAY_TABLE;

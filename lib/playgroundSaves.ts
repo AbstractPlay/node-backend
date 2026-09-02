@@ -9,7 +9,7 @@ import {
 import {
   hydratePlaygroundBody,
   preparePlaygroundBodyForStorage,
-} from './gameState';
+} from './gameState.js';
 
 export type PlaygroundSaveRecord = {
   pk: string;

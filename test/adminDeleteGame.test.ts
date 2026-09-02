@@ -1,7 +1,7 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { adminDeleteGame, loadGameForAdminDelete } from '../lib/adminDeleteGame';
+import { adminDeleteGame, loadGameForAdminDelete } from '../lib/adminDeleteGame.js';
 
 type Store = Map<string, Record<string, unknown>>;
 

@@ -1,7 +1,6 @@
-'use strict';
 
 import type { Handler } from "aws-lambda";
-import i18n from 'i18next';
+import i18n from '../lib/i18nInstance.js';
 import enGames from "../node_modules/@abstractplay/gameslib/locales/en/apgames.json";
 import enBack from "../locales/en/apback.json";
 

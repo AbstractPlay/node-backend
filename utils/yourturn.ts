@@ -1,11 +1,10 @@
-'use strict';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand,  } from '@aws-sdk/lib-dynamodb';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import i18n from 'i18next';
+import i18n from '../lib/i18nInstance.js';
 import type { Handler } from "aws-lambda";
-import { createSendEmailCommand, logGetItemError, formatReturnError, initi18n, changeLanguageForPlayer, UserSettings } from '../api/abstractplay';
+import { createSendEmailCommand, logGetItemError, formatReturnError, initi18n, changeLanguageForPlayer, UserSettings } from '../api/abstractplay.js';
 import { gameinfo } from '@abstractplay/gameslib';
 
 const REGION = "us-east-1";
