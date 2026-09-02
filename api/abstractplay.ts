@@ -7,12 +7,8 @@ import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageReq
 import { CognitoIdentityProviderClient, CreateUserPoolClientCommand, DeleteUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, validateVariantSelection } from '@abstractplay/gameslib';
-import enApgames from '@abstractplay/gameslib/locales/en/apgames.json';
-import frApgames from '@abstractplay/gameslib/locales/fr/apgames.json';
-import deApgames from '@abstractplay/gameslib/locales/de/apgames.json';
-import itApgames from '@abstractplay/gameslib/locales/it/apgames.json';
-import esUSApgames from '@abstractplay/gameslib/locales/es-US/apgames.json';
 import { localizedGameName } from '../lib/gameDisplayName';
+import { applyGameslibBundlesTo } from '../lib/gameslibLocales';
 import { effectiveFlags, flagSetIncludes, structuralFlags, applyPerspectivePlayerRotations } from '../lib/effectiveGameFlags';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush from "web-push";
@@ -28,16 +24,6 @@ import ta from '../locales/ta/apback.json';
 
 const LOCALE_RESOURCES = { en, fr, de, it, "es-US": esUS, pt, ta } as const;
 const REGISTERED_LANGUAGES = Object.keys(LOCALE_RESOURCES);
-
-const APGAMES_BY_LANG: Record<string, object> = {
-  en: enApgames,
-  fr: frApgames,
-  de: deApgames,
-  it: itApgames,
-  "es-US": esUSApgames,
-  pt: enApgames,
-  ta: enApgames,
-};
 
 function resolvePlayerLanguage(language: string | undefined): string {
   if (language && REGISTERED_LANGUAGES.includes(language)) {
@@ -9197,13 +9183,12 @@ export async function initi18n(language: string) {
     resources: Object.fromEntries(
       Object.entries(LOCALE_RESOURCES).map(([lng, translation]) => [
         lng,
-        {
-          translation,
-          apgames: APGAMES_BY_LANG[lng] ?? enApgames,
-        },
+        { translation },
       ]),
     ),
   });
+
+  applyGameslibBundlesTo(i18n);
 }
 
 function clientErrorMessage(err: unknown): string | undefined {
