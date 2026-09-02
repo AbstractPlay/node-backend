@@ -3,7 +3,8 @@ import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import type { i18n } from 'i18next';
 
-const cjsRequire = createRequire(__filename);
+/** Anchor resolution on package.json so this works in ESM bundles (no __filename / import.meta). */
+const cjsRequire = createRequire(path.join(process.cwd(), 'package.json'));
 const gameslibRoot = path.dirname(
   cjsRequire.resolve('@abstractplay/gameslib/package.json'),
 );
