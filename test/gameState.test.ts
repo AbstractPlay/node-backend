@@ -125,6 +125,20 @@ test('hydrateGameState decompresses backend gz state', () => {
   assert.equal(hydrated.pk, 'GAME');
 });
 
+test('hydrateGameState reconciles empty state variants from record variants', () => {
+  const state = JSON.stringify({ game: 'amazons', variants: [], stack: [] });
+  const record = {
+    pk: 'GAME',
+    sk: 'amazons#1#test',
+    state,
+    variants: ['scrambled'],
+  };
+  const hydrated = hydrateGameState(record);
+  assert.notEqual(hydrated.state, state);
+  assert.deepEqual(JSON.parse(hydrated.state).variants, ['scrambled']);
+  assert.deepEqual(hydrated.variants, ['scrambled']);
+});
+
 test('setGameEndedFromEngine sets gameEnded and winner when game is over', () => {
   const engine = GameFactory('saltire', saltireState);
   assert.ok(engine);
