@@ -39,13 +39,13 @@ jobs:
         run: npm ci
 
       - name: Validate ci-deps manifests
-        run: node bin/check-ci-deps.mjs
+        run: npx ap-check-ci-deps
 
       - name: Install pinned AP dependencies
-        run: node bin/install-ap-deps.mjs --stage dev
+        run: npx ap-install-deps --stage dev
 
-      - name: Verify package.json matches ci-deps
-        run: node bin/check-ci-deps.mjs --stage dev --strict
+      - name: Verify lockfile matches ci-deps
+        run: npx ap-check-ci-deps --stage dev --strict
 
       - name: Build
         run: npm run build

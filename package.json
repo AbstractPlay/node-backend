@@ -23,8 +23,8 @@
     "prune-locales": "node bin/locale-prune.mjs locales/en/apback.json",
     "check-weblate-branch": "node bin/check-weblate-branch.mjs",
     "merge-weblate-branch": "node bin/merge-weblate-branch.mjs",
-    "sync-deps": "node bin/install-ap-deps.mjs --stage dev",
-    "sync-deps:prod": "node bin/install-ap-deps.mjs --stage prod"
+    "sync-deps": "ap-install-deps --stage dev",
+    "sync-deps:prod": "ap-install-deps --stage prod"
   },
   "repository": {
     "type": "git",
@@ -62,6 +62,7 @@
     "web-push": "^3.6.3"
   },
   "devDependencies": {
+    "@abstractplay/ap-deps-tools": "^1.1.1",
     "@aws-sdk/types": "^3.310.0",
     "@google/genai": "^2.13.0",
     "@types/aws-lambda": "^8.10.115",
