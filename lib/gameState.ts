@@ -1,5 +1,6 @@
 import { GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
 import { gzipSync, gunzipSync } from 'zlib';
+import { reconcileVariantsInGameState } from './resolveGameVariants.js';
 
 type GameEndedTarget = {
   gameEnded?: number;
@@ -85,12 +86,15 @@ export function compressGameStateIfNeeded(state: string): string {
   return compressed;
 }
 
-export function hydrateGameState<T extends { state: string }>(record: T): T {
-  const decompressed = decompressGameState(record.state);
-  if (decompressed === record.state) {
+export function hydrateGameState<T extends { state: string; variants?: string[] }>(record: T): T {
+  let state = decompressGameState(record.state);
+  if (record.variants !== undefined && record.variants.length > 0) {
+    state = reconcileVariantsInGameState(state, record.variants);
+  }
+  if (state === record.state) {
     return record;
   }
-  return { ...record, state: decompressed };
+  return { ...record, state };
 }
 
 export function prepareGameStateForStorage<T extends { state: string }>(record: T): T {

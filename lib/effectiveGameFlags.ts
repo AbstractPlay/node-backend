@@ -1,5 +1,6 @@
 import { gameinfo, type GameBase } from "@abstractplay/gameslib";
 import * as APGames from "@abstractplay/gameslib";
+import { resolveGameVariantUids } from "./resolveGameVariants.js";
 
 type SessionFlagsEngine = GameBase & {
   getFlags?: () => readonly string[];
@@ -14,6 +15,7 @@ type ResolveGameFlags = (
 export function effectiveFlags(
   engine: GameBase | null | undefined,
   metaGame: string,
+  recordVariants?: string[],
 ): readonly string[] {
   const sessionEngine = engine as SessionFlagsEngine | null | undefined;
   if (sessionEngine != null && typeof sessionEngine.getFlags === "function") {
@@ -27,7 +29,7 @@ export function effectiveFlags(
       numplayers?: number;
     };
     return resolveGameFlags(metaGame, {
-      variants: state.variants,
+      variants: resolveGameVariantUids(state.variants, recordVariants),
       numplayers: state.numplayers,
     });
   }

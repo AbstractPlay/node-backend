@@ -4504,7 +4504,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     applyPerspectivePlayerRotations(
       gamePlayers as Array<{ settings?: { rotate?: number } }>,
       playerIDs.length,
-      effectiveFlags(engine, challenge.metaGame),
+      effectiveFlags(engine, challenge.metaGame, challenge.variants),
     );
     const addGame = ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -4779,7 +4779,7 @@ async function submitMove(userid: string, pars: {
 
     const flags = structuralFlags(game.metaGame);
     const simultaneous = flagSetIncludes(flags, "simultaneous");
-    const sessionFlags = effectiveFlags(engine, game.metaGame);
+    const sessionFlags = effectiveFlags(engine, game.metaGame, game.variants);
     const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
     let autoMoves = 0;
     let autoMovesPerPlayer: number[] = [];
@@ -5079,7 +5079,7 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
     if (!engine)
       throw new Error(`Unknown metaGame ${game.metaGame}`);
     const scores = [];
-    if (flagSetIncludes(effectiveFlags(engine, game.metaGame), "scores")) {
+    if (flagSetIncludes(effectiveFlags(engine, game.metaGame, game.variants), "scores")) {
       for (let p = 1; p <= engine.numplayers; p++) {
         scores.push(engine.getPlayerScore(p));
       }
@@ -5150,7 +5150,7 @@ function resign(userid: any, engine: GameBase, game: FullGame) {
     if (simultaneous) {
       applySimultaneousMove(userid, "resign", engine as GameBaseSimultaneous, game);
     } else {
-      applyMove(userid, "resign", -1, engine, game, [...effectiveFlags(engine, game.metaGame)]);
+      applyMove(userid, "resign", -1, engine, game, [...effectiveFlags(engine, game.metaGame, game.variants)]);
     }
   }
 }
@@ -5195,7 +5195,7 @@ function timeout(userid: string, engine: GameBase | GameBaseSimultaneous, game: 
     if (simultaneous) {
       applySimultaneousMove(loserid, "timeout", engine as GameBaseSimultaneous, game);
     } else {
-      applyMove(loserid, "timeout", -1, engine, game, [...effectiveFlags(engine, game.metaGame)]);
+      applyMove(loserid, "timeout", -1, engine, game, [...effectiveFlags(engine, game.metaGame, game.variants)]);
     }
   }
 }
@@ -8180,7 +8180,7 @@ async function eventCreateGames(userid: string, pars: { eventid: string; pairs: 
       applyPerspectivePlayerRotations(
         gamePlayers as Array<{ settings?: { rotate?: number } }>,
         playerIDs.length,
-        effectiveFlags(engine, pair.metagame),
+        effectiveFlags(engine, pair.metagame, pair.variants),
       );
       // queue for update
       const addGame = sendCommandWithRetry(new PutCommand({
@@ -8512,7 +8512,7 @@ async function invokePie(userid: string, pars: { id: string, metaGame: string, c
       const engine = GameFactory(game.metaGame, game.state);
       if (!engine)
         throw new Error(`Unknown metaGame ${game.metaGame}`);
-      const flags = effectiveFlags(engine, game.metaGame);
+      const flags = effectiveFlags(engine, game.metaGame, game.variants);
       if (!flagSetIncludes(flags, "pie") && !flagSetIncludes(flags, "pie-even")) {
         throw new Error(`Metagame ${pars.metaGame} does not have the "pie" flag. Aborting.`);
       }
