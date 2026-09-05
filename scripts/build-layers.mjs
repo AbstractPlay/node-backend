@@ -2,6 +2,7 @@ import fs from "fs-extra";
 import path from "path";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
+import { getLockfileVersions } from "@abstractplay/ap-deps-tools/lockfile-versions";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -101,9 +102,6 @@ async function pruneLayerNodeModules(layerDir, nodeModulesDir) {
 async function createLayer(layerName, packagesToInclude) {
     const layerDir = path.resolve(ROOT, `.serverless/layers/${layerName}`);
     const nodejsDir = path.join(layerDir, "nodejs");
-    const rootPackageJson = JSON.parse(
-        fs.readFileSync(path.join(ROOT, "package.json"), "utf8"),
-    );
 
     console.log(`Creating ${layerName} layer...`);
 
@@ -118,16 +116,12 @@ async function createLayer(layerName, packagesToInclude) {
         dependencies: {},
     };
 
+    const lockVersions = getLockfileVersions(ROOT, packagesToInclude);
+
     for (const pkg of packagesToInclude) {
-        let version =
-            rootPackageJson.dependencies?.[pkg] ||
-            rootPackageJson.devDependencies?.[pkg];
+        const version = lockVersions[pkg];
         if (!version) {
-            throw new Error(`Could not find ${pkg} in package.json`);
-        }
-        if (version.startsWith("file:")) {
-            const rel = version.slice("file:".length);
-            version = `file:${path.resolve(ROOT, rel)}`;
+            throw new Error(`Could not find ${pkg} in package-lock.json (run npm run sync-deps first)`);
         }
         layerPackageJson.dependencies[pkg] = version;
     }
