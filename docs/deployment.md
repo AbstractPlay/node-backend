@@ -15,7 +15,7 @@ Downstream repos (e.g. gameslib) can trigger backend redeploys after package pub
 
 ## AP dependency pins (`ci-deps.*.json`)
 
-Canonical pins live in `ci-deps.dev.json` and `ci-deps.prod.json`. CI runs `npm ci` → manifest validation → `bin/install-ap-deps.mjs --stage dev|prod` → strict sync check → build/test.
+Canonical pins live in `ci-deps.dev.json` and `ci-deps.prod.json`. CI runs `npm ci` → manifest validation → `ap-install-deps --stage dev|prod` → strict lockfile check → build/test.
 
 After a merge that touches dependency files, run `npm run sync-deps` on `develop` (or `npm run sync-deps:prod` on `main`) and commit `ci-deps.*.json`, `package.json`, and `package-lock.json` together. Do not hand-merge AP version strings in `package.json`.
 
