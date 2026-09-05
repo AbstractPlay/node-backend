@@ -542,6 +542,8 @@ type Customization = {
     [k: string]: string;
   },
   palette: string[];
+  glyphmap?: unknown[];
+  preferredColour?: string;
 }
 
 type CustomizationRec = {
