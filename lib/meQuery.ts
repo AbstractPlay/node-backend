@@ -4,10 +4,10 @@ import type { ActiveGameKey } from './dashboardGames.js';
 import type { DashboardGame } from './dashboardGames.js';
 
 import type { ClientNotification } from './notifications.js';
+import { stripColorFromSettings } from './stripLegacyColorSettings.js';
 
 export type MeAncillaryData = {
   tags: unknown[];
-  palettes: unknown[];
   realStanding: unknown[];
   customizations: Record<string, unknown>;
   bots: ClientBot[];
@@ -40,7 +40,6 @@ export type MeProfilePayload = {
   activeGames: ActiveGameKey[];
   bots: ClientBot[];
   tags: unknown[];
-  palettes: unknown[];
   realStanding: unknown[];
   customizations: MeAncillaryData['customizations'];
   blocked: string[];
@@ -81,7 +80,9 @@ export function buildMeProfilePayload(
     organizer: user.organizer === true,
     language: user.language,
     country: user.country,
-    settings: user.settings,
+    settings: stripColorFromSettings(
+      user.settings as Record<string, unknown> | null | undefined,
+    ),
     stars: user.stars ?? [],
     bggid: user.bggid,
     about: user.about,
@@ -90,7 +91,6 @@ export function buildMeProfilePayload(
     activeGames,
     bots: ancillary.bots,
     tags: ancillary.tags,
-    palettes: ancillary.palettes,
     realStanding: ancillary.realStanding,
     customizations: ancillary.customizations,
     blocked: ancillary.blocked,

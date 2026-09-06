@@ -44,13 +44,15 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `TAG`
   - sk: `<userid>`
 
-- **Palettes** — per-user UI color palettes
-  - pk: `PALETTES`
-  - sk: `<userid>`
-
-- **Customizations** — per-user, per-game UI settings
+- **Customizations** — per-user, per-game UI settings (board colours, preferred colour, glyph map)
   - pk: `CUSTOMIZATION#<userid>`
   - sk: `<metaGame>`
+
+**Retired (no longer written; purge with `bin/purge-legacy-palettes.mjs`):**
+
+- **Palettes** — legacy per-user named colour palettes (replaced by Customize)
+  - pk: `PALETTES`
+  - sk: `<userid>`
 
 - **Playground saves** — per-user saved playground positions (unlimited slots)
   - pk: `PLAYGROUND#<userid>`
