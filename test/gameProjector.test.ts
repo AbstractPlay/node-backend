@@ -1,7 +1,10 @@
 import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
+import type { DynamoDBRecord } from 'aws-lambda';
+import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import {
   parseGameSk,
+  processGameStreamRecord,
   resolveNumMoves,
   shouldKeepCompletedGame,
   toCompletedSummary,
@@ -121,5 +124,29 @@ describe('resolveNumMoves', () => {
       state: '{}',
       numMoves: 7,
     }), 7);
+  });
+});
+
+describe('processGameStreamRecord', () => {
+  it('skips completed-game inserts without a players array', async () => {
+    let sendCalls = 0;
+    const docClient = {
+      send: async () => {
+        sendCalls += 1;
+      },
+    } as unknown as DynamoDBDocumentClient;
+
+    await processGameStreamRecord(docClient, 'table', {
+      eventName: 'INSERT',
+      dynamodb: {
+        NewImage: {
+          pk: { S: 'GAME' },
+          sk: { S: 'volo#1#444727048' },
+          tournament: { S: 'volo#7e2e487d-f028-47cb-b979-9e20972b6296' },
+        },
+      },
+    } satisfies DynamoDBRecord);
+
+    assert.equal(sendCalls, 0);
   });
 });
