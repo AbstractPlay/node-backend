@@ -6557,7 +6557,16 @@ async function archiveTournament(tournament: Tournament) {
         Key: { "pk": "GAME", "sk": tournament.metaGame + '#1#' + tournamentGame.id },
         ExpressionAttributeValues: { ":newTournamentRef": newTournamentRef },
         UpdateExpression: "set tournament = :newTournamentRef",
-      })));
+        ConditionExpression: 'attribute_exists(pk) AND attribute_exists(players)',
+      })).catch((error: { name?: string }) => {
+        if (error.name === 'ConditionalCheckFailedException') {
+          console.warn(
+            `Skipping tournament ref update for missing game ${tournament.metaGame}#1#${tournamentGame.id}`,
+          );
+          return;
+        }
+        throw error;
+      }));
     }
 
     // delete tournament
@@ -6659,12 +6668,23 @@ async function getTournament(pars: { tournamentid: string, metaGame: string, isA
         const newTournamentRef = pars.metaGame + '#' + pars.tournamentid;
 
         // Since tournament is archived, all games must be completed - update completed game
-        await ddbDocClient.send(new UpdateCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: { "pk": "GAME", "sk": pars.metaGame + '#1#' + pars.gameId },
-          ExpressionAttributeValues: { ":newTournamentRef": newTournamentRef },
-          UpdateExpression: "set tournament = :newTournamentRef",
-        }));
+        try {
+          await ddbDocClient.send(new UpdateCommand({
+            TableName: process.env.ABSTRACT_PLAY_TABLE,
+            Key: { "pk": "GAME", "sk": pars.metaGame + '#1#' + pars.gameId },
+            ExpressionAttributeValues: { ":newTournamentRef": newTournamentRef },
+            UpdateExpression: "set tournament = :newTournamentRef",
+            ConditionExpression: 'attribute_exists(pk) AND attribute_exists(players)',
+          }));
+        } catch (error) {
+          if ((error as { name?: string }).name === 'ConditionalCheckFailedException') {
+            console.warn(
+              `Skipping tournament ref fix for missing game ${pars.metaGame}#1#${pars.gameId}`,
+            );
+          } else {
+            throw error;
+          }
+        }
 
         // Replace the empty tournament data with the found completed tournament
         data[0] = completedTournamentData;

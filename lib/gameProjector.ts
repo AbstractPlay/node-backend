@@ -432,6 +432,10 @@ export async function processGameStreamRecord(
   if (!game || game.pk !== 'GAME') {
     return;
   }
+  if (!Array.isArray(game.players)) {
+    console.warn(`Skipping GAME stream record ${game.sk}: missing or invalid players`);
+    return;
+  }
 
   const parsed = parseGameSk(game.sk);
   if (!parsed) {
