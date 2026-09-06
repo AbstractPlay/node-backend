@@ -144,10 +144,19 @@ async function main() {
   const { stage, dryRun, userId } = parseArgs(process.argv.slice(2));
   const { profile, table: tableName } = STAGES[stage];
 
-  const client = new DynamoDBClient({ profile });
-  const docClient = DynamoDBDocumentClient.from(client);
+  const client = new DynamoDBClient({
+    region: 'us-east-1',
+    profile,
+  });
+  const docClient = DynamoDBDocumentClient.from(client, {
+    marshallOptions: {
+      convertEmptyValues: false,
+      removeUndefinedValues: true,
+    },
+  });
 
   console.log(`Stage: ${stage} (${tableName})${dryRun ? ' [dry-run]' : ''}`);
+  console.log(`Profile: ${profile}`);
 
   let keys;
   if (userId) {
