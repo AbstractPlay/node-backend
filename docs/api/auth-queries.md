@@ -41,7 +41,9 @@ See [Game Move layout feedback](/backend/subsystems/game-move-layout-feedback/) 
 
 Mutations return the updated list (`watchedGames`, `highlights`, or `representatives`) on success.
 
-## Push, tags, palettes, customizations
+## Push, tags, customizations
+
+Per-user board colours and preferred colour are configured via **Customize** (`save_customization` / `delete_customization`). Legacy named palettes (`save_palettes`, `settings.color`, `me_profile.palettes`) are retired.
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
@@ -50,7 +52,6 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 | `save_push` | Register or refresh **this device** | `payload` (Web Push subscription object) |
 | `delete_push` | Remove **this device** subscription | `endpoint` (subscription URL) |
 | `save_tags` | Save game tags | `payload` (tag lists) |
-| `save_palettes` | Save color palettes | `palettes` |
 | `save_customization` | Per-game UI customization | `metaGame`, settings |
 | `delete_customization` | Remove customization | `metaGame` |
 | `update_standing` | SDG-style standing challenge preferences | `entries` |

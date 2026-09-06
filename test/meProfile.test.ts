@@ -21,7 +21,6 @@ const user = {
 
 const ancillary: MeAncillaryData = {
   tags: [],
-  palettes: [],
   realStanding: [],
   customizations: {},
   bots: [],
@@ -41,6 +40,25 @@ describe('buildMeProfilePayload', () => {
     assert.deepEqual(payload.activeGames, [{ metaGame: 'saltire', id: 'g1' }]);
     assert.equal('games' in payload, false);
     assert.equal('challengesIssued' in payload, false);
+  });
+
+  it('strips legacy color keys from settings', () => {
+    const payload = buildMeProfilePayload(
+      {
+        ...user,
+        settings: {
+          all: { annotate: true, color: 'blind' },
+          chess: { color: 'My Red', display: 'default' },
+        },
+      },
+      ancillary,
+      [],
+    );
+    assert.deepEqual(payload.settings, {
+      all: { annotate: true },
+      chess: { display: 'default' },
+    });
+    assert.equal('palettes' in payload, false);
   });
 });
 
