@@ -105,6 +105,7 @@ import {
   type MeAncillaryData,
   type MeChallengeData,
 } from '../lib/meQuery.js';
+import { stripColorFromSettings } from '../lib/stripLegacyColorSettings.js';
 import { getUsersLastSeen } from '../lib/touchUserLastSeen.js';
 import { hasCurrentGameRow } from '../lib/dashboardGames.js';
 import {
@@ -225,7 +226,6 @@ export type UserSettings = {
   [k: string]: any;
   all?: {
     [k: string]: any;
-    color?: string;
     annotate?: boolean;
     notifications?: {
       gameStart: boolean;
@@ -292,7 +292,6 @@ type FullUser = {
   };
   stars?: string[];
   tags?: TagList[];
-  palettes?: Palette[];
   mayPush?: boolean;
   publicRivalries?: boolean;
   bggid?: string;
@@ -326,7 +325,6 @@ type MeData = {
   bggid?: string;
   about?: string;
   tags?: TagList[];
-  palettes?: Palette[];
   mayPush: boolean;
   publicRivalries: boolean;
   bots?: Bot[];
@@ -524,17 +522,6 @@ type TagRec = {
   pk: "TAG";
   sk: string;
   tags: TagList[];
-}
-
-type Palette = {
-  name: string;
-  colours: string[];
-}
-
-type PaletteRec = {
-  pk: "PALETTES";
-  sk: string;
-  palettes: Palette[];
 }
 
 type Customization = {
@@ -831,8 +818,6 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await deletePush(event.cognitoPoolClaims.sub, pars);
     case "save_tags":
       return await saveTags(event.cognitoPoolClaims.sub, pars);
-    case "save_palettes":
-      return await savePalettes(event.cognitoPoolClaims.sub, pars);
     case "save_customization":
       return await saveCustomization(event.cognitoPoolClaims.sub, pars);
     case "delete_customization":
@@ -2104,7 +2089,7 @@ async function updateGameSettings(userid: string, pars: { game: string, settings
     const player = game.players.find((p: { id: any; }) => p.id === userid);
     if (player === undefined)
       throw new Error(`updateGameSettings: player ${userid} isn't playing in game ${pars.game}`);
-    player.settings = pars.settings;
+    player.settings = stripColorFromSettings(pars.settings);
     try {
       await ddbDocClient.send(new PutCommand({
         TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -2190,10 +2175,11 @@ async function dismissNotificationAuth(userid: string, pars: { sk?: string }) {
 
 async function updateUserSettings(userid: string, pars: { settings: any; }) {
   try {
+    const settings = stripColorFromSettings(pars.settings);
     await ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userid },
-      ExpressionAttributeValues: { ":ss": pars.settings },
+      ExpressionAttributeValues: { ":ss": settings },
       UpdateExpression: "set settings = :ss",
     }))
     console.log("Success - user settings updated");
@@ -2798,12 +2784,6 @@ async function resolveMeAncillary(userId: string, user: FullUser): Promise<MeAnc
       Key: { pk: 'TAG', sk: userId },
     }),
   );
-  const paletteWork = ddbDocClient.send(
-    new GetCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { pk: 'PALETTES', sk: userId },
-    }),
-  );
   const standingWork = ddbDocClient.send(
     new GetCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -2821,7 +2801,6 @@ async function resolveMeAncillary(userId: string, user: FullUser): Promise<MeAnc
   const botIds: string[] = Array.from(user?.bots ?? new Set());
   const [
     tagData,
-    paletteData,
     standingData,
     customizationData,
     botData,
@@ -2831,7 +2810,6 @@ async function resolveMeAncillary(userId: string, user: FullUser): Promise<MeAnc
     representatives,
   ] = await Promise.all([
     tagWork,
-    paletteWork,
     standingWork,
     customizationWork,
     getBots(botIds),
@@ -2844,10 +2822,6 @@ async function resolveMeAncillary(userId: string, user: FullUser): Promise<MeAnc
   let tags: TagList[] = [];
   if (tagData.Item !== undefined) {
     tags = (tagData.Item as TagRec).tags;
-  }
-  let palettes: Palette[] = [];
-  if (paletteData.Item !== undefined) {
-    palettes = (paletteData.Item as PaletteRec).palettes;
   }
   let realStanding: StandingChallenge[] = [];
   if (standingData.Item !== undefined) {
@@ -2870,7 +2844,6 @@ async function resolveMeAncillary(userId: string, user: FullUser): Promise<MeAnc
 
   return {
     tags,
-    palettes,
     realStanding,
     customizations,
     bots,
@@ -3318,7 +3291,6 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
     "settings": {
       "all": {
         "annotate": true,
-        "color": "standard"
       }
     },
     "publicRivalries": false
@@ -3521,41 +3493,6 @@ async function saveTags(userid: string, pars: { payload: TagList[] }) {
     statusCode: 200,
     body: JSON.stringify({
       message: `Successfully saved tags for ${userid}`,
-    }),
-    headers
-  };
-}
-
-async function savePalettes(userid: string, pars: { palettes: Palette[] }) {
-  try {
-    console.log(`Attempting to save palettes for user ${userid}:\n${JSON.stringify(pars.palettes)}`);
-    if (pars.palettes.length === 0) {
-      await ddbDocClient.send(
-        new DeleteCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          Key: {
-            "pk": "PALETTES", "sk": userid
-          },
-        })
-      )
-    } else {
-      await ddbDocClient.send(new PutCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: {
-          "pk": "PALETTES",
-          "sk": userid,
-          "palettes": pars.palettes,
-        } as PaletteRec
-      }));
-    }
-  } catch (error) {
-    logGetItemError(error);
-    throw new Error("saveTags: Failed to save palettes");
-  }
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      message: `Successfully saved palettes for ${userid}`,
     }),
     headers
   };
