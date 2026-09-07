@@ -58,7 +58,7 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `challengeIssued` | Direct challenge opened | Game name links to `/games/{metaGame}`; **View** opens challenge response modal |
 | `challengeDeclined` / `challengeRevoked` | Direct challenge response | Game name links to `/games/{metaGame}` |
 | `gameStart` | Game begins | Game name links to `/move/{metaGame}/0/{gameId}` |
-| `gameEnd` | Game ends | **View** links to `/move/{metaGame}/0/{gameId}` |
+| `gameEnd` | Game ends | **View** links to `/move/{metaGame}/0/{gameId}`; includes `opponentId` / `opponentName` when the game has a human opponent |
 | `completedGameChat` | Post-game comment on completed game (`save_exploration` with `updateLastChat`) | **View** links to `/move/{metaGame}/1/{gameId}`; one active notification per game until dismissed; legacy backfill rows use generic message when `body.backfill` |
 | `ratingChange` | Daily batch Glicko diff after summarize (backend-crons) | Game name links to `/ratings/{metaGame}`; variant labels in message when applicable |
 | `tournamentStart` | Tournament series starts (`starttournaments` cron) | Tournament name links to `/tournament/{tournamentId}`; variant labels when applicable; dismiss only |
