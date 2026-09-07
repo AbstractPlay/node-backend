@@ -19,9 +19,11 @@ import {
   hasActiveEventInvitationNotification,
   inAppCategoryForBody,
   loadNotificationsForDashboard,
+  markNotificationsSeen,
   notificationInitialExpiresAt,
   notificationPk,
   notificationSeenExpiresAt,
+  notificationStatusFromExpiresAt,
   parseNotificationCreatedAt,
   putNotificationItem,
   wantsInAppNotification,
@@ -439,6 +441,7 @@ describe('loadNotificationsForDashboard', () => {
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].sk, '2000#live');
     assert.equal(notifications[0].createdAt, 2000);
+    assert.equal(notifications[0].status, 'read');
     assert.equal(store.size, 1);
     assert.equal(store.has(itemKey({ pk: notificationPk(USER_ID), sk: '1000#old' })), false);
   });
@@ -471,6 +474,8 @@ describe('loadNotificationsForDashboard', () => {
       );
 
       assert.equal(notifications.length, 2);
+      assert.equal(notifications.find(n => n.sk === longSk)?.status, 'read');
+      assert.equal(notifications.find(n => n.sk === '4000#short')?.status, 'read');
       const longItem = store.get(itemKey({ pk: notificationPk(USER_ID), sk: longSk }));
       const shortItem = store.get(itemKey({ pk: notificationPk(USER_ID), sk: '4000#short' }));
       assert.ok(longItem);
@@ -497,6 +502,99 @@ describe('loadNotificationsForDashboard', () => {
 
     const item = store.get(itemKey({ pk: notificationPk(USER_ID), sk: '5000#long' }));
     assert.equal(item?.expiresAt, longExpires);
+  });
+
+  it('reports new status for long TTL when refreshExpiry is false', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const longExpires = nowSec + NOTIFICATION_INITIAL_TTL_DAYS * SEC_PER_DAY;
+    const store: Store = new Map([
+      [itemKey({ pk: notificationPk(USER_ID), sk: '7000#new' }), {
+        pk: notificationPk(USER_ID),
+        sk: '7000#new',
+        body: { type: 'gameStart', gameId: 'g1', metaGame: 'go', variants: [], opponentId: 'u2', opponentName: 'Bob' },
+        expiresAt: longExpires,
+      }],
+    ]);
+    const client = createMockDocClient(store);
+
+    const notifications = await loadNotificationsForDashboard(
+      client as never,
+      TABLE,
+      USER_ID,
+      { refreshExpiry: false },
+    );
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].status, 'new');
+  });
+});
+
+describe('notificationStatusFromExpiresAt', () => {
+  it('classifies long and short TTL', () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const longExpires = nowSec + NOTIFICATION_INITIAL_TTL_DAYS * SEC_PER_DAY;
+    const shortExpires = notificationSeenExpiresAt();
+    assert.equal(notificationStatusFromExpiresAt(longExpires, nowSec), 'new');
+    assert.equal(notificationStatusFromExpiresAt(shortExpires, nowSec), 'read');
+  });
+});
+
+describe('markNotificationsSeen', () => {
+  it('marks all new notifications as read', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const longSk = '8000#new';
+    const readSk = '8100#read';
+    const store: Store = new Map([
+      [itemKey({ pk: notificationPk(USER_ID), sk: longSk }), {
+        pk: notificationPk(USER_ID),
+        sk: longSk,
+        body: { type: 'gameEnd', gameId: 'g1', metaGame: 'go', variants: [], result: 'win' },
+        expiresAt: nowSec + NOTIFICATION_INITIAL_TTL_DAYS * SEC_PER_DAY,
+      }],
+      [itemKey({ pk: notificationPk(USER_ID), sk: readSk }), {
+        pk: notificationPk(USER_ID),
+        sk: readSk,
+        body: { type: 'gameEnd', gameId: 'g2', metaGame: 'go', variants: [], result: 'lose' },
+        expiresAt: notificationSeenExpiresAt(),
+      }],
+    ]);
+    const client = createMockDocClient(store);
+
+    const notifications = await markNotificationsSeen(client as never, TABLE, USER_ID);
+
+    assert.equal(notifications.length, 2);
+    assert.equal(notifications.find(n => n.sk === longSk)?.status, 'read');
+    assert.equal(notifications.find(n => n.sk === readSk)?.status, 'read');
+    const longItem = store.get(itemKey({ pk: notificationPk(USER_ID), sk: longSk }));
+    assert.ok(longItem);
+    assert.ok(Math.abs((longItem.expiresAt as number) - notificationSeenExpiresAt()) <= 1);
+  });
+
+  it('marks only requested sks', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const sk1 = '8200#a';
+    const sk2 = '8200#b';
+    const longExpires = nowSec + NOTIFICATION_INITIAL_TTL_DAYS * SEC_PER_DAY;
+    const store: Store = new Map([
+      [itemKey({ pk: notificationPk(USER_ID), sk: sk1 }), {
+        pk: notificationPk(USER_ID),
+        sk: sk1,
+        body: { type: 'gameStart', gameId: 'g1', metaGame: 'go', variants: [], opponentId: 'u2', opponentName: 'Bob' },
+        expiresAt: longExpires,
+      }],
+      [itemKey({ pk: notificationPk(USER_ID), sk: sk2 }), {
+        pk: notificationPk(USER_ID),
+        sk: sk2,
+        body: { type: 'gameStart', gameId: 'g2', metaGame: 'go', variants: [], opponentId: 'u3', opponentName: 'Carol' },
+        expiresAt: longExpires,
+      }],
+    ]);
+    const client = createMockDocClient(store);
+
+    const notifications = await markNotificationsSeen(client as never, TABLE, USER_ID, { sks: [sk1] });
+
+    assert.equal(notifications.find(n => n.sk === sk1)?.status, 'read');
+    assert.equal(notifications.find(n => n.sk === sk2)?.status, 'new');
   });
 });
 

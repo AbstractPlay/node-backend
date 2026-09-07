@@ -98,6 +98,7 @@ describe('buildMeDashboardPayload', () => {
     }, [{
       sk: '1700000000000#abc',
       createdAt: 1700000000000,
+      status: 'new',
       body: {
         type: 'challengeIssued',
         challengeId: 'c1',

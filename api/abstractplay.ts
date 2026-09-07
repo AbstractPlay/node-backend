@@ -149,6 +149,7 @@ import {
   formatNotificationScores,
   inAppSettingsMapFromUsers,
   loadNotificationsForDashboard,
+  markNotificationsSeen,
   optionalNotificationNote,
   resolveEventInvitationNotifyIds,
   type InAppNotificationUserSettings,
@@ -861,6 +862,10 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await setLastSeen(event.cognitoPoolClaims.sub, pars);
     case "dismiss_notification":
       return await dismissNotificationAuth(event.cognitoPoolClaims.sub, pars);
+    case "list_notifications":
+      return await listNotificationsAuth(event.cognitoPoolClaims.sub);
+    case "mark_notifications_seen":
+      return await markNotificationsSeenAuth(event.cognitoPoolClaims.sub, pars);
     case "submit_comment":
       return await submitComment(event.cognitoPoolClaims.sub, pars);
     case "save_exploration":
@@ -2180,6 +2185,46 @@ async function dismissNotificationAuth(userid: string, pars: { sk?: string }) {
   }
 }
 
+async function listNotificationsAuth(userid: string) {
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+  try {
+    const notifications = await loadNotificationsForDashboard(
+      ddbDocClient,
+      tableName,
+      userid,
+      { refreshExpiry: false },
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ notifications }),
+      headers,
+    };
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to list notifications for ${userid}`);
+  }
+}
+
+async function markNotificationsSeenAuth(userid: string, pars: { sks?: string[] }) {
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+  try {
+    const notifications = await markNotificationsSeen(
+      ddbDocClient,
+      tableName,
+      userid,
+      { sks: pars.sks },
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ notifications }),
+      headers,
+    };
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to mark notifications seen for ${userid}`);
+  }
+}
+
 async function updateUserSettings(userid: string, pars: { settings: any; }) {
   try {
     const settings = stripColorFromSettings(pars.settings);
@@ -2947,7 +2992,7 @@ async function meDashboard(claim: PartialClaims, pars: { size: string, vars: str
     const [ancillary, challenges, notifications] = await Promise.all([
       resolveMeAncillary(userId, user),
       resolveMeChallenges(user),
-      loadNotificationsForDashboard(ddbDocClient, tableName, userId, { refreshExpiry: true }),
+      loadNotificationsForDashboard(ddbDocClient, tableName, userId, { refreshExpiry: false }),
     ]);
     console.log(`me_dashboard returning for ${user.name}, id ${user.id} with games`, games);
     return {
