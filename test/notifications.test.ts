@@ -13,6 +13,8 @@ import {
   buildNotificationItem,
   dismissNotification,
   backfillCompletedGameChatNotification,
+  collectGameEndScoresFromEngine,
+  formatNotificationScores,
   hasActiveCompletedGameChatNotification,
   hasActiveEventInvitationNotification,
   inAppCategoryForBody,
@@ -234,6 +236,32 @@ test('eventInvitation body carries event page link fields', () => {
   assert.equal(item.body.organizerName, 'Alice');
 });
 
+test('formatNotificationScores accepts numbers and strings', () => {
+  assert.equal(formatNotificationScores([10, '3 goals', 0]), '10, 3 goals, 0');
+  assert.equal(formatNotificationScores([10, null, undefined, 'win']), '10, win');
+  assert.equal(formatNotificationScores([]), '');
+});
+
+test('collectGameEndScoresFromEngine returns undefined when scores disabled', () => {
+  const scores = collectGameEndScoresFromEngine({
+    numplayers: 2,
+    getPlayerScore: () => 5,
+  }, false);
+  assert.equal(scores, undefined);
+});
+
+test('collectGameEndScoresFromEngine collects numeric and string scores', () => {
+  const scores = collectGameEndScoresFromEngine({
+    numplayers: 3,
+    getPlayerScore: (player) => {
+      if (player === 1) return 10;
+      if (player === 2) return '3 goals';
+      return undefined;
+    },
+  }, true);
+  assert.deepEqual(scores, [10, '3 goals']);
+});
+
 test('gameEnd body carries opponent fields when present', () => {
   const item = buildNotificationItem(USER_ID, {
     type: 'gameEnd',
@@ -252,6 +280,22 @@ test('gameEnd body carries opponent fields when present', () => {
   assert.equal(item.body.result, 'win');
   assert.equal(item.body.opponentId, OTHER_USER_ID);
   assert.equal(item.body.opponentName, 'Bob');
+});
+
+test('gameEnd body carries score fields when present', () => {
+  const item = buildNotificationItem(USER_ID, {
+    type: 'gameEnd',
+    gameId: GAME_ID,
+    metaGame: 'go',
+    variants: [],
+    result: 'draw',
+    scores: [10, '3 goals'],
+  });
+  assert.equal(item.body.type, 'gameEnd');
+  if (item.body.type !== 'gameEnd') {
+    return;
+  }
+  assert.deepEqual(item.body.scores, [10, '3 goals']);
 });
 
 test('completedGameChat body carries game link fields', () => {
