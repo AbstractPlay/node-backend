@@ -141,6 +141,7 @@ import {
 import {
   createNotification,
   dismissNotification as deleteUserNotification,
+  dismissAllNotifications,
   enqueueEventInvitationNotifications,
   enqueueCompletedGameChatNotifications,
   enqueueGameEndNotifications,
@@ -862,6 +863,8 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await setLastSeen(event.cognitoPoolClaims.sub, pars);
     case "dismiss_notification":
       return await dismissNotificationAuth(event.cognitoPoolClaims.sub, pars);
+    case "dismiss_all_notifications":
+      return await dismissAllNotificationsAuth(event.cognitoPoolClaims.sub);
     case "list_notifications":
       return await listNotificationsAuth(event.cognitoPoolClaims.sub);
     case "mark_notifications_seen":
@@ -2182,6 +2185,21 @@ async function dismissNotificationAuth(userid: string, pars: { sk?: string }) {
   } catch (err) {
     logGetItemError(err);
     return formatReturnError(`Unable to dismiss notification for ${userid}`);
+  }
+}
+
+async function dismissAllNotificationsAuth(userid: string) {
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+  try {
+    await dismissAllNotifications(ddbDocClient, tableName, userid);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ success: true, notifications: [] }),
+      headers,
+    };
+  } catch (err) {
+    logGetItemError(err);
+    return formatReturnError(`Unable to dismiss all notifications for ${userid}`);
   }
 }
 

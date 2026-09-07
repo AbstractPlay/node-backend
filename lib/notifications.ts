@@ -531,6 +531,38 @@ export async function dismissNotification(
   return true;
 }
 
+export async function dismissAllNotifications(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+): Promise<void> {
+  const pk = notificationPk(userId);
+  const items: NotificationRecord[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const result = await client.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'pk = :pk',
+      ExpressionAttributeValues: { ':pk': pk },
+      ExclusiveStartKey: lastKey,
+      ScanIndexForward: false,
+    }));
+    if (result.Items !== undefined) {
+      items.push(...(result.Items as NotificationRecord[]));
+    }
+    lastKey = result.LastEvaluatedKey;
+  } while (lastKey);
+
+  if (items.length === 0) {
+    return;
+  }
+
+  await Promise.all(items.map(item => client.send(new DeleteCommand({
+    TableName: tableName,
+    Key: { pk: item.pk, sk: item.sk },
+  }))));
+}
+
 export async function enqueueGameStartNotifications(
   client: DynamoDBDocumentClient,
   tableName: string,
