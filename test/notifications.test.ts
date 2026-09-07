@@ -12,6 +12,7 @@ import {
   NOTIFICATION_SEEN_TTL_DAYS,
   buildNotificationItem,
   dismissNotification,
+  dismissAllNotifications,
   backfillCompletedGameChatNotification,
   collectGameEndScoresFromEngine,
   formatNotificationScores,
@@ -624,5 +625,29 @@ describe('dismissNotification', () => {
       'missing#sk',
     );
     assert.equal(ok, false);
+  });
+});
+
+describe('dismissAllNotifications', () => {
+  it('deletes every notification for the user', async () => {
+    const store: Store = new Map([
+      [itemKey({ pk: notificationPk(USER_ID), sk: '9000#a' }), {
+        pk: notificationPk(USER_ID),
+        sk: '9000#a',
+        body: { type: 'gameEnd', gameId: 'g1', metaGame: 'go', variants: [], result: 'win' },
+        expiresAt: notificationSeenExpiresAt(),
+      }],
+      [itemKey({ pk: notificationPk(USER_ID), sk: '9000#b' }), {
+        pk: notificationPk(USER_ID),
+        sk: '9000#b',
+        body: { type: 'gameStart', gameId: 'g2', metaGame: 'go', variants: [], opponentId: 'u2', opponentName: 'Bob' },
+        expiresAt: notificationInitialExpiresAt(),
+      }],
+    ]);
+    const client = createMockDocClient(store);
+
+    await dismissAllNotifications(client as never, TABLE, USER_ID);
+
+    assert.equal(store.size, 0);
   });
 });
