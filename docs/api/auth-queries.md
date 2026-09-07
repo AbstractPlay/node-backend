@@ -11,16 +11,18 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `me_profile` | Site-wide profile for navbar, settings, and game renderer: settings, bots, tags, `activeGames` (`CURRENTGAMES#` keys only). No dashboard maintenance, challenges, or `lastSeen` writes. | — |
-| `me_dashboard` | Dashboard tables: active `games`, `notifications`, challenges, timeout sweep. Clears `USER.cleaned` when set by abandoned-account cron. Loads/refreshes in-app notification TTL on fetch. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
+| `me_dashboard` | Dashboard tables: active `games`, `notifications`, challenges, timeout sweep. Clears `USER.cleaned` when set by abandoned-account cron. Does not refresh notification seen state. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
 | `next_game` | Next game id in user's list | — |
 | `my_settings` | **Deprecated** — minimal id/name/email/language; use `me_profile` instead | — |
 | `new_setting` | Update name, language, country, bggid, about | `attribute`, `value` |
 | `new_profile` | Bulk profile update | profile fields |
 | `set_lastSeen` | Update last-seen timestamp (active dashboard game or watched game) | `gameId`, optional `interval` |
-| `dismiss_notification` | Remove an in-app dashboard notification | `sk` |
+| `dismiss_notification` | Remove an in-app dashboard notification (deleted from DynamoDB) | `sk` |
+| `list_notifications` | List in-app notifications for the navbar bell (does not mark seen) | — |
+| `mark_notifications_seen` | Mark notifications as read (shortens TTL; retained until dismissed) | optional `sks` (array); omit to mark all **new** items |
 | `toggle_star` | Favorite a metaGame | `metaGame` |
 
-**`me_dashboard.notifications`:** array of `{ sk, createdAt, body }` items (see [Notifications — In-app dashboard feed](/backend/subsystems/notifications/)). Omitted from `me_profile`.
+**`me_dashboard.notifications`:** array of `{ sk, createdAt, body, status }` items where `status` is `new` or `read` (see [Notifications — In-app dashboard feed](/backend/subsystems/notifications/)). Omitted from `me_profile`. Use `list_notifications` for navbar bootstrap and `mark_notifications_seen` when the user opens the bell panel.
 
 ## Watch, highlight, and representative games
 
