@@ -18,6 +18,7 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 | `new_profile` | Bulk profile update | profile fields |
 | `set_lastSeen` | Update last-seen timestamp (active dashboard game or watched game) | `gameId`, optional `interval` |
 | `dismiss_notification` | Remove an in-app dashboard notification (deleted from DynamoDB) | `sk` |
+| `dismiss_all_notifications` | Remove all in-app notifications for the user | — |
 | `list_notifications` | List in-app notifications for the navbar bell (does not mark seen) | — |
 | `mark_notifications_seen` | Mark notifications as read (shortens TTL; retained until dismissed) | optional `sks` (array); omit to mark all **new** items |
 | `toggle_star` | Favorite a metaGame | `metaGame` |
