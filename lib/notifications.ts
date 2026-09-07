@@ -189,11 +189,23 @@ export type NotificationRecord = {
   expiresAt: number;
 };
 
+export type NotificationStatus = 'new' | 'read';
+
 export type ClientNotification = {
   sk: string;
   createdAt: number;
   body: NotificationBody;
+  status: NotificationStatus;
 };
+
+/** `new` while TTL is still the initial long window; `read` after seen (shorter TTL). */
+export function notificationStatusFromExpiresAt(
+  expiresAt: number,
+  nowSec = Math.floor(Date.now() / 1000),
+): NotificationStatus {
+  const longTtlThresholdSec = nowSec + NOTIFICATION_SEEN_TTL_DAYS * SEC_PER_DAY;
+  return expiresAt > longTtlThresholdSec ? 'new' : 'read';
+}
 
 export type NotificationGamePlayer = {
   id: string;
@@ -395,7 +407,85 @@ export async function loadNotificationsForDashboard(
       continue;
     }
 
+    let status = notificationStatusFromExpiresAt(item.expiresAt, nowSec);
+
     if (options.refreshExpiry && item.expiresAt > longTtlThresholdSec) {
+      work.push(client.send(new UpdateCommand({
+        TableName: tableName,
+        Key: { pk: item.pk, sk: item.sk },
+        UpdateExpression: 'SET expiresAt = :exp',
+        ExpressionAttributeValues: { ':exp': seenThresholdSec },
+      })));
+      status = 'read';
+    }
+
+    survivors.push({
+      sk: item.sk,
+      createdAt: parseNotificationCreatedAt(item.sk),
+      body: item.body,
+      status,
+    });
+  }
+
+  if (work.length > 0) {
+    await Promise.all(work);
+  }
+
+  return survivors;
+}
+
+export type MarkNotificationsSeenOptions = {
+  /** When omitted, every currently-new notification is marked read. */
+  sks?: string[];
+};
+
+export async function markNotificationsSeen(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  options: MarkNotificationsSeenOptions = {},
+): Promise<ClientNotification[]> {
+  const pk = notificationPk(userId);
+  const nowMs = Date.now();
+  const nowSec = Math.floor(nowMs / 1000);
+  const seenThresholdSec = notificationSeenExpiresAt(nowMs);
+  const longTtlThresholdSec = nowSec + NOTIFICATION_SEEN_TTL_DAYS * SEC_PER_DAY;
+  const skFilter = options.sks !== undefined ? new Set(options.sks) : undefined;
+
+  const items: NotificationRecord[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const result = await client.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'pk = :pk',
+      ExpressionAttributeValues: { ':pk': pk },
+      ExclusiveStartKey: lastKey,
+      ScanIndexForward: false,
+    }));
+    if (result.Items !== undefined) {
+      items.push(...(result.Items as NotificationRecord[]));
+    }
+    lastKey = result.LastEvaluatedKey;
+  } while (lastKey);
+
+  const survivors: ClientNotification[] = [];
+  const work: Promise<unknown>[] = [];
+
+  for (const item of items) {
+    if (item.expiresAt <= nowSec) {
+      work.push(client.send(new DeleteCommand({
+        TableName: tableName,
+        Key: { pk: item.pk, sk: item.sk },
+      })));
+      continue;
+    }
+
+    const isNew = item.expiresAt > longTtlThresholdSec;
+    const shouldMark = skFilter === undefined
+      ? isNew
+      : skFilter.has(item.sk) && isNew;
+
+    if (shouldMark) {
       work.push(client.send(new UpdateCommand({
         TableName: tableName,
         Key: { pk: item.pk, sk: item.sk },
@@ -408,6 +498,7 @@ export async function loadNotificationsForDashboard(
       sk: item.sk,
       createdAt: parseNotificationCreatedAt(item.sk),
       body: item.body,
+      status: shouldMark || !isNew ? 'read' : 'new',
     });
   }
 
