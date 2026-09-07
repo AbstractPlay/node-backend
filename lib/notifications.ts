@@ -111,6 +111,7 @@ export type NotificationBody =
     result: 'win' | 'lose' | 'draw';
     opponentId?: string;
     opponentName?: string;
+    scores?: NotificationScore[];
   }
   | {
     type: 'ratingChange';
@@ -199,12 +200,46 @@ export type NotificationGamePlayer = {
   name: string;
 };
 
+export type NotificationScore = string | number;
+
+export type GameEndScoreEngine = {
+  numplayers: number;
+  getPlayerScore(player: number): NotificationScore | null | undefined;
+};
+
+export function formatNotificationScores(
+  scores: ReadonlyArray<NotificationScore | null | undefined>,
+): string {
+  return scores
+    .filter((score): score is NotificationScore => score !== null && score !== undefined)
+    .map(score => String(score))
+    .join(', ');
+}
+
+export function collectGameEndScoresFromEngine(
+  engine: GameEndScoreEngine,
+  includeScores: boolean,
+): NotificationScore[] | undefined {
+  if (!includeScores) {
+    return undefined;
+  }
+  const scores: NotificationScore[] = [];
+  for (let p = 1; p <= engine.numplayers; p += 1) {
+    const score = engine.getPlayerScore(p);
+    if (score !== null && score !== undefined) {
+      scores.push(score);
+    }
+  }
+  return scores.length > 0 ? scores : undefined;
+}
+
 export type NotificationGame = {
   id: string;
   metaGame: string;
   variants?: string[];
   players: NotificationGamePlayer[];
   winner?: number[];
+  scores?: NotificationScore[];
 };
 
 export function notificationPk(userId: string): string {
@@ -453,6 +488,9 @@ export async function enqueueGameEndNotifications(
       result: gameEndResult(game, player.id),
       ...(opponent !== undefined
         ? { opponentId: opponent.id, opponentName: opponent.name }
+        : {}),
+      ...(game.scores !== undefined && game.scores.length > 0
+        ? { scores: game.scores }
         : {}),
     }, {
       userSettings: userSettingsFromMap(settingsByUserId, player.id),
