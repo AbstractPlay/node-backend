@@ -145,12 +145,15 @@ import {
   enqueueCompletedGameChatNotifications,
   enqueueGameEndNotifications,
   enqueueGameStartNotifications,
+  collectGameEndScoresFromEngine,
+  formatNotificationScores,
   inAppSettingsMapFromUsers,
   loadNotificationsForDashboard,
   optionalNotificationNote,
   resolveEventInvitationNotifyIds,
   type InAppNotificationUserSettings,
   type NotificationGame,
+  type NotificationScore,
 } from '../lib/notifications.js';
 
 const REGION = "us-east-1";
@@ -400,13 +403,17 @@ type FullGame = {
   commented?: number; // 0 or missing: no comments or post game variations, 1: has in-game comments (note this does NOT get updated for post-game comments/variations)
 }
 
-function toNotificationGame(game: Pick<FullGame, 'id' | 'metaGame' | 'variants' | 'players' | 'winner'>): NotificationGame {
+function toNotificationGame(
+  game: Pick<FullGame, 'id' | 'metaGame' | 'variants' | 'players' | 'winner'>,
+  scores?: NotificationScore[],
+): NotificationGame {
   return {
     id: game.id,
     metaGame: game.metaGame,
     variants: game.variants,
     players: game.players.map(p => ({ id: p.id, name: p.name })),
     winner: game.winner,
+    ...(scores !== undefined && scores.length > 0 ? { scores } : {}),
   };
 }
 
@@ -4853,7 +4860,13 @@ async function submitMove(userid: string, pars: {
       list.push(enqueueGameEndNotifications(
         ddbDocClient,
         process.env.ABSTRACT_PLAY_TABLE!,
-        toNotificationGame({ ...game, winner: engine.winner, variants: engine.variants }),
+        toNotificationGame(
+          { ...game, winner: engine.winner, variants: engine.variants },
+          collectGameEndScoresFromEngine(
+            engine,
+            flagSetIncludes(effectiveFlags(engine, game.metaGame, game.variants), 'scores'),
+          ),
+        ),
         inAppSettingsMapFromUsers(players),
       ));
     }
@@ -5017,12 +5030,10 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
     const engine = GameFactory(game.metaGame, game.state);
     if (!engine)
       throw new Error(`Unknown metaGame ${game.metaGame}`);
-    const scores = [];
-    if (flagSetIncludes(effectiveFlags(engine, game.metaGame, game.variants), "scores")) {
-      for (let p = 1; p <= engine.numplayers; p++) {
-        scores.push(engine.getPlayerScore(p));
-      }
-    }
+    const scores = collectGameEndScoresFromEngine(
+      engine,
+      flagSetIncludes(effectiveFlags(engine, game.metaGame, game.variants), 'scores'),
+    );
 
     for (const player of players) {
       await changeLanguageForPlayer(player);
@@ -5043,8 +5054,8 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
       }
       body.push(i18n.t("GameOverResult", { context: result }));
       //   - Final scores, if applicable
-      if (scores.length > 0) {
-        body.push(i18n.t("GameOverScores", { scores: scores.join(", ") }))
+      if (scores !== undefined && scores.length > 0) {
+        body.push(i18n.t("GameOverScores", { scores: formatNotificationScores(scores) }))
       }
       //   - Direct link to game
       body.push(i18n.t("GameOverLink", { metaGame: game.metaGame, gameID: game.id }));
@@ -5264,7 +5275,13 @@ async function timeloss(check: boolean, player: number, gameid: string, metaGame
   work.push(enqueueGameEndNotifications(
     ddbDocClient,
     process.env.ABSTRACT_PLAY_TABLE!,
-    toNotificationGame(game),
+    toNotificationGame(
+      game,
+      collectGameEndScoresFromEngine(
+        engine,
+        flagSetIncludes(effectiveFlags(engine, game.metaGame, game.variants), 'scores'),
+      ),
+    ),
     inAppSettingsMapFromUsers(players),
   ));
   await Promise.all(work);
@@ -5371,7 +5388,13 @@ async function checkForAbandonedGame(userid: string, pars: { id: string, metaGam
     work.push(enqueueGameEndNotifications(
       ddbDocClient,
       process.env.ABSTRACT_PLAY_TABLE!,
-      toNotificationGame(game),
+      toNotificationGame(
+        game,
+        collectGameEndScoresFromEngine(
+          engine,
+          flagSetIncludes(effectiveFlags(engine, game.metaGame, game.variants), 'scores'),
+        ),
+      ),
       abandonedGameEndSettings,
     ));
     await Promise.all(work);
