@@ -109,6 +109,8 @@ export type NotificationBody =
     metaGame: string;
     variants: string[];
     result: 'win' | 'lose' | 'draw';
+    opponentId?: string;
+    opponentName?: string;
   }
   | {
     type: 'ratingChange';
@@ -437,23 +439,25 @@ export async function enqueueGameEndNotifications(
   game: NotificationGame,
   settingsByUserId?: InAppSettingsByUserId,
 ): Promise<void> {
+  const humanIds = await filterHumanIds(game.players.map(p => p.id));
+  const humanPlayers = game.players.filter(p => humanIds.includes(p.id));
   const variants = gameVariants(game);
-  const work: Promise<void>[] = [];
 
-  for (let ind = 0; ind < game.players.length; ind += 1) {
-    const player = game.players[ind];
-    work.push(createNotification(client, tableName, player.id, {
+  await Promise.all(humanPlayers.map(async (player) => {
+    const opponent = opponentForPlayer(game, player.id, humanPlayers);
+    await createNotification(client, tableName, player.id, {
       type: 'gameEnd',
       gameId: game.id,
       metaGame: game.metaGame,
       variants,
       result: gameEndResult(game, player.id),
+      ...(opponent !== undefined
+        ? { opponentId: opponent.id, opponentName: opponent.name }
+        : {}),
     }, {
       userSettings: userSettingsFromMap(settingsByUserId, player.id),
-    }));
-  }
-
-  await Promise.all(work);
+    });
+  }));
 }
 
 /** In-app invite for moderated ORGEVENT records (not automated tournaments). */
