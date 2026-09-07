@@ -234,6 +234,26 @@ test('eventInvitation body carries event page link fields', () => {
   assert.equal(item.body.organizerName, 'Alice');
 });
 
+test('gameEnd body carries opponent fields when present', () => {
+  const item = buildNotificationItem(USER_ID, {
+    type: 'gameEnd',
+    gameId: GAME_ID,
+    metaGame: 'go',
+    variants: [],
+    result: 'win',
+    opponentId: OTHER_USER_ID,
+    opponentName: 'Bob',
+  });
+  assert.equal(item.body.type, 'gameEnd');
+  if (item.body.type !== 'gameEnd') {
+    return;
+  }
+  assert.equal(item.body.gameId, GAME_ID);
+  assert.equal(item.body.result, 'win');
+  assert.equal(item.body.opponentId, OTHER_USER_ID);
+  assert.equal(item.body.opponentName, 'Bob');
+});
+
 test('completedGameChat body carries game link fields', () => {
   const item = buildNotificationItem(USER_ID, {
     type: 'completedGameChat',
