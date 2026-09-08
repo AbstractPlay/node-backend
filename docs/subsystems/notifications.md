@@ -38,7 +38,7 @@ Realtime `yourturn` push is sent after each move when it becomes a player's turn
 
 ## In-app dashboard feed
 
-Per-user notifications stored under `NOTIFICATION#<userid>` and returned on `me_dashboard` and `list_notifications` (not on `me_profile`). Each item has client `status`: **`new`** (long TTL, ~180 days) or **`read`** (short TTL, ~7 days after seen). Users mark items seen via `mark_notifications_seen` (opening the navbar bell panel) and remove them via `dismiss_notification` (`pars.sk`), which deletes the DynamoDB row.
+Per-user notifications stored under `NOTIFICATION#<userid>` and returned on `me_dashboard` and `list_notifications` (not on `me_profile`). Each item has client `status`: **`new`** (long TTL, ~180 days) or **`read`** (short TTL, ~30 days after seen). Users mark items seen via `mark_notifications_seen` (opening the navbar bell panel) and remove them via `dismiss_notification` (`pars.sk`), which deletes the DynamoDB row.
 
 Users control which in-app categories are created via `settings.all.inAppNotifications` (separate from email/push `settings.all.notifications`). Toggles live in User Settings on the front end. Missing keys default to enabled (opt-out). `createNotification()` skips writes when a category is disabled; admin backfill uses `putNotificationItem()` and is not gated.
 
