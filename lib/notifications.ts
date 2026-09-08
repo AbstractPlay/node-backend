@@ -10,7 +10,7 @@ import { isBotId, filterHumanIds } from './participants.js';
 
 export const NOTIFICATION_PK_PREFIX = 'NOTIFICATION#';
 export const NOTIFICATION_INITIAL_TTL_DAYS = 180;
-export const NOTIFICATION_SEEN_TTL_DAYS = 7;
+export const NOTIFICATION_SEEN_TTL_DAYS = 30;
 
 const SEC_PER_DAY = 86_400;
 
