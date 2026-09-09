@@ -47,6 +47,16 @@ Logged-in clients should use the auth `standing_challenges` query instead so blo
 | `get_events` | List organizer events | — |
 | `get_event` | Single event | `id` |
 
+## Telemetry
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `log_gamemove_layout_event` | Anonymous Game Move layout usage event | `event`, `sessionId`, `layout`, `resolvedFrom`, `metaGame`, plus event-specific fields |
+
+Logged-in clients should use the auth `log_gamemove_layout_event` query instead (higher server rate limit; `userHash` stored).
+
+See [Game Move layout analytics](/backend/subsystems/game-move-layout-analytics/).
+
 ## Maintenance
 
 | Query | Purpose | Key `pars` |
