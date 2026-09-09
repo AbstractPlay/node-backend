@@ -132,6 +132,10 @@ import {
   logRecommendationEvent,
   type RecommendationEventPars,
 } from '../lib/recommendationEvents.js';
+import {
+  logLayoutEvent,
+  type LayoutEventPars,
+} from '../lib/layoutEvents.js';
 import { validateAboutText } from '../lib/aboutText.js';
 import { checkAboutSaveAllowed } from '../lib/aboutSaves.js';
 import {
@@ -705,6 +709,8 @@ export const query = async (event: { queryStringParameters: any; body?: string; 
       return await playerAbout(pars);
     case "representative_games":
       return await representativeGames(pars);
+    case "log_gamemove_layout_event":
+      return await logLayoutEventOpen(pars);
     case "report_problem":
       return await reportProblem(pars);
     default:
@@ -901,6 +907,8 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await unrecommendGameAuth(event.cognitoPoolClaims.sub, pars);
     case "log_recommendation_event":
       return await logRecommendationEventAuth(event.cognitoPoolClaims.sub, pars);
+    case "log_gamemove_layout_event":
+      return await logLayoutEventAuth(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
       return await injectState(event.cognitoPoolClaims.sub, pars);
     case "update_game_settings":
@@ -1696,6 +1704,50 @@ async function logRecommendationEventAuth(userId: string, pars: RecommendationEv
   } catch (error) {
     logGetItemError(error);
     return formatReturnError(`Unable to log recommendation event for ${userId}`);
+  }
+}
+
+async function logLayoutEventAuth(userId: string, pars: LayoutEventPars) {
+  try {
+    const result = await logLayoutEvent(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      userId,
+      pars,
+    );
+    if (!result.ok) {
+      return formatReturnError(result.message);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: true }),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to log layout event for ${userId}`);
+  }
+}
+
+async function logLayoutEventOpen(pars: LayoutEventPars) {
+  try {
+    const result = await logLayoutEvent(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      undefined,
+      pars,
+    );
+    if (!result.ok) {
+      return formatReturnError(result.message);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: true }),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError('Unable to log layout event');
   }
 }
 
