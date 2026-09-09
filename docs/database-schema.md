@@ -89,6 +89,13 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - fields: `event`, `batchId`, `surface`, `tier`, `expiresAt` (TTL, ~90 days), plus `metaGame`, `position`, `reasonType`, `gameIds`, `reasons` as applicable
   - no GSI; rate limit 50 events/user/UTC day
 
+- **Game Move layout usage events** — append-only play-page layout telemetry (CLI export only; no live reads)
+  - pk: `LAYOUTEVT#<userid>` or `LAYOUTEVT#anon#<sessionId>`
+  - sk: `<serverTsMs>#<random>`
+  - fields: `event`, `sessionId`, `layout`, `resolvedFrom`, `metaGame`, `ts`, `isLoggedIn`, optional `storedLayout`, `viewportWidth`, `userHash` (authed), `from` / `to` on `layout_switch`
+  - no GSI; rate limit 100 events/user/UTC day (authed), 25/session/UTC day (anonymous)
+  - dump: `bin/dump-gamemove-layout-events.mjs`; purge preview rows: `bin/purge-layout-feedback-events.mjs` (`LAYOUTFB#*` — retired)
+
 - **In-app dashboard notifications** — per-user feed shown on `me_dashboard` (distinct from email/push)
   - pk: `NOTIFICATION#<userid>`
   - sk: `<epochMs>#<random>`
