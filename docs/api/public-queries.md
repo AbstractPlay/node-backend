@@ -18,6 +18,7 @@ POST body: `{ "query": "<name>", "pars": { ... } }`
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `games` | Active games for a metaGame | `metaGame` |
+| `recent_completed_games` | Completed games site-wide in the last N days (default 30; global `COMPLETEDGAMES` index) | `days` (optional), `limit` (optional), `exclusiveStartKey` (optional) |
 | `representative_games` | Community-recommended completed games | `metaGame` |
 | `get_game` | Full game record with `watchCount` | `metaGame`, `id`, `cbit` |
 | `get_public_exploration` | Published exploration tree | `gameid`, `userid`, `movenumber` |
@@ -28,8 +29,9 @@ POST body: `{ "query": "<name>", "pars": { ... } }`
 |-------|---------|------------|
 | `challenge_details` | Single challenge record | `id` |
 | `standing_challenges` | Open challenges for a metaGame (unfiltered) | `metaGame` |
+| `all_standing_challenges` | All open standing challenges site-wide (unfiltered) | — |
 
-Logged-in clients should use the auth `standing_challenges` query instead so blocked players' challenges are hidden.
+Logged-in clients should use the auth `standing_challenges` or `all_standing_challenges` query instead so blocked players' challenges are hidden.
 
 ## Tournaments
 

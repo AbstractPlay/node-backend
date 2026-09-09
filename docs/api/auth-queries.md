@@ -78,6 +78,7 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `challenge_response` | Accept or decline | `response`, `id`, `standing`, `metaGame`, `comment` |
 | `start_solo_game` | Start a 1-player solo run (`rated: false`; optional `challengeSeed`, server assigns if omitted) | `metaGame`, optional `variants`, `challengeSeed`, clock fields |
 | `standing_challenges` | Open challenges (filters blocked issuers) | `metaGame` |
+| `all_standing_challenges` | All open standing challenges site-wide (filters blocked issuers) | — |
 | `submit_move` | Play a move | `metaGame`, `id`, `move`, … |
 | `timeloss` | Report time loss | game ids |
 | `abandoned` | Mark game abandoned | game ids |

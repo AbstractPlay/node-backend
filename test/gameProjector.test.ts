@@ -1,4 +1,4 @@
-import { describe, it } from 'vitest';
+import { describe, it, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import type { DynamoDBRecord } from 'aws-lambda';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
@@ -10,6 +10,10 @@ import {
   toCompletedSummary,
   toCurrentSummary,
 } from '../lib/gameProjector.js';
+
+vi.mock('../lib/participants.js', () => ({
+  isBotId: vi.fn(async () => false),
+}));
 
 describe('parseGameSk', () => {
   it('parses metaGame#cbit#gameId', () => {
@@ -148,5 +152,44 @@ describe('processGameStreamRecord', () => {
     } satisfies DynamoDBRecord);
 
     assert.equal(sendCalls, 0);
+  });
+
+  it('writes global and sharded completed indexes on completed insert', async () => {
+    const puts: Array<{ pk?: string; sk?: string }> = [];
+    const docClient = {
+      send: async (command: { input?: { Item?: { pk?: string; sk?: string } } }) => {
+        if (command.input?.Item) {
+          puts.push(command.input.Item);
+        }
+      },
+    } as unknown as DynamoDBDocumentClient;
+
+    await processGameStreamRecord(docClient, 'table', {
+      eventName: 'INSERT',
+      dynamodb: {
+        NewImage: {
+          pk: { S: 'GAME' },
+          sk: { S: 'loa#1#g1' },
+          id: { S: 'g1' },
+          metaGame: { S: 'loa' },
+          numPlayers: { N: '2' },
+          numMoves: { N: '3' },
+          lastMoveTime: { N: '200' },
+          clockHard: { BOOL: false },
+          toMove: { S: '0' },
+          state: { S: '{}' },
+          players: {
+            L: [
+              { M: { id: { S: 'human-1' }, name: { S: 'A' } } },
+              { M: { id: { S: 'human-2' }, name: { S: 'B' } } },
+            ],
+          },
+        },
+      },
+    } satisfies DynamoDBRecord);
+
+    assert.ok(puts.some(item => item.pk === 'COMPLETEDGAMES' && item.sk === '200#g1'));
+    assert.ok(puts.some(item => item.pk === 'COMPLETEDGAMES#loa' && item.sk === '200#g1'));
+    assert.ok(puts.some(item => item.pk === 'COMPLETEDGAMES#human-1' && item.sk === '200#g1'));
   });
 });
