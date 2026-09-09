@@ -16,7 +16,7 @@ Separate from per-challenge standing records: `REALSTANDING` / `<userid>` stores
 ## Flow
 
 1. **Issue** — `new_challenge` with challenger, challengees (direct), variants, clocks, etc.
-2. **List open** — `standing_challenges` (public unfiltered; auth filters blocked issuers).
+2. **List open** — `standing_challenges` per metaGame, or `all_standing_challenges` site-wide (public unfiltered; auth filters blocked issuers).
 3. **Respond** — `challenge_response` accept/decline; accepted players join `players` list.
 4. **Revoke** — `challenge_revoke` by challenger.
 5. **Game start** — when enough players accept, a `GAME` record is created.
@@ -27,7 +27,7 @@ Standing challenges for two-player games support a `duration` field: `0` = indef
 
 Blocking affects **open challenges only**:
 
-- Auth `standing_challenges` hides challenges issued by players who have blocked the requester.
+- Auth `standing_challenges` and `all_standing_challenges` hide challenges issued by players who have blocked the requester.
 - Direct challenges, accepted games, and tournaments are **not** affected.
 
 See [Player blocking](/backend/subsystems/player-blocking/).
@@ -53,7 +53,8 @@ User records hold sets: `challenges_issued`, `challenges_received`, `challenges_
 | `new_challenge` | yes | Create challenge |
 | `challenge_response` | yes | Accept/decline |
 | `challenge_revoke` | yes | Cancel |
-| `standing_challenges` | public / yes | List open challenges |
+| `standing_challenges` | public / yes | List open challenges for one metaGame |
+| `all_standing_challenges` | public / yes | List all open standing challenges site-wide |
 | `challenge_details` | public | Single challenge |
 
 ## Related

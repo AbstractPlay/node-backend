@@ -294,6 +294,10 @@ async function putCompletedGameIndexes(
   const work: Promise<unknown>[] = [
     docClient.send(new PutCommand({
       TableName: tableName,
+      Item: { pk: 'COMPLETEDGAMES', sk, ...summary },
+    })),
+    docClient.send(new PutCommand({
+      TableName: tableName,
       Item: { pk: `COMPLETEDGAMES#${game.metaGame}`, sk, ...summary },
     })),
   ];
@@ -313,6 +317,7 @@ async function deleteCompletedGameIndexes(
 ): Promise<void> {
   const sk = `${game.lastMoveTime}#${game.id}`;
   const keys = [
+    { pk: 'COMPLETEDGAMES', sk },
     { pk: `COMPLETEDGAMES#${game.metaGame}`, sk },
     ...game.players.map(p => ({ pk: `COMPLETEDGAMES#${p.id}`, sk })),
   ];

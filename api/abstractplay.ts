@@ -137,6 +137,13 @@ import {
   logLayoutEvent,
   type LayoutEventPars,
 } from '../lib/layoutEvents.js';
+import {
+  queryRecentCompletedGames,
+  updateCompletedGameCommentedFlag,
+  RECENT_COMPLETED_CACHE_TTL_MS,
+  type RecentCompletedGamesPars,
+} from '../lib/recentCompletedGames.js';
+import { queryAllStandingChallenges } from '../lib/allStandingChallenges.js';
 import { validateAboutText } from '../lib/aboutText.js';
 import { checkAboutSaveAllowed } from '../lib/aboutSaves.js';
 import {
@@ -184,6 +191,10 @@ const headers = {
   'Access-Control-Allow-Credentials': true,
   "Access-Control-Allow-Headers": "*",
   "Access-Control-Allow-Methods": "*",
+};
+const cachedListHeaders = {
+  ...headers,
+  'Cache-Control': `public, max-age=${Math.floor(RECENT_COMPLETED_CACHE_TTL_MS / 1000)}`,
 };
 
 // Types
@@ -684,6 +695,10 @@ export const query = async (event: { queryStringParameters: any; body?: string; 
       return await challengeDetails(pars);
     case "standing_challenges":
       return await standingChallenges(pars);
+    case "all_standing_challenges":
+      return await allStandingChallenges();
+    case "recent_completed_games":
+      return await recentCompletedGames(pars);
     case "games":
       return await games(pars);
     case "meta_games":
@@ -844,6 +859,8 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await unblock_player(event.cognitoPoolClaims.sub, pars);
     case "standing_challenges":
       return await standingChallenges({ ...pars, userId: event.cognitoPoolClaims.sub });
+    case "all_standing_challenges":
+      return await allStandingChallenges(event.cognitoPoolClaims.sub);
     case "new_challenge":
       return await newChallenge(event.cognitoPoolClaims.sub, pars);
     case "challenge_revoke":
@@ -1276,6 +1293,48 @@ async function standingChallenges(pars: { metaGame: string; userId?: string }) {
   catch (error) {
     logGetItemError(error);
     return formatReturnError(`Unable to get standing challenges for ${pars.metaGame}`);
+  }
+}
+
+async function allStandingChallenges(userId?: string) {
+  const blockedByPromise = userId
+    ? getPlayerRelationIds(userId, "BLOCKEDBY#")
+    : Promise.resolve([] as string[]);
+
+  try {
+    const blockedBy = await blockedByPromise;
+    const items = await queryAllStandingChallenges(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      blockedBy,
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify(items),
+      headers: cachedListHeaders,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError('Unable to get all standing challenges');
+  }
+}
+
+async function recentCompletedGames(pars: RecentCompletedGamesPars) {
+  try {
+    const result = await queryRecentCompletedGames(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      pars,
+    );
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result),
+      headers: cachedListHeaders,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    const message = error instanceof Error ? error.message : 'Unable to get recent completed games';
+    return formatReturnError(message);
   }
 }
 
@@ -6044,18 +6103,15 @@ async function saveExploration(userid: string, pars: { public: boolean, game: st
 
   // If we need to update the commented flag for a completed game
   if (pars.updateCommentedFlag !== undefined && pars.public && pars.gameEnded !== undefined) {
-    // Update the commented flag in COMPLETEDGAMES
     try {
-      await ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "COMPLETEDGAMES#" + pars.metaGame,
-          "sk": pars.gameEnded + "#" + pars.game
-        },
-        ExpressionAttributeValues: { ":c": pars.updateCommentedFlag },
-        UpdateExpression: "set commented = :c",
-        ConditionExpression: "attribute_exists(pk) AND attribute_exists(sk)"
-      }));
+      await updateCompletedGameCommentedFlag(
+        ddbDocClient,
+        process.env.ABSTRACT_PLAY_TABLE!,
+        pars.metaGame,
+        pars.game,
+        pars.gameEnded,
+        pars.updateCommentedFlag,
+      );
       console.log(`Updated commented flag for completed game ${pars.game} to ${pars.updateCommentedFlag}`);
     } catch (error) {
       console.log(`Failed to update commented flag for completed game ${pars.game}:`, error);
@@ -8786,17 +8842,14 @@ async function updateCommented(userId: string, pars: { id: string; metaGame: str
   console.log(`Updating commented flag for game ${pars.id} to ${pars.commented}, cbit=${pars.cbit}, gameEnded=${pars.gameEnded}`);
   try {
     if (pars.cbit === 1 && pars.gameEnded !== undefined) {
-      // For completed games, update COMPLETEDGAMES table
-      await ddbDocClient.send(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "COMPLETEDGAMES#" + pars.metaGame,
-          "sk": pars.gameEnded + "#" + pars.id
-        },
-        ExpressionAttributeValues: { ":c": pars.commented },
-        UpdateExpression: "set commented = :c",
-        ConditionExpression: "attribute_exists(pk) AND attribute_exists(sk)"
-      }));
+      await updateCompletedGameCommentedFlag(
+        ddbDocClient,
+        process.env.ABSTRACT_PLAY_TABLE!,
+        pars.metaGame,
+        pars.id,
+        pars.gameEnded,
+        pars.commented,
+      );
       console.log(`Successfully updated commented flag in COMPLETEDGAMES for game ${pars.id} to ${pars.commented}`);
     } else if (pars.cbit === 0) {
       // For current games, update GAME table

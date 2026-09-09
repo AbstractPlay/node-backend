@@ -121,10 +121,15 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `COMPLETEDGAMES#<userid>`
   - sk: `<timestamp>#<gameid>`
 
+- **Completed games (global)** — site-wide summary index for recent-completions queries (stream-maintained; no historical backfill)
+  - pk: `COMPLETEDGAMES`
+  - sk: `<timestamp>#<gameid>` (`timestamp` = `lastMoveTime` epoch ms)
+  - same summary fields as `COMPLETEDGAMES#<metaGame>` rows
+  - `recent_completed_games` queries with `sk >= <sinceMs>` (lexicographic order matches time order for 13-digit epoch-ms prefixes)
+
 **Retired (no longer written; purged from prod — zero rows remain):**
 
 - pk: `RECENTCOMPLETED#<userid>`, sk: `<gameid>` — legacy completed-dashboard index; post-game chat uses `completedGameChat` notifications
-- pk: `COMPLETEDGAMES`, sk: `<timestamp>#<gameid>` — legacy global list
 - pk: `COMPLETEDGAMES#<metaGame>#<userid>`, sk: `<timestamp>#<gameid>` — legacy per-player-per-game index
 
 ## Exploration
