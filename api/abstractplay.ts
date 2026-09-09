@@ -2311,12 +2311,33 @@ async function updateUserSettings(userid: string, pars: { settings: any; }) {
       removeParts.length > 0 ? ` remove ${removeParts.join(', ')}` : ''
     }`;
 
-    await ddbDocClient.send(new UpdateCommand({
+    const userUpdate = new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userid },
       ExpressionAttributeValues: expressionValues,
       UpdateExpression: updateExpression,
-    }))
+    });
+
+    const usersAvatarUpdate = avatarResult.hasAvatar
+      ? new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USERS", "sk": userid },
+        ExpressionAttributeValues: {
+          ':avatarStyle': expressionValues[':avatarStyle'],
+          ':avatarSeed': expressionValues[':avatarSeed'],
+        },
+        UpdateExpression: 'set avatarStyle = :avatarStyle, avatarSeed = :avatarSeed',
+      })
+      : new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USERS", "sk": userid },
+        UpdateExpression: 'remove avatarStyle, avatarSeed',
+      });
+
+    await Promise.all([
+      ddbDocClient.send(userUpdate),
+      ddbDocClient.send(usersAvatarUpdate),
+    ]);
     console.log("Success - user settings updated");
     return {
       statusCode: 200,
