@@ -106,6 +106,7 @@ import {
   type MeChallengeData,
 } from '../lib/meQuery.js';
 import { stripColorFromSettings } from '../lib/stripLegacyColorSettings.js';
+import { normalizeAvatarInSettings } from '../lib/dicebearAvatar.js';
 import { getUsersLastSeen } from '../lib/touchUserLastSeen.js';
 import { hasCurrentGameRow } from '../lib/dashboardGames.js';
 import {
@@ -312,6 +313,8 @@ export type UsersData = {
   lastSeen: number;
   stars: string[];
   bggid?: string;
+  avatarStyle?: string;
+  avatarSeed?: string;
   bot: boolean;
 };
 
@@ -990,7 +993,7 @@ async function userNames() {
           KeyConditionExpression: "#pk = :pk",
           ExpressionAttributeValues: { ":pk": "USERS" },
           ExpressionAttributeNames: { "#pk": "pk", "#name": "name" },
-          ProjectionExpression: "sk, #name, lastSeen, country, stars, bggid",
+          ProjectionExpression: "sk, #name, lastSeen, country, stars, bggid, avatarStyle, avatarSeed",
           ReturnConsumedCapacity: "INDEXES"
         })),
       ddbDocClient.send(
@@ -1014,7 +1017,18 @@ async function userNames() {
       users[idx].lastSeen = Date.now();
     }
 
-    const userResults = users.map(u => ({ id: u.sk, name: u.name, country: u.country, stars: u.stars, lastSeen: u.lastSeen, bggid: u.bggid, bot: false } as UsersData));
+    const userResults = users.map(u => ({
+      id: u.sk,
+      name: u.name,
+      country: u.country,
+      stars: u.stars,
+      lastSeen: u.lastSeen,
+      bggid: u.bggid,
+      ...(u.avatarStyle && u.avatarSeed
+        ? { avatarStyle: u.avatarStyle as string, avatarSeed: u.avatarSeed as string }
+        : {}),
+      bot: false,
+    } as UsersData));
     const botResults = (botData.Items ?? []).map(b => ({
       id: b.sk,
       name: b.name,
@@ -2269,12 +2283,39 @@ async function markNotificationsSeenAuth(userid: string, pars: { sks?: string[] 
 
 async function updateUserSettings(userid: string, pars: { settings: any; }) {
   try {
-    const settings = stripColorFromSettings(pars.settings);
+    const settings = stripColorFromSettings(pars.settings) as Record<string, unknown>;
+    const avatarResult = normalizeAvatarInSettings(settings);
+    if (!avatarResult.ok) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ message: avatarResult.error }),
+        headers,
+      };
+    }
+
+    const updateParts = ['settings = :ss'];
+    const expressionValues: Record<string, unknown> = { ':ss': settings };
+    const removeParts: string[] = [];
+
+    if (avatarResult.hasAvatar) {
+      const avatar = (settings.all as Record<string, unknown>).profile as Record<string, unknown>;
+      const stored = avatar.avatar as { style: string; seed: string };
+      updateParts.push('avatarStyle = :avatarStyle', 'avatarSeed = :avatarSeed');
+      expressionValues[':avatarStyle'] = stored.style;
+      expressionValues[':avatarSeed'] = stored.seed;
+    } else {
+      removeParts.push('avatarStyle', 'avatarSeed');
+    }
+
+    const updateExpression = `set ${updateParts.join(', ')}${
+      removeParts.length > 0 ? ` remove ${removeParts.join(', ')}` : ''
+    }`;
+
     await ddbDocClient.send(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": userid },
-      ExpressionAttributeValues: { ":ss": settings },
-      UpdateExpression: "set settings = :ss",
+      ExpressionAttributeValues: expressionValues,
+      UpdateExpression: updateExpression,
     }))
     console.log("Success - user settings updated");
     return {

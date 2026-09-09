@@ -58,7 +58,7 @@ Per-user board colours and preferred colour are configured via **Customize** (`s
 | `save_customization` | Per-game UI customization | `metaGame`, settings |
 | `delete_customization` | Remove customization | `metaGame` |
 | `update_standing` | SDG-style standing challenge preferences | `entries` |
-| `update_user_settings` | User settings blob | settings fields |
+| `update_user_settings` | User settings blob | `settings` (full object). Optional `settings.all.profile.avatar`: `{ style, seed }` — style must be one of the allowlisted DiceBear style ids; seed is 1–64 chars (`A–Z`, `a–z`, `0–9`, `_`, `-`). Invalid avatar returns **400**. When avatar is saved, `avatarStyle` / `avatarSeed` are mirrored on the USER record for the public `user_names` query; when avatar is removed or reset to default (key omitted), those mirror fields are removed. |
 
 ## Player blocking
 
