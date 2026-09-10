@@ -44,6 +44,16 @@ See [Game Move layout analytics](/backend/subsystems/game-move-layout-analytics/
 
 Mutations return the updated list (`watchedGames`, `highlights`, or `representatives`) on success.
 
+## Feedback (bugs, ideas, wishlist)
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `feedback_create` | Create a post | `kind`, `title`, optional `body`, `gameUrl`, `attachmentKeys`, `context` (bugs). Bugs require ≥1 `attachmentKeys` under `staging/{userId}/`. Features require `body`. Wishlist requires `gameUrl` (https). Returns `{ id }`. |
+| `feedback_vote` | Toggle vote | `id`, `vote` (boolean). Returns `{ voteCount, effectiveVotes, voted }`. |
+| `feedback_comment` | Add comment | `id`, `body`, optional `subscribe` (default `true`). Returns `{ commentId }`. |
+
+Data lives in DynamoDB table `abstract-play-feedback-{stage}` (not the main `abstract-play` table). Screenshot presign upload (`feedback_presign_upload`) is Phase 2.
+
 ## Push, tags, customizations
 
 Per-user board colours and preferred colour are configured via **Customize** (`save_customization` / `delete_customization`). Legacy named palettes (`save_palettes`, `settings.color`, `me_profile.palettes`) are retired.

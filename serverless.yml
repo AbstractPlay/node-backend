@@ -137,6 +137,8 @@ provider:
       fullExecutionData: false
   environment:
     ABSTRACT_PLAY_TABLE: abstract-play-${self:provider.stage}
+    FEEDBACK_TABLE: abstract-play-feedback-${self:provider.stage}
+    FEEDBACK_ATTACHMENTS_BUCKET: ap-feedback-attachments-${self:provider.stage}
     userpool: ${self:custom.stageConfig.${self:provider.stage}.userpool}
     userpoolId: ${self:custom.stageConfig.${self:provider.stage}.userpoolId}
     userpoolClient: ${self:custom.stageConfig.${self:provider.stage}.userpoolClient}
@@ -216,9 +218,16 @@ provider:
           Action:
             - 's3:GetObject'
             - 's3:PutObject'
+            - 's3:DeleteObject'
           Resource:
             - 'arn:aws:s3:::abstractplay-db-dump/*'
             - 'arn:aws:s3:::records.abstractplay.com/*'
+            - 'arn:aws:s3:::ap-feedback-attachments-${self:provider.stage}/*'
+        - Effect: 'Allow'
+          Action:
+            - 's3:ListBucket'
+          Resource:
+            - 'arn:aws:s3:::ap-feedback-attachments-${self:provider.stage}'
         - Effect: Allow
           Action:
             - cognito-idp:AdminCreateUser
@@ -283,6 +292,91 @@ resources:
         StreamSpecification:
           StreamViewType: "NEW_AND_OLD_IMAGES"
         TableName: ${self:provider.environment.ABSTRACT_PLAY_TABLE}
+
+    FeedbackDynamoDbTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: "pk"
+            AttributeType: "S"
+          -
+            AttributeName: "sk"
+            AttributeType: "S"
+          -
+            AttributeName: "gsi1pk"
+            AttributeType: "S"
+          -
+            AttributeName: "gsi1sk"
+            AttributeType: "S"
+          -
+            AttributeName: "gsi2pk"
+            AttributeType: "S"
+          -
+            AttributeName: "gsi2sk"
+            AttributeType: "S"
+        KeySchema:
+          -
+            AttributeName: "pk"
+            KeyType: "HASH"
+          -
+            AttributeName: "sk"
+            KeyType: "RANGE"
+        GlobalSecondaryIndexes:
+          -
+            IndexName: "ByKind"
+            KeySchema:
+              -
+                AttributeName: "gsi1pk"
+                KeyType: "HASH"
+              -
+                AttributeName: "gsi1sk"
+                KeyType: "RANGE"
+            Projection:
+              ProjectionType: "ALL"
+          -
+            IndexName: "ByStatus"
+            KeySchema:
+              -
+                AttributeName: "gsi2pk"
+                KeyType: "HASH"
+              -
+                AttributeName: "gsi2sk"
+                KeyType: "RANGE"
+            Projection:
+              ProjectionType: "ALL"
+        BillingMode: PAY_PER_REQUEST
+        TimeToLiveSpecification:
+          AttributeName: expiresAt
+          Enabled: true
+        TableName: ${self:provider.environment.FEEDBACK_TABLE}
+
+    FeedbackAttachmentsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ap-feedback-attachments-${self:provider.stage}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        CorsConfiguration:
+          CorsRules:
+            -
+              AllowedHeaders:
+                - "*"
+              AllowedMethods:
+                - GET
+                - PUT
+                - HEAD
+              AllowedOrigins:
+                - "https://play.abstractplay.com"
+                - "https://play.dev.abstractplay.com"
+                - "http://localhost:3000"
+              ExposedHeaders:
+                - ETag
+              MaxAge: 3000
 
     GatewayResponseDefault4XX:
        Type: 'AWS::ApiGateway::GatewayResponse'
