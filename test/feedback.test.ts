@@ -1,0 +1,271 @@
+import { test } from 'vitest';
+import assert from 'node:assert/strict';
+import {
+  DeleteCommand,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  TransactWriteCommand,
+  UpdateCommand,
+  type DynamoDBDocumentClient,
+} from '@aws-sdk/lib-dynamodb';
+import {
+  feedbackComment,
+  feedbackCreate,
+  feedbackList,
+  feedbackVote,
+  seedFeedbackPostForTests,
+} from '../lib/feedback/access.js';
+import { buildMetaItem } from '../lib/feedback/access.js';
+import { metaSk, postPk } from '../lib/feedback/keys.js';
+import { validateFeedbackCreatePars } from '../lib/feedback/validate.js';
+
+const TABLE = 'abstract-play-feedback-test';
+const USER_ID = '31af49bc-2030-4adb-aec9-dc8fa418fec1';
+const VOTER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+
+function itemKey(item: { pk: string; sk: string }) {
+  return `${item.pk}:${item.sk}`;
+}
+
+type Store = Map<string, Record<string, unknown>>;
+
+function applyUpdateExpression(
+  existing: Record<string, unknown>,
+  updateExpression: string,
+  values: Record<string, unknown>,
+) {
+  const setPart = updateExpression.replace(/^SET\s+/i, '');
+  for (const assignment of setPart.split(',')) {
+    const [field, placeholder] = assignment.trim().split(/\s*=\s*/);
+    if (field && placeholder) {
+      existing[field] = values[placeholder];
+    }
+  }
+}
+
+function applyTransact(store: Store, command: TransactWriteCommand) {
+  for (const action of command.input.TransactItems ?? []) {
+    if (action.Put) {
+      const item = action.Put.Item as { pk: string; sk: string };
+      store.set(itemKey(item), { ...item });
+    } else if (action.Delete) {
+      const key = action.Delete.Key as { pk: string; sk: string };
+      store.delete(itemKey(key));
+    } else if (action.Update) {
+      const key = action.Update.Key as { pk: string; sk: string };
+      const existing = store.get(itemKey(key));
+      assert.ok(existing, 'update target must exist');
+      applyUpdateExpression(
+        existing,
+        action.Update.UpdateExpression ?? '',
+        action.Update.ExpressionAttributeValues as Record<string, unknown>,
+      );
+      store.set(itemKey(key), existing);
+    }
+  }
+}
+
+function createMockDocClient(store: Store) {
+  return {
+    async send(command: unknown) {
+      if (command instanceof PutCommand) {
+        const item = command.input.Item as { pk: string; sk: string };
+        store.set(itemKey(item), { ...item });
+        return {};
+      }
+      if (command instanceof DeleteCommand) {
+        const key = command.input.Key as { pk: string; sk: string };
+        store.delete(itemKey(key));
+        return {};
+      }
+      if (command instanceof UpdateCommand) {
+        const key = command.input.Key as { pk: string; sk: string };
+        const existing = store.get(itemKey(key));
+        assert.ok(existing, 'update target must exist');
+        applyUpdateExpression(
+          existing,
+          command.input.UpdateExpression ?? '',
+          command.input.ExpressionAttributeValues as Record<string, unknown>,
+        );
+        store.set(itemKey(key), existing);
+        return {};
+      }
+      if (command instanceof GetCommand) {
+        const key = command.input.Key as { pk: string; sk: string };
+        const item = store.get(itemKey(key));
+        return item ? { Item: { ...item } } : {};
+      }
+      if (command instanceof QueryCommand) {
+        const pk = command.input.ExpressionAttributeValues?.[':pk'] as string | undefined;
+        const gsi1pk = command.input.ExpressionAttributeValues?.[':pk'] as string | undefined;
+        const skPrefix = command.input.ExpressionAttributeValues?.[':skPrefix'] as string | undefined;
+        const gsiPrefix = command.input.ExpressionAttributeValues?.[':prefix'] as string | undefined;
+        const indexName = command.input.IndexName;
+        let items = [...store.values()];
+        if (indexName === 'ByKind') {
+          items = items.filter((item) => item.gsi1pk === gsi1pk);
+          if (gsiPrefix) {
+            items = items.filter((item) => String(item.gsi1sk).startsWith(gsiPrefix));
+          }
+        } else if (pk !== undefined) {
+          items = items.filter((item) => item.pk === pk);
+          if (skPrefix !== undefined) {
+            items = items.filter((item) => String(item.sk).startsWith(skPrefix));
+          }
+        }
+        if (command.input.FilterExpression?.includes('terminalAt')) {
+          items = items.filter((item) => item.terminalAt === undefined);
+        }
+        if (command.input.ScanIndexForward === false) {
+          items.sort((a, b) => String(b.gsi1sk ?? b.sk).localeCompare(String(a.gsi1sk ?? a.sk)));
+        } else {
+          items.sort((a, b) => String(a.sk).localeCompare(String(b.sk)));
+        }
+        const limit = command.input.Limit ?? items.length;
+        const startKey = command.input.ExclusiveStartKey as { pk: string; sk: string } | undefined;
+        if (startKey) {
+          const startIndex = items.findIndex((item) => item.pk === startKey.pk && item.sk === startKey.sk);
+          items = startIndex >= 0 ? items.slice(startIndex + 1) : items;
+        }
+        return { Items: items.slice(0, limit) };
+      }
+      if (command instanceof TransactWriteCommand) {
+        applyTransact(store, command);
+        return {};
+      }
+      throw new Error(`Unexpected command: ${(command as { constructor: { name: string } }).constructor.name}`);
+    },
+  };
+}
+
+test('validateFeedbackCreatePars rejects bug without attachments', () => {
+  const result = validateFeedbackCreatePars(USER_ID, {
+    kind: 'bug',
+    title: 'Broken board',
+    body: 'Pieces overlap',
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.message, /screenshot/i);
+  }
+});
+
+test('feedbackCreate feature post and vote toggle updates counts', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, USER_ID, {
+    kind: 'feature',
+    title: 'Dark mode toggle',
+    body: 'Please add a quick theme switch in settings.',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+
+  const voteOn = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: true });
+  assert.equal(voteOn.ok, true);
+  if (voteOn.ok) {
+    assert.equal(voteOn.data.voteCount, 1);
+    assert.equal(voteOn.data.effectiveVotes, 1);
+    assert.equal(voteOn.data.voted, true);
+  }
+
+  const voteAgain = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: true });
+  assert.equal(voteAgain.ok, true);
+  if (voteAgain.ok) {
+    assert.equal(voteAgain.data.voteCount, 1);
+  }
+
+  const voteOff = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: false });
+  assert.equal(voteOff.ok, true);
+  if (voteOff.ok) {
+    assert.equal(voteOff.data.voteCount, 0);
+    assert.equal(voteOff.data.effectiveVotes, 0);
+    assert.equal(voteOff.data.voted, false);
+  }
+});
+
+test('effectiveVotes includes legacyVoteCount on seeded post', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const id = 'legacy-post-1';
+  const now = Date.now();
+  const meta = buildMetaItem(id, USER_ID, 'Tester', {
+    kind: 'wishlist',
+    title: 'Hive',
+    status: 'requested',
+    gameUrl: 'https://boardgamegeek.com/boardgame/2655/hive',
+    bggGameId: '2655',
+    legacyVoteCount: 42,
+  }, now);
+  await seedFeedbackPostForTests(client, TABLE, meta);
+
+  const voteOn = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: true });
+  assert.equal(voteOn.ok, true);
+  if (voteOn.ok) {
+    assert.equal(voteOn.data.voteCount, 1);
+    assert.equal(voteOn.data.effectiveVotes, 43);
+  }
+});
+
+test('feedbackList excludes items with terminalAt set', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const openId = 'open-feature';
+  const closedId = 'closed-feature';
+  const now = Date.now();
+
+  await seedFeedbackPostForTests(client, TABLE, buildMetaItem(openId, USER_ID, 'Tester', {
+    kind: 'feature',
+    title: 'Open idea',
+    body: 'Still active',
+    status: 'open',
+    legacyVoteCount: 0,
+  }, now));
+
+  const closedMeta = buildMetaItem(closedId, USER_ID, 'Tester', {
+    kind: 'feature',
+    title: 'Shipped idea',
+    body: 'Done',
+    status: 'shipped',
+    legacyVoteCount: 0,
+  }, now - 1000);
+  closedMeta.terminalAt = now;
+  await seedFeedbackPostForTests(client, TABLE, closedMeta);
+
+  const listResult = await feedbackList(client, TABLE, { kind: 'feature', sort: 'recent' });
+  assert.equal(listResult.ok, true);
+  if (listResult.ok) {
+    const ids = listResult.data.items.map((item) => item.id);
+    assert.ok(ids.includes(openId));
+    assert.ok(!ids.includes(closedId));
+  }
+});
+
+test('feedbackComment increments commentCount and creates subscribe row by default', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, USER_ID, {
+    kind: 'feature',
+    title: 'Comment me',
+    body: 'Needs discussion',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const commentResult = await feedbackComment(client, TABLE, VOTER_ID, {
+    id,
+    body: 'I like this idea.',
+  });
+  assert.equal(commentResult.ok, true);
+
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.equal(meta?.commentCount, 1);
+  const subKey = [...store.keys()].find((key) => key.includes('SUB#'));
+  assert.ok(subKey);
+});

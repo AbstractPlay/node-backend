@@ -53,6 +53,7 @@
     "@aws-sdk/client-ses": "^3.321.1",
     "@aws-sdk/client-sqs": "^3.490.0",
     "@aws-sdk/lib-dynamodb": "3.1090.0",
+    "@aws-sdk/s3-request-presigner": "^3.441.0",
     "@sunknudsen/totp": "^1.1.0",
     "abstractplay-backend": "file:",
     "aws-jwt-verify": "^5.1.1",

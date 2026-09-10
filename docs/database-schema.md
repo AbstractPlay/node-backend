@@ -233,6 +233,30 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - sk: `presenceSeq`
   - `seq` — incremented on each debounced presence delta broadcast
 
+## Feedback (separate table)
+
+In-app bugs, feature ideas, and game wishlist use table `abstract-play-feedback-{stage}` (not the main game table).
+
+- **Post meta** — full post record
+  - pk: `POST#{id}`
+  - sk: `META`
+  - GSI `ByKind`: `gsi1pk` = `KIND#{kind}`, `gsi1sk` = `VOTES#…` / `RECENT#…` / `UPDATED#…` on companion `LIST#*` rows
+  - GSI `ByStatus`: `gsi2pk` = `STATUS#{kind}#{status}`, `gsi2sk` = createdAt (admin triage, Phase 3+)
+
+- **List index rows** — sparse GSI projections for board sort orders
+  - pk: `POST#{id}`
+  - sk: `LIST#VOTES` \| `LIST#RECENT` \| `LIST#UPDATED`
+
+- **Comments** — pk: `POST#{id}`, sk: `COMMENT#{ts}#{commentId}`
+
+- **Votes** — pk: `POST#{id}`, sk: `VOTE#{userId}`
+
+- **Subscriptions** — pk: `POST#{id}`, sk: `SUB#{userId}`
+
+- **User index** — pk: `USER#{userId}`, sk: `POST#{kind}#{createdAt}#{id}`
+
+Attachments: S3 bucket `ap-feedback-attachments-{stage}`, keys under `staging/{userId}/` (presign upload in Phase 2).
+
 ## Related docs
 
 - [Games and moves](/backend/subsystems/games-and-moves/)
