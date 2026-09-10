@@ -8,33 +8,27 @@
  * Uses DynamoDB reads only — no API calls, no writes, no Cognito login.
  *
  * Usage:
- *   npm run build-ts
- *   node bin/dump-dashboard.mjs <cognito-sub> [--stage dev|prod] [--verbose] [--include-index] [--include-notifications]
+ *   npm run dump-dashboard -- <cognito-sub> [--stage dev|prod] [--verbose] [--include-index] [--include-notifications]
+ *   npx tsx bin/dump-dashboard.mjs <cognito-sub> [options]
  *
+ * Requires tsx (devDependency) to load lib/*.ts sources. Plain `node` will not work.
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
-import { createRequire } from 'module';
-import { existsSync } from 'fs';
-import { fileURLToPath } from 'url';
-import path from 'path';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   GetCommand,
 } from '@aws-sdk/lib-dynamodb';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-
-const LIB_ROOT = path.join(__dirname, '..', 'lib');
-const REQUIRED_LIBS = [
-  'dashboardGames.js',
-  'challenges.js',
-  'playerGameMarks.js',
-  'playerRelations.js',
-  'participants.js',
-  'notifications.js',
-];
+import { getChallengesByIds } from '../lib/challenges.js';
+import { loadDashboardGameData } from '../lib/dashboardGames.js';
+import { loadNotificationsForDashboard } from '../lib/notifications.js';
+import { getBotRecordsByIds } from '../lib/participants.js';
+import {
+  listHighlights,
+  listUserRecommendations,
+  listWatchedGames,
+} from '../lib/playerGameMarks.js';
+import { listBlockedPlayerIds } from '../lib/playerRelations.js';
 
 const STAGES = {
   dev: {
@@ -48,7 +42,7 @@ const STAGES = {
 };
 
 function usage() {
-  console.error(`Usage: node bin/dump-dashboard.mjs <cognito-sub> [--stage dev|prod] [--verbose] [--include-index] [--include-notifications]
+  console.error(`Usage: npm run dump-dashboard -- <cognito-sub> [--stage dev|prod] [--verbose] [--include-index] [--include-notifications]
 
 Options:
   --stage dev|prod     AWS profile + DynamoDB table (default: dev)
@@ -56,20 +50,8 @@ Options:
   --include-index      Include raw CURRENTGAMES# rows in output (debug)
   --include-notifications  Include in-app NOTIFICATION# feed (refreshExpiry: false; read-only)
   --help, -h           Show this help
-
-Prerequisites:
-  npm run build-ts     (compiles lib/*.ts to lib/*.js)
 `);
   process.exit(1);
-}
-
-function ensureCompiledLib() {
-  const missing = REQUIRED_LIBS.filter(name => !existsSync(path.join(LIB_ROOT, name)));
-  if (missing.length > 0) {
-    console.error(`Missing compiled lib file(s): ${missing.join(', ')}`);
-    console.error('Run: npm run build-ts');
-    process.exit(1);
-  }
 }
 
 function parseArgs(argv) {
@@ -125,20 +107,6 @@ function toIdArray(value) {
 
 async function main() {
   const { userId, stage, verbose, includeIndex, includeNotifications } = parseArgs(process.argv);
-  ensureCompiledLib();
-
-  const {
-    loadDashboardGameData,
-  } = require('../lib/dashboardGames.js');
-  const { getChallengesByIds } = require('../lib/challenges.js');
-  const {
-    listWatchedGames,
-    listHighlights,
-    listUserRecommendations,
-  } = require('../lib/playerGameMarks.js');
-  const { listBlockedPlayerIds } = require('../lib/playerRelations.js');
-  const { getBotRecordsByIds } = require('../lib/participants.js');
-  const { loadNotificationsForDashboard } = require('../lib/notifications.js');
 
   const { profile, table } = STAGES[stage];
   const client = new DynamoDBClient({
