@@ -2096,7 +2096,7 @@ async function feedbackMergeAuth(userId: string, pars: FeedbackMergePars) {
     if (!(await isFeedbackAdmin(userId))) {
       return feedbackErrorResponse('admin access required.', 403);
     }
-    const result = await feedbackMerge(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    const result = await feedbackMerge(ddbDocClient, process.env.FEEDBACK_TABLE, s3Client, pars);
     if (!result.ok) {
       return feedbackErrorResponse(result.message, result.statusCode ?? 400);
     }
@@ -2119,6 +2119,7 @@ async function feedbackDeleteAuth(userId: string, pars: FeedbackDeletePars) {
     const result = await feedbackDelete(
       ddbDocClient,
       process.env.FEEDBACK_TABLE,
+      s3Client,
       userId,
       pars,
     );

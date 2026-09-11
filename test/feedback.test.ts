@@ -9,7 +9,13 @@ import {
   UpdateCommand,
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
-import { CopyObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  CopyObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import {
   feedbackAdminList,
   feedbackComment,
@@ -41,13 +47,19 @@ import {
 } from '../lib/feedback/validate.js';
 
 const TABLE = 'abstract-play-feedback-test';
+process.env.FEEDBACK_ATTACHMENTS_BUCKET = 'ap-feedback-attachments-test';
 const USER_ID = '31af49bc-2030-4adb-aec9-dc8fa418fec1';
 const VOTER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 const ADMIN_ID = 'b2c3d4e5-f6a7-8901-bcde-f12345678901';
 
 const mockS3 = {
   async send(command: unknown) {
-    if (command instanceof HeadObjectCommand || command instanceof CopyObjectCommand) {
+    if (
+      command instanceof HeadObjectCommand
+      || command instanceof CopyObjectCommand
+      || command instanceof DeleteObjectCommand
+      || command instanceof ListObjectsV2Command
+    ) {
       return {};
     }
     throw new Error(`Unexpected S3 command: ${(command as { constructor: { name: string } }).constructor.name}`);
@@ -625,7 +637,7 @@ test('feedbackDelete removes wishlist entry and rejects non-wishlist', async () 
     subscribe: false,
   });
 
-  const deleteResult = await feedbackDelete(client, TABLE, ADMIN_ID, {
+  const deleteResult = await feedbackDelete(client, TABLE, mockS3, ADMIN_ID, {
     id: wishlistId,
     reason: 'Duplicate of an existing wishlist entry.',
   });
@@ -656,7 +668,7 @@ test('feedbackDelete removes wishlist entry and rejects non-wishlist', async () 
   if (!featureResult.ok) {
     return;
   }
-  const featureDelete = await feedbackDelete(client, TABLE, ADMIN_ID, {
+  const featureDelete = await feedbackDelete(client, TABLE, mockS3, ADMIN_ID, {
     id: featureResult.data.id,
     reason: 'Not applicable.',
   });

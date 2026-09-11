@@ -697,6 +697,18 @@ functions:
           description: Archive terminal feedback nightly
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           schedule: cron(0 4 * * ? *)
+  feedback-attachment-cleanup:
+    handler: utils/feedback-attachment-cleanup.handler
+    description: Delete orphaned feedback attachment objects from S3
+    timeout: 900
+    memorySize: 1024
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-feedback-attachment-cleanup
+          description: Purge archived feedback attachments and stale staging uploads
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(30 4 * * ? *)
   bot-outbound:
     handler: utils/bot-outbound.handler
     description: Contacts bot HTTPS endpoints for challenges and move notifications
