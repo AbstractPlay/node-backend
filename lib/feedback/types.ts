@@ -53,6 +53,9 @@ export type FeedbackMetaItem = {
   normalizedGameUrl?: string;
   legacyBggItemId?: string;
   legacyBggSubmitter?: string;
+  legacyDiscordThreadId?: string;
+  legacyDiscordUserId?: string;
+  legacyDiscordUsername?: string;
   wishlistCategory?: WishlistCategory;
   wishlistCategoryNote?: string;
   effort?: FeedbackEffort;
