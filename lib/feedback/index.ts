@@ -16,8 +16,14 @@ export {
   feedbackWishlistSearch,
   feedbackHistoryList,
   feedbackHoldRetention,
+  setFeedbackPostAttachmentKeys,
   seedFeedbackPostForTests,
 } from './access.js';
+export {
+  attachWishlistCoverImageUrls,
+  putPostAttachmentFromUrl,
+} from './attachments.js';
+export { fetchBggRepresentativeImageUrl } from './bggImage.js';
 export {
   archivePost,
   findPostsReadyForArchive,
@@ -57,6 +63,7 @@ export {
   DEFAULT_STATUS_BY_KIND,
   FEEDBACK_ATTACHMENT_MAX_BYTES,
   FEEDBACK_ATTACHMENT_MAX_COUNT,
+  FEEDBACK_WISHLIST_ATTACHMENT_MAX_COUNT,
 } from './constants.js';
 export type {
   FeedbackKind,

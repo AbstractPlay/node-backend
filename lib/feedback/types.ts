@@ -251,6 +251,7 @@ export type FeedbackPublicPost = {
   effectiveVotes: number;
   commentCount: number;
   attachmentKeys?: string[];
+  coverImageUrl?: string;
   gameUrl?: string;
   bggGameId?: string;
   normalizedGameUrl?: string;
