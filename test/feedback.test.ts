@@ -161,21 +161,44 @@ function createMockDocClient(store: Store) {
             items = items.filter((item) => String(item.sk).startsWith(rowPrefix));
           }
         }
-        if (command.input.FilterExpression?.includes('terminalAt')) {
-          items = items.filter((item) => item.terminalAt === undefined);
-        }
         if (command.input.ScanIndexForward === false) {
           items.sort((a, b) => String(b.gsi1sk ?? b.sk).localeCompare(String(a.gsi1sk ?? a.sk)));
         } else {
           items.sort((a, b) => String(a.sk).localeCompare(String(b.sk)));
         }
-        const limit = command.input.Limit ?? items.length;
-        const startKey = command.input.ExclusiveStartKey as { pk: string; sk: string } | undefined;
+        const startKey = command.input.ExclusiveStartKey as {
+          pk?: string;
+          sk?: string;
+          gsi1pk?: string;
+          gsi1sk?: string;
+        } | undefined;
         if (startKey) {
-          const startIndex = items.findIndex((item) => item.pk === startKey.pk && item.sk === startKey.sk);
+          const startIndex = items.findIndex((item) => (
+            (startKey.gsi1pk === undefined || item.gsi1pk === startKey.gsi1pk)
+            && (startKey.gsi1sk === undefined || item.gsi1sk === startKey.gsi1sk)
+            && (startKey.pk === undefined || item.pk === startKey.pk)
+            && (startKey.sk === undefined || item.sk === startKey.sk)
+          ));
           items = startIndex >= 0 ? items.slice(startIndex + 1) : items;
         }
-        return { Items: items.slice(0, limit) };
+        const limit = command.input.Limit ?? items.length;
+        const rawPage = items.slice(0, limit);
+        const filteredPage = command.input.FilterExpression?.includes('terminalAt')
+          ? rawPage.filter((item) => item.terminalAt === undefined)
+          : rawPage;
+        const lastRaw = rawPage[rawPage.length - 1];
+        const hasMore = items.length > limit;
+        return {
+          Items: filteredPage,
+          ...(hasMore && lastRaw ? {
+            LastEvaluatedKey: {
+              pk: lastRaw.pk,
+              sk: lastRaw.sk,
+              gsi1pk: lastRaw.gsi1pk,
+              gsi1sk: lastRaw.gsi1sk,
+            },
+          } : {}),
+        };
       }
       if (command instanceof TransactWriteCommand) {
         applyTransact(store, command);
@@ -377,6 +400,59 @@ test('feedbackList excludes items with terminalAt set', async () => {
     assert.ok(ids.includes(openId));
     assert.ok(!ids.includes(closedId));
   }
+});
+
+test('feedbackList paginates past 100 when terminal rows are filtered from the index page', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const now = Date.now();
+  const activeIds: string[] = [];
+
+  for (let i = 0; i < 120; i += 1) {
+    const id = `wishlist-page-${i}`;
+    const legacyVoteCount = 120 - i;
+    const meta = buildMetaItem(id, USER_ID, 'Tester', {
+      kind: 'wishlist',
+      title: `Game ${i}`,
+      body: 'Please add',
+      status: i === 0 ? 'available' : 'requested',
+      legacyVoteCount,
+    }, now - i);
+    if (i === 0) {
+      meta.terminalAt = now;
+    } else {
+      activeIds.push(id);
+    }
+    await seedFeedbackPostForTests(client, TABLE, meta);
+  }
+
+  const pageOne = await feedbackList(client, TABLE, { kind: 'wishlist', sort: 'votes', limit: 100 });
+  assert.equal(pageOne.ok, true);
+  if (!pageOne.ok) {
+    return;
+  }
+  assert.equal(pageOne.data.items.length, 100);
+  assert.ok(pageOne.data.nextCursor, 'expected nextCursor when more active items remain');
+
+  const pageTwo = await feedbackList(client, TABLE, {
+    kind: 'wishlist',
+    sort: 'votes',
+    limit: 100,
+    cursor: pageOne.data.nextCursor,
+  });
+  assert.equal(pageTwo.ok, true);
+  if (!pageTwo.ok) {
+    return;
+  }
+  assert.equal(pageTwo.data.items.length, 19);
+  assert.equal(pageTwo.data.nextCursor, undefined);
+
+  const listedIds = [...pageOne.data.items, ...pageTwo.data.items].map((item) => item.id);
+  assert.equal(listedIds.length, activeIds.length);
+  for (const id of activeIds) {
+    assert.ok(listedIds.includes(id));
+  }
+  assert.ok(!listedIds.includes('wishlist-page-0'));
 });
 
 test('feedbackComment increments commentCount and creates subscribe row by default', async () => {

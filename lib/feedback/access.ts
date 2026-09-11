@@ -433,6 +433,23 @@ export async function feedbackCreate(
   return { ok: true, data: { id } };
 }
 
+function encodeFeedbackListCursor(key: Record<string, unknown>): string {
+  return Buffer.from(JSON.stringify(key)).toString('base64url');
+}
+
+function decodeFeedbackListCursor(cursor: string): Record<string, unknown> {
+  return JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+}
+
+function feedbackListCursorFromItem(item: Record<string, unknown>): string {
+  return encodeFeedbackListCursor({
+    gsi1pk: item.gsi1pk,
+    gsi1sk: item.gsi1sk,
+    pk: item.pk,
+    sk: item.sk,
+  });
+}
+
 export async function feedbackList(
   client: DynamoDBDocumentClient,
   tableName: string | undefined,
@@ -447,31 +464,48 @@ export async function feedbackList(
   const { kind, sort, limit, cursor } = validated.data;
   const prefix = listSortPrefix(sort);
 
-  const result = await client.send(new QueryCommand({
-    TableName: feedbackTable,
-    IndexName: 'ByKind',
-    KeyConditionExpression: 'gsi1pk = :pk AND begins_with(gsi1sk, :prefix)',
-    ExpressionAttributeValues: {
-      ':pk': kindGsi1Pk(kind),
-      ':prefix': prefix,
-    },
-    FilterExpression: 'attribute_not_exists(terminalAt)',
-    ScanIndexForward: false,
-    Limit: limit + 1,
-    ExclusiveStartKey: cursor ? JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) : undefined,
-  }));
+  const collected: Record<string, unknown>[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined = cursor
+    ? decodeFeedbackListCursor(cursor)
+    : undefined;
 
-  const rawItems = (result.Items ?? []).slice(0, limit);
+  while (collected.length < limit + 1) {
+    const result = await client.send(new QueryCommand({
+      TableName: feedbackTable,
+      IndexName: 'ByKind',
+      KeyConditionExpression: 'gsi1pk = :pk AND begins_with(gsi1sk, :prefix)',
+      ExpressionAttributeValues: {
+        ':pk': kindGsi1Pk(kind),
+        ':prefix': prefix,
+      },
+      FilterExpression: 'attribute_not_exists(terminalAt)',
+      ScanIndexForward: false,
+      Limit: limit + 1,
+      ExclusiveStartKey: exclusiveStartKey,
+    }));
+
+    for (const item of result.Items ?? []) {
+      collected.push(item);
+      if (collected.length >= limit + 1) {
+        break;
+      }
+    }
+
+    exclusiveStartKey = result.LastEvaluatedKey;
+    if (!exclusiveStartKey) {
+      break;
+    }
+  }
+
+  const rawItems = collected.slice(0, limit);
   const items = rawItems.map((item) => toPublicPost(item));
   let nextCursor: string | undefined;
-  if ((result.Items ?? []).length > limit && rawItems.length > 0) {
-    const last = rawItems[rawItems.length - 1]!;
-    nextCursor = Buffer.from(JSON.stringify({
-      gsi1pk: last.gsi1pk,
-      gsi1sk: last.gsi1sk,
-      pk: last.pk,
-      sk: last.sk,
-    })).toString('base64url');
+  if (rawItems.length > 0) {
+    if (collected.length > limit) {
+      nextCursor = feedbackListCursorFromItem(rawItems[rawItems.length - 1]!);
+    } else if (exclusiveStartKey) {
+      nextCursor = encodeFeedbackListCursor(exclusiveStartKey);
+    }
   }
 
   return { ok: true, data: { items, nextCursor } };
