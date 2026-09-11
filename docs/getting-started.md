@@ -15,7 +15,7 @@ npm run build
 
 `npm run build` runs ESLint and TypeScript typecheck (`tsc --noEmit`). Lambda handlers are bundled at deploy time by serverless-esbuild; there is no separate `lib/*.js` compile step.
 
-Ops scripts under `bin/` that only talk to AWS run with `node bin/<script>.mjs`. Scripts that import `lib/*.ts` (e.g. `dump-dashboard`, `import-bgg-wishlist`, `import-discord-feedback`) run via `tsx` — see `npm run dump-dashboard`, `npm run import-bgg-wishlist`, and `npm run import-discord-feedback`.
+Ops scripts under `bin/` that only talk to AWS run with `node bin/<script>.mjs`. Scripts that import `lib/*.ts` (e.g. `dump-dashboard`, `import-bgg-wishlist`, `import-discord-feedback`) run via `tsx` — see `npm run dump-dashboard`, `npm run import-bgg-wishlist`, and `npm run import-discord-feedback`. BGG and Discord imports accept optional user maps (`bin/bgg-ap-user-map.json`, `bin/discord-ap-user-map.json`; see `.example.json` files for format).
 
 ## GitHub Packages
 

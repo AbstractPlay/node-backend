@@ -16,7 +16,16 @@ export {
   feedbackWishlistSearch,
   seedFeedbackPostForTests,
 } from './access.js';
-export { parseBggWishlistXml, buildWishlistMetaFromBggImport } from './bggImport.js';
+export {
+  parseBggWishlistXml,
+  buildWishlistMetaFromBggImport,
+  buildBggImportAuthorEngagementRows,
+  buildApUsernameIndexFromRows,
+  resolveBggSubmitter,
+  shouldBggImportAutoEngageAuthor,
+  BGG_IMPORT_AUTHOR_ID,
+  BGG_IMPORT_SKIP_AUTO_ENGAGE_SUBMITTERS,
+} from './bggImport.js';
 export {
   planDiscordThreadImport,
   resolveExcludeTagIds,
