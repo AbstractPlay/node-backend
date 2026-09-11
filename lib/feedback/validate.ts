@@ -514,6 +514,32 @@ export function validateFeedbackMergePars(
   return { ok: true, data: { survivorId, duplicateId } };
 }
 
+export function validateFeedbackHistoryListPars(
+  pars: { kind?: string; cursor?: string; limit?: string | number },
+): { ok: true; data: { kind: typeof FEEDBACK_KINDS[number]; limit: number; cursor?: string } } | { ok: false; message: string } {
+  if (!pars.kind || !FEEDBACK_KINDS.includes(pars.kind as typeof FEEDBACK_KINDS[number])) {
+    return { ok: false, message: `kind must be one of: ${FEEDBACK_KINDS.join(', ')}.` };
+  }
+  const rawLimit = pars.limit === undefined ? FEEDBACK_LIST_DEFAULT_LIMIT : Number(pars.limit);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(FEEDBACK_LIST_MAX_LIMIT, Math.max(1, Math.floor(rawLimit)))
+    : FEEDBACK_LIST_DEFAULT_LIMIT;
+  const cursor = typeof pars.cursor === 'string' && pars.cursor.trim() ? pars.cursor.trim() : undefined;
+  return { ok: true, data: { kind: pars.kind as typeof FEEDBACK_KINDS[number], limit, cursor } };
+}
+
+export function validateFeedbackHoldRetentionPars(
+  pars: { id?: string; hold?: boolean },
+): { ok: true; data: { id: string; hold: boolean } } | { ok: false; message: string } {
+  if (!isNonEmptyString(pars.id)) {
+    return { ok: false, message: 'id is required.' };
+  }
+  if (typeof pars.hold !== 'boolean') {
+    return { ok: false, message: 'hold must be a boolean.' };
+  }
+  return { ok: true, data: { id: pars.id.trim(), hold: pars.hold } };
+}
+
 export function validateFeedbackWishlistSearchPars(
   pars: FeedbackWishlistSearchPars,
 ): { ok: true; data: { q: string; limit: number } } | { ok: false; message: string } {

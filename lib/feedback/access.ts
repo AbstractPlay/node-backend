@@ -4,6 +4,7 @@ import {
   PutCommand,
   QueryCommand,
   TransactWriteCommand,
+  UpdateCommand,
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
@@ -27,11 +28,14 @@ import { generateCommentId, generateEditId, generatePostId, normalizedGameUrlFor
 import {
   commentSk,
   editSk,
+  historyPk,
+  HISTORY_LOOKUP_SK,
   kindGsi1Pk,
   listGsi1SkForSort,
   listSkForSort,
   listSortPrefix,
   metaSk,
+  postIdLookupPk,
   postPk,
   statusGsi2Pk,
   subscribeSk,
@@ -52,6 +56,7 @@ import {
   notifyFeedbackStatusChange,
 } from './notifications.js';
 import { isUserSubscribed, listSubscriberIds } from './subscribe.js';
+import { toPublicHistorySummary } from './archive.js';
 import { isTerminalStatus } from './status.js';
 import { FEEDBACK_LIST_MAX_LIMIT, FEEDBACK_LIST_SORTS } from './constants.js';
 import {
@@ -70,12 +75,17 @@ import {
   validateFeedbackMergePars,
   validateFeedbackVotePars,
   validateFeedbackWishlistSearchPars,
+  validateFeedbackHistoryListPars,
+  validateFeedbackHoldRetentionPars,
   type ValidatedFeedbackCreate,
 } from './validate.js';
 import type {
   FeedbackCommentPars,
   FeedbackCreatePars,
   FeedbackGetPars,
+  FeedbackHistoryListPars,
+  FeedbackHoldRetentionPars,
+  FeedbackHistorySummary,
   FeedbackListPars,
   FeedbackDeletePars,
   FeedbackMergePars,
@@ -84,7 +94,9 @@ import type {
   FeedbackWishlistSearchPars,
 } from './types.js';
 
-const MAIN_TABLE = process.env.ABSTRACT_PLAY_TABLE;
+function getMainTableName(): string | undefined {
+  return process.env.ABSTRACT_PLAY_TABLE;
+}
 
 function getFeedbackTableName(tableName?: string): string {
   const resolved = tableName ?? process.env.FEEDBACK_TABLE;
@@ -98,11 +110,12 @@ async function loadIsAdmin(
   client: DynamoDBDocumentClient,
   userId: string,
 ): Promise<boolean> {
-  if (!MAIN_TABLE) {
+  const mainTable = getMainTableName();
+  if (!mainTable) {
     return false;
   }
   const result = await client.send(new GetCommand({
-    TableName: MAIN_TABLE,
+    TableName: mainTable,
     Key: { pk: 'USER', sk: userId },
   }));
   return result.Item?.admin === true;
@@ -112,11 +125,12 @@ async function loadAuthorName(
   client: DynamoDBDocumentClient,
   userId: string,
 ): Promise<string> {
-  if (!MAIN_TABLE) {
+  const mainTable = getMainTableName();
+  if (!mainTable) {
     return 'Unknown';
   }
   const result = await client.send(new GetCommand({
-    TableName: MAIN_TABLE,
+    TableName: mainTable,
     Key: { pk: 'USER', sk: userId },
   }));
   const name = result.Item?.name;
@@ -298,6 +312,9 @@ function toPublicPost(item: Record<string, unknown>): FeedbackPublicPost {
     effort: item.effort as FeedbackPublicPost['effort'],
     priority: typeof item.priority === 'string' ? item.priority : undefined,
     adminTags: Array.isArray(item.adminTags) ? item.adminTags as string[] : undefined,
+    archivedAt: typeof item.archivedAt === 'number' ? item.archivedAt : undefined,
+    expiresAt: typeof item.expiresAt === 'number' ? item.expiresAt : undefined,
+    retentionHold: item.retentionHold === true,
   };
 }
 
@@ -479,7 +496,23 @@ export async function feedbackGet(
     Key: { pk: postPk(id), sk: metaSk() },
   }));
   if (!metaResult.Item) {
-    return { ok: false, message: 'feedback item not found.', statusCode: 404 };
+    const lookup = await client.send(new GetCommand({
+      TableName: feedbackTable,
+      Key: { pk: postIdLookupPk(id), sk: HISTORY_LOOKUP_SK },
+    }));
+    if (!lookup.Item) {
+      return { ok: false, message: 'feedback item not found.', statusCode: 404 };
+    }
+    return {
+      ok: true,
+      data: {
+        comments: [],
+        attachmentUrls: [],
+        archived: true,
+        purged: true,
+        summary: toPublicHistorySummary(lookup.Item),
+      },
+    };
   }
 
   const commentsResult = await client.send(new QueryCommand({
@@ -510,7 +543,97 @@ export async function feedbackGet(
     userVoted = Boolean(voteResult.Item);
   }
 
-  return { ok: true, data: { post, comments, attachmentUrls, subscribed, userVoted } };
+  const archived = metaResult.Item.archivedAt !== undefined;
+  return {
+    ok: true,
+    data: {
+      post,
+      comments,
+      attachmentUrls,
+      subscribed,
+      userVoted,
+      ...(archived ? { archived: true } : {}),
+    },
+  };
+}
+
+export async function feedbackHistoryList(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  pars: FeedbackHistoryListPars,
+): Promise<FeedbackResult<{ items: FeedbackHistorySummary[]; nextCursor?: string }>> {
+  const validated = validateFeedbackHistoryListPars(pars);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+
+  const feedbackTable = getFeedbackTableName(tableName);
+  const { kind, limit, cursor } = validated.data;
+  const pk = historyPk(kind);
+
+  const result = await client.send(new QueryCommand({
+    TableName: feedbackTable,
+    KeyConditionExpression: 'pk = :pk',
+    ExpressionAttributeValues: { ':pk': pk },
+    ScanIndexForward: false,
+    Limit: limit + 1,
+    ExclusiveStartKey: cursor ? JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) : undefined,
+  }));
+
+  const rawItems = (result.Items ?? []).slice(0, limit);
+  const items = rawItems.map((item) => toPublicHistorySummary(item));
+
+  let nextCursor: string | undefined;
+  if ((result.Items ?? []).length > limit && rawItems.length > 0) {
+    const last = rawItems[rawItems.length - 1]!;
+    nextCursor = Buffer.from(JSON.stringify({ pk: last.pk, sk: last.sk })).toString('base64url');
+  }
+
+  return { ok: true, data: { items, nextCursor } };
+}
+
+export async function feedbackHoldRetention(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  adminUserId: string,
+  pars: FeedbackHoldRetentionPars,
+): Promise<FeedbackResult<{ retentionHold: boolean }>> {
+  const validated = validateFeedbackHoldRetentionPars(pars);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+
+  const isAdmin = await loadIsAdmin(client, adminUserId);
+  if (!isAdmin) {
+    return { ok: false, message: 'admin only.', statusCode: 403 };
+  }
+
+  const feedbackTable = getFeedbackTableName(tableName);
+  const { id, hold } = validated.data;
+  const metaResult = await client.send(new GetCommand({
+    TableName: feedbackTable,
+    Key: { pk: postPk(id), sk: metaSk() },
+  }));
+  if (!metaResult.Item) {
+    return { ok: false, message: 'feedback item not found.', statusCode: 404 };
+  }
+
+  if (hold) {
+    await client.send(new UpdateCommand({
+      TableName: feedbackTable,
+      Key: { pk: postPk(id), sk: metaSk() },
+      UpdateExpression: 'SET retentionHold = :hold',
+      ExpressionAttributeValues: { ':hold': true },
+    }));
+    return { ok: true, data: { retentionHold: true } };
+  }
+
+  await client.send(new UpdateCommand({
+    TableName: feedbackTable,
+    Key: { pk: postPk(id), sk: metaSk() },
+    UpdateExpression: 'REMOVE retentionHold',
+  }));
+  return { ok: true, data: { retentionHold: false } };
 }
 
 export async function feedbackPresignUpload(

@@ -2,6 +2,9 @@ import type { FeedbackKind, FeedbackListSort } from './types.js';
 
 export const POST_PK_PREFIX = 'POST#';
 export const USER_PK_PREFIX = 'USER#';
+export const HISTORY_PK_PREFIX = 'HISTORY#';
+export const POSTID_PK_PREFIX = 'POSTID#';
+export const HISTORY_LOOKUP_SK = 'SUMMARY';
 
 export function postPk(id: string): string {
   return `${POST_PK_PREFIX}${id}`;
@@ -84,6 +87,18 @@ export function listGsi1SkForSort(
     return listRecentGsi1Sk(createdAt, id);
   }
   return listUpdatedGsi1Sk(updatedAt, id);
+}
+
+export function historyPk(kind: FeedbackKind): string {
+  return `${HISTORY_PK_PREFIX}${kind}`;
+}
+
+export function historySk(closedAt: number, id: string): string {
+  return `${closedAt}#${id}`;
+}
+
+export function postIdLookupPk(id: string): string {
+  return `${POSTID_PK_PREFIX}${id}`;
 }
 
 export function listSortPrefix(sort: FeedbackListSort): string {

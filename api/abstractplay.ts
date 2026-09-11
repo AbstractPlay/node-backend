@@ -153,6 +153,8 @@ import {
   feedbackMerge,
   feedbackDelete,
   feedbackWishlistSearch,
+  feedbackHistoryList,
+  feedbackHoldRetention,
   type FeedbackAdminListPars,
   type FeedbackCommentPars,
   type FeedbackCreatePars,
@@ -168,6 +170,8 @@ import {
   type FeedbackDeletePars,
   type FeedbackMergePars,
   type FeedbackWishlistSearchPars,
+  type FeedbackHistoryListPars,
+  type FeedbackHoldRetentionPars,
 } from '../lib/feedback/index.js';
 import { S3Client } from '@aws-sdk/client-s3';
 import {
@@ -771,6 +775,8 @@ export const query = async (event: { queryStringParameters: any; body?: string; 
       return await feedbackGetOpen(pars);
     case "wishlist_search":
       return await feedbackWishlistSearchOpen(pars);
+    case "feedback_history_list":
+      return await feedbackHistoryListOpen(pars);
     default:
       return {
         statusCode: 500,
@@ -993,6 +999,8 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await feedbackMergeAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_delete":
       return await feedbackDeleteAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_hold_retention":
+      return await feedbackHoldRetentionAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_get":
       return await feedbackGetAuth(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
@@ -1863,6 +1871,40 @@ async function feedbackGetOpen(pars: FeedbackGetPars) {
   } catch (error) {
     logGetItemError(error);
     return feedbackErrorResponse('Unable to load feedback item.');
+  }
+}
+
+async function feedbackHistoryListOpen(pars: FeedbackHistoryListPars) {
+  try {
+    const result = await feedbackHistoryList(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to list feedback history.');
+  }
+}
+
+async function feedbackHoldRetentionAuth(userId: string, pars: FeedbackHoldRetentionPars) {
+  try {
+    const result = await feedbackHoldRetention(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to update retention hold.');
   }
 }
 

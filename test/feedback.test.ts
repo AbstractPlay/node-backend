@@ -224,7 +224,8 @@ test('feedbackCreate auto-votes for author on bug, feature, and wishlist', async
     const getResult = await feedbackGet(client, TABLE, mockS3, { id }, USER_ID);
     assert.equal(getResult.ok, true);
     if (getResult.ok) {
-      assert.equal(getResult.data.post.effectiveVotes, 1, `${kind} get effectiveVotes`);
+      assert.ok(getResult.data.post, `${kind} post`);
+      assert.equal(getResult.data.post!.effectiveVotes, 1, `${kind} get effectiveVotes`);
       assert.equal(getResult.data.userVoted, true, `${kind} userVoted`);
     }
   }
