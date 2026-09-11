@@ -596,19 +596,27 @@ export async function feedbackComment(
         },
       },
     },
-    {
+  ];
+
+  for (const sort of ['votes', 'recent', 'updated'] as const) {
+    const values: Record<string, unknown> = {
+      ':cc': commentCount,
+      ':ua': now,
+    };
+    let updateExpression = 'SET commentCount = :cc, updatedAt = :ua';
+    if (sort === 'updated') {
+      values[':gsi1sk'] = listGsi1SkForSort('updated', effectiveVotes, createdAt, now, id);
+      updateExpression += ', gsi1sk = :gsi1sk';
+    }
+    transactItems.push({
       Update: {
         TableName: feedbackTable,
-        Key: { pk, sk: listSkForSort('updated') },
-        UpdateExpression: 'SET commentCount = :cc, updatedAt = :ua, gsi1sk = :gsi1sk',
-        ExpressionAttributeValues: {
-          ':cc': commentCount,
-          ':ua': now,
-          ':gsi1sk': listGsi1SkForSort('updated', effectiveVotes, createdAt, now, id),
-        },
+        Key: { pk, sk: listSkForSort(sort) },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeValues: values,
       },
-    },
-  ];
+    });
+  }
 
   if (subscribe) {
     transactItems.push({
