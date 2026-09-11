@@ -129,6 +129,9 @@ export function validateFeedbackCreatePars(
       return { ok: false, message: `body must be at most ${FEEDBACK_BODY_MAX_LENGTH} characters.` };
     }
     if (Array.isArray(pars.attachmentKeys) && pars.attachmentKeys.length > 0) {
+      if (pars.attachmentKeys.length > FEEDBACK_ATTACHMENT_MAX_COUNT) {
+        return { ok: false, message: `feature suggestions allow at most ${FEEDBACK_ATTACHMENT_MAX_COUNT} attachments.` };
+      }
       const keyCheck = assertStagingKeysOwned(userId, pars.attachmentKeys);
       if (!keyCheck.ok) {
         return keyCheck;
