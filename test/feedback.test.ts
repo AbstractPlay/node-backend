@@ -79,11 +79,17 @@ function applyUpdateExpression(
   updateExpression: string,
   values: Record<string, unknown>,
 ) {
-  const setPart = updateExpression.replace(/^SET\s+/i, '');
+  const [setSection, removeSection] = updateExpression.split(/\s+REMOVE\s+/i);
+  const setPart = setSection.replace(/^SET\s+/i, '');
   for (const assignment of setPart.split(',')) {
     const [field, placeholder] = assignment.trim().split(/\s*=\s*/);
     if (field && placeholder) {
       existing[field] = values[placeholder];
+    }
+  }
+  if (removeSection) {
+    for (const field of removeSection.split(',').map((part) => part.trim()).filter(Boolean)) {
+      delete existing[field];
     }
   }
 }
@@ -709,6 +715,31 @@ test('feedbackSetAdminFields sets reviewers and notifies newly added', async () 
   assert.ok(notificationKey);
   const notification = store.get(notificationKey!);
   assert.equal((notification?.body as { type?: string })?.type, 'feedbackReviewRequested');
+});
+
+test('feedbackSetAdminFields sets priority with empty reviewerIds', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Priority with reviewers field',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const adminResult = await feedbackSetAdminFields(client, TABLE, ADMIN_ID, {
+    id,
+    priority: 'normal',
+    reviewerIds: [],
+  });
+  assert.equal(adminResult.ok, true);
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.equal(meta?.priority, 'normal');
+  const listItem = store.get(`${postPk(id)}:${listSkForSort('recent')}`);
+  assert.equal(listItem?.priority, 'normal');
 });
 
 test('feedbackSetAdminFields does not re-notify existing reviewers', async () => {
