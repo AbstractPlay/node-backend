@@ -371,6 +371,7 @@ export type UsersData = {
   avatarStyle?: string;
   avatarSeed?: string;
   bot: boolean;
+  admin?: boolean;
 };
 
 type Bot = ClientBot;
@@ -1083,7 +1084,7 @@ async function userNames() {
   // Bot Cognito credentials are also per-stage; dev tokens cannot call prod botQuery.
   console.log("userNames: Scanning users.");
   try {
-    const [data, botData] = await Promise.all([
+    const [data, botData, adminData] = await Promise.all([
       ddbDocClient.send(
         new QueryCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -1101,7 +1102,17 @@ async function userNames() {
           ExpressionAttributeNames: { "#pk": "pk", "#name": "name" },
           ProjectionExpression: "sk, #name, lastseen, description, supported",
         })),
+      ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "#pk = :pk",
+          FilterExpression: "admin = :admin",
+          ExpressionAttributeNames: { "#pk": "pk" },
+          ExpressionAttributeValues: { ":pk": "USER", ":admin": true },
+          ProjectionExpression: "sk",
+        })),
     ]);
+    const adminIds = new Set((adminData.Items ?? []).map((user) => String(user.sk)));
 
     const users = data.Items;
     if (users == undefined) {
@@ -1124,6 +1135,7 @@ async function userNames() {
       ...(u.avatarStyle && u.avatarSeed
         ? { avatarStyle: u.avatarStyle as string, avatarSeed: u.avatarSeed as string }
         : {}),
+      ...(adminIds.has(u.sk) ? { admin: true } : {}),
       bot: false,
     } as UsersData));
     const botResults = (botData.Items ?? []).map(b => ({
@@ -2032,7 +2044,7 @@ async function feedbackSetAdminFieldsAuth(userId: string, pars: FeedbackSetAdmin
     if (!(await isFeedbackAdmin(userId))) {
       return feedbackErrorResponse('admin access required.', 403);
     }
-    const result = await feedbackSetAdminFields(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    const result = await feedbackSetAdminFields(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
     if (!result.ok) {
       return feedbackErrorResponse(result.message, result.statusCode ?? 400);
     }

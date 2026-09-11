@@ -82,6 +82,26 @@ export async function notifyFeedbackStatusChange(
   });
 }
 
+export async function notifyFeedbackReviewRequested(
+  client: DynamoDBDocumentClient,
+  feedbackTable: string,
+  pars: {
+    postId: string;
+    kind: FeedbackKind;
+    title: string;
+    reviewerIds: string[];
+    actorId: string;
+  },
+): Promise<void> {
+  const recipients = pars.reviewerIds.filter((id) => id && id !== pars.actorId);
+  await notifyRecipients(client, feedbackTable, recipients, {
+    type: 'feedbackReviewRequested',
+    postId: pars.postId,
+    kind: pars.kind,
+    title: pars.title,
+  });
+}
+
 export async function notifyFeedbackDeleted(
   client: DynamoDBDocumentClient,
   feedbackTable: string,
