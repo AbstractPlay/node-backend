@@ -5,7 +5,18 @@ import {
   normalizedGameUrlForDedup,
 } from './ids.js';
 import type { FeedbackMetaItem } from './types.js';
-import { kindGsi1Pk, listGsi1SkForSort, listSkForSort, metaSk, postPk, statusGsi2Pk } from './keys.js';
+import {
+  kindGsi1Pk,
+  listGsi1SkForSort,
+  listSkForSort,
+  metaSk,
+  postPk,
+  statusGsi2Pk,
+  subscribeSk,
+  USER_PK_PREFIX,
+  userIndexSk,
+  voteSk,
+} from './keys.js';
 
 export type BggWishlistXmlItem = {
   '@_objectname'?: string;
@@ -29,8 +40,128 @@ export type ParsedBggWishlistItem = {
   createdAt: number;
 };
 
-const IMPORT_AUTHOR_ID = '00000000-0000-4000-8000-000000000001';
+export const BGG_IMPORT_AUTHOR_ID = '00000000-0000-4000-8000-000000000001';
 const IMPORT_AUTHOR_NAME = 'BGG Import';
+
+/** BGG @usernames that should not receive import-time auto-vote or auto-subscribe. */
+export const BGG_IMPORT_SKIP_AUTO_ENGAGE_SUBMITTERS = new Set(['striton']);
+
+export type ApUsernameIndex = {
+  exactNameToId: Map<string, string>;
+  lowerToEntries: Map<string, { id: string; name: string }[]>;
+};
+
+export type BggAuthorResolver = {
+  userMap: Record<string, string>;
+  apUsers?: ApUsernameIndex;
+  displayNameByUserId?: Record<string, string>;
+};
+
+export type ResolvedBggAuthor = {
+  authorId: string;
+  authorName: string;
+  legacyBggSubmitter?: string;
+};
+
+export function buildApUsernameIndexFromRows(
+  rows: { id: string; name: string }[],
+): ApUsernameIndex {
+  const exactNameToId = new Map<string, string>();
+  const lowerToEntries = new Map<string, { id: string; name: string }[]>();
+  for (const row of rows) {
+    const name = row.name.trim();
+    if (!name) {
+      continue;
+    }
+    exactNameToId.set(name, row.id);
+    const key = name.toLowerCase();
+    const entries = lowerToEntries.get(key) ?? [];
+    entries.push({ id: row.id, name });
+    lowerToEntries.set(key, entries);
+  }
+  return { exactNameToId, lowerToEntries };
+}
+
+function lookupUserMap(userMap: Record<string, string>, bggUsername: string): string | undefined {
+  if (userMap[bggUsername]) {
+    return userMap[bggUsername];
+  }
+  const lower = bggUsername.toLowerCase();
+  for (const [key, value] of Object.entries(userMap)) {
+    if (key.toLowerCase() === lower) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+export function resolveBggSubmitter(
+  bggUsername: string | undefined,
+  resolver: BggAuthorResolver,
+): ResolvedBggAuthor {
+  const legacyBggSubmitter = bggUsername?.trim() || undefined;
+  if (!legacyBggSubmitter) {
+    return {
+      authorId: BGG_IMPORT_AUTHOR_ID,
+      authorName: IMPORT_AUTHOR_NAME,
+    };
+  }
+
+  const mappedId = lookupUserMap(resolver.userMap, legacyBggSubmitter);
+  if (mappedId) {
+    return {
+      authorId: mappedId,
+      authorName: resolver.displayNameByUserId?.[mappedId] ?? legacyBggSubmitter,
+      legacyBggSubmitter,
+    };
+  }
+
+  const index = resolver.apUsers;
+  if (index) {
+    const exactId = index.exactNameToId.get(legacyBggSubmitter);
+    if (exactId) {
+      return {
+        authorId: exactId,
+        authorName: resolver.displayNameByUserId?.[exactId]
+          ?? index.lowerToEntries.get(legacyBggSubmitter.toLowerCase())?.find((e) => e.id === exactId)?.name
+          ?? legacyBggSubmitter,
+        legacyBggSubmitter,
+      };
+    }
+    const candidates = index.lowerToEntries.get(legacyBggSubmitter.toLowerCase()) ?? [];
+    if (candidates.length === 1) {
+      const match = candidates[0]!;
+      return {
+        authorId: match.id,
+        authorName: match.name,
+        legacyBggSubmitter,
+      };
+    }
+  }
+
+  return {
+    authorId: BGG_IMPORT_AUTHOR_ID,
+    authorName: IMPORT_AUTHOR_NAME,
+    legacyBggSubmitter,
+  };
+}
+
+export function shouldBggImportAutoEngageAuthor(
+  legacyBggSubmitter?: string,
+  authorId?: string,
+): boolean {
+  const submitter = legacyBggSubmitter?.trim();
+  if (!submitter) {
+    return false;
+  }
+  if (BGG_IMPORT_SKIP_AUTO_ENGAGE_SUBMITTERS.has(submitter.toLowerCase())) {
+    return false;
+  }
+  if (!authorId || authorId === BGG_IMPORT_AUTHOR_ID) {
+    return false;
+  }
+  return true;
+}
 
 export function parseBggWishlistXml(xml: string): ParsedBggWishlistItem[] {
   const parser = new XMLParser({
@@ -77,9 +208,16 @@ export function parseBggWishlistXml(xml: string): ParsedBggWishlistItem[] {
   return results;
 }
 
-export function buildWishlistMetaFromBggImport(item: ParsedBggWishlistItem, id = generatePostId()): FeedbackMetaItem {
+export function buildWishlistMetaFromBggImport(
+  item: ParsedBggWishlistItem,
+  id = generatePostId(),
+  resolver?: BggAuthorResolver,
+): FeedbackMetaItem {
   const now = Date.now();
-  const effectiveVotes = item.legacyVoteCount;
+  const author = resolveBggSubmitter(item.legacyBggSubmitter, resolver ?? { userMap: {} });
+  const autoEngage = shouldBggImportAutoEngageAuthor(item.legacyBggSubmitter, author.authorId);
+  const voteCount = autoEngage ? 1 : 0;
+  const effectiveVotes = item.legacyVoteCount + voteCount;
   return {
     pk: postPk(id),
     sk: metaSk(),
@@ -89,11 +227,11 @@ export function buildWishlistMetaFromBggImport(item: ParsedBggWishlistItem, id =
     title: item.title,
     body: item.body,
     status: 'requested',
-    authorId: IMPORT_AUTHOR_ID,
-    authorName: IMPORT_AUTHOR_NAME,
+    authorId: author.authorId,
+    authorName: author.authorName,
     createdAt: item.createdAt,
     updatedAt: now,
-    voteCount: 0,
+    voteCount,
     legacyVoteCount: item.legacyVoteCount,
     effectiveVotes,
     commentCount: 0,
@@ -101,11 +239,48 @@ export function buildWishlistMetaFromBggImport(item: ParsedBggWishlistItem, id =
     bggGameId: item.bggGameId,
     normalizedGameUrl: item.normalizedGameUrl,
     legacyBggItemId: item.legacyBggItemId,
-    legacyBggSubmitter: item.legacyBggSubmitter,
+    legacyBggSubmitter: author.legacyBggSubmitter,
     wishlistCategory: 'none',
     gsi2pk: statusGsi2Pk('wishlist', 'requested'),
     gsi2sk: String(item.createdAt),
   };
+}
+
+export function buildBggImportAuthorEngagementRows(
+  meta: FeedbackMetaItem,
+  item: ParsedBggWishlistItem,
+  resolver?: BggAuthorResolver,
+): Record<string, unknown>[] {
+  const author = resolveBggSubmitter(item.legacyBggSubmitter, resolver ?? { userMap: {} });
+  if (!shouldBggImportAutoEngageAuthor(item.legacyBggSubmitter, author.authorId)) {
+    return [];
+  }
+  const createdAt = meta.createdAt;
+  return [
+    {
+      pk: postPk(meta.id),
+      sk: subscribeSk(author.authorId),
+      entityType: 'subscribe',
+      userId: author.authorId,
+      createdAt,
+      source: 'comment',
+    },
+    {
+      pk: postPk(meta.id),
+      sk: voteSk(author.authorId),
+      entityType: 'vote',
+      userId: author.authorId,
+      createdAt,
+    },
+    {
+      pk: `${USER_PK_PREFIX}${author.authorId}`,
+      sk: userIndexSk('wishlist', createdAt, meta.id),
+      entityType: 'userIndex',
+      id: meta.id,
+      kind: 'wishlist',
+      createdAt,
+    },
+  ];
 }
 
 export function buildWishlistListRowsFromMeta(meta: FeedbackMetaItem): Record<string, unknown>[] {

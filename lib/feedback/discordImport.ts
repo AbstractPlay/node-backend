@@ -1,3 +1,4 @@
+import type { ApUsernameIndex } from './bggImport.js';
 import { generateCommentId, generatePostId } from './ids.js';
 import { commentSk, kindGsi1Pk, listGsi1SkForSort, listSkForSort, metaSk, postPk, statusGsi2Pk } from './keys.js';
 import type { FeedbackKind, FeedbackMetaItem } from './types.js';
@@ -131,6 +132,20 @@ export function formatDiscordMessageBody(
     body = body ? `${body}\n\n${lines.join('\n')}` : lines.join('\n');
   }
   return body;
+}
+
+export function buildDiscordUsernameToUserId(index: ApUsernameIndex): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [lower, entries] of index.lowerToEntries) {
+    if (entries.length === 1) {
+      out[lower] = entries[0]!.id;
+    }
+  }
+  return out;
+}
+
+export function isUnmappedDiscordAuthor(author: ResolvedDiscordAuthor): boolean {
+  return author.authorId === DISCORD_IMPORT_AUTHOR_ID;
 }
 
 export function resolveDiscordAuthor(
