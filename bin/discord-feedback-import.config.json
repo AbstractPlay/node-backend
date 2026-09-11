@@ -1,0 +1,10 @@
+{
+  "guildId": "REPLACE_WITH_GUILD_ID",
+  "bugForumChannelId": "REPLACE_WITH_BUG_FORUM_CHANNEL_ID",
+  "featureForumChannelId": "REPLACE_WITH_FEATURE_FORUM_CHANNEL_ID",
+  "excludeTagsByKind": {
+    "bug": ["RESOLVED"],
+    "feature": ["DONE"]
+  },
+  "staffBotUserIds": []
+}

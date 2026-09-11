@@ -1,0 +1,687 @@
+import { test } from 'vitest';
+import assert from 'node:assert/strict';
+import {
+  DeleteCommand,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  TransactWriteCommand,
+  UpdateCommand,
+  type DynamoDBDocumentClient,
+} from '@aws-sdk/lib-dynamodb';
+import { CopyObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  feedbackAdminList,
+  feedbackComment,
+  feedbackCreate,
+  feedbackDelete,
+  feedbackGet,
+  feedbackList,
+  feedbackMine,
+  feedbackSetAdminFields,
+  feedbackSubscribe,
+  feedbackUpdate,
+  feedbackVote,
+  seedFeedbackPostForTests,
+} from '../lib/feedback/access.js';
+import { buildMetaItem } from '../lib/feedback/access.js';
+import {
+  listSkForSort,
+  metaSk,
+  postPk,
+  subscribeSk,
+  USER_PK_PREFIX,
+  userIndexSk,
+  voteSk,
+} from '../lib/feedback/keys.js';
+import {
+  validateFeedbackCreatePars,
+  validateFeedbackDeletePars,
+  validateFeedbackSetAdminFieldsPars,
+} from '../lib/feedback/validate.js';
+
+const TABLE = 'abstract-play-feedback-test';
+const USER_ID = '31af49bc-2030-4adb-aec9-dc8fa418fec1';
+const VOTER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+const ADMIN_ID = 'b2c3d4e5-f6a7-8901-bcde-f12345678901';
+
+const mockS3 = {
+  async send(command: unknown) {
+    if (command instanceof HeadObjectCommand || command instanceof CopyObjectCommand) {
+      return {};
+    }
+    throw new Error(`Unexpected S3 command: ${(command as { constructor: { name: string } }).constructor.name}`);
+  },
+} as unknown as S3Client;
+
+function itemKey(item: { pk: string; sk: string }) {
+  return `${item.pk}:${item.sk}`;
+}
+
+type Store = Map<string, Record<string, unknown>>;
+
+function applyUpdateExpression(
+  existing: Record<string, unknown>,
+  updateExpression: string,
+  values: Record<string, unknown>,
+) {
+  const setPart = updateExpression.replace(/^SET\s+/i, '');
+  for (const assignment of setPart.split(',')) {
+    const [field, placeholder] = assignment.trim().split(/\s*=\s*/);
+    if (field && placeholder) {
+      existing[field] = values[placeholder];
+    }
+  }
+}
+
+function applyTransact(store: Store, command: TransactWriteCommand) {
+  for (const action of command.input.TransactItems ?? []) {
+    if (action.Put) {
+      const item = action.Put.Item as { pk: string; sk: string };
+      store.set(itemKey(item), { ...item });
+    } else if (action.Delete) {
+      const key = action.Delete.Key as { pk: string; sk: string };
+      store.delete(itemKey(key));
+    } else if (action.Update) {
+      const key = action.Update.Key as { pk: string; sk: string };
+      const existing = store.get(itemKey(key));
+      assert.ok(existing, 'update target must exist');
+      applyUpdateExpression(
+        existing,
+        action.Update.UpdateExpression ?? '',
+        action.Update.ExpressionAttributeValues as Record<string, unknown>,
+      );
+      store.set(itemKey(key), existing);
+    }
+  }
+}
+
+function createMockDocClient(store: Store) {
+  return {
+    async send(command: unknown) {
+      if (command instanceof PutCommand) {
+        const item = command.input.Item as { pk: string; sk: string };
+        store.set(itemKey(item), { ...item });
+        return {};
+      }
+      if (command instanceof DeleteCommand) {
+        const key = command.input.Key as { pk: string; sk: string };
+        store.delete(itemKey(key));
+        return {};
+      }
+      if (command instanceof UpdateCommand) {
+        const key = command.input.Key as { pk: string; sk: string };
+        const existing = store.get(itemKey(key));
+        assert.ok(existing, 'update target must exist');
+        applyUpdateExpression(
+          existing,
+          command.input.UpdateExpression ?? '',
+          command.input.ExpressionAttributeValues as Record<string, unknown>,
+        );
+        store.set(itemKey(key), existing);
+        return {};
+      }
+      if (command instanceof GetCommand) {
+        const key = command.input.Key as { pk: string; sk: string };
+        const item = store.get(itemKey(key));
+        return item ? { Item: { ...item } } : {};
+      }
+      if (command instanceof QueryCommand) {
+        const pk = command.input.ExpressionAttributeValues?.[':pk'] as string | undefined;
+        const gsi1pk = command.input.ExpressionAttributeValues?.[':pk'] as string | undefined;
+        const skPrefix = command.input.ExpressionAttributeValues?.[':skPrefix'] as string | undefined;
+        const beginsWithPrefix = command.input.ExpressionAttributeValues?.[':prefix'] as string | undefined;
+        const gsiPrefix = beginsWithPrefix;
+        const indexName = command.input.IndexName;
+        let items = [...store.values()];
+        if (indexName === 'ByKind') {
+          items = items.filter((item) => item.gsi1pk === gsi1pk);
+          if (gsiPrefix) {
+            items = items.filter((item) => String(item.gsi1sk).startsWith(gsiPrefix));
+          }
+        } else if (indexName === 'ByStatus') {
+          const gsi2pk = command.input.ExpressionAttributeValues?.[':pk'] as string | undefined;
+          items = items.filter((item) => item.gsi2pk === gsi2pk);
+        } else if (pk !== undefined) {
+          items = items.filter((item) => item.pk === pk);
+          const rowPrefix = skPrefix ?? beginsWithPrefix;
+          if (rowPrefix !== undefined) {
+            items = items.filter((item) => String(item.sk).startsWith(rowPrefix));
+          }
+        }
+        if (command.input.FilterExpression?.includes('terminalAt')) {
+          items = items.filter((item) => item.terminalAt === undefined);
+        }
+        if (command.input.ScanIndexForward === false) {
+          items.sort((a, b) => String(b.gsi1sk ?? b.sk).localeCompare(String(a.gsi1sk ?? a.sk)));
+        } else {
+          items.sort((a, b) => String(a.sk).localeCompare(String(b.sk)));
+        }
+        const limit = command.input.Limit ?? items.length;
+        const startKey = command.input.ExclusiveStartKey as { pk: string; sk: string } | undefined;
+        if (startKey) {
+          const startIndex = items.findIndex((item) => item.pk === startKey.pk && item.sk === startKey.sk);
+          items = startIndex >= 0 ? items.slice(startIndex + 1) : items;
+        }
+        return { Items: items.slice(0, limit) };
+      }
+      if (command instanceof TransactWriteCommand) {
+        applyTransact(store, command);
+        return {};
+      }
+      throw new Error(`Unexpected command: ${(command as { constructor: { name: string } }).constructor.name}`);
+    },
+  };
+}
+
+test('validateFeedbackCreatePars accepts bug without attachments', () => {
+  const result = validateFeedbackCreatePars(USER_ID, {
+    kind: 'bug',
+    title: 'Broken board',
+    body: 'Pieces overlap',
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.data.attachmentKeys, undefined);
+  }
+});
+
+test('feedbackCreate auto-votes for author on bug, feature, and wishlist', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const cases = [
+    {
+      kind: 'bug' as const,
+      pars: { kind: 'bug' as const, title: 'Broken board', body: 'Pieces overlap.' },
+    },
+    {
+      kind: 'feature' as const,
+      pars: { kind: 'feature' as const, title: 'Dark mode', body: 'Please add dark mode.' },
+    },
+    {
+      kind: 'wishlist' as const,
+      pars: {
+        kind: 'wishlist' as const,
+        title: 'Azul',
+        body: 'Please add this game.',
+        gameUrl: 'https://boardgamegeek.com/boardgame/230802/azul',
+      },
+    },
+  ];
+
+  for (const { kind, pars } of cases) {
+    const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, pars);
+    assert.equal(createResult.ok, true);
+    if (!createResult.ok) {
+      return;
+    }
+    const id = createResult.data.id;
+    const meta = store.get(`${postPk(id)}:${metaSk()}`);
+    assert.equal(meta?.voteCount, 1, `${kind} voteCount`);
+    assert.equal(meta?.effectiveVotes, 1, `${kind} effectiveVotes`);
+    assert.ok(store.has(`${postPk(id)}:${voteSk(USER_ID)}`), `${kind} author vote row`);
+
+    const getResult = await feedbackGet(client, TABLE, mockS3, { id }, USER_ID);
+    assert.equal(getResult.ok, true);
+    if (getResult.ok) {
+      assert.equal(getResult.data.post.effectiveVotes, 1, `${kind} get effectiveVotes`);
+      assert.equal(getResult.data.userVoted, true, `${kind} userVoted`);
+    }
+  }
+});
+
+test('feedbackCreate rejects duplicate wishlist by bggGameId', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const gameUrl = 'https://boardgamegeek.com/boardgame/2655/hive';
+  const first = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'wishlist',
+    title: 'Hive',
+    gameUrl,
+  });
+  assert.equal(first.ok, true);
+  const second = await feedbackCreate(client, TABLE, mockS3, VOTER_ID, {
+    kind: 'wishlist',
+    title: 'Hive duplicate',
+    gameUrl,
+  });
+  assert.equal(second.ok, false);
+  if (!second.ok) {
+    assert.equal(second.code, 'duplicate');
+    assert.ok(second.existingId);
+  }
+});
+
+test('validateFeedbackCreatePars rejects feature with too many attachments', () => {
+  const result = validateFeedbackCreatePars(USER_ID, {
+    kind: 'feature',
+    title: 'Mockups',
+    body: 'See attached images.',
+    attachmentKeys: ['a', 'b', 'c', 'd'],
+  });
+  assert.equal(result.ok, false);
+});
+
+test('feedbackCreate feature post and vote toggle updates counts', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Dark mode toggle',
+    body: 'Please add a quick theme switch in settings.',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+
+  const voteOn = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: true });
+  assert.equal(voteOn.ok, true);
+  if (voteOn.ok) {
+    assert.equal(voteOn.data.voteCount, 2);
+    assert.equal(voteOn.data.effectiveVotes, 2);
+    assert.equal(voteOn.data.voted, true);
+  }
+  for (const sort of ['votes', 'recent', 'updated'] as const) {
+    const listItem = store.get(`${postPk(id)}:${listSkForSort(sort)}`);
+    assert.equal(listItem?.effectiveVotes, 2, `feature LIST#${sort} effectiveVotes`);
+  }
+  const ideasList = await feedbackList(client, TABLE, { kind: 'feature', sort: 'votes' });
+  assert.equal(ideasList.ok, true);
+  if (ideasList.ok) {
+    const item = ideasList.data.items.find((entry) => entry.id === id);
+    assert.equal(item?.effectiveVotes, 2);
+  }
+
+  const voteAgain = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: true });
+  assert.equal(voteAgain.ok, true);
+  if (voteAgain.ok) {
+    assert.equal(voteAgain.data.voteCount, 2);
+  }
+
+  const voteOff = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: false });
+  assert.equal(voteOff.ok, true);
+  if (voteOff.ok) {
+    assert.equal(voteOff.data.voteCount, 1);
+    assert.equal(voteOff.data.effectiveVotes, 1);
+    assert.equal(voteOff.data.voted, false);
+  }
+});
+
+test('effectiveVotes includes legacyVoteCount on seeded post', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const id = 'legacy-post-1';
+  const now = Date.now();
+  const meta = buildMetaItem(id, USER_ID, 'Tester', {
+    kind: 'wishlist',
+    title: 'Hive',
+    status: 'requested',
+    gameUrl: 'https://boardgamegeek.com/boardgame/2655/hive',
+    bggGameId: '2655',
+    legacyVoteCount: 42,
+  }, now);
+  await seedFeedbackPostForTests(client, TABLE, meta);
+
+  const voteOn = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: true });
+  assert.equal(voteOn.ok, true);
+  if (voteOn.ok) {
+    assert.equal(voteOn.data.voteCount, 1);
+    assert.equal(voteOn.data.effectiveVotes, 43);
+  }
+});
+
+test('feedbackList excludes items with terminalAt set', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const openId = 'open-feature';
+  const closedId = 'closed-feature';
+  const now = Date.now();
+
+  await seedFeedbackPostForTests(client, TABLE, buildMetaItem(openId, USER_ID, 'Tester', {
+    kind: 'feature',
+    title: 'Open idea',
+    body: 'Still active',
+    status: 'open',
+    legacyVoteCount: 0,
+  }, now));
+
+  const closedMeta = buildMetaItem(closedId, USER_ID, 'Tester', {
+    kind: 'feature',
+    title: 'Shipped idea',
+    body: 'Done',
+    status: 'shipped',
+    legacyVoteCount: 0,
+  }, now - 1000);
+  closedMeta.terminalAt = now;
+  await seedFeedbackPostForTests(client, TABLE, closedMeta);
+
+  const listResult = await feedbackList(client, TABLE, { kind: 'feature', sort: 'recent' });
+  assert.equal(listResult.ok, true);
+  if (listResult.ok) {
+    const ids = listResult.data.items.map((item) => item.id);
+    assert.ok(ids.includes(openId));
+    assert.ok(!ids.includes(closedId));
+  }
+});
+
+test('feedbackComment increments commentCount and creates subscribe row by default', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Comment me',
+    body: 'Needs discussion',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const commentResult = await feedbackComment(client, TABLE, VOTER_ID, {
+    id,
+    body: 'I like this idea.',
+  });
+  assert.equal(commentResult.ok, true);
+
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.equal(meta?.commentCount, 1);
+  const subKey = [...store.keys()].find((key) => key.includes('SUB#'));
+  assert.ok(subKey);
+});
+
+test('feedbackSubscribe without comment creates SUB# row', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Watch me',
+    body: 'Subscribe only',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const sub = await feedbackSubscribe(client, TABLE, VOTER_ID, { id, subscribe: true });
+  assert.equal(sub.ok, true);
+  assert.ok(store.has(`${postPk(id)}:SUB#${VOTER_ID}`));
+});
+
+test('feedbackComment updates commentCount on all list projections for bugs and features', async () => {
+  for (const kind of ['bug', 'feature'] as const) {
+    const store: Store = new Map();
+    const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+    const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+      kind,
+      title: `${kind} board count`,
+      body: 'Comment count should appear on list',
+    });
+    assert.equal(createResult.ok, true);
+    if (!createResult.ok) {
+      return;
+    }
+    const id = createResult.data.id;
+    const commentResult = await feedbackComment(client, TABLE, VOTER_ID, {
+      id,
+      body: 'Visible on the board',
+      subscribe: false,
+    });
+    assert.equal(commentResult.ok, true);
+
+    for (const sort of ['votes', 'recent', 'updated'] as const) {
+      const listItem = store.get(`${postPk(id)}:${listSkForSort(sort)}`);
+      assert.equal(listItem?.commentCount, 1, `${kind} LIST#${sort} commentCount`);
+    }
+
+    const sort = kind === 'feature' ? 'votes' : 'recent';
+    const listResult = await feedbackList(client, TABLE, { kind, sort });
+    assert.equal(listResult.ok, true);
+    if (listResult.ok) {
+      const item = listResult.data.items.find((entry) => entry.id === id);
+      assert.equal(item?.commentCount, 1, `${kind} board list commentCount`);
+    }
+  }
+});
+
+test('feedbackVote updates voteCount on all list projections for bugs', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Vote sync',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const voteOn = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: true });
+  assert.equal(voteOn.ok, true);
+
+  for (const sort of ['votes', 'recent', 'updated'] as const) {
+    const listItem = store.get(`${postPk(id)}:${listSkForSort(sort)}`);
+    assert.equal(listItem?.voteCount, 2, `bug LIST#${sort} voteCount`);
+    assert.equal(listItem?.effectiveVotes, 2, `bug LIST#${sort} effectiveVotes`);
+  }
+
+  const bugsList = await feedbackList(client, TABLE, { kind: 'bug', sort: 'recent' });
+  assert.equal(bugsList.ok, true);
+  if (bugsList.ok) {
+    const item = bugsList.data.items.find((entry) => entry.id === id);
+    assert.equal(item?.effectiveVotes, 2);
+  }
+});
+
+test('feedbackUpdate allows author to edit title', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Original title',
+    body: 'Original body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const updateResult = await feedbackUpdate(client, TABLE, USER_ID, {
+    id,
+    title: 'Updated title',
+  }, false);
+  assert.equal(updateResult.ok, true);
+
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.equal(meta?.title, 'Updated title');
+  const listItem = store.get(`${postPk(id)}:${listSkForSort('recent')}`);
+  assert.equal(listItem?.title, 'Updated title');
+});
+
+test('feedbackSetAdminFields sets effort on feature post', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Admin fields',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const adminResult = await feedbackSetAdminFields(client, TABLE, {
+    id,
+    effort: 'high',
+    priority: 'urgent',
+  });
+  assert.equal(adminResult.ok, true);
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.equal(meta?.effort, 'high');
+  assert.equal(meta?.priority, 'urgent');
+});
+
+test('validateFeedbackSetAdminFieldsPars rejects invalid priority', () => {
+  const result = validateFeedbackSetAdminFieldsPars({
+    id: 'post-1',
+    priority: 'soon',
+  }, 'feature');
+  assert.equal(result.ok, false);
+});
+
+test('feedbackMine returns posts authored by user', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Mine me',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const mineResult = await feedbackMine(client, TABLE, USER_ID, { kind: 'feature' });
+  assert.equal(mineResult.ok, true);
+  if (mineResult.ok) {
+    assert.ok(mineResult.data.items.some((item) => item.id === createResult.data.id));
+  }
+});
+
+test('feedbackAdminList filters by priority', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Urgent bug',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  await feedbackSetAdminFields(client, TABLE, { id, priority: 'urgent' });
+  const listResult = await feedbackAdminList(client, TABLE, { kind: 'bug', priority: 'urgent' });
+  assert.equal(listResult.ok, true);
+  if (listResult.ok) {
+    assert.ok(listResult.data.items.some((item) => item.id === id));
+  }
+});
+
+test('feedbackAdminList filters by effort', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'High effort idea',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  await feedbackSetAdminFields(client, TABLE, { id, effort: 'high' });
+  const listResult = await feedbackAdminList(client, TABLE, { kind: 'feature', effort: 'high' });
+  assert.equal(listResult.ok, true);
+  if (listResult.ok) {
+    assert.ok(listResult.data.items.some((item) => item.id === id));
+  }
+});
+
+test('validateFeedbackDeletePars requires reason', () => {
+  const missingReason = validateFeedbackDeletePars({ id: 'post-1' });
+  assert.equal(missingReason.ok, false);
+  const ok = validateFeedbackDeletePars({ id: 'post-1', reason: 'Duplicate of another entry.' });
+  assert.equal(ok.ok, true);
+});
+
+test('feedbackDelete removes wishlist entry and rejects non-wishlist', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+
+  const wishlistResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'wishlist',
+    title: 'Azul',
+    body: 'Please add this game.',
+    gameUrl: 'https://boardgamegeek.com/boardgame/230802/azul',
+  });
+  assert.equal(wishlistResult.ok, true);
+  if (!wishlistResult.ok) {
+    return;
+  }
+  const wishlistId = wishlistResult.data.id;
+  const metaBeforeDelete = store.get(`${postPk(wishlistId)}:${metaSk()}`);
+  const createdAt = Number(metaBeforeDelete?.createdAt);
+  await feedbackSubscribe(client, TABLE, VOTER_ID, { id: wishlistId, subscribe: true });
+  await feedbackComment(client, TABLE, VOTER_ID, {
+    id: wishlistId,
+    body: 'I want this too.',
+    subscribe: false,
+  });
+
+  const deleteResult = await feedbackDelete(client, TABLE, ADMIN_ID, {
+    id: wishlistId,
+    reason: 'Duplicate of an existing wishlist entry.',
+  });
+  assert.equal(deleteResult.ok, true);
+  assert.ok(!store.has(`${postPk(wishlistId)}:${metaSk()}`));
+  assert.ok(!store.has(`${postPk(wishlistId)}:${listSkForSort('recent')}`));
+  assert.ok(!store.has(`${postPk(wishlistId)}:${subscribeSk(VOTER_ID)}`));
+  assert.ok(!store.has(`${USER_PK_PREFIX}${USER_ID}:${userIndexSk('wishlist', createdAt, wishlistId)}`));
+
+  const getResult = await feedbackGet(client, TABLE, mockS3, { id: wishlistId });
+  assert.equal(getResult.ok, false);
+  if (!getResult.ok) {
+    assert.equal(getResult.statusCode, 404);
+  }
+
+  const listResult = await feedbackList(client, TABLE, { kind: 'wishlist', sort: 'recent' });
+  assert.equal(listResult.ok, true);
+  if (listResult.ok) {
+    assert.ok(!listResult.data.items.some((item) => item.id === wishlistId));
+  }
+
+  const featureResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Dark mode',
+    body: 'Please add dark mode.',
+  });
+  assert.equal(featureResult.ok, true);
+  if (!featureResult.ok) {
+    return;
+  }
+  const featureDelete = await feedbackDelete(client, TABLE, ADMIN_ID, {
+    id: featureResult.data.id,
+    reason: 'Not applicable.',
+  });
+  assert.equal(featureDelete.ok, false);
+  if (!featureDelete.ok) {
+    assert.equal(featureDelete.statusCode, 400);
+  }
+});
+
+test('feedbackComment with subscribe false does not add SUB# for commenter', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'No sub',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  await feedbackComment(client, TABLE, VOTER_ID, {
+    id,
+    body: 'Just commenting',
+    subscribe: false,
+  });
+  assert.ok(!store.has(`${postPk(id)}:SUB#${VOTER_ID}`));
+});

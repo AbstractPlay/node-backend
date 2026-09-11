@@ -59,6 +59,15 @@ Logged-in clients should use the auth `log_gamemove_layout_event` query instead 
 
 See [Game Move layout analytics](/backend/subsystems/game-move-layout-analytics/).
 
+## Feedback (bugs, ideas, wishlist)
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `feedback_list` | Public board listing | `kind` (`bug` \| `feature` \| `wishlist`), optional `sort` (`votes` \| `recent` \| `updated`, default `votes`), `limit`, `cursor` |
+| `feedback_get` | Single post with comments and presigned attachment URLs | `id` |
+
+Returns `{ items, nextCursor? }` for list; `{ post, comments, attachmentUrls }` for get. Terminal/archived items are excluded from list.
+
 ## Maintenance
 
 | Query | Purpose | Key `pars` |

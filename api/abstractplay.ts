@@ -138,6 +138,39 @@ import {
   type LayoutEventPars,
 } from '../lib/layoutEvents.js';
 import {
+  feedbackAdminList,
+  feedbackComment,
+  feedbackCreate,
+  feedbackGet,
+  feedbackList,
+  feedbackMine,
+  feedbackPresignUpload,
+  feedbackSetAdminFields,
+  feedbackSetStatus,
+  feedbackSubscribe,
+  feedbackUpdate,
+  feedbackVote,
+  feedbackMerge,
+  feedbackDelete,
+  feedbackWishlistSearch,
+  type FeedbackAdminListPars,
+  type FeedbackCommentPars,
+  type FeedbackCreatePars,
+  type FeedbackGetPars,
+  type FeedbackListPars,
+  type FeedbackMinePars,
+  type FeedbackPresignUploadPars,
+  type FeedbackSetAdminFieldsPars,
+  type FeedbackSetStatusPars,
+  type FeedbackSubscribePars,
+  type FeedbackUpdatePars,
+  type FeedbackVotePars,
+  type FeedbackDeletePars,
+  type FeedbackMergePars,
+  type FeedbackWishlistSearchPars,
+} from '../lib/feedback/index.js';
+import { S3Client } from '@aws-sdk/client-s3';
+import {
   queryRecentCompletedGames,
   updateCompletedGameCommentedFlag,
   RECENT_COMPLETED_CACHE_TTL_MS,
@@ -168,6 +201,7 @@ import {
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
+const s3Client = new S3Client({ region: REGION });
 const sqsClient = new SQSClient({ region: REGION });
 const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
 const clnt = new DynamoDBClient({ region: REGION });
@@ -731,6 +765,12 @@ export const query = async (event: { queryStringParameters: any; body?: string; 
       return await logLayoutEventOpen(pars);
     case "report_problem":
       return await reportProblem(pars);
+    case "feedback_list":
+      return await feedbackListOpen(pars);
+    case "feedback_get":
+      return await feedbackGetOpen(pars);
+    case "wishlist_search":
+      return await feedbackWishlistSearchOpen(pars);
     default:
       return {
         statusCode: 500,
@@ -929,6 +969,32 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await logRecommendationEventAuth(event.cognitoPoolClaims.sub, pars);
     case "log_gamemove_layout_event":
       return await logLayoutEventAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_create":
+      return await feedbackCreateAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_presign_upload":
+      return await feedbackPresignUploadAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_vote":
+      return await feedbackVoteAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_comment":
+      return await feedbackCommentAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_subscribe":
+      return await feedbackSubscribeAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_set_status":
+      return await feedbackSetStatusAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_update":
+      return await feedbackUpdateAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_set_admin_fields":
+      return await feedbackSetAdminFieldsAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_mine":
+      return await feedbackMineAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_admin_list":
+      return await feedbackAdminListAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_merge":
+      return await feedbackMergeAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_delete":
+      return await feedbackDeleteAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_get":
+      return await feedbackGetAuth(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
       return await injectState(event.cognitoPoolClaims.sub, pars);
     case "update_game_settings":
@@ -1756,6 +1822,344 @@ function markResultResponse(result: MarkResult, successBody?: unknown) {
     body: JSON.stringify(successBody ?? { message: 'Success' }),
     headers,
   };
+}
+
+function feedbackErrorResponse(message: string, statusCode = 500) {
+  return {
+    statusCode,
+    body: JSON.stringify({ message }),
+    headers,
+  };
+}
+
+async function feedbackListOpen(pars: FeedbackListPars) {
+  try {
+    const result = await feedbackList(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to list feedback items.');
+  }
+}
+
+async function feedbackGetOpen(pars: FeedbackGetPars) {
+  try {
+    const result = await feedbackGet(ddbDocClient, process.env.FEEDBACK_TABLE, s3Client, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to load feedback item.');
+  }
+}
+
+async function feedbackGetAuth(userId: string, pars: FeedbackGetPars) {
+  try {
+    const result = await feedbackGet(
+      ddbDocClient,
+      process.env.FEEDBACK_TABLE,
+      s3Client,
+      pars,
+      userId,
+    );
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to load feedback item.');
+  }
+}
+
+async function feedbackPresignUploadAuth(userId: string, pars: FeedbackPresignUploadPars) {
+  try {
+    const result = await feedbackPresignUpload(s3Client, userId, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to presign upload for ${userId}`);
+  }
+}
+
+async function feedbackSubscribeAuth(userId: string, pars: FeedbackSubscribePars) {
+  try {
+    const result = await feedbackSubscribe(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to update subscription for ${userId}`);
+  }
+}
+
+async function isFeedbackAdmin(userId: string): Promise<boolean> {
+  const user = await ddbDocClient.send(new GetCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: { pk: 'USER', sk: userId },
+  }));
+  return user.Item?.admin === true;
+}
+
+async function feedbackSetStatusAuth(userId: string, pars: FeedbackSetStatusPars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const result = await feedbackSetStatus(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to set feedback status for ${userId}`);
+  }
+}
+
+async function feedbackUpdateAuth(userId: string, pars: FeedbackUpdatePars) {
+  try {
+    const isAdmin = await isFeedbackAdmin(userId);
+    const result = await feedbackUpdate(
+      ddbDocClient,
+      process.env.FEEDBACK_TABLE,
+      userId,
+      pars,
+      isAdmin,
+    );
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to update feedback for ${userId}`);
+  }
+}
+
+async function feedbackSetAdminFieldsAuth(userId: string, pars: FeedbackSetAdminFieldsPars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const result = await feedbackSetAdminFields(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to set feedback admin fields for ${userId}`);
+  }
+}
+
+async function feedbackMineAuth(userId: string, pars: FeedbackMinePars) {
+  try {
+    const result = await feedbackMine(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to list feedback for ${userId}`);
+  }
+}
+
+async function feedbackAdminListAuth(userId: string, pars: FeedbackAdminListPars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const result = await feedbackAdminList(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to list feedback for admin ${userId}`);
+  }
+}
+
+async function feedbackWishlistSearchOpen(pars: FeedbackWishlistSearchPars) {
+  try {
+    const result = await feedbackWishlistSearch(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to search wishlist.');
+  }
+}
+
+async function feedbackMergeAuth(userId: string, pars: FeedbackMergePars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const result = await feedbackMerge(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to merge wishlist items for ${userId}`);
+  }
+}
+
+async function feedbackDeleteAuth(userId: string, pars: FeedbackDeletePars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const result = await feedbackDelete(
+      ddbDocClient,
+      process.env.FEEDBACK_TABLE,
+      userId,
+      pars,
+    );
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to delete wishlist item for ${userId}`);
+  }
+}
+
+async function feedbackCreateAuth(userId: string, pars: FeedbackCreatePars) {
+  try {
+    const result = await feedbackCreate(
+      ddbDocClient,
+      process.env.FEEDBACK_TABLE,
+      s3Client,
+      userId,
+      pars,
+    );
+    if (!result.ok) {
+      const body: Record<string, unknown> = { message: result.message };
+      if (result.existingId) {
+        body.existingId = result.existingId;
+      }
+      if (result.code) {
+        body.code = result.code;
+      }
+      return {
+        statusCode: result.statusCode ?? 400,
+        body: JSON.stringify(body),
+        headers,
+      };
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to create feedback for ${userId}`);
+  }
+}
+
+async function feedbackVoteAuth(userId: string, pars: FeedbackVotePars) {
+  try {
+    const result = await feedbackVote(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to vote on feedback for ${userId}`);
+  }
+}
+
+async function feedbackCommentAuth(userId: string, pars: FeedbackCommentPars) {
+  try {
+    const result = await feedbackComment(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to comment on feedback for ${userId}`);
+  }
 }
 
 async function logRecommendationEventAuth(userId: string, pars: RecommendationEventPars) {

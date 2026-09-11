@@ -44,6 +44,26 @@ See [Game Move layout analytics](/backend/subsystems/game-move-layout-analytics/
 
 Mutations return the updated list (`watchedGames`, `highlights`, or `representatives`) on success.
 
+## Feedback (bugs, ideas, wishlist)
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `feedback_presign_upload` | Presigned S3 PUT for bug screenshots | `filename`, `contentType`, `contentLength` (png/jpeg/webp, max 5 MB). Returns `{ uploadUrl, key, headers }`. |
+| `feedback_create` | Create a post | `kind`, `title`, optional `body`, `gameUrl`, `attachmentKeys`, `context` (bugs). Bug screenshots optional (≤3 when provided). Returns `{ id }`. |
+| `feedback_get` | Single post (auth adds `subscribed`, `userVoted`) | `id` |
+| `feedback_vote` | Toggle vote | `id`, `vote` (boolean). Returns `{ voteCount, effectiveVotes, voted }`. |
+| `feedback_comment` | Add comment | `id`, `body`, optional `subscribe` (default `true`). Returns `{ commentId }`. |
+| `feedback_subscribe` | Watch/unwatch | `id`, `subscribe` (boolean). Returns `{ subscribed }`. |
+| `feedback_set_status` | Admin status change | `id`, `status`. Notifies author and subscribers. |
+| `feedback_update` | Edit title/body | `id`, optional `title`, `body` (at least one). Author or admin. Writes `EDIT#` audit rows. |
+| `feedback_set_admin_fields` | Admin triage fields | `id`, optional `effort`, `priority`, `adminTags`, `wishlistCategory`, `wishlistCategoryNote`. |
+| `feedback_mine` | List caller's posts | optional `kind`, `limit`, `cursor`. Returns `{ items, nextCursor? }`. |
+| `feedback_admin_list` | Admin dashboard list | `kind`, optional `status`, `effort`, `priority`, `needsResponse`, `limit`, `cursor`. Returns `{ items, nextCursor? }` with `needsResponse` per item. |
+| `feedback_delete` | Admin delete wishlist entry | `id`, `reason` (required). Permanently removes the post and notifies watchers. Wishlist only. Returns `{ id }`. |
+| `feedback_merge` | Admin merge duplicate wishlist entries | `survivorId`, `duplicateId`. Moves comments/votes to survivor and deletes duplicate. |
+
+Data lives in DynamoDB table `abstract-play-feedback-{stage}` (not the main `abstract-play` table).
+
 ## Push, tags, customizations
 
 Per-user board colours and preferred colour are configured via **Customize** (`save_customization` / `delete_customization`). Legacy named palettes (`save_palettes`, `settings.color`, `me_profile.palettes`) are retired.
