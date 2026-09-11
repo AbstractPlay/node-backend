@@ -1156,7 +1156,9 @@ function pushListProjectionFieldUpdates(
   effectiveVotes: number,
   setParts: string[],
   values: Record<string, unknown>,
+  removeParts: string[] = [],
 ): void {
+  const removeExpr = removeParts.length > 0 ? removeParts.join(', ') : '';
   for (const sort of FEEDBACK_LIST_SORTS) {
     const rowValues: Record<string, unknown> = { ...values, ':ua': now };
     let updateExpression = setParts.length > 0
@@ -1166,37 +1168,8 @@ function pushListProjectionFieldUpdates(
       rowValues[':gsi1sk'] = listGsi1SkForSort('updated', effectiveVotes, createdAt, now, id);
       updateExpression += ', gsi1sk = :gsi1sk';
     }
-    transactItems.push({
-      Update: {
-        TableName: feedbackTable,
-        Key: { pk, sk: listSkForSort(sort) },
-        UpdateExpression: updateExpression,
-        ExpressionAttributeValues: rowValues,
-      },
-    });
-  }
-}
-
-function pushListProjectionFieldRemoves(
-  transactItems: Record<string, unknown>[],
-  feedbackTable: string,
-  pk: string,
-  id: string,
-  now: number,
-  createdAt: number,
-  effectiveVotes: number,
-  removeParts: string[],
-): void {
-  if (removeParts.length === 0) {
-    return;
-  }
-  const removeExpr = removeParts.join(', ');
-  for (const sort of FEEDBACK_LIST_SORTS) {
-    const rowValues: Record<string, unknown> = { ':ua': now };
-    let updateExpression = `SET updatedAt = :ua REMOVE ${removeExpr}`;
-    if (sort === 'updated') {
-      rowValues[':gsi1sk'] = listGsi1SkForSort('updated', effectiveVotes, createdAt, now, id);
-      updateExpression = `SET updatedAt = :ua, gsi1sk = :gsi1sk REMOVE ${removeExpr}`;
+    if (removeExpr) {
+      updateExpression += ` REMOVE ${removeExpr}`;
     }
     transactItems.push({
       Update: {
@@ -1504,7 +1477,7 @@ export async function feedbackSetAdminFields(
     },
   }];
 
-  if (listSetParts.length > 0) {
+  if (listSetParts.length > 0 || listRemoveParts.length > 0) {
     pushListProjectionFieldUpdates(
       transactItems,
       feedbackTable,
@@ -1515,17 +1488,6 @@ export async function feedbackSetAdminFields(
       effectiveVotes,
       listSetParts,
       listValues,
-    );
-  }
-  if (listRemoveParts.length > 0) {
-    pushListProjectionFieldRemoves(
-      transactItems,
-      feedbackTable,
-      pk,
-      id,
-      now,
-      createdAt,
-      effectiveVotes,
       listRemoveParts,
     );
   }
