@@ -96,17 +96,25 @@ export async function discordGet(token, path) {
   return res.json();
 }
 
-export async function fetchAllThreads(token, channelId) {
+export async function fetchAllThreads(token, channelId, guildId) {
   const channel = await discordGet(token, `/channels/${channelId}`);
   const availableTags = channel.available_tags ?? [];
   const threads = [];
 
-  const active = await discordGet(token, `/channels/${channelId}/threads/active`);
-  threads.push(...(active.threads ?? []));
+  // Forum channels (type 15): /channels/{id}/threads/active returns 404; use guild endpoint.
+  if (guildId) {
+    const guildActive = await discordGet(token, `/guilds/${guildId}/threads/active`);
+    threads.push(...(guildActive.threads ?? []).filter((thread) => thread.parent_id === channelId));
+  } else {
+    const active = await discordGet(token, `/channels/${channelId}/threads/active`);
+    threads.push(...(active.threads ?? []));
+  }
 
   let archivedBefore;
   do {
-    const archivedQuery = archivedBefore ? `?before=${archivedBefore}` : '';
+    const archivedQuery = archivedBefore
+      ? `?before=${encodeURIComponent(archivedBefore)}`
+      : '';
     const archived = await discordGet(token, `/channels/${channelId}/threads/archived/public${archivedQuery}`);
     threads.push(...(archived.threads ?? []));
     if (!archived.has_more) {

@@ -112,7 +112,7 @@ async function main() {
   for (const kind of kinds) {
     const channelId = kind === 'bug' ? config.bugForumChannelId : config.featureForumChannelId;
     const excludeNames = config.excludeTagsByKind?.[kind] ?? [];
-    const { threads, availableTags } = await fetchAllThreads(token, channelId);
+    const { threads, availableTags } = await fetchAllThreads(token, channelId, config.guildId);
     const excludeTagIds = resolveExcludeTagIds(availableTags, excludeNames);
     const staffBotUserIds = new Set(config.staffBotUserIds ?? []);
 
