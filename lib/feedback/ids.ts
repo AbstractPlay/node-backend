@@ -8,6 +8,10 @@ export function generateCommentId(): string {
   return uuidv4();
 }
 
+export function generateEditId(): string {
+  return uuidv4();
+}
+
 export function normalizeGameUrl(raw: string): string {
   const trimmed = raw.trim();
   try {

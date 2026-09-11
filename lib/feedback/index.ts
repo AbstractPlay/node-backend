@@ -7,6 +7,10 @@ export {
   feedbackPresignUpload,
   feedbackSubscribe,
   feedbackSetStatus,
+  feedbackUpdate,
+  feedbackSetAdminFields,
+  feedbackMine,
+  feedbackAdminList,
   seedFeedbackPostForTests,
 } from './access.js';
 export {
@@ -26,4 +30,8 @@ export type {
   FeedbackPresignUploadPars,
   FeedbackSubscribePars,
   FeedbackSetStatusPars,
+  FeedbackUpdatePars,
+  FeedbackSetAdminFieldsPars,
+  FeedbackMinePars,
+  FeedbackAdminListPars,
 } from './types.js';

@@ -8,18 +8,25 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
 import type {
+  FeedbackAdminListItem,
+  FeedbackAdminListPars,
   FeedbackGetResult,
+  FeedbackKind,
   FeedbackListSort,
   FeedbackMetaItem,
+  FeedbackMinePars,
   FeedbackPresignUploadPars,
   FeedbackPublicComment,
   FeedbackPublicPost,
+  FeedbackSetAdminFieldsPars,
   FeedbackSetStatusPars,
   FeedbackSubscribePars,
+  FeedbackUpdatePars,
 } from './types.js';
-import { generateCommentId, generatePostId } from './ids.js';
+import { generateCommentId, generateEditId, generatePostId } from './ids.js';
 import {
   commentSk,
+  editSk,
   kindGsi1Pk,
   listGsi1SkForSort,
   listSkForSort,
@@ -29,6 +36,7 @@ import {
   statusGsi2Pk,
   subscribeSk,
   userIndexSk,
+  userPostsSkPrefix,
   voteSk,
   USER_PK_PREFIX,
 } from './keys.js';
@@ -41,14 +49,19 @@ import {
 import { notifyFeedbackComment, notifyFeedbackStatusChange } from './notifications.js';
 import { isUserSubscribed } from './subscribe.js';
 import { isTerminalStatus } from './status.js';
+import { FEEDBACK_LIST_SORTS } from './constants.js';
 import {
+  validateFeedbackAdminListPars,
   validateFeedbackCommentPars,
   validateFeedbackCreatePars,
   validateFeedbackGetPars,
   validateFeedbackListPars,
+  validateFeedbackMinePars,
   validateFeedbackPresignUploadPars,
+  validateFeedbackSetAdminFieldsPars,
   validateFeedbackSetStatusPars,
   validateFeedbackSubscribePars,
+  validateFeedbackUpdatePars,
   validateFeedbackVotePars,
   type ValidatedFeedbackCreate,
 } from './validate.js';
@@ -105,6 +118,7 @@ function buildListFields(
     FeedbackMetaItem,
     'id' | 'kind' | 'title' | 'status' | 'authorId' | 'authorName' | 'createdAt' | 'updatedAt'
     | 'voteCount' | 'legacyVoteCount' | 'effectiveVotes' | 'commentCount' | 'attachmentKeys' | 'terminalAt'
+    | 'effort' | 'priority' | 'adminTags' | 'lastStaffCommentAt' | 'lastAuthorCommentAt'
   >,
 ) {
   return {
@@ -122,7 +136,27 @@ function buildListFields(
     commentCount: meta.commentCount,
     attachmentKeys: meta.attachmentKeys,
     terminalAt: meta.terminalAt,
+    effort: meta.effort,
+    priority: meta.priority,
+    adminTags: meta.adminTags,
+    lastStaffCommentAt: meta.lastStaffCommentAt,
+    lastAuthorCommentAt: meta.lastAuthorCommentAt,
   };
+}
+
+function needsResponseFromMeta(item: Record<string, unknown>): boolean {
+  if (item.terminalAt !== undefined) {
+    return false;
+  }
+  const lastStaff = typeof item.lastStaffCommentAt === 'number' ? item.lastStaffCommentAt : undefined;
+  const lastAuthor = typeof item.lastAuthorCommentAt === 'number' ? item.lastAuthorCommentAt : undefined;
+  if (lastStaff === undefined) {
+    return true;
+  }
+  if (lastAuthor === undefined) {
+    return false;
+  }
+  return lastAuthor > lastStaff;
 }
 
 function buildMetaItem(
@@ -192,6 +226,16 @@ function toPublicPost(item: Record<string, unknown>): FeedbackPublicPost {
     gameUrl: typeof item.gameUrl === 'string' ? item.gameUrl : undefined,
     bggGameId: typeof item.bggGameId === 'string' ? item.bggGameId : undefined,
     wishlistCategory: item.wishlistCategory as FeedbackPublicPost['wishlistCategory'],
+    effort: item.effort as FeedbackPublicPost['effort'],
+    priority: typeof item.priority === 'string' ? item.priority : undefined,
+    adminTags: Array.isArray(item.adminTags) ? item.adminTags as string[] : undefined,
+  };
+}
+
+function toAdminListItem(item: Record<string, unknown>): FeedbackAdminListItem {
+  return {
+    ...toPublicPost(item),
+    needsResponse: needsResponseFromMeta(item),
   };
 }
 
@@ -486,33 +530,29 @@ export async function feedbackVote(
     },
   });
 
-  transactItems.push({
-    Update: {
-      TableName: feedbackTable,
-      Key: { pk, sk: listSkForSort('votes') },
-      UpdateExpression: 'SET voteCount = :vc, effectiveVotes = :ev, gsi1sk = :gsi1sk, updatedAt = :ua',
-      ExpressionAttributeValues: {
-        ':vc': nextVoteCount,
-        ':ev': effectiveVotes,
-        ':gsi1sk': listGsi1SkForSort('votes', effectiveVotes, createdAt, now, id),
-        ':ua': now,
+  for (const sort of FEEDBACK_LIST_SORTS) {
+    const values: Record<string, unknown> = {
+      ':vc': nextVoteCount,
+      ':ev': effectiveVotes,
+      ':ua': now,
+    };
+    let updateExpression = 'SET voteCount = :vc, effectiveVotes = :ev, updatedAt = :ua';
+    if (sort === 'votes') {
+      values[':gsi1sk'] = listGsi1SkForSort('votes', effectiveVotes, createdAt, now, id);
+      updateExpression += ', gsi1sk = :gsi1sk';
+    } else if (sort === 'updated') {
+      values[':gsi1sk'] = listGsi1SkForSort('updated', effectiveVotes, createdAt, now, id);
+      updateExpression += ', gsi1sk = :gsi1sk';
+    }
+    transactItems.push({
+      Update: {
+        TableName: feedbackTable,
+        Key: { pk, sk: listSkForSort(sort) },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeValues: values,
       },
-    },
-  });
-
-  transactItems.push({
-    Update: {
-      TableName: feedbackTable,
-      Key: { pk, sk: listSkForSort('updated') },
-      UpdateExpression: 'SET voteCount = :vc, effectiveVotes = :ev, gsi1sk = :gsi1sk, updatedAt = :ua',
-      ExpressionAttributeValues: {
-        ':vc': nextVoteCount,
-        ':ev': effectiveVotes,
-        ':gsi1sk': listGsi1SkForSort('updated', effectiveVotes, createdAt, now, id),
-        ':ua': now,
-      },
-    },
-  });
+    });
+  }
 
   try {
     await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
@@ -567,6 +607,19 @@ export async function feedbackComment(
   const createdAt = Number(metaResult.Item.createdAt);
   const effectiveVotes = Number(metaResult.Item.effectiveVotes ?? 0);
   const commentCount = Number(metaResult.Item.commentCount ?? 0) + 1;
+  const authorId = String(metaResult.Item.authorId);
+  let metaUpdateExpression = 'SET commentCount = :cc, updatedAt = :ua';
+  const metaUpdateValues: Record<string, unknown> = {
+    ':cc': commentCount,
+    ':ua': now,
+  };
+  if (isStaff) {
+    metaUpdateExpression += ', lastStaffCommentAt = :lsa';
+    metaUpdateValues[':lsa'] = now;
+  } else if (userId === authorId) {
+    metaUpdateExpression += ', lastAuthorCommentAt = :laa';
+    metaUpdateValues[':laa'] = now;
+  }
 
   const transactItems: Record<string, unknown>[] = [
     {
@@ -589,21 +642,25 @@ export async function feedbackComment(
       Update: {
         TableName: feedbackTable,
         Key: { pk, sk: metaSk() },
-        UpdateExpression: 'SET commentCount = :cc, updatedAt = :ua',
-        ExpressionAttributeValues: {
-          ':cc': commentCount,
-          ':ua': now,
-        },
+        UpdateExpression: metaUpdateExpression,
+        ExpressionAttributeValues: metaUpdateValues,
       },
     },
   ];
 
-  for (const sort of ['votes', 'recent', 'updated'] as const) {
+  for (const sort of FEEDBACK_LIST_SORTS) {
     const values: Record<string, unknown> = {
       ':cc': commentCount,
       ':ua': now,
     };
     let updateExpression = 'SET commentCount = :cc, updatedAt = :ua';
+    if (isStaff) {
+      values[':lsa'] = now;
+      updateExpression += ', lastStaffCommentAt = :lsa';
+    } else if (userId === authorId) {
+      values[':laa'] = now;
+      updateExpression += ', lastAuthorCommentAt = :laa';
+    }
     if (sort === 'updated') {
       values[':gsi1sk'] = listGsi1SkForSort('updated', effectiveVotes, createdAt, now, id);
       updateExpression += ', gsi1sk = :gsi1sk';
@@ -638,7 +695,6 @@ export async function feedbackComment(
 
   const kind = metaResult.Item.kind as FeedbackMetaItem['kind'];
   const title = String(metaResult.Item.title);
-  const authorId = String(metaResult.Item.authorId);
   try {
     await notifyFeedbackComment(client, feedbackTable, {
       postId: id,
@@ -759,7 +815,7 @@ export async function feedbackSetStatus(
     },
   ];
 
-  for (const sort of ['votes', 'recent', 'updated'] as const) {
+  for (const sort of FEEDBACK_LIST_SORTS) {
     const values: Record<string, unknown> = {
       ':status': status,
       ':ua': now,
@@ -802,6 +858,386 @@ export async function feedbackSetStatus(
   }
 
   return { ok: true, data: { status } };
+}
+
+async function canEditPost(
+  client: DynamoDBDocumentClient,
+  userId: string,
+  meta: Record<string, unknown>,
+  isAdmin: boolean,
+): Promise<boolean> {
+  if (isAdmin) {
+    return true;
+  }
+  return String(meta.authorId) === userId;
+}
+
+function pushListProjectionFieldUpdates(
+  transactItems: Record<string, unknown>[],
+  feedbackTable: string,
+  pk: string,
+  id: string,
+  now: number,
+  createdAt: number,
+  effectiveVotes: number,
+  setParts: string[],
+  values: Record<string, unknown>,
+): void {
+  for (const sort of FEEDBACK_LIST_SORTS) {
+    const rowValues: Record<string, unknown> = { ...values, ':ua': now };
+    let updateExpression = setParts.length > 0
+      ? `SET ${setParts.join(', ')}, updatedAt = :ua`
+      : 'SET updatedAt = :ua';
+    if (sort === 'updated') {
+      rowValues[':gsi1sk'] = listGsi1SkForSort('updated', effectiveVotes, createdAt, now, id);
+      updateExpression += ', gsi1sk = :gsi1sk';
+    }
+    transactItems.push({
+      Update: {
+        TableName: feedbackTable,
+        Key: { pk, sk: listSkForSort(sort) },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeValues: rowValues,
+      },
+    });
+  }
+}
+
+export async function feedbackUpdate(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  userId: string,
+  pars: FeedbackUpdatePars,
+  isAdmin: boolean,
+): Promise<FeedbackResult<{ id: string }>> {
+  const validated = validateFeedbackUpdatePars(pars);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+
+  const feedbackTable = getFeedbackTableName(tableName);
+  const { id, title, body } = validated.data;
+  const pk = postPk(id);
+
+  const metaResult = await client.send(new GetCommand({
+    TableName: feedbackTable,
+    Key: { pk, sk: metaSk() },
+  }));
+  if (!metaResult.Item) {
+    return { ok: false, message: 'feedback item not found.', statusCode: 404 };
+  }
+  if (metaResult.Item.terminalAt !== undefined) {
+    return { ok: false, message: 'cannot edit a closed item.', statusCode: 400 };
+  }
+  if (!(await canEditPost(client, userId, metaResult.Item, isAdmin))) {
+    return { ok: false, message: 'only the author or an admin may edit this item.', statusCode: 403 };
+  }
+
+  const now = Date.now();
+  const editId = generateEditId();
+  const createdAt = Number(metaResult.Item.createdAt);
+  const effectiveVotes = Number(metaResult.Item.effectiveVotes ?? 0);
+  const metaSetParts = ['updatedAt = :ua'];
+  const metaValues: Record<string, unknown> = { ':ua': now };
+  const listSetParts = ['updatedAt = :ua'];
+  const listValues: Record<string, unknown> = { ':ua': now };
+  const transactItems: Record<string, unknown>[] = [];
+
+  if (title !== undefined) {
+    metaSetParts.push('title = :title');
+    metaValues[':title'] = title;
+    listSetParts.push('title = :title');
+    listValues[':title'] = title;
+    transactItems.push({
+      Put: {
+        TableName: feedbackTable,
+        Item: {
+          pk,
+          sk: editSk(now, editId),
+          entityType: 'edit',
+          editId,
+          editorId: userId,
+          field: 'title',
+          previousValue: String(metaResult.Item.title),
+          newValue: title,
+          createdAt: now,
+        },
+      },
+    });
+  }
+  if (body !== undefined) {
+    metaSetParts.push('body = :body');
+    metaValues[':body'] = body;
+    transactItems.push({
+      Put: {
+        TableName: feedbackTable,
+        Item: {
+          pk,
+          sk: editSk(now + 1, `${editId}-body`),
+          entityType: 'edit',
+          editId: `${editId}-body`,
+          editorId: userId,
+          field: 'body',
+          previousValue: typeof metaResult.Item.body === 'string' ? metaResult.Item.body : '',
+          newValue: body,
+          createdAt: now,
+        },
+      },
+    });
+  }
+
+  transactItems.push({
+    Update: {
+      TableName: feedbackTable,
+      Key: { pk, sk: metaSk() },
+      UpdateExpression: `SET ${metaSetParts.join(', ')}`,
+      ExpressionAttributeValues: metaValues,
+    },
+  });
+  if (title !== undefined) {
+    pushListProjectionFieldUpdates(
+      transactItems,
+      feedbackTable,
+      pk,
+      id,
+      now,
+      createdAt,
+      effectiveVotes,
+      listSetParts.filter((part) => part !== 'updatedAt = :ua'),
+      listValues,
+    );
+  } else {
+    pushListProjectionFieldUpdates(
+      transactItems,
+      feedbackTable,
+      pk,
+      id,
+      now,
+      createdAt,
+      effectiveVotes,
+      [],
+      {},
+    );
+  }
+
+  await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
+  return { ok: true, data: { id } };
+}
+
+export async function feedbackSetAdminFields(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  pars: FeedbackSetAdminFieldsPars,
+): Promise<FeedbackResult<{ id: string }>> {
+  const feedbackTable = getFeedbackTableName(tableName);
+  const idGuess = typeof pars.id === 'string' ? pars.id.trim() : '';
+  if (!idGuess) {
+    return { ok: false, message: 'id is required.', statusCode: 400 };
+  }
+
+  const pk = postPk(idGuess);
+  const metaResult = await client.send(new GetCommand({
+    TableName: feedbackTable,
+    Key: { pk, sk: metaSk() },
+  }));
+  if (!metaResult.Item) {
+    return { ok: false, message: 'feedback item not found.', statusCode: 404 };
+  }
+
+  const kind = metaResult.Item.kind as FeedbackKind;
+  const validated = validateFeedbackSetAdminFieldsPars(pars, kind);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+
+  const { id, effort, priority, adminTags, wishlistCategory, wishlistCategoryNote } = validated.data;
+  const now = Date.now();
+  const createdAt = Number(metaResult.Item.createdAt);
+  const effectiveVotes = Number(metaResult.Item.effectiveVotes ?? 0);
+  const metaSetParts = ['updatedAt = :ua'];
+  const metaValues: Record<string, unknown> = { ':ua': now };
+  const listSetParts: string[] = [];
+  const listValues: Record<string, unknown> = {};
+
+  if (effort !== undefined) {
+    metaSetParts.push('effort = :effort');
+    metaValues[':effort'] = effort;
+    listSetParts.push('effort = :effort');
+    listValues[':effort'] = effort;
+  }
+  if (priority !== undefined) {
+    metaSetParts.push('priority = :priority');
+    metaValues[':priority'] = priority;
+    listSetParts.push('priority = :priority');
+    listValues[':priority'] = priority;
+  }
+  if (adminTags !== undefined) {
+    metaSetParts.push('adminTags = :adminTags');
+    metaValues[':adminTags'] = adminTags;
+    listSetParts.push('adminTags = :adminTags');
+    listValues[':adminTags'] = adminTags;
+  }
+  if (wishlistCategory !== undefined) {
+    metaSetParts.push('wishlistCategory = :wishlistCategory');
+    metaValues[':wishlistCategory'] = wishlistCategory;
+  }
+  if (wishlistCategoryNote !== undefined) {
+    metaSetParts.push('wishlistCategoryNote = :wishlistCategoryNote');
+    metaValues[':wishlistCategoryNote'] = wishlistCategoryNote;
+  }
+
+  const transactItems: Record<string, unknown>[] = [{
+    Update: {
+      TableName: feedbackTable,
+      Key: { pk, sk: metaSk() },
+      UpdateExpression: `SET ${metaSetParts.join(', ')}`,
+      ExpressionAttributeValues: metaValues,
+    },
+  }];
+
+  if (listSetParts.length > 0) {
+    pushListProjectionFieldUpdates(
+      transactItems,
+      feedbackTable,
+      pk,
+      id,
+      now,
+      createdAt,
+      effectiveVotes,
+      listSetParts,
+      listValues,
+    );
+  }
+
+  await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
+  return { ok: true, data: { id } };
+}
+
+export async function feedbackMine(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  userId: string,
+  pars: FeedbackMinePars,
+): Promise<FeedbackResult<{ items: FeedbackPublicPost[]; nextCursor?: string }>> {
+  const validated = validateFeedbackMinePars(pars);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+
+  const feedbackTable = getFeedbackTableName(tableName);
+  const { kind, limit, cursor } = validated.data;
+  const pk = `${USER_PK_PREFIX}${userId}`;
+
+  const result = await client.send(new QueryCommand({
+    TableName: feedbackTable,
+    KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+    ExpressionAttributeValues: {
+      ':pk': pk,
+      ':prefix': userPostsSkPrefix(),
+    },
+    ScanIndexForward: false,
+    Limit: limit + 1,
+    ExclusiveStartKey: cursor ? JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) : undefined,
+  }));
+
+  let indexItems = (result.Items ?? []);
+  if (kind) {
+    indexItems = indexItems.filter((item) => item.kind === kind);
+  }
+  indexItems = indexItems.slice(0, limit);
+
+  const items: FeedbackPublicPost[] = [];
+  for (const indexItem of indexItems) {
+    const postId = String(indexItem.id);
+    const metaResult = await client.send(new GetCommand({
+      TableName: feedbackTable,
+      Key: { pk: postPk(postId), sk: metaSk() },
+    }));
+    if (metaResult.Item) {
+      items.push(toPublicPost(metaResult.Item));
+    }
+  }
+
+  let nextCursor: string | undefined;
+  if ((result.Items ?? []).length > limit && indexItems.length > 0) {
+    const last = indexItems[indexItems.length - 1]!;
+    nextCursor = Buffer.from(JSON.stringify({
+      pk: last.pk,
+      sk: last.sk,
+    })).toString('base64url');
+  }
+
+  return { ok: true, data: { items, nextCursor } };
+}
+
+export async function feedbackAdminList(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  pars: FeedbackAdminListPars,
+): Promise<FeedbackResult<{ items: FeedbackAdminListItem[]; nextCursor?: string }>> {
+  const validated = validateFeedbackAdminListPars(pars);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+
+  const feedbackTable = getFeedbackTableName(tableName);
+  const { kind, status, effort, priority, needsResponse, limit, cursor } = validated.data;
+
+  let result;
+  if (status) {
+    result = await client.send(new QueryCommand({
+      TableName: feedbackTable,
+      IndexName: 'ByStatus',
+      KeyConditionExpression: 'gsi2pk = :pk',
+      FilterExpression: 'entityType = :entityType',
+      ExpressionAttributeValues: {
+        ':pk': statusGsi2Pk(kind, status),
+        ':entityType': 'meta',
+      },
+      ScanIndexForward: false,
+      Limit: limit + 1,
+      ExclusiveStartKey: cursor ? JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) : undefined,
+    }));
+  } else {
+    result = await client.send(new QueryCommand({
+      TableName: feedbackTable,
+      IndexName: 'ByKind',
+      KeyConditionExpression: 'gsi1pk = :pk AND begins_with(gsi1sk, :prefix)',
+      ExpressionAttributeValues: {
+        ':pk': kindGsi1Pk(kind),
+        ':prefix': listSortPrefix('recent'),
+      },
+      FilterExpression: 'attribute_not_exists(terminalAt)',
+      ScanIndexForward: false,
+      Limit: limit + 1,
+      ExclusiveStartKey: cursor ? JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) : undefined,
+    }));
+  }
+
+  let rawItems = (result.Items ?? []);
+  if (effort) {
+    rawItems = rawItems.filter((item) => item.effort === effort);
+  }
+  if (priority) {
+    rawItems = rawItems.filter((item) => item.priority === priority);
+  }
+  if (needsResponse) {
+    rawItems = rawItems.filter((item) => needsResponseFromMeta(item));
+  }
+  rawItems = rawItems.slice(0, limit);
+
+  const items = rawItems.map((item) => toAdminListItem(item));
+  let nextCursor: string | undefined;
+  if ((result.Items ?? []).length > limit && rawItems.length > 0) {
+    const last = rawItems[rawItems.length - 1]!;
+    nextCursor = Buffer.from(JSON.stringify(
+      status
+        ? { gsi2pk: last.gsi2pk, gsi2sk: last.gsi2sk, pk: last.pk, sk: last.sk }
+        : { gsi1pk: last.gsi1pk, gsi1sk: last.gsi1sk, pk: last.pk, sk: last.sk },
+    )).toString('base64url');
+  }
+
+  return { ok: true, data: { items, nextCursor } };
 }
 
 /** Test helper: seed a post with legacy vote count without going through create validation. */

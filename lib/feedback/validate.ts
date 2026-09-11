@@ -1,5 +1,8 @@
 import {
   DEFAULT_STATUS_BY_KIND,
+  EFFORT_LEVELS,
+  FEEDBACK_ADMIN_TAG_MAX_COUNT,
+  FEEDBACK_ADMIN_TAG_MAX_LENGTH,
   FEEDBACK_ALLOWED_ATTACHMENT_TYPES,
   FEEDBACK_ATTACHMENT_MAX_BYTES,
   FEEDBACK_ATTACHMENT_MAX_COUNT,
@@ -10,7 +13,9 @@ import {
   FEEDBACK_LIST_DEFAULT_LIMIT,
   FEEDBACK_LIST_MAX_LIMIT,
   FEEDBACK_LIST_SORTS,
+  FEEDBACK_PRIORITY_MAX_LENGTH,
   FEEDBACK_TITLE_MAX_LENGTH,
+  WISHLIST_CATEGORIES,
 } from './constants.js';
 import { normalizeGameUrl, parseBggGameId } from './ids.js';
 import { assertStagingKeysOwned } from './attachments.js';
@@ -23,8 +28,12 @@ import type {
   FeedbackListPars,
   FeedbackListSort,
   FeedbackPresignUploadPars,
+  FeedbackAdminListPars,
+  FeedbackMinePars,
+  FeedbackSetAdminFieldsPars,
   FeedbackSetStatusPars,
   FeedbackSubscribePars,
+  FeedbackUpdatePars,
   FeedbackVotePars,
 } from './types.js';
 
@@ -260,4 +269,170 @@ export function validateFeedbackSetStatusPars(
     return { ok: false, message: `invalid status for kind ${kind}.` };
   }
   return { ok: true, data: { id: pars.id.trim(), status } };
+}
+
+export function validateFeedbackUpdatePars(
+  pars: FeedbackUpdatePars,
+): { ok: true; data: { id: string; title?: string; body?: string } } | { ok: false; message: string } {
+  if (!isNonEmptyString(pars.id)) {
+    return { ok: false, message: 'id is required.' };
+  }
+  const title = isNonEmptyString(pars.title) ? pars.title.trim() : undefined;
+  const body = isNonEmptyString(pars.body) ? pars.body.trim() : undefined;
+  if (!title && !body) {
+    return { ok: false, message: 'title or body is required.' };
+  }
+  if (title && title.length > FEEDBACK_TITLE_MAX_LENGTH) {
+    return { ok: false, message: `title must be at most ${FEEDBACK_TITLE_MAX_LENGTH} characters.` };
+  }
+  if (body && body.length > FEEDBACK_BODY_MAX_LENGTH) {
+    return { ok: false, message: `body must be at most ${FEEDBACK_BODY_MAX_LENGTH} characters.` };
+  }
+  return { ok: true, data: { id: pars.id.trim(), title, body } };
+}
+
+function parseAdminTags(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const tags = value
+    .filter((tag): tag is string => typeof tag === 'string')
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0 && tag.length <= FEEDBACK_ADMIN_TAG_MAX_LENGTH);
+  if (tags.length > FEEDBACK_ADMIN_TAG_MAX_COUNT) {
+    return undefined;
+  }
+  return tags;
+}
+
+export function validateFeedbackSetAdminFieldsPars(
+  pars: FeedbackSetAdminFieldsPars,
+  kind: FeedbackKind,
+): {
+  ok: true;
+  data: {
+    id: string;
+    effort?: string;
+    priority?: string;
+    adminTags?: string[];
+    wishlistCategory?: string;
+    wishlistCategoryNote?: string;
+  };
+} | { ok: false; message: string } {
+  if (!isNonEmptyString(pars.id)) {
+    return { ok: false, message: 'id is required.' };
+  }
+  const data: {
+    id: string;
+    effort?: string;
+    priority?: string;
+    adminTags?: string[];
+    wishlistCategory?: string;
+    wishlistCategoryNote?: string;
+  } = { id: pars.id.trim() };
+
+  if (pars.effort !== undefined) {
+    if (!isNonEmptyString(pars.effort) || !(EFFORT_LEVELS as readonly string[]).includes(pars.effort)) {
+      return { ok: false, message: 'effort must be low, medium, high, or unknown.' };
+    }
+    data.effort = pars.effort;
+  }
+  if (pars.priority !== undefined) {
+    if (!isNonEmptyString(pars.priority) || pars.priority.trim().length > FEEDBACK_PRIORITY_MAX_LENGTH) {
+      return { ok: false, message: `priority must be at most ${FEEDBACK_PRIORITY_MAX_LENGTH} characters.` };
+    }
+    data.priority = pars.priority.trim();
+  }
+  if (pars.adminTags !== undefined) {
+    const tags = parseAdminTags(pars.adminTags);
+    if (!tags) {
+      return { ok: false, message: 'adminTags must be a list of short strings.' };
+    }
+    data.adminTags = tags;
+  }
+  if (kind === 'wishlist') {
+    if (pars.wishlistCategory !== undefined) {
+      if (!isNonEmptyString(pars.wishlistCategory)
+        || !(WISHLIST_CATEGORIES as readonly string[]).includes(pars.wishlistCategory)) {
+        return { ok: false, message: 'invalid wishlistCategory.' };
+      }
+      data.wishlistCategory = pars.wishlistCategory;
+    }
+    if (pars.wishlistCategoryNote !== undefined) {
+      if (!isNonEmptyString(pars.wishlistCategoryNote)) {
+        return { ok: false, message: 'wishlistCategoryNote must be a non-empty string.' };
+      }
+      data.wishlistCategoryNote = pars.wishlistCategoryNote.trim();
+    }
+  } else if (pars.wishlistCategory !== undefined || pars.wishlistCategoryNote !== undefined) {
+    return { ok: false, message: 'wishlist fields are only valid for wishlist items.' };
+  }
+
+  if (
+    data.effort === undefined
+    && data.priority === undefined
+    && data.adminTags === undefined
+    && data.wishlistCategory === undefined
+    && data.wishlistCategoryNote === undefined
+  ) {
+    return { ok: false, message: 'at least one admin field is required.' };
+  }
+  return { ok: true, data };
+}
+
+export function validateFeedbackMinePars(
+  pars: FeedbackMinePars,
+): { ok: true; data: { kind?: FeedbackKind; limit: number; cursor?: string } } | { ok: false; message: string } {
+  let kind: FeedbackKind | undefined;
+  if (pars.kind !== undefined && pars.kind !== '') {
+    if (!isNonEmptyString(pars.kind) || !isFeedbackKind(pars.kind)) {
+      return { ok: false, message: 'kind must be bug, feature, or wishlist.' };
+    }
+    kind = pars.kind;
+  }
+  const rawLimit = pars.limit === undefined ? FEEDBACK_LIST_DEFAULT_LIMIT : Number(pars.limit);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(FEEDBACK_LIST_MAX_LIMIT, Math.max(1, Math.floor(rawLimit)))
+    : FEEDBACK_LIST_DEFAULT_LIMIT;
+  const cursor = isNonEmptyString(pars.cursor) ? pars.cursor : undefined;
+  return { ok: true, data: { kind, limit, cursor } };
+}
+
+export function validateFeedbackAdminListPars(
+  pars: FeedbackAdminListPars,
+): {
+  ok: true;
+  data: {
+    kind: FeedbackKind;
+    status?: string;
+    effort?: string;
+    priority?: string;
+    needsResponse?: boolean;
+    limit: number;
+    cursor?: string;
+  };
+} | { ok: false; message: string } {
+  if (!isNonEmptyString(pars.kind) || !isFeedbackKind(pars.kind)) {
+    return { ok: false, message: 'kind must be bug, feature, or wishlist.' };
+  }
+  const kind = pars.kind;
+  const status = isNonEmptyString(pars.status) ? pars.status.trim() : undefined;
+  if (status && !isValidStatusForKind(kind, status)) {
+    return { ok: false, message: `invalid status for kind ${kind}.` };
+  }
+  const effort = isNonEmptyString(pars.effort) ? pars.effort.trim() : undefined;
+  if (effort && !(EFFORT_LEVELS as readonly string[]).includes(effort)) {
+    return { ok: false, message: 'effort must be low, medium, high, or unknown.' };
+  }
+  const priority = isNonEmptyString(pars.priority) ? pars.priority.trim() : undefined;
+  const needsResponse = pars.needsResponse === true || pars.needsResponse === 'true' || pars.needsResponse === '1';
+  const rawLimit = pars.limit === undefined ? FEEDBACK_LIST_DEFAULT_LIMIT : Number(pars.limit);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(FEEDBACK_LIST_MAX_LIMIT, Math.max(1, Math.floor(rawLimit)))
+    : FEEDBACK_LIST_DEFAULT_LIMIT;
+  const cursor = isNonEmptyString(pars.cursor) ? pars.cursor : undefined;
+  return {
+    ok: true,
+    data: { kind, status, effort, priority, needsResponse: needsResponse || undefined, limit, cursor },
+  };
 }
