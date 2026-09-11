@@ -96,17 +96,16 @@ export function validateFeedbackCreatePars(
   let context: FeedbackCreatePars['context'] | undefined;
 
   if (kind === 'bug') {
-    if (!Array.isArray(pars.attachmentKeys) || pars.attachmentKeys.length < 1) {
-      return { ok: false, message: 'bug reports require at least one screenshot attachment key.' };
+    if (Array.isArray(pars.attachmentKeys) && pars.attachmentKeys.length > 0) {
+      if (pars.attachmentKeys.length > FEEDBACK_ATTACHMENT_MAX_COUNT) {
+        return { ok: false, message: `bug reports allow at most ${FEEDBACK_ATTACHMENT_MAX_COUNT} screenshots.` };
+      }
+      const keyCheck = assertStagingKeysOwned(userId, pars.attachmentKeys);
+      if (!keyCheck.ok) {
+        return keyCheck;
+      }
+      attachmentKeys = pars.attachmentKeys.map((key) => key.trim());
     }
-    if (pars.attachmentKeys.length > FEEDBACK_ATTACHMENT_MAX_COUNT) {
-      return { ok: false, message: `bug reports allow at most ${FEEDBACK_ATTACHMENT_MAX_COUNT} screenshots.` };
-    }
-    const keyCheck = assertStagingKeysOwned(userId, pars.attachmentKeys);
-    if (!keyCheck.ok) {
-      return keyCheck;
-    }
-    attachmentKeys = pars.attachmentKeys.map((key) => key.trim());
     body = isNonEmptyString(pars.body) ? pars.body.trim() : undefined;
     if (body && body.length > FEEDBACK_BODY_MAX_LENGTH) {
       return { ok: false, message: `body must be at most ${FEEDBACK_BODY_MAX_LENGTH} characters.` };
