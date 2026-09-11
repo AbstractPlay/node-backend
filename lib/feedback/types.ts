@@ -209,6 +209,7 @@ export type FeedbackUpdatePars = {
   id?: string;
   title?: string;
   body?: string;
+  attachmentKeys?: string[];
 };
 
 export type FeedbackSetAdminFieldsPars = {

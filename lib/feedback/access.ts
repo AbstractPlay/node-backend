@@ -45,6 +45,7 @@ import {
   USER_PK_PREFIX,
 } from './keys.js';
 import {
+  assertStagingKeysOwned,
   assertStagingObjectsExist,
   deletePostAttachments,
   deleteS3Objects,
@@ -60,7 +61,11 @@ import {
 import { isUserSubscribed, listSubscriberIds } from './subscribe.js';
 import { toPublicHistorySummary } from './archive.js';
 import { isTerminalStatus } from './status.js';
-import { FEEDBACK_LIST_MAX_LIMIT, FEEDBACK_LIST_SORTS } from './constants.js';
+import {
+  FEEDBACK_LIST_MAX_LIMIT,
+  FEEDBACK_LIST_SORTS,
+  FEEDBACK_WISHLIST_ATTACHMENT_MAX_COUNT,
+} from './constants.js';
 import {
   validateFeedbackAdminListPars,
   validateFeedbackCommentPars,
@@ -1196,6 +1201,7 @@ function pushListProjectionFieldRemoves(
 export async function feedbackUpdate(
   client: DynamoDBDocumentClient,
   tableName: string | undefined,
+  s3: S3Client,
   userId: string,
   pars: FeedbackUpdatePars,
   isAdmin: boolean,
@@ -1206,7 +1212,7 @@ export async function feedbackUpdate(
   }
 
   const feedbackTable = getFeedbackTableName(tableName);
-  const { id, title, body } = validated.data;
+  const { id, title, body, attachmentKeys } = validated.data;
   const pk = postPk(id);
 
   const metaResult = await client.send(new GetCommand({
@@ -1311,6 +1317,37 @@ export async function feedbackUpdate(
   }
 
   await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
+
+  if (attachmentKeys !== undefined) {
+    const kind = metaResult.Item.kind;
+    if (kind !== 'wishlist') {
+      return { ok: false, message: 'only wishlist entries support cover images.', statusCode: 400 };
+    }
+    if (attachmentKeys.length > FEEDBACK_WISHLIST_ATTACHMENT_MAX_COUNT) {
+      return {
+        ok: false,
+        message: `wishlist entries allow at most ${FEEDBACK_WISHLIST_ATTACHMENT_MAX_COUNT} image.`,
+        statusCode: 400,
+      };
+    }
+    let nextKeys: string[] = [];
+    if (attachmentKeys.length > 0) {
+      const keyCheck = assertStagingKeysOwned(userId, attachmentKeys);
+      if (!keyCheck.ok) {
+        return { ok: false, message: keyCheck.message, statusCode: 400 };
+      }
+      const exists = await assertStagingObjectsExist(s3, attachmentKeys);
+      if (!exists.ok) {
+        return { ok: false, message: exists.message, statusCode: 400 };
+      }
+      nextKeys = await finalizeAttachmentKeys(s3, userId, id, attachmentKeys);
+    }
+    const attachResult = await setFeedbackPostAttachmentKeys(client, tableName, id, nextKeys, s3);
+    if (!attachResult.ok) {
+      return attachResult;
+    }
+  }
+
   return { ok: true, data: { id } };
 }
 
