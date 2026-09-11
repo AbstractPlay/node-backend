@@ -6,7 +6,7 @@ import {
   UpdateCommand,
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
-import { isBotId, filterHumanIds } from './participants.js';
+import { isBotId, isBotIdOnTable, filterHumanIds } from './participants.js';
 
 export const NOTIFICATION_PK_PREFIX = 'NOTIFICATION#';
 export const NOTIFICATION_INITIAL_TTL_DAYS = 180;
@@ -382,7 +382,7 @@ export async function createNotification(
   body: NotificationBody,
   options?: CreateNotificationOptions,
 ): Promise<void> {
-  if (await isBotId(userId)) {
+  if (await isBotIdOnTable(client, tableName, userId)) {
     return;
   }
   const category = inAppCategoryForBody(body);

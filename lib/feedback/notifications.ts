@@ -1,10 +1,12 @@
 import { type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { createNotification } from '../notifications.js';
-import { isBotId } from '../participants.js';
+import { isBotIdOnTable } from '../participants.js';
 import type { FeedbackKind } from './types.js';
 import { listSubscriberIds } from './subscribe.js';
 
-const MAIN_TABLE = process.env.ABSTRACT_PLAY_TABLE;
+function getMainTableName(): string | undefined {
+  return process.env.ABSTRACT_PLAY_TABLE;
+}
 
 async function notifyRecipients(
   client: DynamoDBDocumentClient,
@@ -12,15 +14,16 @@ async function notifyRecipients(
   recipients: string[],
   body: Parameters<typeof createNotification>[3],
 ): Promise<void> {
-  if (!MAIN_TABLE) {
+  const mainTable = getMainTableName();
+  if (!mainTable) {
     return;
   }
   const unique = [...new Set(recipients)].filter((id) => id);
   for (const userId of unique) {
-    if (await isBotId(userId)) {
+    if (await isBotIdOnTable(client, mainTable, userId)) {
       continue;
     }
-    await createNotification(client, MAIN_TABLE, userId, body);
+    await createNotification(client, mainTable, userId, body);
   }
 }
 
