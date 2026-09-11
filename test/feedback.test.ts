@@ -150,15 +150,15 @@ function createMockDocClient(store: Store) {
   };
 }
 
-test('validateFeedbackCreatePars rejects bug without attachments', () => {
+test('validateFeedbackCreatePars accepts bug without attachments', () => {
   const result = validateFeedbackCreatePars(USER_ID, {
     kind: 'bug',
     title: 'Broken board',
     body: 'Pieces overlap',
   });
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.match(result.message, /screenshot/i);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.data.attachmentKeys, undefined);
   }
 });
 

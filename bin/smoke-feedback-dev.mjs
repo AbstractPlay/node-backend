@@ -125,15 +125,15 @@ async function main() {
   const id = create.body.id;
   pass(`feedback_create → id ${id}`);
 
-  const bugReject = await postAuth(token, 'feedback_create', {
+  const bugNoScreenshot = await postAuth(token, 'feedback_create', {
     kind: 'bug',
-    title: 'Should fail',
-    body: 'No attachments',
+    title: `Smoke bug no screenshot ${stamp}`,
+    body: 'No attachments (allowed)',
   });
-  if (bugReject.status === 200 && bugReject.body.id) {
-    fail('bug create without attachments should fail', bugReject);
+  if (bugNoScreenshot.status !== 200 || !bugNoScreenshot.body.id) {
+    fail('bug create without attachments', bugNoScreenshot);
   }
-  pass('bug create without attachments rejected');
+  pass(`bug create without screenshot → id ${bugNoScreenshot.body.id}`);
 
   const get = await postOpen('feedback_get', { id });
   if (get.status !== 200 || get.body.post?.id !== id) {
