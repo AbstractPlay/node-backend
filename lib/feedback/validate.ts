@@ -459,7 +459,6 @@ export function validateFeedbackSetAdminFieldsPars(
   } else if (
     pars.wishlistCategory !== undefined
     || pars.wishlistCategoryNote !== undefined
-    || pars.reviewerIds !== undefined
   ) {
     return { ok: false, message: 'wishlist fields are only valid for wishlist items.' };
   }

@@ -8,7 +8,7 @@ import {
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
-import { isBotId } from '../participants.js';
+import { isBotIdOnTable } from '../participants.js';
 import type {
   FeedbackAdminListItem,
   FeedbackAdminListPars,
@@ -1368,7 +1368,7 @@ async function resolveReviewers(
 ): Promise<FeedbackResult<{ reviewers: { id: string; name: string }[] }>> {
   const reviewers: { id: string; name: string }[] = [];
   for (const reviewerId of reviewerIds) {
-    if (await isBotId(reviewerId)) {
+    if (await isBotIdOnTable(client, getMainTableName(), reviewerId)) {
       return { ok: false, message: 'bots cannot be reviewers.', statusCode: 400 };
     }
     const name = await loadAuthorName(client, reviewerId);

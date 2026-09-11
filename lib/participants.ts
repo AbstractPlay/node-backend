@@ -88,6 +88,23 @@ export type Participant = {
   };
 };
 
+export async function isBotIdOnTable(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  id: string,
+): Promise<boolean> {
+  if (!tableName) {
+    return false;
+  }
+  const data = await client.send(
+    new GetCommand({
+      TableName: tableName,
+      Key: { pk: 'BOT', sk: id },
+    }),
+  );
+  return data.Item !== undefined;
+}
+
 export async function getBotRecord(clientId: string): Promise<BotRecord | undefined> {
   const data = await ddbDocClient.send(
     new GetCommand({
@@ -99,8 +116,7 @@ export async function getBotRecord(clientId: string): Promise<BotRecord | undefi
 }
 
 export async function isBotId(id: string): Promise<boolean> {
-  const bot = await getBotRecord(id);
-  return bot !== undefined;
+  return isBotIdOnTable(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE, id);
 }
 
 export async function getParticipant(id: string): Promise<Participant | undefined> {
