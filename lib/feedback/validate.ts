@@ -13,7 +13,7 @@ import {
   FEEDBACK_LIST_DEFAULT_LIMIT,
   FEEDBACK_LIST_MAX_LIMIT,
   FEEDBACK_LIST_SORTS,
-  FEEDBACK_PRIORITY_MAX_LENGTH,
+  PRIORITY_LEVELS,
   FEEDBACK_TITLE_MAX_LENGTH,
   WISHLIST_CATEGORIES,
 } from './constants.js';
@@ -47,6 +47,10 @@ function isFeedbackKind(value: string): value is FeedbackKind {
 
 function isListSort(value: string): value is FeedbackListSort {
   return (FEEDBACK_LIST_SORTS as readonly string[]).includes(value);
+}
+
+function isPriorityLevel(value: string): boolean {
+  return (PRIORITY_LEVELS as readonly string[]).includes(value);
 }
 
 function isHttpsUrl(value: string): boolean {
@@ -316,7 +320,7 @@ export function validateFeedbackSetAdminFieldsPars(
   data: {
     id: string;
     effort?: string;
-    priority?: string;
+    priority?: string | null;
     adminTags?: string[];
     wishlistCategory?: string;
     wishlistCategoryNote?: string;
@@ -328,7 +332,7 @@ export function validateFeedbackSetAdminFieldsPars(
   const data: {
     id: string;
     effort?: string;
-    priority?: string;
+    priority?: string | null;
     adminTags?: string[];
     wishlistCategory?: string;
     wishlistCategoryNote?: string;
@@ -341,10 +345,13 @@ export function validateFeedbackSetAdminFieldsPars(
     data.effort = pars.effort;
   }
   if (pars.priority !== undefined) {
-    if (!isNonEmptyString(pars.priority) || pars.priority.trim().length > FEEDBACK_PRIORITY_MAX_LENGTH) {
-      return { ok: false, message: `priority must be at most ${FEEDBACK_PRIORITY_MAX_LENGTH} characters.` };
+    if (pars.priority === '' || pars.priority === null) {
+      data.priority = null;
+    } else if (!isNonEmptyString(pars.priority) || !isPriorityLevel(pars.priority)) {
+      return { ok: false, message: 'priority must be urgent, normal, or low.' };
+    } else {
+      data.priority = pars.priority;
     }
-    data.priority = pars.priority.trim();
   }
   if (pars.adminTags !== undefined) {
     const tags = parseAdminTags(pars.adminTags);
@@ -428,6 +435,9 @@ export function validateFeedbackAdminListPars(
     return { ok: false, message: 'effort must be low, medium, high, or unknown.' };
   }
   const priority = isNonEmptyString(pars.priority) ? pars.priority.trim() : undefined;
+  if (priority && !isPriorityLevel(priority)) {
+    return { ok: false, message: 'priority must be urgent, normal, or low.' };
+  }
   const needsResponse = pars.needsResponse === true || pars.needsResponse === 'true' || pars.needsResponse === '1';
   const rawLimit = pars.limit === undefined ? FEEDBACK_LIST_DEFAULT_LIMIT : Number(pars.limit);
   const limit = Number.isFinite(rawLimit)

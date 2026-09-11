@@ -24,7 +24,10 @@ import {
 } from '../lib/feedback/access.js';
 import { buildMetaItem } from '../lib/feedback/access.js';
 import { listSkForSort, metaSk, postPk } from '../lib/feedback/keys.js';
-import { validateFeedbackCreatePars } from '../lib/feedback/validate.js';
+import {
+  validateFeedbackCreatePars,
+  validateFeedbackSetAdminFieldsPars,
+} from '../lib/feedback/validate.js';
 
 const TABLE = 'abstract-play-feedback-test';
 const USER_ID = '31af49bc-2030-4adb-aec9-dc8fa418fec1';
@@ -433,12 +436,20 @@ test('feedbackSetAdminFields sets effort on feature post', async () => {
   const adminResult = await feedbackSetAdminFields(client, TABLE, {
     id,
     effort: 'high',
-    priority: 'soon',
+    priority: 'urgent',
   });
   assert.equal(adminResult.ok, true);
   const meta = store.get(`${postPk(id)}:${metaSk()}`);
   assert.equal(meta?.effort, 'high');
-  assert.equal(meta?.priority, 'soon');
+  assert.equal(meta?.priority, 'urgent');
+});
+
+test('validateFeedbackSetAdminFieldsPars rejects invalid priority', () => {
+  const result = validateFeedbackSetAdminFieldsPars({
+    id: 'post-1',
+    priority: 'soon',
+  }, 'feature');
+  assert.equal(result.ok, false);
 });
 
 test('feedbackMine returns posts authored by user', async () => {
@@ -457,6 +468,27 @@ test('feedbackMine returns posts authored by user', async () => {
   assert.equal(mineResult.ok, true);
   if (mineResult.ok) {
     assert.ok(mineResult.data.items.some((item) => item.id === createResult.data.id));
+  }
+});
+
+test('feedbackAdminList filters by priority', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Urgent bug',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  await feedbackSetAdminFields(client, TABLE, { id, priority: 'urgent' });
+  const listResult = await feedbackAdminList(client, TABLE, { kind: 'bug', priority: 'urgent' });
+  assert.equal(listResult.ok, true);
+  if (listResult.ok) {
+    assert.ok(listResult.data.items.some((item) => item.id === id));
   }
 });
 
