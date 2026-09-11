@@ -602,7 +602,7 @@ test('feedbackUpdate allows author to edit title', async () => {
     return;
   }
   const id = createResult.data.id;
-  const updateResult = await feedbackUpdate(client, TABLE, USER_ID, {
+  const updateResult = await feedbackUpdate(client, TABLE, mockS3, USER_ID, {
     id,
     title: 'Updated title',
   }, false);
@@ -612,6 +612,32 @@ test('feedbackUpdate allows author to edit title', async () => {
   assert.equal(meta?.title, 'Updated title');
   const listItem = store.get(`${postPk(id)}:${listSkForSort('recent')}`);
   assert.equal(listItem?.title, 'Updated title');
+});
+
+test('feedbackUpdate allows wishlist author to add cover image', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'wishlist',
+    title: 'Hive',
+    gameUrl: 'https://boardgamegeek.com/boardgame/2655/hive',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const stagingKey = `staging/${USER_ID}/cover.png`;
+  const updateResult = await feedbackUpdate(client, TABLE, mockS3, USER_ID, {
+    id,
+    attachmentKeys: [stagingKey],
+  }, false);
+  assert.equal(updateResult.ok, true);
+
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.deepEqual(meta?.attachmentKeys, [`${id}/cover.png`]);
+  const listItem = store.get(`${postPk(id)}:${listSkForSort('recent')}`);
+  assert.deepEqual(listItem?.attachmentKeys, [`${id}/cover.png`]);
 });
 
 test('feedbackSetAdminFields sets effort on feature post', async () => {

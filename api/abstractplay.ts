@@ -2007,6 +2007,7 @@ async function feedbackUpdateAuth(userId: string, pars: FeedbackUpdatePars) {
     const result = await feedbackUpdate(
       ddbDocClient,
       process.env.FEEDBACK_TABLE,
+      s3Client,
       userId,
       pars,
       isAdmin,

@@ -321,14 +321,24 @@ export function validateFeedbackSetStatusPars(
 
 export function validateFeedbackUpdatePars(
   pars: FeedbackUpdatePars,
-): { ok: true; data: { id: string; title?: string; body?: string } } | { ok: false; message: string } {
+): {
+  ok: true;
+  data: { id: string; title?: string; body?: string; attachmentKeys?: string[] };
+} | { ok: false; message: string } {
   if (!isNonEmptyString(pars.id)) {
     return { ok: false, message: 'id is required.' };
   }
   const title = isNonEmptyString(pars.title) ? pars.title.trim() : undefined;
   const body = isNonEmptyString(pars.body) ? pars.body.trim() : undefined;
-  if (!title && !body) {
-    return { ok: false, message: 'title or body is required.' };
+  let attachmentKeys: string[] | undefined;
+  if (pars.attachmentKeys !== undefined) {
+    if (!Array.isArray(pars.attachmentKeys)) {
+      return { ok: false, message: 'attachmentKeys must be an array.' };
+    }
+    attachmentKeys = pars.attachmentKeys;
+  }
+  if (!title && !body && attachmentKeys === undefined) {
+    return { ok: false, message: 'title, body, or attachmentKeys is required.' };
   }
   if (title && title.length > FEEDBACK_TITLE_MAX_LENGTH) {
     return { ok: false, message: `title must be at most ${FEEDBACK_TITLE_MAX_LENGTH} characters.` };
@@ -336,7 +346,7 @@ export function validateFeedbackUpdatePars(
   if (body && body.length > FEEDBACK_BODY_MAX_LENGTH) {
     return { ok: false, message: `body must be at most ${FEEDBACK_BODY_MAX_LENGTH} characters.` };
   }
-  return { ok: true, data: { id: pars.id.trim(), title, body } };
+  return { ok: true, data: { id: pars.id.trim(), title, body, attachmentKeys } };
 }
 
 function parseAdminTags(value: unknown): string[] | undefined {
