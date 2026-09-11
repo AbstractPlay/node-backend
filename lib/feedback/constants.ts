@@ -58,3 +58,7 @@ export const DEFAULT_STATUS_BY_KIND: Record<typeof FEEDBACK_KINDS[number], strin
   feature: 'open',
   wishlist: 'requested',
 };
+
+export const FEEDBACK_ARCHIVE_AFTER_TERMINAL_DAYS = 7;
+export const FEEDBACK_LIVE_RETENTION_AFTER_ARCHIVE_DAYS = 90;
+export const FEEDBACK_ARCHIVE_S3_PREFIX = 'archive';

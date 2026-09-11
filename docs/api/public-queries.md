@@ -65,8 +65,9 @@ See [Game Move layout analytics](/backend/subsystems/game-move-layout-analytics/
 |-------|---------|------------|
 | `feedback_list` | Public board listing | `kind` (`bug` \| `feature` \| `wishlist`), optional `sort` (`votes` \| `recent` \| `updated`, default `votes`), `limit`, `cursor` |
 | `feedback_get` | Single post with comments and presigned attachment URLs | `id` |
+| `feedback_history_list` | Archived summaries for a kind | `kind` (`bug` \| `feature` \| `wishlist`), optional `limit`, `cursor` |
 
-Returns `{ items, nextCursor? }` for list; `{ post, comments, attachmentUrls }` for get. Terminal/archived items are excluded from list.
+Returns `{ items, nextCursor? }` for list; `{ post, comments, attachmentUrls, archived? }` for get when live rows still exist. After TTL purge, get returns `{ archived: true, purged: true, summary }` with no comments. Terminal items are excluded from `feedback_list`; archived summaries appear in `feedback_history_list`.
 
 ## Maintenance
 

@@ -64,8 +64,34 @@ export type FeedbackMetaItem = {
   lastStaffCommentAt?: number;
   lastAuthorCommentAt?: number;
   terminalAt?: number;
+  archivedAt?: number;
+  expiresAt?: number;
+  retentionHold?: boolean;
+  s3ArchiveKey?: string;
+  implementedGameMeta?: { gameId?: string; name?: string };
+  resolutionNote?: string;
   gsi2pk?: string;
   gsi2sk?: string;
+};
+
+export type FeedbackHistorySummary = {
+  id: string;
+  kind: FeedbackKind;
+  title: string;
+  terminalStatus: string;
+  closedAt: number;
+  authorName: string;
+  effectiveVotes: number;
+  gameUrl?: string;
+  implementedGameMeta?: { gameId?: string; name?: string };
+  resolutionNote?: string;
+  s3ArchiveKey?: string;
+};
+
+export type FeedbackHistoryItem = FeedbackHistorySummary & {
+  pk: string;
+  sk: string;
+  entityType: 'history';
 };
 
 export type FeedbackListIndexItem = {
@@ -232,6 +258,9 @@ export type FeedbackPublicPost = {
   effort?: FeedbackEffort;
   priority?: string;
   adminTags?: string[];
+  archivedAt?: number;
+  expiresAt?: number;
+  retentionHold?: boolean;
 };
 
 export type FeedbackAdminListItem = FeedbackPublicPost & {
@@ -248,11 +277,25 @@ export type FeedbackPublicComment = {
 };
 
 export type FeedbackGetResult = {
-  post: FeedbackPublicPost;
+  post?: FeedbackPublicPost;
   comments: FeedbackPublicComment[];
   attachmentUrls: { key: string; url: string }[];
   subscribed?: boolean;
   userVoted?: boolean;
+  archived?: boolean;
+  purged?: boolean;
+  summary?: FeedbackHistorySummary;
+};
+
+export type FeedbackHistoryListPars = {
+  kind?: string;
+  cursor?: string;
+  limit?: string | number;
+};
+
+export type FeedbackHoldRetentionPars = {
+  id?: string;
+  hold?: boolean;
 };
 
 export type FeedbackMergePars = {

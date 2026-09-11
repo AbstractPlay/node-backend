@@ -14,8 +14,17 @@ export {
   feedbackMerge,
   feedbackDelete,
   feedbackWishlistSearch,
+  feedbackHistoryList,
+  feedbackHoldRetention,
   seedFeedbackPostForTests,
 } from './access.js';
+export {
+  archivePost,
+  findPostsReadyForArchive,
+  runFeedbackArchiveJob,
+  defaultArchiveConfig,
+  buildHistorySummaryFromMeta,
+} from './archive.js';
 export {
   parseBggWishlistXml,
   buildWishlistMetaFromBggImport,
@@ -60,4 +69,7 @@ export type {
   FeedbackDeletePars,
   FeedbackMergePars,
   FeedbackWishlistSearchPars,
+  FeedbackHistoryListPars,
+  FeedbackHoldRetentionPars,
+  FeedbackHistorySummary,
 } from './types.js';

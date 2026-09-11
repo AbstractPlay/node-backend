@@ -61,8 +61,11 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 | `feedback_admin_list` | Admin dashboard list | `kind`, optional `status`, `effort`, `priority`, `needsResponse`, `limit`, `cursor`. Returns `{ items, nextCursor? }` with `needsResponse` per item. |
 | `feedback_delete` | Admin delete wishlist entry | `id`, `reason` (required). Permanently removes the post and notifies watchers. Wishlist only. Returns `{ id }`. |
 | `feedback_merge` | Admin merge duplicate wishlist entries | `survivorId`, `duplicateId`. Moves comments/votes to survivor and deletes duplicate. |
+| `feedback_hold_retention` | Admin retention hold (skip auto-archive) | `id`, `hold` (boolean). Returns `{ retentionHold }`. |
 
 Data lives in DynamoDB table `abstract-play-feedback-{stage}` (not the main `abstract-play` table).
+
+Nightly archive job: `utils/feedback-archive` Lambda (`npm run feedback-archive` locally). Snapshots terminal posts to S3, writes `HISTORY#` rows, sets `archivedAt` and `expiresAt` TTL on live rows.
 
 ## Push, tags, customizations
 
