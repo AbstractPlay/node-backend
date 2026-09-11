@@ -59,6 +59,8 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 | `feedback_set_admin_fields` | Admin triage fields | `id`, optional `effort`, `priority`, `adminTags`, `wishlistCategory`, `wishlistCategoryNote`. |
 | `feedback_mine` | List caller's posts | optional `kind`, `limit`, `cursor`. Returns `{ items, nextCursor? }`. |
 | `feedback_admin_list` | Admin dashboard list | `kind`, optional `status`, `effort`, `priority`, `needsResponse`, `limit`, `cursor`. Returns `{ items, nextCursor? }` with `needsResponse` per item. |
+| `feedback_delete` | Admin delete wishlist entry | `id`, `reason` (required). Permanently removes the post and notifies watchers. Wishlist only. Returns `{ id }`. |
+| `feedback_merge` | Admin merge duplicate wishlist entries | `survivorId`, `duplicateId`. Moves comments/votes to survivor and deletes duplicate. |
 
 Data lives in DynamoDB table `abstract-play-feedback-{stage}` (not the main `abstract-play` table).
 

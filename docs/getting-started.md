@@ -15,7 +15,7 @@ npm run build
 
 `npm run build` runs ESLint and TypeScript typecheck (`tsc --noEmit`). Lambda handlers are bundled at deploy time by serverless-esbuild; there is no separate `lib/*.js` compile step.
 
-Ops scripts under `bin/` that only talk to AWS run with `node bin/<script>.mjs`. Scripts that import `lib/*.ts` (e.g. `dump-dashboard`) run via `tsx` — see `npm run dump-dashboard`.
+Ops scripts under `bin/` that only talk to AWS run with `node bin/<script>.mjs`. Scripts that import `lib/*.ts` (e.g. `dump-dashboard`, `import-bgg-wishlist`) run via `tsx` — see `npm run dump-dashboard` and `npm run import-bgg-wishlist`.
 
 ## GitHub Packages
 

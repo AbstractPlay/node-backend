@@ -21,14 +21,21 @@ export const PRIORITY_LEVELS = ['urgent', 'normal', 'low'] as const;
 export const WISHLIST_CATEGORIES = [
   'none',
   'permissions_required',
+  'declined',
   'feasible',
   'low_priority',
   'not_feasible',
 ] as const;
 
+export const WISHLIST_CATEGORY_FILTER_CHIPS = [
+  'permissions_required',
+  'declined',
+] as const;
+
 export const FEEDBACK_LIST_SORTS = ['votes', 'recent', 'updated'] as const;
 
 export const FEEDBACK_COMMENT_MAX_LENGTH = 2000;
+export const FEEDBACK_DELETE_REASON_MAX_LENGTH = 2000;
 export const FEEDBACK_TITLE_MAX_LENGTH = 200;
 export const FEEDBACK_BODY_MAX_LENGTH = 10_000;
 export const FEEDBACK_PRIORITY_MAX_LENGTH = 50;

@@ -8,6 +8,7 @@ import {
   FEEDBACK_ATTACHMENT_MAX_COUNT,
   FEEDBACK_BODY_MAX_LENGTH,
   FEEDBACK_COMMENT_MAX_LENGTH,
+  FEEDBACK_DELETE_REASON_MAX_LENGTH,
   FEEDBACK_CONTEXT_MAX_BYTES,
   FEEDBACK_KINDS,
   FEEDBACK_LIST_DEFAULT_LIMIT,
@@ -17,7 +18,7 @@ import {
   FEEDBACK_TITLE_MAX_LENGTH,
   WISHLIST_CATEGORIES,
 } from './constants.js';
-import { normalizeGameUrl, parseBggGameId } from './ids.js';
+import { normalizeGameUrl, normalizedGameUrlForDedup, parseBggGameId } from './ids.js';
 import { assertStagingKeysOwned } from './attachments.js';
 import { isValidStatusForKind } from './status.js';
 import type {
@@ -35,6 +36,9 @@ import type {
   FeedbackSubscribePars,
   FeedbackUpdatePars,
   FeedbackVotePars,
+  FeedbackDeletePars,
+  FeedbackMergePars,
+  FeedbackWishlistSearchPars,
 } from './types.js';
 
 function isNonEmptyString(value: unknown): value is string {
@@ -84,6 +88,10 @@ export type ValidatedFeedbackCreate = {
   status: string;
   gameUrl?: string;
   bggGameId?: string;
+  normalizedGameUrl?: string;
+  wishlistCategory?: string;
+  legacyBggItemId?: string;
+  legacyBggSubmitter?: string;
   attachmentKeys?: string[];
   context?: FeedbackCreatePars['context'];
   legacyVoteCount: number;
@@ -148,10 +156,29 @@ export function validateFeedbackCreatePars(
     }
     gameUrl = normalizeGameUrl(pars.gameUrl);
     bggGameId = parseBggGameId(gameUrl);
+    const normalizedGameUrl = normalizedGameUrlForDedup(gameUrl);
     body = isNonEmptyString(pars.body) ? pars.body.trim() : undefined;
     if (body && body.length > FEEDBACK_BODY_MAX_LENGTH) {
       return { ok: false, message: `body must be at most ${FEEDBACK_BODY_MAX_LENGTH} characters.` };
     }
+    return {
+      ok: true,
+      data: {
+        kind,
+        title,
+        body,
+        status: DEFAULT_STATUS_BY_KIND[kind],
+        gameUrl,
+        bggGameId,
+        normalizedGameUrl,
+        wishlistCategory: 'none',
+        attachmentKeys,
+        context,
+        legacyVoteCount: typeof pars.legacyVoteCount === 'number' && pars.legacyVoteCount >= 0
+          ? Math.floor(pars.legacyVoteCount)
+          : 0,
+      },
+    };
   }
 
   const legacyVoteCount = typeof pars.legacyVoteCount === 'number' && pars.legacyVoteCount >= 0
@@ -448,4 +475,58 @@ export function validateFeedbackAdminListPars(
     ok: true,
     data: { kind, status, effort, priority, needsResponse: needsResponse || undefined, limit, cursor },
   };
+}
+
+export function validateFeedbackDeletePars(
+  pars: FeedbackDeletePars,
+): { ok: true; data: { id: string; reason: string } } | { ok: false; message: string } {
+  if (!isNonEmptyString(pars.id)) {
+    return { ok: false, message: 'id is required.' };
+  }
+  if (!isNonEmptyString(pars.reason)) {
+    return { ok: false, message: 'reason is required.' };
+  }
+  const id = pars.id.trim();
+  const reason = pars.reason.trim();
+  if (reason.length > FEEDBACK_DELETE_REASON_MAX_LENGTH) {
+    return {
+      ok: false,
+      message: `reason must be at most ${FEEDBACK_DELETE_REASON_MAX_LENGTH} characters.`,
+    };
+  }
+  return { ok: true, data: { id, reason } };
+}
+
+export function validateFeedbackMergePars(
+  pars: FeedbackMergePars,
+): { ok: true; data: { survivorId: string; duplicateId: string } } | { ok: false; message: string } {
+  if (!isNonEmptyString(pars.survivorId)) {
+    return { ok: false, message: 'survivorId is required.' };
+  }
+  if (!isNonEmptyString(pars.duplicateId)) {
+    return { ok: false, message: 'duplicateId is required.' };
+  }
+  const survivorId = pars.survivorId.trim();
+  const duplicateId = pars.duplicateId.trim();
+  if (survivorId === duplicateId) {
+    return { ok: false, message: 'survivorId and duplicateId must differ.' };
+  }
+  return { ok: true, data: { survivorId, duplicateId } };
+}
+
+export function validateFeedbackWishlistSearchPars(
+  pars: FeedbackWishlistSearchPars,
+): { ok: true; data: { q: string; limit: number } } | { ok: false; message: string } {
+  if (!isNonEmptyString(pars.q)) {
+    return { ok: false, message: 'q is required.' };
+  }
+  const q = pars.q.trim();
+  if (q.length < 2) {
+    return { ok: false, message: 'q must be at least 2 characters.' };
+  }
+  const rawLimit = pars.limit === undefined ? 20 : Number(pars.limit);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(FEEDBACK_LIST_MAX_LIMIT, Math.max(1, Math.floor(rawLimit)))
+    : 20;
+  return { ok: true, data: { q, limit } };
 }

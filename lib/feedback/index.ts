@@ -11,8 +11,12 @@ export {
   feedbackSetAdminFields,
   feedbackMine,
   feedbackAdminList,
+  feedbackMerge,
+  feedbackDelete,
+  feedbackWishlistSearch,
   seedFeedbackPostForTests,
 } from './access.js';
+export { parseBggWishlistXml, buildWishlistMetaFromBggImport } from './bggImport.js';
 export {
   FEEDBACK_KINDS,
   TERMINAL_STATUSES,
@@ -34,4 +38,7 @@ export type {
   FeedbackSetAdminFieldsPars,
   FeedbackMinePars,
   FeedbackAdminListPars,
+  FeedbackDeletePars,
+  FeedbackMergePars,
+  FeedbackWishlistSearchPars,
 } from './types.js';
