@@ -2,9 +2,7 @@ export const FEEDBACK_KINDS = ['bug', 'feature', 'wishlist'] as const;
 
 export const BUG_STATUSES = [
   'open',
-  'triaged_urgent',
-  'triaged_normal',
-  'triaged_low',
+  'triaged',
   'resolved',
   'closed',
 ] as const;
@@ -18,6 +16,7 @@ export const TERMINAL_STATUSES: Record<typeof FEEDBACK_KINDS[number], readonly s
 };
 
 export const EFFORT_LEVELS = ['low', 'medium', 'high', 'unknown'] as const;
+export const PRIORITY_LEVELS = ['urgent', 'normal', 'low'] as const;
 
 export const WISHLIST_CATEGORIES = [
   'none',

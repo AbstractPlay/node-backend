@@ -903,6 +903,38 @@ function pushListProjectionFieldUpdates(
   }
 }
 
+function pushListProjectionFieldRemoves(
+  transactItems: Record<string, unknown>[],
+  feedbackTable: string,
+  pk: string,
+  id: string,
+  now: number,
+  createdAt: number,
+  effectiveVotes: number,
+  removeParts: string[],
+): void {
+  if (removeParts.length === 0) {
+    return;
+  }
+  const removeExpr = removeParts.join(', ');
+  for (const sort of FEEDBACK_LIST_SORTS) {
+    const rowValues: Record<string, unknown> = { ':ua': now };
+    let updateExpression = `SET updatedAt = :ua REMOVE ${removeExpr}`;
+    if (sort === 'updated') {
+      rowValues[':gsi1sk'] = listGsi1SkForSort('updated', effectiveVotes, createdAt, now, id);
+      updateExpression = `SET updatedAt = :ua, gsi1sk = :gsi1sk REMOVE ${removeExpr}`;
+    }
+    transactItems.push({
+      Update: {
+        TableName: feedbackTable,
+        Key: { pk, sk: listSkForSort(sort) },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeValues: rowValues,
+      },
+    });
+  }
+}
+
 export async function feedbackUpdate(
   client: DynamoDBDocumentClient,
   tableName: string | undefined,
@@ -1056,8 +1088,10 @@ export async function feedbackSetAdminFields(
   const effectiveVotes = Number(metaResult.Item.effectiveVotes ?? 0);
   const metaSetParts = ['updatedAt = :ua'];
   const metaValues: Record<string, unknown> = { ':ua': now };
+  const metaRemoveParts: string[] = [];
   const listSetParts: string[] = [];
   const listValues: Record<string, unknown> = {};
+  const listRemoveParts: string[] = [];
 
   if (effort !== undefined) {
     metaSetParts.push('effort = :effort');
@@ -1066,10 +1100,15 @@ export async function feedbackSetAdminFields(
     listValues[':effort'] = effort;
   }
   if (priority !== undefined) {
-    metaSetParts.push('priority = :priority');
-    metaValues[':priority'] = priority;
-    listSetParts.push('priority = :priority');
-    listValues[':priority'] = priority;
+    if (priority === null) {
+      metaRemoveParts.push('priority');
+      listRemoveParts.push('priority');
+    } else {
+      metaSetParts.push('priority = :priority');
+      metaValues[':priority'] = priority;
+      listSetParts.push('priority = :priority');
+      listValues[':priority'] = priority;
+    }
   }
   if (adminTags !== undefined) {
     metaSetParts.push('adminTags = :adminTags');
@@ -1086,11 +1125,16 @@ export async function feedbackSetAdminFields(
     metaValues[':wishlistCategoryNote'] = wishlistCategoryNote;
   }
 
+  const metaUpdateParts = [`SET ${metaSetParts.join(', ')}`];
+  if (metaRemoveParts.length > 0) {
+    metaUpdateParts.push(`REMOVE ${metaRemoveParts.join(', ')}`);
+  }
+
   const transactItems: Record<string, unknown>[] = [{
     Update: {
       TableName: feedbackTable,
       Key: { pk, sk: metaSk() },
-      UpdateExpression: `SET ${metaSetParts.join(', ')}`,
+      UpdateExpression: metaUpdateParts.join(' '),
       ExpressionAttributeValues: metaValues,
     },
   }];
@@ -1106,6 +1150,18 @@ export async function feedbackSetAdminFields(
       effectiveVotes,
       listSetParts,
       listValues,
+    );
+  }
+  if (listRemoveParts.length > 0) {
+    pushListProjectionFieldRemoves(
+      transactItems,
+      feedbackTable,
+      pk,
+      id,
+      now,
+      createdAt,
+      effectiveVotes,
+      listRemoveParts,
     );
   }
 
