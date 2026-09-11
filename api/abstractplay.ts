@@ -234,6 +234,10 @@ const cachedListHeaders = {
   ...headers,
   'Cache-Control': `public, max-age=${Math.floor(RECENT_COMPLETED_CACHE_TTL_MS / 1000)}`,
 };
+const feedbackListHeaders = {
+  ...headers,
+  'Cache-Control': 'no-cache, no-store, must-revalidate',
+};
 
 // Types
 type MetaGameCounts = {
@@ -1849,7 +1853,7 @@ async function feedbackListOpen(pars: FeedbackListPars) {
     return {
       statusCode: 200,
       body: JSON.stringify(result.data),
-      headers,
+      headers: feedbackListHeaders,
     };
   } catch (error) {
     logGetItemError(error);
@@ -1866,7 +1870,7 @@ async function feedbackGetOpen(pars: FeedbackGetPars) {
     return {
       statusCode: 200,
       body: JSON.stringify(result.data),
-      headers,
+      headers: feedbackListHeaders,
     };
   } catch (error) {
     logGetItemError(error);
@@ -1883,7 +1887,7 @@ async function feedbackHistoryListOpen(pars: FeedbackHistoryListPars) {
     return {
       statusCode: 200,
       body: JSON.stringify(result.data),
-      headers,
+      headers: feedbackListHeaders,
     };
   } catch (error) {
     logGetItemError(error);
@@ -2083,7 +2087,7 @@ async function feedbackWishlistSearchOpen(pars: FeedbackWishlistSearchPars) {
     return {
       statusCode: 200,
       body: JSON.stringify(result.data),
-      headers,
+      headers: feedbackListHeaders,
     };
   } catch (error) {
     logGetItemError(error);
