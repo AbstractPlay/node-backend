@@ -1,5 +1,8 @@
 import {
   DEFAULT_STATUS_BY_KIND,
+  FEEDBACK_ALLOWED_ATTACHMENT_TYPES,
+  FEEDBACK_ATTACHMENT_MAX_BYTES,
+  FEEDBACK_ATTACHMENT_MAX_COUNT,
   FEEDBACK_BODY_MAX_LENGTH,
   FEEDBACK_COMMENT_MAX_LENGTH,
   FEEDBACK_CONTEXT_MAX_BYTES,
@@ -11,6 +14,7 @@ import {
 } from './constants.js';
 import { normalizeGameUrl, parseBggGameId } from './ids.js';
 import { assertStagingKeysOwned } from './attachments.js';
+import { isValidStatusForKind } from './status.js';
 import type {
   FeedbackCommentPars,
   FeedbackCreatePars,
@@ -18,6 +22,9 @@ import type {
   FeedbackKind,
   FeedbackListPars,
   FeedbackListSort,
+  FeedbackPresignUploadPars,
+  FeedbackSetStatusPars,
+  FeedbackSubscribePars,
   FeedbackVotePars,
 } from './types.js';
 
@@ -91,6 +98,9 @@ export function validateFeedbackCreatePars(
   if (kind === 'bug') {
     if (!Array.isArray(pars.attachmentKeys) || pars.attachmentKeys.length < 1) {
       return { ok: false, message: 'bug reports require at least one screenshot attachment key.' };
+    }
+    if (pars.attachmentKeys.length > FEEDBACK_ATTACHMENT_MAX_COUNT) {
+      return { ok: false, message: `bug reports allow at most ${FEEDBACK_ATTACHMENT_MAX_COUNT} screenshots.` };
     }
     const keyCheck = assertStagingKeysOwned(userId, pars.attachmentKeys);
     if (!keyCheck.ok) {
@@ -203,4 +213,52 @@ export function validateFeedbackCommentPars(
       subscribe,
     },
   };
+}
+
+export function validateFeedbackPresignUploadPars(
+  pars: FeedbackPresignUploadPars,
+): { ok: true; data: { contentType: string; contentLength: number } } | { ok: false; message: string } {
+  if (!isNonEmptyString(pars.contentType)) {
+    return { ok: false, message: 'contentType is required.' };
+  }
+  if (!(FEEDBACK_ALLOWED_ATTACHMENT_TYPES as readonly string[]).includes(pars.contentType)) {
+    return { ok: false, message: 'contentType must be image/png, image/jpeg, or image/webp.' };
+  }
+  const contentLength = Number(pars.contentLength);
+  if (!Number.isFinite(contentLength) || contentLength < 1) {
+    return { ok: false, message: 'contentLength is required.' };
+  }
+  if (contentLength > FEEDBACK_ATTACHMENT_MAX_BYTES) {
+    return { ok: false, message: `attachments must be at most ${FEEDBACK_ATTACHMENT_MAX_BYTES} bytes.` };
+  }
+  return { ok: true, data: { contentType: pars.contentType, contentLength } };
+}
+
+export function validateFeedbackSubscribePars(
+  pars: FeedbackSubscribePars,
+): { ok: true; data: { id: string; subscribe: boolean } } | { ok: false; message: string } {
+  if (!isNonEmptyString(pars.id)) {
+    return { ok: false, message: 'id is required.' };
+  }
+  if (typeof pars.subscribe !== 'boolean') {
+    return { ok: false, message: 'subscribe must be a boolean.' };
+  }
+  return { ok: true, data: { id: pars.id.trim(), subscribe: pars.subscribe } };
+}
+
+export function validateFeedbackSetStatusPars(
+  pars: FeedbackSetStatusPars,
+  kind: FeedbackKind,
+): { ok: true; data: { id: string; status: string } } | { ok: false; message: string } {
+  if (!isNonEmptyString(pars.id)) {
+    return { ok: false, message: 'id is required.' };
+  }
+  if (!isNonEmptyString(pars.status)) {
+    return { ok: false, message: 'status is required.' };
+  }
+  const status = pars.status.trim();
+  if (!isValidStatusForKind(kind, status)) {
+    return { ok: false, message: `invalid status for kind ${kind}.` };
+  }
+  return { ok: true, data: { id: pars.id.trim(), status } };
 }

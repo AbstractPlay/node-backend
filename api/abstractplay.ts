@@ -142,11 +142,17 @@ import {
   feedbackCreate,
   feedbackGet,
   feedbackList,
+  feedbackPresignUpload,
+  feedbackSetStatus,
+  feedbackSubscribe,
   feedbackVote,
   type FeedbackCommentPars,
   type FeedbackCreatePars,
   type FeedbackGetPars,
   type FeedbackListPars,
+  type FeedbackPresignUploadPars,
+  type FeedbackSetStatusPars,
+  type FeedbackSubscribePars,
   type FeedbackVotePars,
 } from '../lib/feedback/index.js';
 import { S3Client } from '@aws-sdk/client-s3';
@@ -949,10 +955,18 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await logLayoutEventAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_create":
       return await feedbackCreateAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_presign_upload":
+      return await feedbackPresignUploadAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_vote":
       return await feedbackVoteAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_comment":
       return await feedbackCommentAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_subscribe":
+      return await feedbackSubscribeAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_set_status":
+      return await feedbackSetStatusAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_get":
+      return await feedbackGetAuth(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
       return await injectState(event.cognitoPoolClaims.sub, pars);
     case "update_game_settings":
@@ -1824,9 +1838,100 @@ async function feedbackGetOpen(pars: FeedbackGetPars) {
   }
 }
 
+async function feedbackGetAuth(userId: string, pars: FeedbackGetPars) {
+  try {
+    const result = await feedbackGet(
+      ddbDocClient,
+      process.env.FEEDBACK_TABLE,
+      s3Client,
+      pars,
+      userId,
+    );
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to load feedback item.');
+  }
+}
+
+async function feedbackPresignUploadAuth(userId: string, pars: FeedbackPresignUploadPars) {
+  try {
+    const result = await feedbackPresignUpload(s3Client, userId, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to presign upload for ${userId}`);
+  }
+}
+
+async function feedbackSubscribeAuth(userId: string, pars: FeedbackSubscribePars) {
+  try {
+    const result = await feedbackSubscribe(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to update subscription for ${userId}`);
+  }
+}
+
+async function isFeedbackAdmin(userId: string): Promise<boolean> {
+  const user = await ddbDocClient.send(new GetCommand({
+    TableName: process.env.ABSTRACT_PLAY_TABLE,
+    Key: { pk: 'USER', sk: userId },
+  }));
+  return user.Item?.admin === true;
+}
+
+async function feedbackSetStatusAuth(userId: string, pars: FeedbackSetStatusPars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const result = await feedbackSetStatus(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to set feedback status for ${userId}`);
+  }
+}
+
 async function feedbackCreateAuth(userId: string, pars: FeedbackCreatePars) {
   try {
-    const result = await feedbackCreate(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
+    const result = await feedbackCreate(
+      ddbDocClient,
+      process.env.FEEDBACK_TABLE,
+      s3Client,
+      userId,
+      pars,
+    );
     if (!result.ok) {
       return feedbackErrorResponse(result.message, result.statusCode ?? 400);
     }

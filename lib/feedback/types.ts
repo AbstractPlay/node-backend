@@ -151,6 +151,22 @@ export type FeedbackCommentPars = {
   subscribe?: boolean;
 };
 
+export type FeedbackPresignUploadPars = {
+  filename?: string;
+  contentType?: string;
+  contentLength?: number;
+};
+
+export type FeedbackSubscribePars = {
+  id?: string;
+  subscribe?: boolean;
+};
+
+export type FeedbackSetStatusPars = {
+  id?: string;
+  status?: string;
+};
+
 export type FeedbackPublicPost = {
   id: string;
   kind: FeedbackKind;
@@ -178,6 +194,14 @@ export type FeedbackPublicComment = {
   body: string;
   createdAt: number;
   isStaff?: boolean;
+};
+
+export type FeedbackGetResult = {
+  post: FeedbackPublicPost;
+  comments: FeedbackPublicComment[];
+  attachmentUrls: { key: string; url: string }[];
+  subscribed?: boolean;
+  userVoted?: boolean;
 };
 
 export type FeedbackResult<T> =

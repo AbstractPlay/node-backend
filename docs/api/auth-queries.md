@@ -48,11 +48,15 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `feedback_create` | Create a post | `kind`, `title`, optional `body`, `gameUrl`, `attachmentKeys`, `context` (bugs). Bugs require ≥1 `attachmentKeys` under `staging/{userId}/`. Features require `body`. Wishlist requires `gameUrl` (https). Returns `{ id }`. |
+| `feedback_presign_upload` | Presigned S3 PUT for bug screenshots | `filename`, `contentType`, `contentLength` (png/jpeg/webp, max 5 MB). Returns `{ uploadUrl, key, headers }`. |
+| `feedback_create` | Create a post | `kind`, `title`, optional `body`, `gameUrl`, `attachmentKeys`, `context` (bugs). Bugs require ≥1 staged `attachmentKeys`. Returns `{ id }`. |
+| `feedback_get` | Single post (auth adds `subscribed`, `userVoted`) | `id` |
 | `feedback_vote` | Toggle vote | `id`, `vote` (boolean). Returns `{ voteCount, effectiveVotes, voted }`. |
 | `feedback_comment` | Add comment | `id`, `body`, optional `subscribe` (default `true`). Returns `{ commentId }`. |
+| `feedback_subscribe` | Watch/unwatch | `id`, `subscribe` (boolean). Returns `{ subscribed }`. |
+| `feedback_set_status` | Admin status change | `id`, `status`. Notifies author and subscribers. |
 
-Data lives in DynamoDB table `abstract-play-feedback-{stage}` (not the main `abstract-play` table). Screenshot presign upload (`feedback_presign_upload`) is Phase 2.
+Data lives in DynamoDB table `abstract-play-feedback-{stage}` (not the main `abstract-play` table).
 
 ## Push, tags, customizations
 
