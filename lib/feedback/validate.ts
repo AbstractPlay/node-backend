@@ -3,6 +3,7 @@ import {
   EFFORT_LEVELS,
   FEEDBACK_ADMIN_TAG_MAX_COUNT,
   FEEDBACK_ADMIN_TAG_MAX_LENGTH,
+  FEEDBACK_REVIEWER_MAX_COUNT,
   FEEDBACK_ALLOWED_ATTACHMENT_TYPES,
   FEEDBACK_ATTACHMENT_MAX_BYTES,
   FEEDBACK_ATTACHMENT_MAX_COUNT,
@@ -349,6 +350,20 @@ export function validateFeedbackUpdatePars(
   return { ok: true, data: { id: pars.id.trim(), title, body, attachmentKeys } };
 }
 
+function parseReviewerIds(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const ids = value
+    .filter((id): id is string => typeof id === 'string')
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
+  if (ids.length > FEEDBACK_REVIEWER_MAX_COUNT) {
+    return undefined;
+  }
+  return [...new Set(ids)];
+}
+
 function parseAdminTags(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
@@ -373,6 +388,7 @@ export function validateFeedbackSetAdminFieldsPars(
     effort?: string;
     priority?: string | null;
     adminTags?: string[];
+    reviewerIds?: string[];
     wishlistCategory?: string;
     wishlistCategoryNote?: string;
   };
@@ -385,6 +401,7 @@ export function validateFeedbackSetAdminFieldsPars(
     effort?: string;
     priority?: string | null;
     adminTags?: string[];
+    reviewerIds?: string[];
     wishlistCategory?: string;
     wishlistCategoryNote?: string;
   } = { id: pars.id.trim() };
@@ -411,6 +428,20 @@ export function validateFeedbackSetAdminFieldsPars(
     }
     data.adminTags = tags;
   }
+  if (pars.reviewerIds !== undefined) {
+    if (kind === 'wishlist') {
+      return { ok: false, message: 'reviewers are only valid for bug and feature items.' };
+    }
+    const reviewerIds = parseReviewerIds(pars.reviewerIds);
+    if (!reviewerIds) {
+      return {
+        ok: false,
+        message: `reviewerIds must be a list of at most ${FEEDBACK_REVIEWER_MAX_COUNT} user ids.`,
+      };
+    }
+    data.reviewerIds = reviewerIds;
+  }
+
   if (kind === 'wishlist') {
     if (pars.wishlistCategory !== undefined) {
       if (!isNonEmptyString(pars.wishlistCategory)
@@ -425,7 +456,11 @@ export function validateFeedbackSetAdminFieldsPars(
       }
       data.wishlistCategoryNote = pars.wishlistCategoryNote.trim();
     }
-  } else if (pars.wishlistCategory !== undefined || pars.wishlistCategoryNote !== undefined) {
+  } else if (
+    pars.wishlistCategory !== undefined
+    || pars.wishlistCategoryNote !== undefined
+    || pars.reviewerIds !== undefined
+  ) {
     return { ok: false, message: 'wishlist fields are only valid for wishlist items.' };
   }
 
@@ -433,6 +468,7 @@ export function validateFeedbackSetAdminFieldsPars(
     data.effort === undefined
     && data.priority === undefined
     && data.adminTags === undefined
+    && data.reviewerIds === undefined
     && data.wishlistCategory === undefined
     && data.wishlistCategoryNote === undefined
   ) {

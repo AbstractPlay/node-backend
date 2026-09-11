@@ -45,12 +45,14 @@ import {
   validateFeedbackDeletePars,
   validateFeedbackSetAdminFieldsPars,
 } from '../lib/feedback/validate.js';
+import { notificationPk } from '../lib/notifications.js';
 
 const TABLE = 'abstract-play-feedback-test';
 process.env.FEEDBACK_ATTACHMENTS_BUCKET = 'ap-feedback-attachments-test';
 const USER_ID = '31af49bc-2030-4adb-aec9-dc8fa418fec1';
 const VOTER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 const ADMIN_ID = 'b2c3d4e5-f6a7-8901-bcde-f12345678901';
+const REVIEWER_ID = 'c3d4e5f6-a7b8-9012-cdef-123456789012';
 
 const mockS3 = {
   async send(command: unknown) {
@@ -653,7 +655,7 @@ test('feedbackSetAdminFields sets effort on feature post', async () => {
     return;
   }
   const id = createResult.data.id;
-  const adminResult = await feedbackSetAdminFields(client, TABLE, {
+  const adminResult = await feedbackSetAdminFields(client, TABLE, ADMIN_ID, {
     id,
     effort: 'high',
     priority: 'urgent',
@@ -662,6 +664,82 @@ test('feedbackSetAdminFields sets effort on feature post', async () => {
   const meta = store.get(`${postPk(id)}:${metaSk()}`);
   assert.equal(meta?.effort, 'high');
   assert.equal(meta?.priority, 'urgent');
+});
+
+test('validateFeedbackSetAdminFieldsPars rejects reviewers on wishlist', () => {
+  const result = validateFeedbackSetAdminFieldsPars({
+    id: 'post-1',
+    reviewerIds: [REVIEWER_ID],
+  }, 'wishlist');
+  assert.equal(result.ok, false);
+});
+
+test('feedbackSetAdminFields sets reviewers and notifies newly added', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  process.env.ABSTRACT_PLAY_TABLE = TABLE;
+  store.set(itemKey({ pk: 'USER', sk: REVIEWER_ID }), {
+    pk: 'USER',
+    sk: REVIEWER_ID,
+    name: 'Reviewer One',
+  });
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Needs review',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const adminResult = await feedbackSetAdminFields(client, TABLE, ADMIN_ID, {
+    id,
+    reviewerIds: [REVIEWER_ID],
+  });
+  assert.equal(adminResult.ok, true);
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.deepEqual(meta?.reviewers, [{ id: REVIEWER_ID, name: 'Reviewer One' }]);
+  const getResult = await feedbackGet(client, TABLE, mockS3, { id });
+  assert.equal(getResult.ok, true);
+  if (getResult.ok) {
+    assert.deepEqual(getResult.data.post?.reviewers, [{ id: REVIEWER_ID, name: 'Reviewer One' }]);
+  }
+  const notificationKey = [...store.keys()].find((key) => key.startsWith(`${notificationPk(REVIEWER_ID)}:`));
+  assert.ok(notificationKey);
+  const notification = store.get(notificationKey!);
+  assert.equal((notification?.body as { type?: string })?.type, 'feedbackReviewRequested');
+});
+
+test('feedbackSetAdminFields does not re-notify existing reviewers', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  process.env.ABSTRACT_PLAY_TABLE = TABLE;
+  store.set(itemKey({ pk: 'USER', sk: REVIEWER_ID }), {
+    pk: 'USER',
+    sk: REVIEWER_ID,
+    name: 'Reviewer One',
+  });
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Feature review',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  await feedbackSetAdminFields(client, TABLE, ADMIN_ID, { id, reviewerIds: [REVIEWER_ID] });
+  const countAfterFirst = [...store.keys()].filter((key) => key.startsWith(`${notificationPk(REVIEWER_ID)}:`)).length;
+  assert.equal(countAfterFirst, 1);
+  await feedbackSetAdminFields(client, TABLE, ADMIN_ID, {
+    id,
+    reviewerIds: [REVIEWER_ID],
+    effort: 'low',
+  });
+  const countAfterSecond = [...store.keys()].filter((key) => key.startsWith(`${notificationPk(REVIEWER_ID)}:`)).length;
+  assert.equal(countAfterSecond, 1);
 });
 
 test('validateFeedbackSetAdminFieldsPars rejects invalid priority', () => {
@@ -704,7 +782,7 @@ test('feedbackAdminList filters by priority', async () => {
     return;
   }
   const id = createResult.data.id;
-  await feedbackSetAdminFields(client, TABLE, { id, priority: 'urgent' });
+  await feedbackSetAdminFields(client, TABLE, ADMIN_ID, { id, priority: 'urgent' });
   const listResult = await feedbackAdminList(client, TABLE, { kind: 'bug', priority: 'urgent' });
   assert.equal(listResult.ok, true);
   if (listResult.ok) {
@@ -725,7 +803,7 @@ test('feedbackAdminList filters by effort', async () => {
     return;
   }
   const id = createResult.data.id;
-  await feedbackSetAdminFields(client, TABLE, { id, effort: 'high' });
+  await feedbackSetAdminFields(client, TABLE, ADMIN_ID, { id, effort: 'high' });
   const listResult = await feedbackAdminList(client, TABLE, { kind: 'feature', effort: 'high' });
   assert.equal(listResult.ok, true);
   if (listResult.ok) {

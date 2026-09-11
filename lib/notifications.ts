@@ -26,6 +26,7 @@ export const IN_APP_NOTIFICATION_CATEGORIES = [
   'feedbackReply',
   'feedbackStatus',
   'feedbackDeleted',
+  'feedbackReviewRequested',
 ] as const;
 
 export type InAppNotificationCategory = typeof IN_APP_NOTIFICATION_CATEGORIES[number];
@@ -75,6 +76,8 @@ export function inAppCategoryForBody(body: NotificationBody): InAppNotificationC
       return 'feedbackStatus';
     case 'feedbackDeleted':
       return 'feedbackDeleted';
+    case 'feedbackReviewRequested':
+      return 'feedbackReviewRequested';
     default: {
       const _exhaustive: never = body;
       return _exhaustive;
@@ -209,6 +212,12 @@ export type NotificationBody =
     kind: string;
     title: string;
     reason: string;
+  }
+  | {
+    type: 'feedbackReviewRequested';
+    postId: string;
+    kind: string;
+    title: string;
   };
 
 export type NotificationRecord = {

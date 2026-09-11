@@ -16,6 +16,11 @@ export type WishlistStatus = typeof WISHLIST_STATUSES[number];
 export type FeedbackEffort = typeof EFFORT_LEVELS[number];
 export type WishlistCategory = typeof WISHLIST_CATEGORIES[number];
 
+export type FeedbackReviewer = {
+  id: string;
+  name: string;
+};
+
 export type FeedbackStatus = BugStatus | FeatureStatus | WishlistStatus;
 
 export type FeedbackBugContext = {
@@ -61,6 +66,7 @@ export type FeedbackMetaItem = {
   effort?: FeedbackEffort;
   priority?: string;
   adminTags?: string[];
+  reviewers?: FeedbackReviewer[];
   lastStaffCommentAt?: number;
   lastAuthorCommentAt?: number;
   terminalAt?: number;
@@ -217,6 +223,7 @@ export type FeedbackSetAdminFieldsPars = {
   effort?: string;
   priority?: string;
   adminTags?: string[];
+  reviewerIds?: string[];
   wishlistCategory?: string;
   wishlistCategoryNote?: string;
 };
@@ -263,6 +270,7 @@ export type FeedbackPublicPost = {
   effort?: FeedbackEffort;
   priority?: string;
   adminTags?: string[];
+  reviewers?: FeedbackReviewer[];
   archivedAt?: number;
   expiresAt?: number;
   retentionHold?: boolean;

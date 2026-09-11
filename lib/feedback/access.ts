@@ -8,6 +8,7 @@ import {
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
+import { isBotId } from '../participants.js';
 import type {
   FeedbackAdminListItem,
   FeedbackAdminListPars,
@@ -56,6 +57,7 @@ import {
 import {
   notifyFeedbackComment,
   notifyFeedbackDeleted,
+  notifyFeedbackReviewRequested,
   notifyFeedbackStatusChange,
 } from './notifications.js';
 import { isUserSubscribed, listSubscriberIds } from './subscribe.js';
@@ -149,7 +151,7 @@ function buildListFields(
     FeedbackMetaItem,
     'id' | 'kind' | 'title' | 'status' | 'authorId' | 'authorName' | 'createdAt' | 'updatedAt'
     | 'voteCount' | 'legacyVoteCount' | 'effectiveVotes' | 'commentCount' | 'attachmentKeys' | 'terminalAt'
-    | 'effort' | 'priority' | 'adminTags' | 'lastStaffCommentAt' | 'lastAuthorCommentAt'
+    | 'effort' | 'priority' | 'adminTags' | 'reviewers' | 'lastStaffCommentAt' | 'lastAuthorCommentAt'
     | 'gameUrl' | 'bggGameId' | 'normalizedGameUrl' | 'wishlistCategory' | 'wishlistCategoryNote'
     | 'legacyBggItemId' | 'legacyBggSubmitter'
   >,
@@ -172,6 +174,7 @@ function buildListFields(
     effort: meta.effort,
     priority: meta.priority,
     adminTags: meta.adminTags,
+    reviewers: meta.reviewers,
     lastStaffCommentAt: meta.lastStaffCommentAt,
     lastAuthorCommentAt: meta.lastAuthorCommentAt,
     gameUrl: meta.gameUrl,
@@ -319,6 +322,14 @@ function toPublicPost(item: Record<string, unknown>): FeedbackPublicPost {
     effort: item.effort as FeedbackPublicPost['effort'],
     priority: typeof item.priority === 'string' ? item.priority : undefined,
     adminTags: Array.isArray(item.adminTags) ? item.adminTags as string[] : undefined,
+    reviewers: Array.isArray(item.reviewers)
+      ? item.reviewers.filter((reviewer): reviewer is { id: string; name: string } => (
+        typeof reviewer === 'object'
+        && reviewer !== null
+        && typeof reviewer.id === 'string'
+        && typeof reviewer.name === 'string'
+      ))
+      : undefined,
     archivedAt: typeof item.archivedAt === 'number' ? item.archivedAt : undefined,
     expiresAt: typeof item.expiresAt === 'number' ? item.expiresAt : undefined,
     retentionHold: item.retentionHold === true,
@@ -1351,9 +1362,28 @@ export async function feedbackUpdate(
   return { ok: true, data: { id } };
 }
 
+async function resolveReviewers(
+  client: DynamoDBDocumentClient,
+  reviewerIds: string[],
+): Promise<FeedbackResult<{ reviewers: { id: string; name: string }[] }>> {
+  const reviewers: { id: string; name: string }[] = [];
+  for (const reviewerId of reviewerIds) {
+    if (await isBotId(reviewerId)) {
+      return { ok: false, message: 'bots cannot be reviewers.', statusCode: 400 };
+    }
+    const name = await loadAuthorName(client, reviewerId);
+    if (name === 'Unknown') {
+      return { ok: false, message: `unknown user id: ${reviewerId}`, statusCode: 400 };
+    }
+    reviewers.push({ id: reviewerId, name });
+  }
+  return { ok: true, data: { reviewers } };
+}
+
 export async function feedbackSetAdminFields(
   client: DynamoDBDocumentClient,
   tableName: string | undefined,
+  actorUserId: string,
   pars: FeedbackSetAdminFieldsPars,
 ): Promise<FeedbackResult<{ id: string }>> {
   const feedbackTable = getFeedbackTableName(tableName);
@@ -1377,7 +1407,15 @@ export async function feedbackSetAdminFields(
     return { ok: false, message: validated.message, statusCode: 400 };
   }
 
-  const { id, effort, priority, adminTags, wishlistCategory, wishlistCategoryNote } = validated.data;
+  const {
+    id,
+    effort,
+    priority,
+    adminTags,
+    reviewerIds,
+    wishlistCategory,
+    wishlistCategoryNote,
+  } = validated.data;
   const now = Date.now();
   const createdAt = Number(metaResult.Item.createdAt);
   const effectiveVotes = Number(metaResult.Item.effectiveVotes ?? 0);
@@ -1424,6 +1462,34 @@ export async function feedbackSetAdminFields(
     listValues[':wishlistCategoryNote'] = wishlistCategoryNote;
   }
 
+  let newlyAddedReviewerIds: string[] = [];
+  if (reviewerIds !== undefined) {
+    const resolved = await resolveReviewers(client, reviewerIds);
+    if (!resolved.ok) {
+      return resolved;
+    }
+    const previousReviewers = Array.isArray(metaResult.Item.reviewers)
+      ? metaResult.Item.reviewers.filter((reviewer): reviewer is { id: string; name: string } => (
+        typeof reviewer === 'object'
+        && reviewer !== null
+        && typeof reviewer.id === 'string'
+      ))
+      : [];
+    const previousIds = new Set(previousReviewers.map((reviewer) => reviewer.id));
+    newlyAddedReviewerIds = resolved.data.reviewers
+      .filter((reviewer) => !previousIds.has(reviewer.id))
+      .map((reviewer) => reviewer.id);
+    if (resolved.data.reviewers.length === 0) {
+      metaRemoveParts.push('reviewers');
+      listRemoveParts.push('reviewers');
+    } else {
+      metaSetParts.push('reviewers = :reviewers');
+      metaValues[':reviewers'] = resolved.data.reviewers;
+      listSetParts.push('reviewers = :reviewers');
+      listValues[':reviewers'] = resolved.data.reviewers;
+    }
+  }
+
   const metaUpdateParts = [`SET ${metaSetParts.join(', ')}`];
   if (metaRemoveParts.length > 0) {
     metaUpdateParts.push(`REMOVE ${metaRemoveParts.join(', ')}`);
@@ -1465,6 +1531,21 @@ export async function feedbackSetAdminFields(
   }
 
   await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
+
+  if (newlyAddedReviewerIds.length > 0) {
+    try {
+      await notifyFeedbackReviewRequested(client, feedbackTable, {
+        postId: id,
+        kind,
+        title: String(metaResult.Item.title),
+        reviewerIds: newlyAddedReviewerIds,
+        actorId: actorUserId,
+      });
+    } catch (error) {
+      console.error('notifyFeedbackReviewRequested failed', error);
+    }
+  }
+
   return { ok: true, data: { id } };
 }
 
