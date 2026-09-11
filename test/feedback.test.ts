@@ -288,6 +288,31 @@ test('feedbackCreate rejects duplicate wishlist by bggGameId', async () => {
   }
 });
 
+test('validateFeedbackCreatePars accepts wishlist with one cover image', () => {
+  const stagingKey = `staging/${USER_ID}/cover.png`;
+  const result = validateFeedbackCreatePars(USER_ID, {
+    kind: 'wishlist',
+    title: 'Hive',
+    gameUrl: 'https://boardgamegeek.com/boardgame/2655/hive',
+    attachmentKeys: [stagingKey],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.data.attachmentKeys, [stagingKey]);
+  }
+});
+
+test('validateFeedbackCreatePars rejects wishlist with more than one image', () => {
+  const prefix = `staging/${USER_ID}/`;
+  const result = validateFeedbackCreatePars(USER_ID, {
+    kind: 'wishlist',
+    title: 'Hive',
+    gameUrl: 'https://boardgamegeek.com/boardgame/2655/hive',
+    attachmentKeys: [`${prefix}a.png`, `${prefix}b.png`],
+  });
+  assert.equal(result.ok, false);
+});
+
 test('validateFeedbackCreatePars rejects feature with too many attachments', () => {
   const result = validateFeedbackCreatePars(USER_ID, {
     kind: 'feature',

@@ -6,6 +6,7 @@ import {
   FEEDBACK_ALLOWED_ATTACHMENT_TYPES,
   FEEDBACK_ATTACHMENT_MAX_BYTES,
   FEEDBACK_ATTACHMENT_MAX_COUNT,
+  FEEDBACK_WISHLIST_ATTACHMENT_MAX_COUNT,
   FEEDBACK_BODY_MAX_LENGTH,
   FEEDBACK_COMMENT_MAX_LENGTH,
   FEEDBACK_DELETE_REASON_MAX_LENGTH,
@@ -157,6 +158,19 @@ export function validateFeedbackCreatePars(
     gameUrl = normalizeGameUrl(pars.gameUrl);
     bggGameId = parseBggGameId(gameUrl);
     const normalizedGameUrl = normalizedGameUrlForDedup(gameUrl);
+    if (Array.isArray(pars.attachmentKeys) && pars.attachmentKeys.length > 0) {
+      if (pars.attachmentKeys.length > FEEDBACK_WISHLIST_ATTACHMENT_MAX_COUNT) {
+        return {
+          ok: false,
+          message: `wishlist entries allow at most ${FEEDBACK_WISHLIST_ATTACHMENT_MAX_COUNT} image.`,
+        };
+      }
+      const keyCheck = assertStagingKeysOwned(userId, pars.attachmentKeys);
+      if (!keyCheck.ok) {
+        return keyCheck;
+      }
+      attachmentKeys = pars.attachmentKeys.map((key) => key.trim());
+    }
     body = isNonEmptyString(pars.body) ? pars.body.trim() : undefined;
     if (body && body.length > FEEDBACK_BODY_MAX_LENGTH) {
       return { ok: false, message: `body must be at most ${FEEDBACK_BODY_MAX_LENGTH} characters.` };

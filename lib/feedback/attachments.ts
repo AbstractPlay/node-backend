@@ -10,8 +10,13 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import {
+  assertAllowedDownloadedImage,
+  contentTypeFromImageUrl,
+} from './bggImage.js';
+import {
   FEEDBACK_ATTACHMENT_PRESIGN_TTL_SECONDS,
 } from './constants.js';
+import type { FeedbackPublicPost } from './types.js';
 
 export const FEEDBACK_STAGING_PREFIX = 'staging/';
 
@@ -199,6 +204,36 @@ export async function finalizeAttachmentKeys(
   return finalKeys;
 }
 
+export async function putPostAttachmentFromUrl(
+  s3: S3Client,
+  postId: string,
+  sourceUrl: string,
+): Promise<string> {
+  const response = await fetch(sourceUrl);
+  if (!response.ok) {
+    throw new Error(`image download failed (${response.status})`);
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  const headerType = response.headers.get('content-type')?.split(';')[0]?.trim();
+  const contentType = headerType && headerType.startsWith('image/')
+    ? headerType
+    : contentTypeFromImageUrl(sourceUrl);
+  const allowed = assertAllowedDownloadedImage(contentType, bytes.length);
+  if (!allowed.ok) {
+    throw new Error(allowed.message);
+  }
+  const bucket = getFeedbackAttachmentsBucket();
+  const ext = extensionForContentType(contentType);
+  const key = `${postAttachmentPrefix(postId)}${uuidv4()}.${ext}`;
+  await s3.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: bytes,
+    ContentType: contentType,
+  }));
+  return key;
+}
+
 export async function presignAttachmentGetUrls(
   s3: S3Client,
   keys: string[],
@@ -214,4 +249,33 @@ export async function presignAttachmentGetUrls(
     results.push({ key, url });
   }
   return results;
+}
+
+export async function attachWishlistCoverImageUrls(
+  s3: S3Client,
+  items: FeedbackPublicPost[],
+): Promise<FeedbackPublicPost[]> {
+  if (items.length === 0) {
+    return items;
+  }
+  const urlByKey = new Map<string, string>();
+  const uniqueKeys = [...new Set(
+    items
+      .map((item) => item.attachmentKeys?.[0])
+      .filter((key): key is string => typeof key === 'string' && key.trim() !== ''),
+  )];
+  if (uniqueKeys.length > 0) {
+    const presigned = await presignAttachmentGetUrls(s3, uniqueKeys);
+    for (const entry of presigned) {
+      urlByKey.set(entry.key, entry.url);
+    }
+  }
+  return items.map((item) => {
+    const key = item.attachmentKeys?.[0];
+    if (!key) {
+      return item;
+    }
+    const coverImageUrl = urlByKey.get(key);
+    return coverImageUrl ? { ...item, coverImageUrl } : item;
+  });
 }

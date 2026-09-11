@@ -155,6 +155,7 @@ import {
   feedbackWishlistSearch,
   feedbackHistoryList,
   feedbackHoldRetention,
+  attachWishlistCoverImageUrls,
   type FeedbackAdminListPars,
   type FeedbackCommentPars,
   type FeedbackCreatePars,
@@ -1850,9 +1851,12 @@ async function feedbackListOpen(pars: FeedbackListPars) {
     if (!result.ok) {
       return feedbackErrorResponse(result.message, result.statusCode ?? 400);
     }
+    const items = pars.kind === 'wishlist' && result.data.items.length > 0
+      ? await attachWishlistCoverImageUrls(s3Client, result.data.items)
+      : result.data.items;
     return {
       statusCode: 200,
-      body: JSON.stringify(result.data),
+      body: JSON.stringify({ items, nextCursor: result.data.nextCursor }),
       headers: feedbackListHeaders,
     };
   } catch (error) {

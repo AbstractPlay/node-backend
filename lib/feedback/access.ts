@@ -47,6 +47,7 @@ import {
 import {
   assertStagingObjectsExist,
   deletePostAttachments,
+  deleteS3Objects,
   finalizeAttachmentKeys,
   presignAttachmentGetUrls,
   presignAttachmentPutUrl,
@@ -1782,6 +1783,66 @@ export async function feedbackDelete(
   }
 
   return { ok: true, data: { id } };
+}
+
+export async function setFeedbackPostAttachmentKeys(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  postId: string,
+  attachmentKeys: string[],
+  s3?: S3Client,
+): Promise<FeedbackResult<{ id: string }>> {
+  const feedbackTable = getFeedbackTableName(tableName);
+  const pk = postPk(postId);
+  const now = Date.now();
+
+  const metaResult = await client.send(new GetCommand({
+    TableName: feedbackTable,
+    Key: { pk, sk: metaSk() },
+  }));
+  if (!metaResult.Item) {
+    return { ok: false, message: 'feedback item not found.', statusCode: 404 };
+  }
+
+  const previousKeys = Array.isArray(metaResult.Item.attachmentKeys)
+    ? metaResult.Item.attachmentKeys.filter((key): key is string => typeof key === 'string' && key.trim() !== '')
+    : [];
+  const nextKeys = attachmentKeys.filter((key) => key.trim() !== '');
+  const keysToDelete = previousKeys.filter((key) => !nextKeys.includes(key));
+
+  const transactItems = [
+    {
+      Update: {
+        TableName: feedbackTable,
+        Key: { pk, sk: metaSk() },
+        UpdateExpression: 'SET attachmentKeys = :keys, updatedAt = :ua',
+        ExpressionAttributeValues: {
+          ':keys': nextKeys,
+          ':ua': now,
+        },
+      },
+    },
+    ...FEEDBACK_LIST_SORTS.map((sort) => ({
+      Update: {
+        TableName: feedbackTable,
+        Key: { pk, sk: listSkForSort(sort) },
+        UpdateExpression: 'SET attachmentKeys = :keys',
+        ExpressionAttributeValues: { ':keys': nextKeys },
+      },
+    })),
+  ];
+
+  await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
+
+  if (s3 && keysToDelete.length > 0) {
+    try {
+      await deleteS3Objects(s3, keysToDelete);
+    } catch (error) {
+      console.error('deleteS3Objects failed during setFeedbackPostAttachmentKeys', error);
+    }
+  }
+
+  return { ok: true, data: { id: postId } };
 }
 
 /** Test helper: seed a post with legacy vote count without going through create validation. */

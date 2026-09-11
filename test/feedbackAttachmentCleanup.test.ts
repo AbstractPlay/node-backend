@@ -5,6 +5,7 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  TransactWriteCommand,
   UpdateCommand,
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
@@ -23,8 +24,12 @@ import {
   runFeedbackAttachmentCleanupJob,
 } from '../lib/feedback/attachmentCleanup.js';
 import { archivePost } from '../lib/feedback/archive.js';
-import { feedbackDelete } from '../lib/feedback/access.js';
-import { buildMetaItem } from '../lib/feedback/access.js';
+import {
+  feedbackDelete,
+  buildMetaItem,
+  setFeedbackPostAttachmentKeys,
+  seedFeedbackPostForTests,
+} from '../lib/feedback/access.js';
 import {
   finalizeAttachmentKeys,
 } from '../lib/feedback/attachments.js';
@@ -63,6 +68,21 @@ function applyUpdate(existing: Record<string, unknown>, updateExpression: string
   }
 }
 
+function applyTransact(store: Store, command: TransactWriteCommand) {
+  for (const action of command.input.TransactItems ?? []) {
+    if (action.Put) {
+      const item = action.Put.Item as { pk: string; sk: string };
+      store.set(itemKey(item), { ...item });
+    } else if (action.Update) {
+      const key = action.Update.Key as { pk: string; sk: string };
+      const existing = store.get(itemKey(key));
+      assert.ok(existing, 'update target must exist');
+      applyUpdate(existing, action.Update.UpdateExpression ?? '', action.Update.ExpressionAttributeValues ?? {});
+      store.set(itemKey(key), existing);
+    }
+  }
+}
+
 function createMockDocClient(store: Store) {
   return {
     async send(command: unknown) {
@@ -96,6 +116,10 @@ function createMockDocClient(store: Store) {
           items.sort((a, b) => String(b.sk).localeCompare(String(a.sk)));
         }
         return { Items: items };
+      }
+      if (command instanceof TransactWriteCommand) {
+        applyTransact(store, command);
+        return {};
       }
       throw new Error(`Unexpected command: ${(command as { constructor: { name: string } }).constructor.name}`);
     },
@@ -208,6 +232,31 @@ test('finalizeAttachmentKeys deletes staging source after copy', async () => {
   assert.deepEqual(finalKeys, ['post-1/abc.png']);
   assert.ok(s3Objects.has('post-1/abc.png'));
   assert.ok(!s3Objects.has(stagingKey));
+});
+
+test('setFeedbackPostAttachmentKeys deletes replaced cover image objects', async () => {
+  s3Objects.clear();
+  const store: Store = new Map();
+  const client = createMockDocClient(store);
+  const s3 = createMockS3();
+  const id = 'wish-replace';
+  const meta = buildMetaItem(id, USER_ID, 'Alice', {
+    kind: 'wishlist',
+    title: 'Hive',
+    body: 'Please add',
+    status: 'requested',
+    gameUrl: 'https://boardgamegeek.com/boardgame/2655/hive',
+    attachmentKeys: [`${id}/old.jpg`],
+    legacyVoteCount: 0,
+  }, Date.now());
+  await seedFeedbackPostForTests(client, TABLE, meta);
+  s3Objects.set(`${id}/old.jpg`, { lastModified: Date.now() });
+  s3Objects.set(`${id}/new.jpg`, { lastModified: Date.now() });
+
+  const result = await setFeedbackPostAttachmentKeys(client, TABLE, id, [`${id}/new.jpg`], s3);
+  assert.equal(result.ok, true);
+  assert.ok(!s3Objects.has(`${id}/old.jpg`));
+  assert.ok(s3Objects.has(`${id}/new.jpg`));
 });
 
 test('feedbackDelete deletes post attachment prefix objects', async () => {
@@ -371,6 +420,57 @@ test('staging sweeper deletes only objects older than threshold', async () => {
   assert.equal(result.deleted, 1);
   assert.ok(!s3Objects.has('staging/user/old.png'));
   assert.ok(s3Objects.has('staging/user/new.png'));
+});
+
+test('job purges wishlist cover images from archived history rows', async () => {
+  s3Objects.clear();
+  const store: Store = new Map();
+  const client = createMockDocClient(store);
+  const s3 = createMockS3();
+  const now = Date.now();
+  const id = 'wish-cover';
+  seedHistoryRow(store, {
+    id,
+    kind: 'wishlist',
+    attachmentsPurgeAfter: now - 1,
+    attachmentKeys: [`${id}/cover.jpg`],
+  });
+  s3Objects.set(`${id}/cover.jpg`, { lastModified: now });
+
+  const summary = await runFeedbackAttachmentCleanupJob(client, s3, TABLE, { now });
+  assert.equal(summary.archivedPurged, 1);
+  assert.ok(!s3Objects.has(`${id}/cover.jpg`));
+});
+
+test('archivePost stamps wishlist cover attachment purge metadata on history rows', async () => {
+  s3Objects.clear();
+  const store: Store = new Map();
+  const client = createMockDocClient(store);
+  const s3 = createMockS3();
+  const now = Date.now();
+  const id = 'wish-archive-cover';
+  const meta = buildMetaItem(id, USER_ID, 'Alice', {
+    kind: 'wishlist',
+    title: 'Hive',
+    body: 'Please add',
+    status: 'available',
+    gameUrl: 'https://boardgamegeek.com/boardgame/2655/hive',
+    attachmentKeys: [`${id}/cover.jpg`],
+    legacyVoteCount: 0,
+  }, now);
+  meta.terminalAt = now;
+  store.set(itemKey(meta), meta);
+
+  const result = await archivePost(client, s3, TABLE, id, {
+    archiveAfterTerminalDays: 0,
+    liveRetentionAfterArchiveDays: 90,
+    now,
+  });
+  assert.equal(result.ok, true);
+  const history = [...store.values()].find((item) => item.pk === historyPk('wishlist'));
+  assert.ok(history);
+  assert.deepEqual(history.attachmentKeys, [`${id}/cover.jpg`]);
+  assert.equal(history.attachmentsPurgeAfter, now + 90 * 86_400_000);
 });
 
 test('archivePost stamps attachment purge metadata on history rows', async () => {
