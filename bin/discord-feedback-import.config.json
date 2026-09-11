@@ -1,7 +1,7 @@
 {
-  "guildId": "REPLACE_WITH_GUILD_ID",
-  "bugForumChannelId": "REPLACE_WITH_BUG_FORUM_CHANNEL_ID",
-  "featureForumChannelId": "REPLACE_WITH_FEATURE_FORUM_CHANNEL_ID",
+  "guildId": "526483743180062720",
+  "bugForumChannelId": "1133031059802554519",
+  "featureForumChannelId": "1252275758945140877",
   "excludeTagsByKind": {
     "bug": ["RESOLVED"],
     "feature": ["DONE"]

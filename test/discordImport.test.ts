@@ -1,6 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
+  buildApUsernameIndexFromRows,
+} from '../lib/feedback/bggImport.js';
+import {
+  buildDiscordUsernameToUserId,
   DISCORD_IMPORT_AUTHOR_ID,
   planDiscordThreadImport,
   resolveDiscordAuthor,
@@ -25,6 +29,17 @@ test('shouldImportThread skips excluded tags', () => {
   const exclude = new Set(['t1']);
   assert.equal(shouldImportThread({ id: '1', name: 'Bug', owner_id: 'u', applied_tags: ['t1'] }, exclude), false);
   assert.equal(shouldImportThread({ id: '2', name: 'Bug', owner_id: 'u', applied_tags: ['t2'] }, exclude), true);
+});
+
+test('buildDiscordUsernameToUserId only maps unambiguous AP usernames', () => {
+  const index = buildApUsernameIndexFromRows([
+    { id: 'user-1', name: 'alice' },
+    { id: 'user-2', name: 'Alice' },
+    { id: 'user-3', name: 'bob' },
+  ]);
+  const map = buildDiscordUsernameToUserId(index);
+  assert.equal(map.alice, undefined);
+  assert.equal(map.bob, 'user-3');
 });
 
 test('resolveDiscordAuthor prefers user map over username', () => {

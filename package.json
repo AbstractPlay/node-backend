@@ -27,6 +27,7 @@
     "import-bgg-wishlist": "tsx bin/import-bgg-wishlist.mjs",
     "import-discord-feedback": "tsx bin/import-discord-feedback.mjs",
     "report-bgg-wishlist-users": "tsx bin/report-bgg-wishlist-users.mjs",
+    "report-discord-feedback-users": "tsx bin/report-discord-feedback-users.mjs",
     "sync-deps": "ap-install-deps --stage dev",
     "sync-deps:prod": "ap-install-deps --stage prod"
   },

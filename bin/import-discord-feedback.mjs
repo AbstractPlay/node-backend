@@ -3,23 +3,32 @@
  * Import Discord forum threads into the feedback DynamoDB table.
  *
  * Usage:
- *   npm run import-discord-feedback -- --stage dev --dry-run --token-file path/to/token.txt
- *   npx tsx bin/import-discord-feedback.mjs --stage dev --kind bug --dry-run
+ *   npm run import-discord-feedback -- --stage prod --dry-run --token-file path/to/token.txt
+ *   npm run import-discord-feedback -- --stage prod --kind all --map bin/discord-ap-user-map.json --live
  *
  * Requires tsx to load lib/*.ts sources. Plain `node` will not work.
  * Dry-run is the default; pass --live to write.
+ * User map: bin/discord-ap-user-map.json (Discord user ID -> AP UUID); shared by bug and feature import.
  */
 import { readFileSync } from 'node:fs';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, QueryCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import {
+  DEFAULT_DISCORD_MAP,
+  fetchAllMessages,
+  fetchAllThreads,
+  loadApUserResolver,
+  loadToken,
+  loadUserMap,
+} from './discord-feedback-import-lib.mjs';
+import {
+  isUnmappedDiscordAuthor,
   planDiscordThreadImport,
+  resolveDiscordAuthor,
   resolveExcludeTagIds,
   shouldImportThread,
 } from '../lib/feedback/discordImport.js';
 import { kindGsi1Pk, listSortPrefix } from '../lib/feedback/keys.js';
-
-const DISCORD_API = 'https://discord.com/api/v10';
 
 function parseArgs(argv) {
   const args = {
@@ -27,7 +36,7 @@ function parseArgs(argv) {
     stage: '',
     config: 'bin/discord-feedback-import.config.json',
     tokenFile: '',
-    mapFile: '',
+    mapFile: DEFAULT_DISCORD_MAP,
     kind: 'all',
     limit: 0,
   };
@@ -45,6 +54,8 @@ function parseArgs(argv) {
       args.tokenFile = argv[++i];
     } else if (arg === '--map' && argv[i + 1]) {
       args.mapFile = argv[++i];
+    } else if (arg === '--no-map') {
+      args.mapFile = '';
     } else if (arg === '--kind' && argv[i + 1]) {
       args.kind = argv[++i];
     } else if (arg === '--limit' && argv[i + 1]) {
@@ -59,68 +70,6 @@ function tableNameForStage(stage) {
     return process.env.FEEDBACK_TABLE_PROD ?? 'abstract-play-feedback-prod';
   }
   return process.env.FEEDBACK_TABLE ?? 'abstract-play-feedback-dev';
-}
-
-function loadToken(tokenFile) {
-  const fromEnv = process.env.DISCORD_BOT_TOKEN?.trim();
-  if (fromEnv) {
-    return fromEnv;
-  }
-  if (tokenFile) {
-    return readFileSync(tokenFile, 'utf8').trim();
-  }
-  throw new Error('Discord token required: set DISCORD_BOT_TOKEN or pass --token-file');
-}
-
-async function discordGet(token, path) {
-  const res = await fetch(`${DISCORD_API}${path}`, {
-    headers: { Authorization: `Bot ${token}` },
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Discord GET ${path} failed (${res.status}): ${text}`);
-  }
-  return res.json();
-}
-
-async function fetchAllThreads(token, channelId) {
-  const channel = await discordGet(token, `/channels/${channelId}`);
-  const availableTags = channel.available_tags ?? [];
-  const threads = [];
-
-  const active = await discordGet(token, `/channels/${channelId}/threads/active`);
-  threads.push(...(active.threads ?? []));
-
-  let archivedBefore;
-  do {
-    const archivedQuery = archivedBefore ? `?before=${archivedBefore}` : '';
-    const archived = await discordGet(token, `/channels/${channelId}/threads/archived/public${archivedQuery}`);
-    threads.push(...(archived.threads ?? []));
-    if (!archived.has_more) {
-      break;
-    }
-    archivedBefore = archived.threads?.at(-1)?.thread_metadata?.archive_timestamp;
-  } while (archivedBefore);
-
-  return { threads, availableTags };
-}
-
-async function fetchAllMessages(token, threadId) {
-  const messages = [];
-  let before;
-  do {
-    const query = before ? `?before=${before}&limit=100` : '?limit=100';
-    const batch = await discordGet(token, `/channels/${threadId}/messages${query}`);
-    if (!Array.isArray(batch) || batch.length === 0) {
-      break;
-    }
-    messages.push(...batch);
-    before = batch[batch.length - 1]?.id;
-    if (batch.length < 100) {
-      break;
-    }
-  } while (before);
-  return messages;
 }
 
 async function existingDiscordThreadIds(client, tableName, kind) {
@@ -149,23 +98,54 @@ async function existingDiscordThreadIds(client, tableName, kind) {
   return ids;
 }
 
+function trackAuthor(store, user, resolver) {
+  if (user.bot) {
+    return;
+  }
+  const author = resolveDiscordAuthor(user, resolver);
+  const entry = store.get(user.id) ?? { mapped: 0, unmapped: 0 };
+  if (isUnmappedDiscordAuthor(author)) {
+    entry.unmapped += 1;
+  } else {
+    entry.mapped += 1;
+  }
+  store.set(user.id, entry);
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   if (!args.stage) {
-    console.error('Usage: npm run import-discord-feedback -- --stage dev|prod [--dry-run|--live] [--kind bug|feature|all] [--token-file path] [--map path] [--limit N]');
+    console.error('Usage: npm run import-discord-feedback -- --stage dev|prod [--dry-run|--live] [--kind bug|feature|all] [--token-file path] [--map bin/discord-ap-user-map.json] [--limit N]');
+    console.error('Dry-run is the default; pass --live to write to DynamoDB.');
     process.exit(1);
   }
 
   const token = loadToken(args.tokenFile);
   const config = JSON.parse(readFileSync(args.config, 'utf8'));
-  const userMap = args.mapFile
-    ? JSON.parse(readFileSync(args.mapFile, 'utf8'))
-    : {};
+  const userMap = loadUserMap(args.mapFile);
   const tableName = tableNameForStage(args.stage);
   const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+  const { usernameToUserId, displayNameByUserId } = await loadApUserResolver(client, args.stage);
+  const resolver = { userMap, usernameToUserId, displayNameByUserId };
 
   const kinds = args.kind === 'all' ? ['bug', 'feature'] : [args.kind];
-  const report = { imported: 0, skippedExisting: 0, skippedTags: 0, skippedEmpty: 0, comments: 0 };
+  const report = {
+    imported: 0,
+    skippedExisting: 0,
+    skippedTags: 0,
+    skippedEmpty: 0,
+    comments: 0,
+  };
+  const authorStats = new Map();
+
+  if (args.dryRun) {
+    console.log('*** DRY RUN — no data written. Pass --live to import. ***');
+  } else {
+    console.log(`*** LIVE import into ${tableName} ***`);
+  }
+  if (args.mapFile) {
+    console.log(`User map: ${args.mapFile} (${Object.keys(userMap).filter((k) => userMap[k]).length} filled entries)`);
+  }
 
   for (const kind of kinds) {
     const channelId = kind === 'bug' ? config.bugForumChannelId : config.featureForumChannelId;
@@ -190,11 +170,16 @@ async function main() {
       }
 
       const messages = await fetchAllMessages(token, thread.id);
+      for (const message of messages) {
+        trackAuthor(authorStats, message.author, resolver);
+      }
+
       const planned = planDiscordThreadImport({
         kind,
         thread,
         messagesNewestFirst: messages,
         userMap,
+        usernameToUserId,
         staffBotUserIds,
       });
       if ('ok' in planned && planned.ok === false) {
@@ -218,12 +203,23 @@ async function main() {
     }
   }
 
+  const unmappedAuthors = [...authorStats.values()].filter((entry) => entry.unmapped > 0).length;
+  const mappedAuthors = [...authorStats.values()].filter((entry) => entry.mapped > 0 && entry.unmapped === 0).length;
+  const mixedAuthors = [...authorStats.values()].filter((entry) => entry.mapped > 0 && entry.unmapped > 0).length;
+
   console.log(`${args.dryRun ? 'Dry run' : 'Import'} complete for ${args.stage} (${args.kind}):`);
   console.log(`  threads imported: ${report.imported}`);
   console.log(`  comments: ${report.comments}`);
   console.log(`  skipped (existing): ${report.skippedExisting}`);
   console.log(`  skipped (excluded tag): ${report.skippedTags}`);
   console.log(`  skipped (empty): ${report.skippedEmpty}`);
+  console.log(`  authors: ${mappedAuthors} fully mapped, ${mixedAuthors} mixed, ${unmappedAuthors} need map entries`);
+  if (args.dryRun && unmappedAuthors > 0) {
+    console.log(`  Run: npm run report-discord-feedback-users -- --stage ${args.stage} --kind ${args.kind} --emit-map`);
+  }
+  if (args.dryRun) {
+    console.log('Re-run with --live to write.');
+  }
 }
 
 main().catch((err) => {

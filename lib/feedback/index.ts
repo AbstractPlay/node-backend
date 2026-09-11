@@ -27,10 +27,14 @@ export {
   BGG_IMPORT_SKIP_AUTO_ENGAGE_SUBMITTERS,
 } from './bggImport.js';
 export {
+  buildDiscordUsernameToUserId,
+  discordThreadImportKey,
+  isUnmappedDiscordAuthor,
   planDiscordThreadImport,
+  resolveDiscordAuthor,
   resolveExcludeTagIds,
   shouldImportThread,
-  discordThreadImportKey,
+  DISCORD_IMPORT_AUTHOR_ID,
 } from './discordImport.js';
 export {
   FEEDBACK_KINDS,
