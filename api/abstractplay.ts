@@ -183,6 +183,7 @@ import {
 } from '../lib/recentCompletedGames.js';
 import { queryAllStandingChallenges } from '../lib/allStandingChallenges.js';
 import { validateAboutText } from '../lib/aboutText.js';
+import { validateUserDisplayName } from '../lib/userDisplayName.js';
 import { checkAboutSaveAllowed } from '../lib/aboutSaves.js';
 import {
   createNotification,
@@ -3822,10 +3823,19 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
   let attr = '';
   let val = '';
   switch (pars.attribute) {
-    case "name":
+    case "name": {
+      const validated = validateUserDisplayName(pars.value);
+      if (!validated.ok) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ message: validated.message }),
+          headers,
+        };
+      }
       attr = "name";
-      val = pars.value;
+      val = validated.name;
       break;
+    }
     case "language":
       attr = "language";
       val = pars.value;
@@ -3945,6 +3955,14 @@ async function getBots(botIds: string[]) {
 async function newProfile(claim: PartialClaims, pars: { name: any; consent: any; anonymous: any; country: any; tagline: any; }) {
   const userid = claim.sub;
   const email = claim.email;
+  const validatedName = validateUserDisplayName(pars.name);
+  if (!validatedName.ok) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: validatedName.message }),
+      headers,
+    };
+  }
   if (!email || email.trim() === "") {
     logGetItemError(`No email for user ${pars.name}, id ${userid} in newProfile`);
     return formatReturnError(`No email for user ${pars.name}, id ${userid} in newProfile`);
@@ -3953,7 +3971,7 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
     "pk": "USER",
     "sk": userid,
     "id": userid,
-    "name": pars.name,
+    "name": validatedName.name,
     "email": email,
     "consent": pars.consent,
     "anonymous": pars.anonymous,
@@ -3970,7 +3988,7 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
   const data2 = {
     "pk": "USERS",
     "sk": userid,
-    "name": pars.name,
+    "name": validatedName.name,
     "publicRivalries": false
   };
   try {
