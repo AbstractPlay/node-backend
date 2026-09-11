@@ -23,7 +23,7 @@ import type {
   FeedbackSubscribePars,
   FeedbackUpdatePars,
 } from './types.js';
-import { generateCommentId, generateEditId, generatePostId } from './ids.js';
+import { generateCommentId, generateEditId, generatePostId, normalizedGameUrlForDedup } from './ids.js';
 import {
   commentSk,
   editSk,
@@ -46,10 +46,14 @@ import {
   presignAttachmentGetUrls,
   presignAttachmentPutUrl,
 } from './attachments.js';
-import { notifyFeedbackComment, notifyFeedbackStatusChange } from './notifications.js';
-import { isUserSubscribed } from './subscribe.js';
+import {
+  notifyFeedbackComment,
+  notifyFeedbackDeleted,
+  notifyFeedbackStatusChange,
+} from './notifications.js';
+import { isUserSubscribed, listSubscriberIds } from './subscribe.js';
 import { isTerminalStatus } from './status.js';
-import { FEEDBACK_LIST_SORTS } from './constants.js';
+import { FEEDBACK_LIST_MAX_LIMIT, FEEDBACK_LIST_SORTS } from './constants.js';
 import {
   validateFeedbackAdminListPars,
   validateFeedbackCommentPars,
@@ -62,7 +66,10 @@ import {
   validateFeedbackSetStatusPars,
   validateFeedbackSubscribePars,
   validateFeedbackUpdatePars,
+  validateFeedbackDeletePars,
+  validateFeedbackMergePars,
   validateFeedbackVotePars,
+  validateFeedbackWishlistSearchPars,
   type ValidatedFeedbackCreate,
 } from './validate.js';
 import type {
@@ -70,8 +77,11 @@ import type {
   FeedbackCreatePars,
   FeedbackGetPars,
   FeedbackListPars,
+  FeedbackDeletePars,
+  FeedbackMergePars,
   FeedbackResult,
   FeedbackVotePars,
+  FeedbackWishlistSearchPars,
 } from './types.js';
 
 const MAIN_TABLE = process.env.ABSTRACT_PLAY_TABLE;
@@ -119,6 +129,8 @@ function buildListFields(
     'id' | 'kind' | 'title' | 'status' | 'authorId' | 'authorName' | 'createdAt' | 'updatedAt'
     | 'voteCount' | 'legacyVoteCount' | 'effectiveVotes' | 'commentCount' | 'attachmentKeys' | 'terminalAt'
     | 'effort' | 'priority' | 'adminTags' | 'lastStaffCommentAt' | 'lastAuthorCommentAt'
+    | 'gameUrl' | 'bggGameId' | 'normalizedGameUrl' | 'wishlistCategory' | 'wishlistCategoryNote'
+    | 'legacyBggItemId' | 'legacyBggSubmitter'
   >,
 ) {
   return {
@@ -141,6 +153,13 @@ function buildListFields(
     adminTags: meta.adminTags,
     lastStaffCommentAt: meta.lastStaffCommentAt,
     lastAuthorCommentAt: meta.lastAuthorCommentAt,
+    gameUrl: meta.gameUrl,
+    bggGameId: meta.bggGameId,
+    normalizedGameUrl: meta.normalizedGameUrl,
+    wishlistCategory: meta.wishlistCategory,
+    wishlistCategoryNote: meta.wishlistCategoryNote,
+    legacyBggItemId: meta.legacyBggItemId,
+    legacyBggSubmitter: meta.legacyBggSubmitter,
   };
 }
 
@@ -188,9 +207,55 @@ function buildMetaItem(
     context: data.context,
     gameUrl: data.gameUrl,
     bggGameId: data.bggGameId,
+    normalizedGameUrl: data.normalizedGameUrl,
+    wishlistCategory: data.wishlistCategory as FeedbackMetaItem['wishlistCategory'],
+    legacyBggItemId: data.legacyBggItemId,
+    legacyBggSubmitter: data.legacyBggSubmitter,
     gsi2pk: statusGsi2Pk(data.kind, data.status),
     gsi2sk: String(now),
   };
+}
+
+async function findWishlistDuplicateId(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  options: { bggGameId?: string; normalizedGameUrl?: string },
+): Promise<string | undefined> {
+  const feedbackTable = getFeedbackTableName(tableName);
+  const { bggGameId, normalizedGameUrl } = options;
+  if (!bggGameId && !normalizedGameUrl) {
+    return undefined;
+  }
+
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const result = await client.send(new QueryCommand({
+      TableName: feedbackTable,
+      IndexName: 'ByKind',
+      KeyConditionExpression: 'gsi1pk = :pk AND begins_with(gsi1sk, :prefix)',
+      ExpressionAttributeValues: {
+        ':pk': kindGsi1Pk('wishlist'),
+        ':prefix': listSortPrefix('votes'),
+      },
+      FilterExpression: 'attribute_not_exists(terminalAt)',
+      ScanIndexForward: false,
+      Limit: 100,
+      ExclusiveStartKey: lastKey,
+    }));
+
+    for (const item of result.Items ?? []) {
+      if (bggGameId && item.bggGameId === bggGameId) {
+        return String(item.id);
+      }
+      if (normalizedGameUrl && item.normalizedGameUrl === normalizedGameUrl) {
+        return String(item.id);
+      }
+    }
+
+    lastKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
+
+  return undefined;
 }
 
 function buildListIndexItem(
@@ -225,7 +290,11 @@ function toPublicPost(item: Record<string, unknown>): FeedbackPublicPost {
     attachmentKeys: Array.isArray(item.attachmentKeys) ? item.attachmentKeys as string[] : undefined,
     gameUrl: typeof item.gameUrl === 'string' ? item.gameUrl : undefined,
     bggGameId: typeof item.bggGameId === 'string' ? item.bggGameId : undefined,
+    normalizedGameUrl: typeof item.normalizedGameUrl === 'string' ? item.normalizedGameUrl : undefined,
+    legacyBggItemId: typeof item.legacyBggItemId === 'string' ? item.legacyBggItemId : undefined,
+    legacyBggSubmitter: typeof item.legacyBggSubmitter === 'string' ? item.legacyBggSubmitter : undefined,
     wishlistCategory: item.wishlistCategory as FeedbackPublicPost['wishlistCategory'],
+    wishlistCategoryNote: typeof item.wishlistCategoryNote === 'string' ? item.wishlistCategoryNote : undefined,
     effort: item.effort as FeedbackPublicPost['effort'],
     priority: typeof item.priority === 'string' ? item.priority : undefined,
     adminTags: Array.isArray(item.adminTags) ? item.adminTags as string[] : undefined,
@@ -275,6 +344,22 @@ export async function feedbackCreate(
       return { ok: false, message: exists.message, statusCode: 400 };
     }
     attachmentKeys = await finalizeAttachmentKeys(s3, userId, id, attachmentKeys);
+  }
+
+  if (data.kind === 'wishlist') {
+    const duplicateId = await findWishlistDuplicateId(client, tableName, {
+      bggGameId: data.bggGameId,
+      normalizedGameUrl: data.normalizedGameUrl ?? (data.gameUrl ? normalizedGameUrlForDedup(data.gameUrl) : undefined),
+    });
+    if (duplicateId) {
+      return {
+        ok: false,
+        message: 'This game is already on the wishlist.',
+        statusCode: 409,
+        code: 'duplicate',
+        existingId: duplicateId,
+      };
+    }
   }
 
   const meta = buildMetaItem(id, userId, authorName, { ...data, attachmentKeys }, now);
@@ -1119,10 +1204,14 @@ export async function feedbackSetAdminFields(
   if (wishlistCategory !== undefined) {
     metaSetParts.push('wishlistCategory = :wishlistCategory');
     metaValues[':wishlistCategory'] = wishlistCategory;
+    listSetParts.push('wishlistCategory = :wishlistCategory');
+    listValues[':wishlistCategory'] = wishlistCategory;
   }
   if (wishlistCategoryNote !== undefined) {
     metaSetParts.push('wishlistCategoryNote = :wishlistCategoryNote');
     metaValues[':wishlistCategoryNote'] = wishlistCategoryNote;
+    listSetParts.push('wishlistCategoryNote = :wishlistCategoryNote');
+    listValues[':wishlistCategoryNote'] = wishlistCategoryNote;
   }
 
   const metaUpdateParts = [`SET ${metaSetParts.join(', ')}`];
@@ -1294,6 +1383,213 @@ export async function feedbackAdminList(
   }
 
   return { ok: true, data: { items, nextCursor } };
+}
+
+export async function feedbackWishlistSearch(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  pars: FeedbackWishlistSearchPars,
+): Promise<FeedbackResult<{ items: FeedbackPublicPost[] }>> {
+  const validated = validateFeedbackWishlistSearchPars(pars);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+
+  const listResult = await feedbackList(client, tableName, {
+    kind: 'wishlist',
+    sort: 'votes',
+    limit: FEEDBACK_LIST_MAX_LIMIT,
+  });
+  if (!listResult.ok) {
+    return listResult;
+  }
+
+  const needle = validated.data.q.toLowerCase();
+  const items = listResult.data.items
+    .filter((item) => item.title.toLowerCase().includes(needle))
+    .slice(0, validated.data.limit);
+
+  return { ok: true, data: { items } };
+}
+
+export async function feedbackMerge(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  pars: FeedbackMergePars,
+): Promise<FeedbackResult<{ survivorId: string; duplicateId: string }>> {
+  const validated = validateFeedbackMergePars(pars);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+
+  const feedbackTable = getFeedbackTableName(tableName);
+  const { survivorId, duplicateId } = validated.data;
+
+  const survivorMeta = await client.send(new GetCommand({
+    TableName: feedbackTable,
+    Key: { pk: postPk(survivorId), sk: metaSk() },
+  }));
+  const duplicateMeta = await client.send(new GetCommand({
+    TableName: feedbackTable,
+    Key: { pk: postPk(duplicateId), sk: metaSk() },
+  }));
+  if (!survivorMeta.Item || !duplicateMeta.Item) {
+    return { ok: false, message: 'survivor or duplicate not found.', statusCode: 404 };
+  }
+  if (survivorMeta.Item.kind !== 'wishlist' || duplicateMeta.Item.kind !== 'wishlist') {
+    return { ok: false, message: 'merge is only supported for wishlist items.', statusCode: 400 };
+  }
+
+  const survivorVotes = Number(survivorMeta.Item.voteCount ?? 0);
+  const duplicateVotes = Number(duplicateMeta.Item.voteCount ?? 0);
+  const survivorLegacy = Number(survivorMeta.Item.legacyVoteCount ?? 0);
+  const duplicateLegacy = Number(duplicateMeta.Item.legacyVoteCount ?? 0);
+  const survivorComments = Number(survivorMeta.Item.commentCount ?? 0);
+  const duplicateComments = Number(duplicateMeta.Item.commentCount ?? 0);
+  const newVoteCount = survivorVotes + duplicateVotes;
+  const newLegacyVoteCount = survivorLegacy + duplicateLegacy;
+  const newEffectiveVotes = newVoteCount + newLegacyVoteCount;
+  const newCommentCount = survivorComments + duplicateComments;
+  const now = Date.now();
+  const createdAt = Number(survivorMeta.Item.createdAt);
+  const survivorPk = postPk(survivorId);
+  const duplicatePk = postPk(duplicateId);
+
+  const duplicateRows = await client.send(new QueryCommand({
+    TableName: feedbackTable,
+    KeyConditionExpression: 'pk = :pk',
+    ExpressionAttributeValues: { ':pk': duplicatePk },
+  }));
+
+  const survivorUpdates: Record<string, unknown>[] = [{
+    Update: {
+      TableName: feedbackTable,
+      Key: { pk: survivorPk, sk: metaSk() },
+      UpdateExpression: 'SET voteCount = :vc, legacyVoteCount = :lvc, effectiveVotes = :ev, commentCount = :cc, updatedAt = :ua',
+      ExpressionAttributeValues: {
+        ':vc': newVoteCount,
+        ':lvc': newLegacyVoteCount,
+        ':ev': newEffectiveVotes,
+        ':cc': newCommentCount,
+        ':ua': now,
+      },
+    },
+  }];
+
+  for (const sort of FEEDBACK_LIST_SORTS) {
+    const values: Record<string, unknown> = {
+      ':vc': newVoteCount,
+      ':lvc': newLegacyVoteCount,
+      ':ev': newEffectiveVotes,
+      ':cc': newCommentCount,
+      ':ua': now,
+    };
+    let updateExpression = 'SET voteCount = :vc, legacyVoteCount = :lvc, effectiveVotes = :ev, commentCount = :cc, updatedAt = :ua';
+    if (sort === 'votes') {
+      values[':gsi1sk'] = listGsi1SkForSort('votes', newEffectiveVotes, createdAt, createdAt, survivorId);
+      updateExpression += ', gsi1sk = :gsi1sk';
+    }
+    if (sort === 'updated') {
+      values[':gsi1skUpdated'] = listGsi1SkForSort('updated', newEffectiveVotes, createdAt, now, survivorId);
+      updateExpression += ', gsi1sk = :gsi1skUpdated';
+    }
+    survivorUpdates.push({
+      Update: {
+        TableName: feedbackTable,
+        Key: { pk: survivorPk, sk: listSkForSort(sort) },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeValues: values,
+      },
+    });
+  }
+
+  await client.send(new TransactWriteCommand({ TransactItems: survivorUpdates }));
+
+  for (const row of duplicateRows.Items ?? []) {
+    const sk = String(row.sk);
+    if (sk.startsWith('COMMENT#')) {
+      await client.send(new PutCommand({
+        TableName: feedbackTable,
+        Item: { ...row, pk: survivorPk },
+      }));
+    }
+    await client.send(new DeleteCommand({
+      TableName: feedbackTable,
+      Key: { pk: row.pk, sk: row.sk },
+    }));
+  }
+
+  return { ok: true, data: { survivorId, duplicateId } };
+}
+
+export async function feedbackDelete(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  adminUserId: string,
+  pars: FeedbackDeletePars,
+): Promise<FeedbackResult<{ id: string }>> {
+  const validated = validateFeedbackDeletePars(pars);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+
+  const feedbackTable = getFeedbackTableName(tableName);
+  const { id, reason } = validated.data;
+  const pk = postPk(id);
+
+  const metaResult = await client.send(new GetCommand({
+    TableName: feedbackTable,
+    Key: { pk, sk: metaSk() },
+  }));
+  if (!metaResult.Item) {
+    return { ok: false, message: 'feedback item not found.', statusCode: 404 };
+  }
+
+  const kind = metaResult.Item.kind as FeedbackKind;
+  if (kind !== 'wishlist') {
+    return { ok: false, message: 'only wishlist items can be deleted.', statusCode: 400 };
+  }
+
+  const authorId = String(metaResult.Item.authorId);
+  const title = String(metaResult.Item.title);
+  const createdAt = Number(metaResult.Item.createdAt);
+  const subscriberIds = await listSubscriberIds(client, feedbackTable, id);
+
+  const postRows = await client.send(new QueryCommand({
+    TableName: feedbackTable,
+    KeyConditionExpression: 'pk = :pk',
+    ExpressionAttributeValues: { ':pk': pk },
+  }));
+
+  for (const row of postRows.Items ?? []) {
+    await client.send(new DeleteCommand({
+      TableName: feedbackTable,
+      Key: { pk: row.pk, sk: row.sk },
+    }));
+  }
+
+  await client.send(new DeleteCommand({
+    TableName: feedbackTable,
+    Key: {
+      pk: `${USER_PK_PREFIX}${authorId}`,
+      sk: userIndexSk(kind, createdAt, id),
+    },
+  }));
+
+  try {
+    await notifyFeedbackDeleted(client, feedbackTable, {
+      kind,
+      title,
+      authorId,
+      reason,
+      actorId: adminUserId,
+      subscriberIds,
+    });
+  } catch (error) {
+    console.error('notifyFeedbackDeleted failed', error);
+  }
+
+  return { ok: true, data: { id } };
 }
 
 /** Test helper: seed a post with legacy vote count without going through create validation. */

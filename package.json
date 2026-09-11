@@ -24,6 +24,7 @@
     "check-weblate-branch": "node bin/check-weblate-branch.mjs",
     "merge-weblate-branch": "node bin/merge-weblate-branch.mjs",
     "dump-dashboard": "tsx bin/dump-dashboard.mjs",
+    "import-bgg-wishlist": "tsx bin/import-bgg-wishlist.mjs",
     "sync-deps": "ap-install-deps --stage dev",
     "sync-deps:prod": "ap-install-deps --stage prod"
   },
@@ -57,6 +58,7 @@
     "@sunknudsen/totp": "^1.1.0",
     "abstractplay-backend": "file:",
     "aws-jwt-verify": "^5.1.1",
+    "fast-xml-parser": "^4.5.7",
     "fflate": "^0.8.1",
     "i18next": "^22.4.15",
     "ion-js": "^5.2.0",

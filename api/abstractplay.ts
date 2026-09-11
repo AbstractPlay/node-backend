@@ -150,6 +150,9 @@ import {
   feedbackSubscribe,
   feedbackUpdate,
   feedbackVote,
+  feedbackMerge,
+  feedbackDelete,
+  feedbackWishlistSearch,
   type FeedbackAdminListPars,
   type FeedbackCommentPars,
   type FeedbackCreatePars,
@@ -162,6 +165,9 @@ import {
   type FeedbackSubscribePars,
   type FeedbackUpdatePars,
   type FeedbackVotePars,
+  type FeedbackDeletePars,
+  type FeedbackMergePars,
+  type FeedbackWishlistSearchPars,
 } from '../lib/feedback/index.js';
 import { S3Client } from '@aws-sdk/client-s3';
 import {
@@ -763,6 +769,8 @@ export const query = async (event: { queryStringParameters: any; body?: string; 
       return await feedbackListOpen(pars);
     case "feedback_get":
       return await feedbackGetOpen(pars);
+    case "wishlist_search":
+      return await feedbackWishlistSearchOpen(pars);
     default:
       return {
         statusCode: 500,
@@ -981,6 +989,10 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await feedbackMineAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_admin_list":
       return await feedbackAdminListAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_merge":
+      return await feedbackMergeAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_delete":
+      return await feedbackDeleteAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_get":
       return await feedbackGetAuth(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
@@ -2020,6 +2032,68 @@ async function feedbackAdminListAuth(userId: string, pars: FeedbackAdminListPars
   }
 }
 
+async function feedbackWishlistSearchOpen(pars: FeedbackWishlistSearchPars) {
+  try {
+    const result = await feedbackWishlistSearch(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to search wishlist.');
+  }
+}
+
+async function feedbackMergeAuth(userId: string, pars: FeedbackMergePars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const result = await feedbackMerge(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to merge wishlist items for ${userId}`);
+  }
+}
+
+async function feedbackDeleteAuth(userId: string, pars: FeedbackDeletePars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const result = await feedbackDelete(
+      ddbDocClient,
+      process.env.FEEDBACK_TABLE,
+      userId,
+      pars,
+    );
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to delete wishlist item for ${userId}`);
+  }
+}
+
 async function feedbackCreateAuth(userId: string, pars: FeedbackCreatePars) {
   try {
     const result = await feedbackCreate(
@@ -2030,7 +2104,18 @@ async function feedbackCreateAuth(userId: string, pars: FeedbackCreatePars) {
       pars,
     );
     if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+      const body: Record<string, unknown> = { message: result.message };
+      if (result.existingId) {
+        body.existingId = result.existingId;
+      }
+      if (result.code) {
+        body.code = result.code;
+      }
+      return {
+        statusCode: result.statusCode ?? 400,
+        body: JSON.stringify(body),
+        headers,
+      };
     }
     return {
       statusCode: 200,

@@ -14,6 +14,8 @@ import {
   feedbackAdminList,
   feedbackComment,
   feedbackCreate,
+  feedbackDelete,
+  feedbackGet,
   feedbackList,
   feedbackMine,
   feedbackSetAdminFields,
@@ -23,15 +25,17 @@ import {
   seedFeedbackPostForTests,
 } from '../lib/feedback/access.js';
 import { buildMetaItem } from '../lib/feedback/access.js';
-import { listSkForSort, metaSk, postPk } from '../lib/feedback/keys.js';
+import { listSkForSort, metaSk, postPk, subscribeSk, USER_PK_PREFIX, userIndexSk } from '../lib/feedback/keys.js';
 import {
   validateFeedbackCreatePars,
+  validateFeedbackDeletePars,
   validateFeedbackSetAdminFieldsPars,
 } from '../lib/feedback/validate.js';
 
 const TABLE = 'abstract-play-feedback-test';
 const USER_ID = '31af49bc-2030-4adb-aec9-dc8fa418fec1';
 const VOTER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+const ADMIN_ID = 'b2c3d4e5-f6a7-8901-bcde-f12345678901';
 
 const mockS3 = {
   async send(command: unknown) {
@@ -118,7 +122,8 @@ function createMockDocClient(store: Store) {
         const pk = command.input.ExpressionAttributeValues?.[':pk'] as string | undefined;
         const gsi1pk = command.input.ExpressionAttributeValues?.[':pk'] as string | undefined;
         const skPrefix = command.input.ExpressionAttributeValues?.[':skPrefix'] as string | undefined;
-        const gsiPrefix = command.input.ExpressionAttributeValues?.[':prefix'] as string | undefined;
+        const beginsWithPrefix = command.input.ExpressionAttributeValues?.[':prefix'] as string | undefined;
+        const gsiPrefix = beginsWithPrefix;
         const indexName = command.input.IndexName;
         let items = [...store.values()];
         if (indexName === 'ByKind') {
@@ -131,8 +136,9 @@ function createMockDocClient(store: Store) {
           items = items.filter((item) => item.gsi2pk === gsi2pk);
         } else if (pk !== undefined) {
           items = items.filter((item) => item.pk === pk);
-          if (skPrefix !== undefined) {
-            items = items.filter((item) => String(item.sk).startsWith(skPrefix));
+          const rowPrefix = skPrefix ?? beginsWithPrefix;
+          if (rowPrefix !== undefined) {
+            items = items.filter((item) => String(item.sk).startsWith(rowPrefix));
           }
         }
         if (command.input.FilterExpression?.includes('terminalAt')) {
@@ -169,6 +175,28 @@ test('validateFeedbackCreatePars accepts bug without attachments', () => {
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.data.attachmentKeys, undefined);
+  }
+});
+
+test('feedbackCreate rejects duplicate wishlist by bggGameId', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const gameUrl = 'https://boardgamegeek.com/boardgame/2655/hive';
+  const first = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'wishlist',
+    title: 'Hive',
+    gameUrl,
+  });
+  assert.equal(first.ok, true);
+  const second = await feedbackCreate(client, TABLE, mockS3, VOTER_ID, {
+    kind: 'wishlist',
+    title: 'Hive duplicate',
+    gameUrl,
+  });
+  assert.equal(second.ok, false);
+  if (!second.ok) {
+    assert.equal(second.code, 'duplicate');
+    assert.ok(second.existingId);
   }
 });
 
@@ -510,6 +538,78 @@ test('feedbackAdminList filters by effort', async () => {
   assert.equal(listResult.ok, true);
   if (listResult.ok) {
     assert.ok(listResult.data.items.some((item) => item.id === id));
+  }
+});
+
+test('validateFeedbackDeletePars requires reason', () => {
+  const missingReason = validateFeedbackDeletePars({ id: 'post-1' });
+  assert.equal(missingReason.ok, false);
+  const ok = validateFeedbackDeletePars({ id: 'post-1', reason: 'Duplicate of another entry.' });
+  assert.equal(ok.ok, true);
+});
+
+test('feedbackDelete removes wishlist entry and rejects non-wishlist', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+
+  const wishlistResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'wishlist',
+    title: 'Azul',
+    body: 'Please add this game.',
+    gameUrl: 'https://boardgamegeek.com/boardgame/230802/azul',
+  });
+  assert.equal(wishlistResult.ok, true);
+  if (!wishlistResult.ok) {
+    return;
+  }
+  const wishlistId = wishlistResult.data.id;
+  const metaBeforeDelete = store.get(`${postPk(wishlistId)}:${metaSk()}`);
+  const createdAt = Number(metaBeforeDelete?.createdAt);
+  await feedbackSubscribe(client, TABLE, VOTER_ID, { id: wishlistId, subscribe: true });
+  await feedbackComment(client, TABLE, VOTER_ID, {
+    id: wishlistId,
+    body: 'I want this too.',
+    subscribe: false,
+  });
+
+  const deleteResult = await feedbackDelete(client, TABLE, ADMIN_ID, {
+    id: wishlistId,
+    reason: 'Duplicate of an existing wishlist entry.',
+  });
+  assert.equal(deleteResult.ok, true);
+  assert.ok(!store.has(`${postPk(wishlistId)}:${metaSk()}`));
+  assert.ok(!store.has(`${postPk(wishlistId)}:${listSkForSort('recent')}`));
+  assert.ok(!store.has(`${postPk(wishlistId)}:${subscribeSk(VOTER_ID)}`));
+  assert.ok(!store.has(`${USER_PK_PREFIX}${USER_ID}:${userIndexSk('wishlist', createdAt, wishlistId)}`));
+
+  const getResult = await feedbackGet(client, TABLE, mockS3, { id: wishlistId });
+  assert.equal(getResult.ok, false);
+  if (!getResult.ok) {
+    assert.equal(getResult.statusCode, 404);
+  }
+
+  const listResult = await feedbackList(client, TABLE, { kind: 'wishlist', sort: 'recent' });
+  assert.equal(listResult.ok, true);
+  if (listResult.ok) {
+    assert.ok(!listResult.data.items.some((item) => item.id === wishlistId));
+  }
+
+  const featureResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Dark mode',
+    body: 'Please add dark mode.',
+  });
+  assert.equal(featureResult.ok, true);
+  if (!featureResult.ok) {
+    return;
+  }
+  const featureDelete = await feedbackDelete(client, TABLE, ADMIN_ID, {
+    id: featureResult.data.id,
+    reason: 'Not applicable.',
+  });
+  assert.equal(featureDelete.ok, false);
+  if (!featureDelete.ok) {
+    assert.equal(featureDelete.statusCode, 400);
   }
 });
 

@@ -50,6 +50,9 @@ export type FeedbackMetaItem = {
   context?: FeedbackBugContext;
   gameUrl?: string;
   bggGameId?: string;
+  normalizedGameUrl?: string;
+  legacyBggItemId?: string;
+  legacyBggSubmitter?: string;
   wishlistCategory?: WishlistCategory;
   wishlistCategoryNote?: string;
   effort?: FeedbackEffort;
@@ -218,7 +221,11 @@ export type FeedbackPublicPost = {
   attachmentKeys?: string[];
   gameUrl?: string;
   bggGameId?: string;
+  normalizedGameUrl?: string;
+  legacyBggItemId?: string;
+  legacyBggSubmitter?: string;
   wishlistCategory?: WishlistCategory;
+  wishlistCategoryNote?: string;
   effort?: FeedbackEffort;
   priority?: string;
   adminTags?: string[];
@@ -245,6 +252,21 @@ export type FeedbackGetResult = {
   userVoted?: boolean;
 };
 
+export type FeedbackMergePars = {
+  survivorId?: string;
+  duplicateId?: string;
+};
+
+export type FeedbackDeletePars = {
+  id?: string;
+  reason?: string;
+};
+
+export type FeedbackWishlistSearchPars = {
+  q?: string;
+  limit?: string | number;
+};
+
 export type FeedbackResult<T> =
   | { ok: true; data: T }
-  | { ok: false; message: string; statusCode?: number };
+  | { ok: false; message: string; statusCode?: number; code?: string; existingId?: string };

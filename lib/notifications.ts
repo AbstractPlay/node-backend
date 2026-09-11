@@ -25,6 +25,7 @@ export const IN_APP_NOTIFICATION_CATEGORIES = [
   'tournamentEnd',
   'feedbackReply',
   'feedbackStatus',
+  'feedbackDeleted',
 ] as const;
 
 export type InAppNotificationCategory = typeof IN_APP_NOTIFICATION_CATEGORIES[number];
@@ -72,6 +73,8 @@ export function inAppCategoryForBody(body: NotificationBody): InAppNotificationC
       return 'feedbackReply';
     case 'feedbackStatus':
       return 'feedbackStatus';
+    case 'feedbackDeleted':
+      return 'feedbackDeleted';
     default: {
       const _exhaustive: never = body;
       return _exhaustive;
@@ -200,6 +203,12 @@ export type NotificationBody =
     kind: string;
     title: string;
     status: string;
+  }
+  | {
+    type: 'feedbackDeleted';
+    kind: string;
+    title: string;
+    reason: string;
   };
 
 export type NotificationRecord = {

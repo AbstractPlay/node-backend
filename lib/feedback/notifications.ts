@@ -81,3 +81,31 @@ export async function notifyFeedbackStatusChange(
     status: pars.status,
   });
 }
+
+export async function notifyFeedbackDeleted(
+  client: DynamoDBDocumentClient,
+  feedbackTable: string,
+  pars: {
+    kind: FeedbackKind;
+    title: string;
+    authorId: string;
+    reason: string;
+    actorId: string;
+    subscriberIds: string[];
+  },
+): Promise<void> {
+  const recipients = new Set<string>(pars.subscriberIds);
+  recipients.add(pars.authorId);
+  recipients.delete(pars.actorId);
+
+  const reason = pars.reason.length > 200
+    ? `${pars.reason.slice(0, 197)}...`
+    : pars.reason;
+
+  await notifyRecipients(client, feedbackTable, [...recipients], {
+    type: 'feedbackDeleted',
+    kind: pars.kind,
+    title: pars.title,
+    reason,
+  });
+}
