@@ -9,10 +9,12 @@ import {
   UpdateCommand,
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
+import { CopyObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import {
   feedbackComment,
   feedbackCreate,
   feedbackList,
+  feedbackSubscribe,
   feedbackVote,
   seedFeedbackPostForTests,
 } from '../lib/feedback/access.js';
@@ -23,6 +25,15 @@ import { validateFeedbackCreatePars } from '../lib/feedback/validate.js';
 const TABLE = 'abstract-play-feedback-test';
 const USER_ID = '31af49bc-2030-4adb-aec9-dc8fa418fec1';
 const VOTER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+
+const mockS3 = {
+  async send(command: unknown) {
+    if (command instanceof HeadObjectCommand || command instanceof CopyObjectCommand) {
+      return {};
+    }
+    throw new Error(`Unexpected S3 command: ${(command as { constructor: { name: string } }).constructor.name}`);
+  },
+} as unknown as S3Client;
 
 function itemKey(item: { pk: string; sk: string }) {
   return `${item.pk}:${item.sk}`;
@@ -154,7 +165,7 @@ test('validateFeedbackCreatePars rejects bug without attachments', () => {
 test('feedbackCreate feature post and vote toggle updates counts', async () => {
   const store: Store = new Map();
   const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
-  const createResult = await feedbackCreate(client, TABLE, USER_ID, {
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
     kind: 'feature',
     title: 'Dark mode toggle',
     body: 'Please add a quick theme switch in settings.',
@@ -248,7 +259,7 @@ test('feedbackList excludes items with terminalAt set', async () => {
 test('feedbackComment increments commentCount and creates subscribe row by default', async () => {
   const store: Store = new Map();
   const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
-  const createResult = await feedbackCreate(client, TABLE, USER_ID, {
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
     kind: 'feature',
     title: 'Comment me',
     body: 'Needs discussion',
@@ -268,4 +279,43 @@ test('feedbackComment increments commentCount and creates subscribe row by defau
   assert.equal(meta?.commentCount, 1);
   const subKey = [...store.keys()].find((key) => key.includes('SUB#'));
   assert.ok(subKey);
+});
+
+test('feedbackSubscribe without comment creates SUB# row', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Watch me',
+    body: 'Subscribe only',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const sub = await feedbackSubscribe(client, TABLE, VOTER_ID, { id, subscribe: true });
+  assert.equal(sub.ok, true);
+  assert.ok(store.has(`${postPk(id)}:SUB#${VOTER_ID}`));
+});
+
+test('feedbackComment with subscribe false does not add SUB# for commenter', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'No sub',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  await feedbackComment(client, TABLE, VOTER_ID, {
+    id,
+    body: 'Just commenting',
+    subscribe: false,
+  });
+  assert.ok(!store.has(`${postPk(id)}:SUB#${VOTER_ID}`));
 });

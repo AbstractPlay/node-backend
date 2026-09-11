@@ -1,4 +1,5 @@
 import {
+  DeleteCommand,
   GetCommand,
   PutCommand,
   QueryCommand,
@@ -6,7 +7,16 @@ import {
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
-import type { FeedbackListSort, FeedbackMetaItem, FeedbackPublicComment, FeedbackPublicPost } from './types.js';
+import type {
+  FeedbackGetResult,
+  FeedbackListSort,
+  FeedbackMetaItem,
+  FeedbackPresignUploadPars,
+  FeedbackPublicComment,
+  FeedbackPublicPost,
+  FeedbackSetStatusPars,
+  FeedbackSubscribePars,
+} from './types.js';
 import { generateCommentId, generatePostId } from './ids.js';
 import {
   commentSk,
@@ -22,12 +32,23 @@ import {
   voteSk,
   USER_PK_PREFIX,
 } from './keys.js';
-import { presignAttachmentGetUrls } from './attachments.js';
+import {
+  assertStagingObjectsExist,
+  finalizeAttachmentKeys,
+  presignAttachmentGetUrls,
+  presignAttachmentPutUrl,
+} from './attachments.js';
+import { notifyFeedbackComment, notifyFeedbackStatusChange } from './notifications.js';
+import { isUserSubscribed } from './subscribe.js';
+import { isTerminalStatus } from './status.js';
 import {
   validateFeedbackCommentPars,
   validateFeedbackCreatePars,
   validateFeedbackGetPars,
   validateFeedbackListPars,
+  validateFeedbackPresignUploadPars,
+  validateFeedbackSetStatusPars,
+  validateFeedbackSubscribePars,
   validateFeedbackVotePars,
   type ValidatedFeedbackCreate,
 } from './validate.js';
@@ -48,6 +69,20 @@ function getFeedbackTableName(tableName?: string): string {
     throw new Error('FEEDBACK_TABLE is not configured');
   }
   return resolved;
+}
+
+async function loadIsAdmin(
+  client: DynamoDBDocumentClient,
+  userId: string,
+): Promise<boolean> {
+  if (!MAIN_TABLE) {
+    return false;
+  }
+  const result = await client.send(new GetCommand({
+    TableName: MAIN_TABLE,
+    Key: { pk: 'USER', sk: userId },
+  }));
+  return result.Item?.admin === true;
 }
 
 async function loadAuthorName(
@@ -174,6 +209,7 @@ function toPublicComment(item: Record<string, unknown>): FeedbackPublicComment {
 export async function feedbackCreate(
   client: DynamoDBDocumentClient,
   tableName: string | undefined,
+  s3: S3Client,
   userId: string,
   pars: FeedbackCreatePars,
 ): Promise<FeedbackResult<{ id: string }>> {
@@ -187,7 +223,17 @@ export async function feedbackCreate(
   const id = generatePostId();
   const now = Date.now();
   const authorName = await loadAuthorName(client, userId);
-  const meta = buildMetaItem(id, userId, authorName, data, now);
+
+  let attachmentKeys = data.attachmentKeys;
+  if (attachmentKeys && attachmentKeys.length > 0) {
+    const exists = await assertStagingObjectsExist(s3, attachmentKeys);
+    if (!exists.ok) {
+      return { ok: false, message: exists.message, statusCode: 400 };
+    }
+    attachmentKeys = await finalizeAttachmentKeys(s3, userId, id, attachmentKeys);
+  }
+
+  const meta = buildMetaItem(id, userId, authorName, { ...data, attachmentKeys }, now);
 
   const writes = [
     { Put: { TableName: feedbackTable, Item: meta } },
@@ -204,6 +250,19 @@ export async function feedbackCreate(
           id,
           kind: data.kind,
           createdAt: now,
+        },
+      },
+    },
+    {
+      Put: {
+        TableName: feedbackTable,
+        Item: {
+          pk: postPk(id),
+          sk: subscribeSk(userId),
+          entityType: 'subscribe',
+          userId,
+          createdAt: now,
+          source: 'comment',
         },
       },
     },
@@ -262,11 +321,8 @@ export async function feedbackGet(
   tableName: string | undefined,
   s3: S3Client,
   pars: FeedbackGetPars,
-): Promise<FeedbackResult<{
-  post: FeedbackPublicPost;
-  comments: FeedbackPublicComment[];
-  attachmentUrls: { key: string; url: string }[];
-}>> {
+  viewerUserId?: string,
+): Promise<FeedbackResult<FeedbackGetResult>> {
   const validated = validateFeedbackGetPars(pars);
   if (!validated.ok) {
     return { ok: false, message: validated.message, statusCode: 400 };
@@ -300,7 +356,31 @@ export async function feedbackGet(
     Array.isArray(metaResult.Item.attachmentKeys) ? metaResult.Item.attachmentKeys as string[] : [],
   );
 
-  return { ok: true, data: { post, comments, attachmentUrls } };
+  let subscribed: boolean | undefined;
+  let userVoted: boolean | undefined;
+  if (viewerUserId) {
+    subscribed = await isUserSubscribed(client, feedbackTable, id, viewerUserId);
+    const voteResult = await client.send(new GetCommand({
+      TableName: feedbackTable,
+      Key: { pk: postPk(id), sk: voteSk(viewerUserId) },
+    }));
+    userVoted = Boolean(voteResult.Item);
+  }
+
+  return { ok: true, data: { post, comments, attachmentUrls, subscribed, userVoted } };
+}
+
+export async function feedbackPresignUpload(
+  s3: S3Client,
+  userId: string,
+  pars: FeedbackPresignUploadPars,
+): Promise<FeedbackResult<{ uploadUrl: string; key: string; headers: Record<string, string> }>> {
+  const validated = validateFeedbackPresignUploadPars(pars);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+  const result = await presignAttachmentPutUrl(s3, userId, validated.data.contentType);
+  return { ok: true, data: result };
 }
 
 export async function feedbackVote(
@@ -483,6 +563,7 @@ export async function feedbackComment(
   const now = Date.now();
   const commentId = generateCommentId();
   const authorName = await loadAuthorName(client, userId);
+  const isStaff = await loadIsAdmin(client, userId);
   const createdAt = Number(metaResult.Item.createdAt);
   const effectiveVotes = Number(metaResult.Item.effectiveVotes ?? 0);
   const commentCount = Number(metaResult.Item.commentCount ?? 0) + 1;
@@ -500,6 +581,7 @@ export async function feedbackComment(
           authorName,
           body,
           createdAt: now,
+          ...(isStaff ? { isStaff: true } : {}),
         },
       },
     },
@@ -545,7 +627,173 @@ export async function feedbackComment(
   }
 
   await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
+
+  const kind = metaResult.Item.kind as FeedbackMetaItem['kind'];
+  const title = String(metaResult.Item.title);
+  const authorId = String(metaResult.Item.authorId);
+  try {
+    await notifyFeedbackComment(client, feedbackTable, {
+      postId: id,
+      kind,
+      title,
+      authorId,
+      commenterId: userId,
+      commentPreview: body,
+    });
+  } catch (error) {
+    console.error('notifyFeedbackComment failed', error);
+  }
+
   return { ok: true, data: { commentId } };
+}
+
+export async function feedbackSubscribe(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  userId: string,
+  pars: FeedbackSubscribePars,
+): Promise<FeedbackResult<{ subscribed: boolean }>> {
+  const validated = validateFeedbackSubscribePars(pars);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+
+  const feedbackTable = getFeedbackTableName(tableName);
+  const { id, subscribe } = validated.data;
+  const pk = postPk(id);
+
+  const metaResult = await client.send(new GetCommand({
+    TableName: feedbackTable,
+    Key: { pk, sk: metaSk() },
+  }));
+  if (!metaResult.Item) {
+    return { ok: false, message: 'feedback item not found.', statusCode: 404 };
+  }
+  if (metaResult.Item.terminalAt !== undefined) {
+    return { ok: false, message: 'cannot change subscription on a closed item.', statusCode: 400 };
+  }
+
+  const now = Date.now();
+  if (subscribe) {
+    await client.send(new PutCommand({
+      TableName: feedbackTable,
+      Item: {
+        pk,
+        sk: subscribeSk(userId),
+        entityType: 'subscribe',
+        userId,
+        createdAt: now,
+        source: 'manual',
+      },
+    }));
+    return { ok: true, data: { subscribed: true } };
+  }
+
+  await client.send(new DeleteCommand({
+    TableName: feedbackTable,
+    Key: { pk, sk: subscribeSk(userId) },
+  }));
+  return { ok: true, data: { subscribed: false } };
+}
+
+export async function feedbackSetStatus(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  adminUserId: string,
+  pars: FeedbackSetStatusPars,
+): Promise<FeedbackResult<{ status: string }>> {
+  const feedbackTable = getFeedbackTableName(tableName);
+  const idGuess = typeof pars.id === 'string' ? pars.id.trim() : '';
+  if (!idGuess) {
+    return { ok: false, message: 'id is required.', statusCode: 400 };
+  }
+
+  const pk = postPk(idGuess);
+  const metaResult = await client.send(new GetCommand({
+    TableName: feedbackTable,
+    Key: { pk, sk: metaSk() },
+  }));
+  if (!metaResult.Item) {
+    return { ok: false, message: 'feedback item not found.', statusCode: 404 };
+  }
+
+  const kind = metaResult.Item.kind as FeedbackMetaItem['kind'];
+  const validated = validateFeedbackSetStatusPars(pars, kind);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+
+  const { id, status } = validated.data;
+  const now = Date.now();
+  const terminalAt = isTerminalStatus(kind, status) ? now : undefined;
+  const createdAt = Number(metaResult.Item.createdAt);
+  const effectiveVotes = Number(metaResult.Item.effectiveVotes ?? 0);
+  const authorId = String(metaResult.Item.authorId);
+  const title = String(metaResult.Item.title);
+
+  const transactItems: Record<string, unknown>[] = [
+    {
+      Update: {
+        TableName: feedbackTable,
+        Key: { pk, sk: metaSk() },
+        UpdateExpression: terminalAt !== undefined
+          ? 'SET #status = :status, updatedAt = :ua, gsi2pk = :g2pk, gsi2sk = :g2sk, terminalAt = :ta'
+          : 'SET #status = :status, updatedAt = :ua, gsi2pk = :g2pk, gsi2sk = :g2sk REMOVE terminalAt',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+          ':status': status,
+          ':ua': now,
+          ':g2pk': statusGsi2Pk(kind, status),
+          ':g2sk': String(createdAt),
+          ...(terminalAt !== undefined ? { ':ta': terminalAt } : {}),
+        },
+      },
+    },
+  ];
+
+  for (const sort of ['votes', 'recent', 'updated'] as const) {
+    const values: Record<string, unknown> = {
+      ':status': status,
+      ':ua': now,
+    };
+    let updateExpression = 'SET #status = :status, updatedAt = :ua';
+    if (sort === 'updated') {
+      values[':gsi1sk'] = listGsi1SkForSort('updated', effectiveVotes, createdAt, now, id);
+      updateExpression += ', gsi1sk = :gsi1sk';
+    }
+    if (terminalAt !== undefined) {
+      values[':ta'] = terminalAt;
+      updateExpression += ', terminalAt = :ta';
+    } else {
+      updateExpression += ' REMOVE terminalAt';
+    }
+    transactItems.push({
+      Update: {
+        TableName: feedbackTable,
+        Key: { pk, sk: listSkForSort(sort) },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: values,
+      },
+    });
+  }
+
+  await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
+
+  try {
+    await notifyFeedbackStatusChange(client, feedbackTable, {
+      postId: id,
+      kind,
+      title,
+      authorId,
+      status,
+      actorId: adminUserId,
+    });
+  } catch (error) {
+    console.error('notifyFeedbackStatusChange failed', error);
+  }
+
+  return { ok: true, data: { status } };
 }
 
 /** Test helper: seed a post with legacy vote count without going through create validation. */

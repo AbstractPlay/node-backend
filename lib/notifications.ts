@@ -23,6 +23,8 @@ export const IN_APP_NOTIFICATION_CATEGORIES = [
   'completedGameChat',
   'tournamentStart',
   'tournamentEnd',
+  'feedbackReply',
+  'feedbackStatus',
 ] as const;
 
 export type InAppNotificationCategory = typeof IN_APP_NOTIFICATION_CATEGORIES[number];
@@ -66,6 +68,10 @@ export function inAppCategoryForBody(body: NotificationBody): InAppNotificationC
       return 'tournamentStart';
     case 'tournamentEnd':
       return 'tournamentEnd';
+    case 'feedbackReply':
+      return 'feedbackReply';
+    case 'feedbackStatus':
+      return 'feedbackStatus';
     default: {
       const _exhaustive: never = body;
       return _exhaustive;
@@ -180,6 +186,20 @@ export type NotificationBody =
     number: number;
     variants: string[];
     winnerName?: string;
+  }
+  | {
+    type: 'feedbackReply';
+    postId: string;
+    kind: string;
+    title: string;
+    commentPreview?: string;
+  }
+  | {
+    type: 'feedbackStatus';
+    postId: string;
+    kind: string;
+    title: string;
+    status: string;
   };
 
 export type NotificationRecord = {

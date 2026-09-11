@@ -29,6 +29,13 @@ export const FEEDBACK_LIST_DEFAULT_LIMIT = 50;
 export const FEEDBACK_LIST_MAX_LIMIT = 100;
 export const FEEDBACK_CONTEXT_MAX_BYTES = 16_384;
 export const FEEDBACK_ATTACHMENT_PRESIGN_TTL_SECONDS = 900;
+export const FEEDBACK_ATTACHMENT_MAX_BYTES = 5_242_880;
+export const FEEDBACK_ATTACHMENT_MAX_COUNT = 3;
+export const FEEDBACK_ALLOWED_ATTACHMENT_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+] as const;
 
 export const DEFAULT_STATUS_BY_KIND: Record<typeof FEEDBACK_KINDS[number], string> = {
   bug: 'open',
