@@ -18,6 +18,12 @@ export {
 } from './access.js';
 export { parseBggWishlistXml, buildWishlistMetaFromBggImport } from './bggImport.js';
 export {
+  planDiscordThreadImport,
+  resolveExcludeTagIds,
+  shouldImportThread,
+  discordThreadImportKey,
+} from './discordImport.js';
+export {
   FEEDBACK_KINDS,
   TERMINAL_STATUSES,
   DEFAULT_STATUS_BY_KIND,
