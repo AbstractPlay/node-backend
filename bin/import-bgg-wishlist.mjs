@@ -3,9 +3,10 @@
  * Import BGG wishlist XML into the feedback DynamoDB table.
  *
  * Usage:
+ *   npm run import-bgg-wishlist -- --stage prod --input path/to/thumbs.xml --map bin/bgg-ap-user-map.json --live
  *   npm run import-bgg-wishlist -- --stage dev --input path/to/thumbs.xml --dry-run
- *   npm run import-bgg-wishlist -- --stage prod --input path/to/thumbs.xml --map bin/bgg-ap-user-map.json --dry-run
- *   npx tsx bin/import-bgg-wishlist.mjs --stage dev --input path/to/thumbs.xml --dry-run
+ *
+ * Dry-run is the default (no DynamoDB writes). Pass --live to import.
  *
  * User map format (BGG @username -> AP user UUID):
  *   { "Striton": "uuid-here", "Kalabas07": "uuid-here" }
@@ -168,7 +169,8 @@ function summarizeAuthors(items, resolver) {
 async function main() {
   const args = parseArgs(process.argv);
   if (!args.stage || !args.input) {
-    console.error('Usage: npm run import-bgg-wishlist -- --stage dev|prod --input path/to/thumbs.xml [--map bin/bgg-ap-user-map.json] [--no-map] [--dry-run|--live]');
+    console.error('Usage: npm run import-bgg-wishlist -- --stage dev|prod --input path/to/thumbs.xml [--map bin/bgg-ap-user-map.json] [--no-map] [--live]');
+    console.error('Dry-run is the default; pass --live to write to DynamoDB.');
     process.exit(1);
   }
 
@@ -193,6 +195,12 @@ async function main() {
     return shouldBggImportAutoEngageAuthor(item.legacyBggSubmitter, author.authorId);
   }).length;
 
+  if (args.dryRun) {
+    console.log('*** DRY RUN — no data written. Pass --live to import. ***');
+  } else {
+    console.log(`*** LIVE import into ${tableName} ***`);
+  }
+
   console.log(`Parsed ${items.length} items; ${toImport.length} to import (${items.length - toImport.length} skipped as existing).`);
   if (args.mapFile) {
     console.log(`User map: ${args.mapFile} (${Object.keys(userMap).length} entries)`);
@@ -202,7 +210,8 @@ async function main() {
 
   if (args.dryRun) {
     const totalLegacyVotes = toImport.reduce((sum, item) => sum + item.legacyVoteCount, 0);
-    console.log(`Dry run: would import ${toImport.length} items with ${totalLegacyVotes} aggregate legacy votes.`);
+    console.log(`Would import ${toImport.length} items with ${totalLegacyVotes} aggregate legacy votes.`);
+    console.log('Re-run with --live to write.');
     return;
   }
 
