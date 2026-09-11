@@ -19,7 +19,7 @@ import {
   seedFeedbackPostForTests,
 } from '../lib/feedback/access.js';
 import { buildMetaItem } from '../lib/feedback/access.js';
-import { metaSk, postPk } from '../lib/feedback/keys.js';
+import { listSkForSort, metaSk, postPk } from '../lib/feedback/keys.js';
 import { validateFeedbackCreatePars } from '../lib/feedback/validate.js';
 
 const TABLE = 'abstract-play-feedback-test';
@@ -297,6 +297,39 @@ test('feedbackSubscribe without comment creates SUB# row', async () => {
   const sub = await feedbackSubscribe(client, TABLE, VOTER_ID, { id, subscribe: true });
   assert.equal(sub.ok, true);
   assert.ok(store.has(`${postPk(id)}:SUB#${VOTER_ID}`));
+});
+
+test('feedbackComment updates commentCount on all list projections', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Board count',
+    body: 'Comment count should appear on list',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const commentResult = await feedbackComment(client, TABLE, VOTER_ID, {
+    id,
+    body: 'Visible on the board',
+    subscribe: false,
+  });
+  assert.equal(commentResult.ok, true);
+
+  for (const sort of ['votes', 'recent', 'updated'] as const) {
+    const listItem = store.get(`${postPk(id)}:${listSkForSort(sort)}`);
+    assert.equal(listItem?.commentCount, 1, `LIST#${sort} commentCount`);
+  }
+
+  const listResult = await feedbackList(client, TABLE, { kind: 'bug', sort: 'recent' });
+  assert.equal(listResult.ok, true);
+  if (listResult.ok) {
+    const item = listResult.data.items.find((entry) => entry.id === id);
+    assert.equal(item?.commentCount, 1);
+  }
 });
 
 test('feedbackComment with subscribe false does not add SUB# for commenter', async () => {
