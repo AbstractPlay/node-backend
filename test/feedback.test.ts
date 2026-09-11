@@ -169,6 +169,16 @@ test('validateFeedbackCreatePars accepts bug without attachments', () => {
   }
 });
 
+test('validateFeedbackCreatePars rejects feature with too many attachments', () => {
+  const result = validateFeedbackCreatePars(USER_ID, {
+    kind: 'feature',
+    title: 'Mockups',
+    body: 'See attached images.',
+    attachmentKeys: ['a', 'b', 'c', 'd'],
+  });
+  assert.equal(result.ok, false);
+});
+
 test('feedbackCreate feature post and vote toggle updates counts', async () => {
   const store: Store = new Map();
   const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
