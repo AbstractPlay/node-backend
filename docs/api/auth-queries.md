@@ -65,7 +65,7 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 
 Data lives in DynamoDB table `abstract-play-feedback-{stage}` (not the main `abstract-play` table).
 
-Nightly archive job: `utils/feedback-archive` Lambda (`npm run feedback-archive` locally). Snapshots terminal posts to S3, writes `HISTORY#` rows, sets `archivedAt` and `expiresAt` TTL on live rows.
+Nightly jobs: `utils/feedback-archive` Lambda (`npm run feedback-archive`) snapshots terminal posts to S3, writes `HISTORY#` rows, sets `archivedAt` and `expiresAt` TTL on live rows. `utils/feedback-attachment-cleanup` Lambda (`npm run feedback-attachment-cleanup`) deletes `{postId}/` screenshot objects after purge and sweeps stale `staging/` uploads; keeps `archive/{postId}.json` snapshots.
 
 ## Push, tags, customizations
 

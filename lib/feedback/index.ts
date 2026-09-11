@@ -26,6 +26,12 @@ export {
   buildHistorySummaryFromMeta,
 } from './archive.js';
 export {
+  runFeedbackAttachmentCleanupJob,
+  purgeStaleStagingObjects,
+  collectAttachmentKeysFromArchiveSnapshot,
+  defaultAttachmentCleanupConfig,
+} from './attachmentCleanup.js';
+export {
   parseBggWishlistXml,
   buildWishlistMetaFromBggImport,
   buildBggImportAuthorEngagementRows,

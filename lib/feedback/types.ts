@@ -86,6 +86,9 @@ export type FeedbackHistorySummary = {
   implementedGameMeta?: { gameId?: string; name?: string };
   resolutionNote?: string;
   s3ArchiveKey?: string;
+  attachmentKeys?: string[];
+  attachmentsPurgeAfter?: number;
+  attachmentsPurgedAt?: number;
 };
 
 export type FeedbackHistoryItem = FeedbackHistorySummary & {

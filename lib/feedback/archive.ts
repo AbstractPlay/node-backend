@@ -208,9 +208,13 @@ export async function archivePost(
 
   const summary = buildHistorySummaryFromMeta(meta);
   const closedAt = summary.closedAt;
+  const expiresAt = now + config.liveRetentionAfterArchiveDays * 86_400_000;
+  const attachmentKeys = Array.isArray(meta.attachmentKeys) ? meta.attachmentKeys as string[] : [];
   const historyRow: FeedbackHistoryItem = {
     ...summary,
     s3ArchiveKey,
+    attachmentKeys,
+    attachmentsPurgeAfter: expiresAt,
     pk: historyPk(meta.kind),
     sk: historySk(closedAt, postId),
     entityType: 'history',
@@ -221,6 +225,8 @@ export async function archivePost(
     entityType: 'historyLookup',
     ...summary,
     s3ArchiveKey,
+    attachmentKeys,
+    attachmentsPurgeAfter: expiresAt,
   };
 
   const existingHistory = await client.send(new GetCommand({
@@ -232,7 +238,6 @@ export async function archivePost(
     await client.send(new PutCommand({ TableName: tableName, Item: lookupRow }));
   }
 
-  const expiresAt = now + config.liveRetentionAfterArchiveDays * 86_400_000;
   const rowsToExpire = [...children, ...userIndexRows];
   for (const row of rowsToExpire) {
     await client.send(new UpdateCommand({

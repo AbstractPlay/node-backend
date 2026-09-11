@@ -1,22 +1,26 @@
 import {
   CopyObjectCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import {
-  FEEDBACK_ALLOWED_ATTACHMENT_TYPES,
-  FEEDBACK_ATTACHMENT_MAX_BYTES,
   FEEDBACK_ATTACHMENT_PRESIGN_TTL_SECONDS,
 } from './constants.js';
 
-const STAGING_PREFIX = 'staging/';
+export const FEEDBACK_STAGING_PREFIX = 'staging/';
 
 export function stagingKeyPrefix(userId: string): string {
-  return `${STAGING_PREFIX}${userId}/`;
+  return `${FEEDBACK_STAGING_PREFIX}${userId}/`;
+}
+
+export function postAttachmentPrefix(postId: string): string {
+  return `${postId}/`;
 }
 
 export function assertStagingKeysOwned(
@@ -54,6 +58,81 @@ function extensionForContentType(contentType: string): string {
     return 'webp';
   }
   return 'bin';
+}
+
+export type DeleteS3ObjectsResult = {
+  deleted: number;
+  errors: string[];
+};
+
+export async function deleteS3Objects(
+  s3: S3Client,
+  keys: string[],
+): Promise<DeleteS3ObjectsResult> {
+  const bucket = getFeedbackAttachmentsBucket();
+  const uniqueKeys = [...new Set(keys.filter((key) => typeof key === 'string' && key.trim() !== ''))];
+  let deleted = 0;
+  const errors: string[] = [];
+  for (const key of uniqueKeys) {
+    try {
+      await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+      deleted += 1;
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : `delete failed: ${key}`);
+    }
+  }
+  return { deleted, errors };
+}
+
+export async function deleteStagingKeys(
+  s3: S3Client,
+  keys: string[],
+): Promise<DeleteS3ObjectsResult> {
+  return deleteS3Objects(s3, keys);
+}
+
+export async function listObjectKeysUnderPrefix(
+  s3: S3Client,
+  prefix: string,
+): Promise<string[]> {
+  const bucket = getFeedbackAttachmentsBucket();
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const result = await s3.send(new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix,
+      ContinuationToken: continuationToken,
+    }));
+    for (const item of result.Contents ?? []) {
+      if (item.Key) {
+        keys.push(item.Key);
+      }
+    }
+    continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+  } while (continuationToken);
+  return keys;
+}
+
+export async function deletePostAttachmentPrefix(
+  s3: S3Client,
+  postId: string,
+): Promise<DeleteS3ObjectsResult> {
+  const keys = await listObjectKeysUnderPrefix(s3, postAttachmentPrefix(postId));
+  return deleteS3Objects(s3, keys);
+}
+
+export async function deletePostAttachments(
+  s3: S3Client,
+  postId: string,
+  attachmentKeys: string[] | undefined,
+): Promise<DeleteS3ObjectsResult> {
+  const explicit = await deleteS3Objects(s3, attachmentKeys ?? []);
+  const prefix = await deletePostAttachmentPrefix(s3, postId);
+  return {
+    deleted: explicit.deleted + prefix.deleted,
+    errors: [...explicit.errors, ...prefix.errors],
+  };
 }
 
 export async function presignAttachmentPutUrl(
@@ -112,6 +191,10 @@ export async function finalizeAttachmentKeys(
       Key: finalKey,
     }));
     finalKeys.push(finalKey);
+    await s3.send(new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: stagingKey,
+    }));
   }
   return finalKeys;
 }

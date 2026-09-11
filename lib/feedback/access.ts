@@ -46,6 +46,7 @@ import {
 } from './keys.js';
 import {
   assertStagingObjectsExist,
+  deletePostAttachments,
   finalizeAttachmentKeys,
   presignAttachmentGetUrls,
   presignAttachmentPutUrl,
@@ -1552,6 +1553,7 @@ export async function feedbackWishlistSearch(
 export async function feedbackMerge(
   client: DynamoDBDocumentClient,
   tableName: string | undefined,
+  s3: S3Client,
   pars: FeedbackMergePars,
 ): Promise<FeedbackResult<{ survivorId: string; duplicateId: string }>> {
   const validated = validateFeedbackMergePars(pars);
@@ -1656,12 +1658,22 @@ export async function feedbackMerge(
     }));
   }
 
+  const duplicateAttachmentKeys = Array.isArray(duplicateMeta.Item.attachmentKeys)
+    ? duplicateMeta.Item.attachmentKeys as string[]
+    : undefined;
+  try {
+    await deletePostAttachments(s3, duplicateId, duplicateAttachmentKeys);
+  } catch (error) {
+    console.error('deletePostAttachments failed during feedbackMerge', error);
+  }
+
   return { ok: true, data: { survivorId, duplicateId } };
 }
 
 export async function feedbackDelete(
   client: DynamoDBDocumentClient,
   tableName: string | undefined,
+  s3: S3Client,
   adminUserId: string,
   pars: FeedbackDeletePars,
 ): Promise<FeedbackResult<{ id: string }>> {
@@ -1690,7 +1702,16 @@ export async function feedbackDelete(
   const authorId = String(metaResult.Item.authorId);
   const title = String(metaResult.Item.title);
   const createdAt = Number(metaResult.Item.createdAt);
+  const attachmentKeys = Array.isArray(metaResult.Item.attachmentKeys)
+    ? metaResult.Item.attachmentKeys as string[]
+    : undefined;
   const subscriberIds = await listSubscriberIds(client, feedbackTable, id);
+
+  try {
+    await deletePostAttachments(s3, id, attachmentKeys);
+  } catch (error) {
+    console.error('deletePostAttachments failed during feedbackDelete', error);
+  }
 
   const postRows = await client.send(new QueryCommand({
     TableName: feedbackTable,
