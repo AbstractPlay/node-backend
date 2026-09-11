@@ -31,6 +31,7 @@
     "feedback-archive": "tsx bin/feedback-archive.mjs",
     "feedback-attachment-cleanup": "tsx bin/feedback-attachment-cleanup.mjs",
     "backfill-wishlist-bgg-images": "tsx bin/backfill-wishlist-bgg-images.mjs",
+    "backfill-blank-user-names": "tsx bin/backfill-blank-user-names.mjs",
     "sync-deps": "ap-install-deps --stage dev",
     "sync-deps:prod": "ap-install-deps --stage prod"
   },
