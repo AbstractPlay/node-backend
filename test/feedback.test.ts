@@ -25,7 +25,15 @@ import {
   seedFeedbackPostForTests,
 } from '../lib/feedback/access.js';
 import { buildMetaItem } from '../lib/feedback/access.js';
-import { listSkForSort, metaSk, postPk, subscribeSk, USER_PK_PREFIX, userIndexSk } from '../lib/feedback/keys.js';
+import {
+  listSkForSort,
+  metaSk,
+  postPk,
+  subscribeSk,
+  USER_PK_PREFIX,
+  userIndexSk,
+  voteSk,
+} from '../lib/feedback/keys.js';
 import {
   validateFeedbackCreatePars,
   validateFeedbackDeletePars,
@@ -178,6 +186,50 @@ test('validateFeedbackCreatePars accepts bug without attachments', () => {
   }
 });
 
+test('feedbackCreate auto-votes for author on bug, feature, and wishlist', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const cases = [
+    {
+      kind: 'bug' as const,
+      pars: { kind: 'bug' as const, title: 'Broken board', body: 'Pieces overlap.' },
+    },
+    {
+      kind: 'feature' as const,
+      pars: { kind: 'feature' as const, title: 'Dark mode', body: 'Please add dark mode.' },
+    },
+    {
+      kind: 'wishlist' as const,
+      pars: {
+        kind: 'wishlist' as const,
+        title: 'Azul',
+        body: 'Please add this game.',
+        gameUrl: 'https://boardgamegeek.com/boardgame/230802/azul',
+      },
+    },
+  ];
+
+  for (const { kind, pars } of cases) {
+    const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, pars);
+    assert.equal(createResult.ok, true);
+    if (!createResult.ok) {
+      return;
+    }
+    const id = createResult.data.id;
+    const meta = store.get(`${postPk(id)}:${metaSk()}`);
+    assert.equal(meta?.voteCount, 1, `${kind} voteCount`);
+    assert.equal(meta?.effectiveVotes, 1, `${kind} effectiveVotes`);
+    assert.ok(store.has(`${postPk(id)}:${voteSk(USER_ID)}`), `${kind} author vote row`);
+
+    const getResult = await feedbackGet(client, TABLE, mockS3, { id }, USER_ID);
+    assert.equal(getResult.ok, true);
+    if (getResult.ok) {
+      assert.equal(getResult.data.post.effectiveVotes, 1, `${kind} get effectiveVotes`);
+      assert.equal(getResult.data.userVoted, true, `${kind} userVoted`);
+    }
+  }
+});
+
 test('feedbackCreate rejects duplicate wishlist by bggGameId', async () => {
   const store: Store = new Map();
   const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
@@ -227,32 +279,32 @@ test('feedbackCreate feature post and vote toggle updates counts', async () => {
   const voteOn = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: true });
   assert.equal(voteOn.ok, true);
   if (voteOn.ok) {
-    assert.equal(voteOn.data.voteCount, 1);
-    assert.equal(voteOn.data.effectiveVotes, 1);
+    assert.equal(voteOn.data.voteCount, 2);
+    assert.equal(voteOn.data.effectiveVotes, 2);
     assert.equal(voteOn.data.voted, true);
   }
   for (const sort of ['votes', 'recent', 'updated'] as const) {
     const listItem = store.get(`${postPk(id)}:${listSkForSort(sort)}`);
-    assert.equal(listItem?.effectiveVotes, 1, `feature LIST#${sort} effectiveVotes`);
+    assert.equal(listItem?.effectiveVotes, 2, `feature LIST#${sort} effectiveVotes`);
   }
   const ideasList = await feedbackList(client, TABLE, { kind: 'feature', sort: 'votes' });
   assert.equal(ideasList.ok, true);
   if (ideasList.ok) {
     const item = ideasList.data.items.find((entry) => entry.id === id);
-    assert.equal(item?.effectiveVotes, 1);
+    assert.equal(item?.effectiveVotes, 2);
   }
 
   const voteAgain = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: true });
   assert.equal(voteAgain.ok, true);
   if (voteAgain.ok) {
-    assert.equal(voteAgain.data.voteCount, 1);
+    assert.equal(voteAgain.data.voteCount, 2);
   }
 
   const voteOff = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: false });
   assert.equal(voteOff.ok, true);
   if (voteOff.ok) {
-    assert.equal(voteOff.data.voteCount, 0);
-    assert.equal(voteOff.data.effectiveVotes, 0);
+    assert.equal(voteOff.data.voteCount, 1);
+    assert.equal(voteOff.data.effectiveVotes, 1);
     assert.equal(voteOff.data.voted, false);
   }
 });
@@ -411,15 +463,15 @@ test('feedbackVote updates voteCount on all list projections for bugs', async ()
 
   for (const sort of ['votes', 'recent', 'updated'] as const) {
     const listItem = store.get(`${postPk(id)}:${listSkForSort(sort)}`);
-    assert.equal(listItem?.voteCount, 1, `bug LIST#${sort} voteCount`);
-    assert.equal(listItem?.effectiveVotes, 1, `bug LIST#${sort} effectiveVotes`);
+    assert.equal(listItem?.voteCount, 2, `bug LIST#${sort} voteCount`);
+    assert.equal(listItem?.effectiveVotes, 2, `bug LIST#${sort} effectiveVotes`);
   }
 
   const bugsList = await feedbackList(client, TABLE, { kind: 'bug', sort: 'recent' });
   assert.equal(bugsList.ok, true);
   if (bugsList.ok) {
     const item = bugsList.data.items.find((entry) => entry.id === id);
-    assert.equal(item?.effectiveVotes, 1);
+    assert.equal(item?.effectiveVotes, 2);
   }
 });
 
