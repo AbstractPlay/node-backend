@@ -363,6 +363,8 @@ export async function feedbackCreate(
   }
 
   const meta = buildMetaItem(id, userId, authorName, { ...data, attachmentKeys }, now);
+  meta.voteCount = 1;
+  meta.effectiveVotes = meta.legacyVoteCount + 1;
 
   const writes = [
     { Put: { TableName: feedbackTable, Item: meta } },
@@ -392,6 +394,18 @@ export async function feedbackCreate(
           userId,
           createdAt: now,
           source: 'comment',
+        },
+      },
+    },
+    {
+      Put: {
+        TableName: feedbackTable,
+        Item: {
+          pk: postPk(id),
+          sk: voteSk(userId),
+          entityType: 'vote',
+          userId,
+          createdAt: now,
         },
       },
     },
