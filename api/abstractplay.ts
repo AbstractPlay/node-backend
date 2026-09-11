@@ -138,21 +138,29 @@ import {
   type LayoutEventPars,
 } from '../lib/layoutEvents.js';
 import {
+  feedbackAdminList,
   feedbackComment,
   feedbackCreate,
   feedbackGet,
   feedbackList,
+  feedbackMine,
   feedbackPresignUpload,
+  feedbackSetAdminFields,
   feedbackSetStatus,
   feedbackSubscribe,
+  feedbackUpdate,
   feedbackVote,
+  type FeedbackAdminListPars,
   type FeedbackCommentPars,
   type FeedbackCreatePars,
   type FeedbackGetPars,
   type FeedbackListPars,
+  type FeedbackMinePars,
   type FeedbackPresignUploadPars,
+  type FeedbackSetAdminFieldsPars,
   type FeedbackSetStatusPars,
   type FeedbackSubscribePars,
+  type FeedbackUpdatePars,
   type FeedbackVotePars,
 } from '../lib/feedback/index.js';
 import { S3Client } from '@aws-sdk/client-s3';
@@ -965,6 +973,14 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await feedbackSubscribeAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_set_status":
       return await feedbackSetStatusAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_update":
+      return await feedbackUpdateAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_set_admin_fields":
+      return await feedbackSetAdminFieldsAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_mine":
+      return await feedbackMineAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_admin_list":
+      return await feedbackAdminListAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_get":
       return await feedbackGetAuth(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
@@ -1920,6 +1936,87 @@ async function feedbackSetStatusAuth(userId: string, pars: FeedbackSetStatusPars
   } catch (error) {
     logGetItemError(error);
     return feedbackErrorResponse(`Unable to set feedback status for ${userId}`);
+  }
+}
+
+async function feedbackUpdateAuth(userId: string, pars: FeedbackUpdatePars) {
+  try {
+    const isAdmin = await isFeedbackAdmin(userId);
+    const result = await feedbackUpdate(
+      ddbDocClient,
+      process.env.FEEDBACK_TABLE,
+      userId,
+      pars,
+      isAdmin,
+    );
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to update feedback for ${userId}`);
+  }
+}
+
+async function feedbackSetAdminFieldsAuth(userId: string, pars: FeedbackSetAdminFieldsPars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const result = await feedbackSetAdminFields(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to set feedback admin fields for ${userId}`);
+  }
+}
+
+async function feedbackMineAuth(userId: string, pars: FeedbackMinePars) {
+  try {
+    const result = await feedbackMine(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to list feedback for ${userId}`);
+  }
+}
+
+async function feedbackAdminListAuth(userId: string, pars: FeedbackAdminListPars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const result = await feedbackAdminList(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to list feedback for admin ${userId}`);
   }
 }
 

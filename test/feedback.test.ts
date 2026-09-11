@@ -11,10 +11,14 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { CopyObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import {
+  feedbackAdminList,
   feedbackComment,
   feedbackCreate,
   feedbackList,
+  feedbackMine,
+  feedbackSetAdminFields,
   feedbackSubscribe,
+  feedbackUpdate,
   feedbackVote,
   seedFeedbackPostForTests,
 } from '../lib/feedback/access.js';
@@ -119,6 +123,9 @@ function createMockDocClient(store: Store) {
           if (gsiPrefix) {
             items = items.filter((item) => String(item.gsi1sk).startsWith(gsiPrefix));
           }
+        } else if (indexName === 'ByStatus') {
+          const gsi2pk = command.input.ExpressionAttributeValues?.[':pk'] as string | undefined;
+          items = items.filter((item) => item.gsi2pk === gsi2pk);
         } else if (pk !== undefined) {
           items = items.filter((item) => item.pk === pk);
           if (skPrefix !== undefined) {
@@ -182,6 +189,16 @@ test('feedbackCreate feature post and vote toggle updates counts', async () => {
     assert.equal(voteOn.data.voteCount, 1);
     assert.equal(voteOn.data.effectiveVotes, 1);
     assert.equal(voteOn.data.voted, true);
+  }
+  for (const sort of ['votes', 'recent', 'updated'] as const) {
+    const listItem = store.get(`${postPk(id)}:${listSkForSort(sort)}`);
+    assert.equal(listItem?.effectiveVotes, 1, `feature LIST#${sort} effectiveVotes`);
+  }
+  const ideasList = await feedbackList(client, TABLE, { kind: 'feature', sort: 'votes' });
+  assert.equal(ideasList.ok, true);
+  if (ideasList.ok) {
+    const item = ideasList.data.items.find((entry) => entry.id === id);
+    assert.equal(item?.effectiveVotes, 1);
   }
 
   const voteAgain = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: true });
@@ -299,36 +316,158 @@ test('feedbackSubscribe without comment creates SUB# row', async () => {
   assert.ok(store.has(`${postPk(id)}:SUB#${VOTER_ID}`));
 });
 
-test('feedbackComment updates commentCount on all list projections', async () => {
+test('feedbackComment updates commentCount on all list projections for bugs and features', async () => {
+  for (const kind of ['bug', 'feature'] as const) {
+    const store: Store = new Map();
+    const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+    const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+      kind,
+      title: `${kind} board count`,
+      body: 'Comment count should appear on list',
+    });
+    assert.equal(createResult.ok, true);
+    if (!createResult.ok) {
+      return;
+    }
+    const id = createResult.data.id;
+    const commentResult = await feedbackComment(client, TABLE, VOTER_ID, {
+      id,
+      body: 'Visible on the board',
+      subscribe: false,
+    });
+    assert.equal(commentResult.ok, true);
+
+    for (const sort of ['votes', 'recent', 'updated'] as const) {
+      const listItem = store.get(`${postPk(id)}:${listSkForSort(sort)}`);
+      assert.equal(listItem?.commentCount, 1, `${kind} LIST#${sort} commentCount`);
+    }
+
+    const sort = kind === 'feature' ? 'votes' : 'recent';
+    const listResult = await feedbackList(client, TABLE, { kind, sort });
+    assert.equal(listResult.ok, true);
+    if (listResult.ok) {
+      const item = listResult.data.items.find((entry) => entry.id === id);
+      assert.equal(item?.commentCount, 1, `${kind} board list commentCount`);
+    }
+  }
+});
+
+test('feedbackVote updates voteCount on all list projections for bugs', async () => {
   const store: Store = new Map();
   const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
   const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
     kind: 'bug',
-    title: 'Board count',
-    body: 'Comment count should appear on list',
+    title: 'Vote sync',
+    body: 'Body',
   });
   assert.equal(createResult.ok, true);
   if (!createResult.ok) {
     return;
   }
   const id = createResult.data.id;
-  const commentResult = await feedbackComment(client, TABLE, VOTER_ID, {
-    id,
-    body: 'Visible on the board',
-    subscribe: false,
-  });
-  assert.equal(commentResult.ok, true);
+  const voteOn = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: true });
+  assert.equal(voteOn.ok, true);
 
   for (const sort of ['votes', 'recent', 'updated'] as const) {
     const listItem = store.get(`${postPk(id)}:${listSkForSort(sort)}`);
-    assert.equal(listItem?.commentCount, 1, `LIST#${sort} commentCount`);
+    assert.equal(listItem?.voteCount, 1, `bug LIST#${sort} voteCount`);
+    assert.equal(listItem?.effectiveVotes, 1, `bug LIST#${sort} effectiveVotes`);
   }
 
-  const listResult = await feedbackList(client, TABLE, { kind: 'bug', sort: 'recent' });
+  const bugsList = await feedbackList(client, TABLE, { kind: 'bug', sort: 'recent' });
+  assert.equal(bugsList.ok, true);
+  if (bugsList.ok) {
+    const item = bugsList.data.items.find((entry) => entry.id === id);
+    assert.equal(item?.effectiveVotes, 1);
+  }
+});
+
+test('feedbackUpdate allows author to edit title', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Original title',
+    body: 'Original body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const updateResult = await feedbackUpdate(client, TABLE, USER_ID, {
+    id,
+    title: 'Updated title',
+  }, false);
+  assert.equal(updateResult.ok, true);
+
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.equal(meta?.title, 'Updated title');
+  const listItem = store.get(`${postPk(id)}:${listSkForSort('recent')}`);
+  assert.equal(listItem?.title, 'Updated title');
+});
+
+test('feedbackSetAdminFields sets effort on feature post', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Admin fields',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const adminResult = await feedbackSetAdminFields(client, TABLE, {
+    id,
+    effort: 'high',
+    priority: 'soon',
+  });
+  assert.equal(adminResult.ok, true);
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.equal(meta?.effort, 'high');
+  assert.equal(meta?.priority, 'soon');
+});
+
+test('feedbackMine returns posts authored by user', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Mine me',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const mineResult = await feedbackMine(client, TABLE, USER_ID, { kind: 'feature' });
+  assert.equal(mineResult.ok, true);
+  if (mineResult.ok) {
+    assert.ok(mineResult.data.items.some((item) => item.id === createResult.data.id));
+  }
+});
+
+test('feedbackAdminList filters by effort', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'High effort idea',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  await feedbackSetAdminFields(client, TABLE, { id, effort: 'high' });
+  const listResult = await feedbackAdminList(client, TABLE, { kind: 'feature', effort: 'high' });
   assert.equal(listResult.ok, true);
   if (listResult.ok) {
-    const item = listResult.data.items.find((entry) => entry.id === id);
-    assert.equal(item?.commentCount, 1);
+    assert.ok(listResult.data.items.some((item) => item.id === id));
   }
 });
 

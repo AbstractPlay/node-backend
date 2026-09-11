@@ -51,9 +51,12 @@ export type FeedbackMetaItem = {
   gameUrl?: string;
   bggGameId?: string;
   wishlistCategory?: WishlistCategory;
+  wishlistCategoryNote?: string;
   effort?: FeedbackEffort;
   priority?: string;
   adminTags?: string[];
+  lastStaffCommentAt?: number;
+  lastAuthorCommentAt?: number;
   terminalAt?: number;
   gsi2pk?: string;
   gsi2sk?: string;
@@ -167,6 +170,37 @@ export type FeedbackSetStatusPars = {
   status?: string;
 };
 
+export type FeedbackUpdatePars = {
+  id?: string;
+  title?: string;
+  body?: string;
+};
+
+export type FeedbackSetAdminFieldsPars = {
+  id?: string;
+  effort?: string;
+  priority?: string;
+  adminTags?: string[];
+  wishlistCategory?: string;
+  wishlistCategoryNote?: string;
+};
+
+export type FeedbackMinePars = {
+  kind?: string;
+  cursor?: string;
+  limit?: string | number;
+};
+
+export type FeedbackAdminListPars = {
+  kind?: string;
+  status?: string;
+  effort?: string;
+  priority?: string;
+  needsResponse?: boolean | string;
+  cursor?: string;
+  limit?: string | number;
+};
+
 export type FeedbackPublicPost = {
   id: string;
   kind: FeedbackKind;
@@ -185,6 +219,13 @@ export type FeedbackPublicPost = {
   gameUrl?: string;
   bggGameId?: string;
   wishlistCategory?: WishlistCategory;
+  effort?: FeedbackEffort;
+  priority?: string;
+  adminTags?: string[];
+};
+
+export type FeedbackAdminListItem = FeedbackPublicPost & {
+  needsResponse: boolean;
 };
 
 export type FeedbackPublicComment = {

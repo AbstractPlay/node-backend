@@ -15,6 +15,14 @@ export function commentSk(createdAt: number, commentId: string): string {
   return `COMMENT#${createdAt}#${commentId}`;
 }
 
+export function editSk(createdAt: number, editId: string): string {
+  return `EDIT#${createdAt}#${editId}`;
+}
+
+export function userPostsSkPrefix(): string {
+  return 'POST#';
+}
+
 export function voteSk(userId: string): string {
   return `VOTE#${userId}`;
 }
