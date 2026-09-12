@@ -28,6 +28,10 @@ export function postAttachmentPrefix(postId: string): string {
   return `${postId}/`;
 }
 
+export function commentAttachmentPrefix(postId: string, commentId: string): string {
+  return `${postId}/comments/${commentId}/`;
+}
+
 export function assertStagingKeysOwned(
   userId: string,
   keys: string[],
@@ -178,18 +182,18 @@ export async function assertStagingObjectsExist(
   return { ok: true };
 }
 
-export async function finalizeAttachmentKeys(
+async function copyStagingKeysToPrefix(
   s3: S3Client,
   userId: string,
-  postId: string,
   stagingKeys: string[],
+  destinationPrefix: string,
 ): Promise<string[]> {
   const bucket = getFeedbackAttachmentsBucket();
   const prefix = stagingKeyPrefix(userId);
   const finalKeys: string[] = [];
   for (const stagingKey of stagingKeys) {
     const fileName = stagingKey.slice(prefix.length);
-    const finalKey = `${postId}/${fileName}`;
+    const finalKey = `${destinationPrefix}${fileName}`;
     await s3.send(new CopyObjectCommand({
       Bucket: bucket,
       CopySource: `${bucket}/${stagingKey}`,
@@ -202,6 +206,56 @@ export async function finalizeAttachmentKeys(
     }));
   }
   return finalKeys;
+}
+
+export async function finalizeAttachmentKeys(
+  s3: S3Client,
+  userId: string,
+  postId: string,
+  stagingKeys: string[],
+): Promise<string[]> {
+  return copyStagingKeysToPrefix(s3, userId, stagingKeys, postAttachmentPrefix(postId));
+}
+
+export async function finalizeCommentAttachmentKeys(
+  s3: S3Client,
+  userId: string,
+  postId: string,
+  commentId: string,
+  stagingKeys: string[],
+): Promise<string[]> {
+  return copyStagingKeysToPrefix(
+    s3,
+    userId,
+    stagingKeys,
+    commentAttachmentPrefix(postId, commentId),
+  );
+}
+
+export async function attachCommentAttachmentUrls<T extends { attachmentKeys?: string[] }>(
+  s3: S3Client,
+  comments: T[],
+): Promise<(T & { attachmentUrls?: { key: string; url: string }[] })[]> {
+  const uniqueKeys = [...new Set(
+    comments
+      .flatMap((comment) => comment.attachmentKeys ?? [])
+      .filter((key): key is string => typeof key === 'string' && key.trim() !== ''),
+  )];
+  if (uniqueKeys.length === 0) {
+    return comments.map((comment) => ({ ...comment }));
+  }
+  const presigned = await presignAttachmentGetUrls(s3, uniqueKeys);
+  const urlByKey = new Map(presigned.map((entry) => [entry.key, entry.url]));
+  return comments.map((comment) => {
+    const keys = comment.attachmentKeys ?? [];
+    if (keys.length === 0) {
+      return { ...comment };
+    }
+    const attachmentUrls = keys
+      .map((key) => ({ key, url: urlByKey.get(key) ?? '' }))
+      .filter((entry) => entry.url);
+    return attachmentUrls.length > 0 ? { ...comment, attachmentUrls } : { ...comment };
+  });
 }
 
 export async function putPostAttachmentFromUrl(
