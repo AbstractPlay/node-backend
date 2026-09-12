@@ -49,9 +49,11 @@ import {
 import {
   assertStagingKeysOwned,
   assertStagingObjectsExist,
+  attachCommentAttachmentUrls,
   deletePostAttachments,
   deleteS3Objects,
   finalizeAttachmentKeys,
+  finalizeCommentAttachmentKeys,
   presignAttachmentGetUrls,
   presignAttachmentPutUrl,
 } from './attachments.js';
@@ -345,7 +347,10 @@ function toAdminListItem(item: Record<string, unknown>): FeedbackAdminListItem {
   };
 }
 
-function toPublicComment(item: Record<string, unknown>): FeedbackPublicComment {
+function toPublicComment(
+  item: Record<string, unknown>,
+  attachmentUrls?: { key: string; url: string }[],
+): FeedbackPublicComment {
   return {
     commentId: String(item.commentId),
     authorId: String(item.authorId),
@@ -353,6 +358,7 @@ function toPublicComment(item: Record<string, unknown>): FeedbackPublicComment {
     body: String(item.body),
     createdAt: Number(item.createdAt),
     isStaff: item.isStaff === true,
+    ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
   };
 }
 
@@ -580,7 +586,19 @@ export async function feedbackGet(
   }));
 
   const post = toPublicPost(metaResult.Item);
-  const comments = (commentsResult.Items ?? []).map((item) => toPublicComment(item));
+  const rawComments = (commentsResult.Items ?? []).map((item) => ({
+    item,
+    attachmentKeys: Array.isArray(item.attachmentKeys)
+      ? item.attachmentKeys.filter((key): key is string => typeof key === 'string')
+      : undefined,
+  }));
+  const commentsWithUrls = await attachCommentAttachmentUrls(
+    s3,
+    rawComments.map(({ item, attachmentKeys }) => ({ item, attachmentKeys })),
+  );
+  const comments = commentsWithUrls.map(({ item, attachmentUrls }) => (
+    toPublicComment(item, attachmentUrls)
+  ));
   const attachmentUrls = await presignAttachmentGetUrls(
     s3,
     Array.isArray(metaResult.Item.attachmentKeys) ? metaResult.Item.attachmentKeys as string[] : [],
@@ -853,6 +871,7 @@ export async function feedbackVote(
 export async function feedbackComment(
   client: DynamoDBDocumentClient,
   tableName: string | undefined,
+  s3: S3Client,
   userId: string,
   pars: FeedbackCommentPars,
 ): Promise<FeedbackResult<{ commentId: string }>> {
@@ -862,7 +881,7 @@ export async function feedbackComment(
   }
 
   const feedbackTable = getFeedbackTableName(tableName);
-  const { id, body, subscribe } = validated.data;
+  const { id, body, subscribe, attachmentKeys: stagingKeys } = validated.data;
   const pk = postPk(id);
 
   const metaResult = await client.send(new GetCommand({
@@ -876,10 +895,30 @@ export async function feedbackComment(
     return { ok: false, message: 'cannot comment on a closed item.', statusCode: 400 };
   }
 
+  const kind = metaResult.Item.kind as FeedbackMetaItem['kind'];
+  if (stagingKeys && stagingKeys.length > 0) {
+    if (kind !== 'bug' && kind !== 'feature') {
+      return { ok: false, message: 'comment attachments are only supported on bugs and features.', statusCode: 400 };
+    }
+  }
+
   const now = Date.now();
   const commentId = generateCommentId();
   const authorName = await loadAuthorName(client, userId);
   const isStaff = await loadIsAdmin(client, userId);
+
+  let attachmentKeys: string[] | undefined;
+  if (stagingKeys && stagingKeys.length > 0) {
+    const keyCheck = assertStagingKeysOwned(userId, stagingKeys);
+    if (!keyCheck.ok) {
+      return { ok: false, message: keyCheck.message, statusCode: 400 };
+    }
+    const exists = await assertStagingObjectsExist(s3, stagingKeys);
+    if (!exists.ok) {
+      return { ok: false, message: exists.message, statusCode: 400 };
+    }
+    attachmentKeys = await finalizeCommentAttachmentKeys(s3, userId, id, commentId, stagingKeys);
+  }
   const createdAt = Number(metaResult.Item.createdAt);
   const effectiveVotes = Number(metaResult.Item.effectiveVotes ?? 0);
   const commentCount = Number(metaResult.Item.commentCount ?? 0) + 1;
@@ -911,6 +950,7 @@ export async function feedbackComment(
           body,
           createdAt: now,
           ...(isStaff ? { isStaff: true } : {}),
+          ...(attachmentKeys && attachmentKeys.length > 0 ? { attachmentKeys } : {}),
         },
       },
     },
@@ -969,8 +1009,9 @@ export async function feedbackComment(
 
   await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
 
-  const kind = metaResult.Item.kind as FeedbackMetaItem['kind'];
   const title = String(metaResult.Item.title);
+  const commentPreview = body
+    || (attachmentKeys && attachmentKeys.length > 0 ? '[image]' : '');
   try {
     await notifyFeedbackComment(client, feedbackTable, {
       postId: id,
@@ -978,7 +1019,7 @@ export async function feedbackComment(
       title,
       authorId,
       commenterId: userId,
-      commentPreview: body,
+      commentPreview,
     });
   } catch (error) {
     console.error('notifyFeedbackComment failed', error);

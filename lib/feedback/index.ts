@@ -21,7 +21,9 @@ export {
   seedFeedbackPostForTests,
 } from './access.js';
 export {
+  attachCommentAttachmentUrls,
   attachWishlistCoverImageUrls,
+  finalizeCommentAttachmentKeys,
   putPostAttachmentFromUrl,
 } from './attachments.js';
 export { fetchBggRepresentativeImageUrl } from './bggImage.js';
@@ -64,6 +66,7 @@ export {
   DEFAULT_STATUS_BY_KIND,
   FEEDBACK_ATTACHMENT_MAX_BYTES,
   FEEDBACK_ATTACHMENT_MAX_COUNT,
+  FEEDBACK_COMMENT_ATTACHMENT_MAX_COUNT,
   FEEDBACK_WISHLIST_ATTACHMENT_MAX_COUNT,
 } from './constants.js';
 export type {

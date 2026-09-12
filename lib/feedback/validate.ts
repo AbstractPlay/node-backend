@@ -7,6 +7,7 @@ import {
   FEEDBACK_ALLOWED_ATTACHMENT_TYPES,
   FEEDBACK_ATTACHMENT_MAX_BYTES,
   FEEDBACK_ATTACHMENT_MAX_COUNT,
+  FEEDBACK_COMMENT_ATTACHMENT_MAX_COUNT,
   FEEDBACK_WISHLIST_ATTACHMENT_MAX_COUNT,
   FEEDBACK_BODY_MAX_LENGTH,
   FEEDBACK_COMMENT_MAX_LENGTH,
@@ -253,22 +254,58 @@ export function validateFeedbackVotePars(
   return { ok: true, data: { id: pars.id.trim(), vote: pars.vote } };
 }
 
+function parseCommentAttachmentKeys(value: unknown): string[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const keys = value
+    .filter((key): key is string => typeof key === 'string')
+    .map((key) => key.trim())
+    .filter((key) => key.length > 0);
+  if (keys.length > FEEDBACK_COMMENT_ATTACHMENT_MAX_COUNT) {
+    return undefined;
+  }
+  return keys;
+}
+
 export function validateFeedbackCommentPars(
   pars: FeedbackCommentPars,
-): { ok: true; data: { id: string; body: string; subscribe: boolean } } | { ok: false; message: string } {
+): {
+  ok: true;
+  data: { id: string; body: string; subscribe: boolean; attachmentKeys?: string[] };
+} | { ok: false; message: string } {
   if (!isNonEmptyString(pars.id)) {
     return { ok: false, message: 'id is required.' };
   }
-  if (!isNonEmptyString(pars.body) || pars.body.trim().length > FEEDBACK_COMMENT_MAX_LENGTH) {
-    return { ok: false, message: `body is required (max ${FEEDBACK_COMMENT_MAX_LENGTH} characters).` };
+  const body = typeof pars.body === 'string' ? pars.body.trim() : '';
+  if (body.length > FEEDBACK_COMMENT_MAX_LENGTH) {
+    return { ok: false, message: `body must be at most ${FEEDBACK_COMMENT_MAX_LENGTH} characters.` };
+  }
+  let attachmentKeys: string[] | undefined;
+  if (pars.attachmentKeys !== undefined) {
+    const parsed = parseCommentAttachmentKeys(pars.attachmentKeys);
+    if (!parsed) {
+      return {
+        ok: false,
+        message: `attachmentKeys must be a list of at most ${FEEDBACK_COMMENT_ATTACHMENT_MAX_COUNT} images.`,
+      };
+    }
+    attachmentKeys = parsed;
+  }
+  if (!body && (!attachmentKeys || attachmentKeys.length === 0)) {
+    return { ok: false, message: 'comment body or attachment is required.' };
   }
   const subscribe = pars.subscribe === undefined ? true : Boolean(pars.subscribe);
   return {
     ok: true,
     data: {
       id: pars.id.trim(),
-      body: pars.body.trim(),
+      body,
       subscribe,
+      ...(attachmentKeys !== undefined ? { attachmentKeys } : {}),
     },
   };
 }
