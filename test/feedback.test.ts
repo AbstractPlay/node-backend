@@ -688,9 +688,30 @@ test('feedbackSetAdminFields sets effort on feature post', async () => {
   assert.equal(meta?.priority, 'urgent');
 });
 
+test('feedbackSetStatus accepts monitoring as non-terminal bug status', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Watch this',
+    body: 'Flaky repro',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const result = await feedbackSetStatus(client, TABLE, ADMIN_ID, { id, status: 'monitoring' });
+  assert.equal(result.ok, true);
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.equal(meta?.status, 'monitoring');
+  assert.equal(meta?.terminalAt, undefined);
+});
+
 test('mapBugStatusToFeatureStatus maps non-terminal bug statuses', () => {
   assert.equal(mapBugStatusToFeatureStatus('open'), 'open');
   assert.equal(mapBugStatusToFeatureStatus('triaged'), 'under_review');
+  assert.equal(mapBugStatusToFeatureStatus('monitoring'), 'planned');
   assert.equal(mapBugStatusToFeatureStatus('resolved'), null);
   assert.equal(mapBugStatusToFeatureStatus('closed'), null);
 });
