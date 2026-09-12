@@ -52,7 +52,7 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 | `feedback_create` | Create a post | `kind`, `title`, optional `body`, `gameUrl`, `attachmentKeys`, `context` (bugs). Bug screenshots optional (≤3 when provided). Returns `{ id }`. |
 | `feedback_get` | Single post (auth adds `subscribed`, `userVoted`) | `id` |
 | `feedback_vote` | Toggle vote | `id`, `vote` (boolean). Returns `{ voteCount, effectiveVotes, voted }`. |
-| `feedback_comment` | Add comment | `id`, `body`, optional `subscribe` (default `true`). Returns `{ commentId }`. |
+| `feedback_comment` | Add comment | `id`, `body` and/or `attachmentKeys` (bugs/features only, ≤3 images), optional `subscribe` (default `true`). Returns `{ commentId }`. |
 | `feedback_subscribe` | Watch/unwatch | `id`, `subscribe` (boolean). Returns `{ subscribed }`. |
 | `feedback_set_status` | Admin status change | `id`, `status`. Notifies author and subscribers. |
 | `feedback_reclassify` | Admin reclassify bug → feature | `id`. Open bugs become feature `open`; triaged bugs become `under_review`. Terminal bugs rejected. Returns `{ id, kind, status }`. |

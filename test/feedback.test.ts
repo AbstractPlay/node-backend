@@ -72,6 +72,8 @@ const mockS3 = {
   },
 } as unknown as S3Client;
 
+const presignS3 = new S3Client({ region: 'us-east-1' });
+
 function itemKey(item: { pk: string; sk: string }) {
   return `${item.pk}:${item.sk}`;
 }
@@ -515,7 +517,7 @@ test('feedbackComment increments commentCount and creates subscribe row by defau
     return;
   }
   const id = createResult.data.id;
-  const commentResult = await feedbackComment(client, TABLE, VOTER_ID, {
+  const commentResult = await feedbackComment(client, TABLE, mockS3, VOTER_ID, {
     id,
     body: 'I like this idea.',
   });
@@ -559,7 +561,7 @@ test('feedbackComment updates commentCount on all list projections for bugs and 
       return;
     }
     const id = createResult.data.id;
-    const commentResult = await feedbackComment(client, TABLE, VOTER_ID, {
+    const commentResult = await feedbackComment(client, TABLE, mockS3, VOTER_ID, {
       id,
       body: 'Visible on the board',
       subscribe: false,
@@ -965,7 +967,7 @@ test('feedbackDelete removes wishlist entry and rejects non-wishlist', async () 
   const metaBeforeDelete = store.get(`${postPk(wishlistId)}:${metaSk()}`);
   const createdAt = Number(metaBeforeDelete?.createdAt);
   await feedbackSubscribe(client, TABLE, VOTER_ID, { id: wishlistId, subscribe: true });
-  await feedbackComment(client, TABLE, VOTER_ID, {
+  await feedbackComment(client, TABLE, mockS3, VOTER_ID, {
     id: wishlistId,
     body: 'I want this too.',
     subscribe: false,
@@ -1012,6 +1014,66 @@ test('feedbackDelete removes wishlist entry and rejects non-wishlist', async () 
   }
 });
 
+test('feedbackComment stores attachments on bugs and features', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Screenshot follow-up',
+    body: 'Broken layout',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const stagingKey = `staging/${VOTER_ID}/comment.png`;
+  const commentResult = await feedbackComment(client, TABLE, mockS3, VOTER_ID, {
+    id,
+    body: 'Here is what I see.',
+    attachmentKeys: [stagingKey],
+    subscribe: false,
+  });
+  assert.equal(commentResult.ok, true);
+  if (!commentResult.ok) {
+    return;
+  }
+  const commentKey = [...store.keys()].find((key) => key.includes('COMMENT#'));
+  assert.ok(commentKey);
+  const comment = store.get(commentKey!);
+  assert.ok(Array.isArray(comment?.attachmentKeys));
+  assert.match(String(comment?.attachmentKeys?.[0]), new RegExp(`^${id}/comments/`));
+
+  const getResult = await feedbackGet(client, TABLE, presignS3, { id });
+  assert.equal(getResult.ok, true);
+  if (getResult.ok) {
+    assert.equal(getResult.data.comments.length, 1);
+    assert.equal(getResult.data.comments[0]?.attachmentUrls?.length, 1);
+    assert.match(String(getResult.data.comments[0]?.attachmentUrls?.[0]?.key), new RegExp(`^${id}/comments/`));
+  }
+});
+
+test('feedbackComment rejects attachments on wishlist', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'wishlist',
+    title: 'Azul',
+    gameUrl: 'https://boardgamegeek.com/boardgame/230802/azul',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const commentResult = await feedbackComment(client, TABLE, mockS3, VOTER_ID, {
+    id: createResult.data.id,
+    body: 'Cover art',
+    attachmentKeys: [`staging/${VOTER_ID}/cover.png`],
+    subscribe: false,
+  });
+  assert.equal(commentResult.ok, false);
+});
+
 test('feedbackComment with subscribe false does not add SUB# for commenter', async () => {
   const store: Store = new Map();
   const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
@@ -1025,7 +1087,7 @@ test('feedbackComment with subscribe false does not add SUB# for commenter', asy
     return;
   }
   const id = createResult.data.id;
-  await feedbackComment(client, TABLE, VOTER_ID, {
+  await feedbackComment(client, TABLE, mockS3, VOTER_ID, {
     id,
     body: 'Just commenting',
     subscribe: false,

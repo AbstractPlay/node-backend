@@ -135,6 +135,7 @@ export type FeedbackCommentItem = {
   body: string;
   createdAt: number;
   isStaff?: boolean;
+  attachmentKeys?: string[];
 };
 
 export type FeedbackVoteItem = {
@@ -193,6 +194,7 @@ export type FeedbackCommentPars = {
   id?: string;
   body?: string;
   subscribe?: boolean;
+  attachmentKeys?: string[];
 };
 
 export type FeedbackPresignUploadPars = {
@@ -291,6 +293,7 @@ export type FeedbackPublicComment = {
   body: string;
   createdAt: number;
   isStaff?: boolean;
+  attachmentUrls?: { key: string; url: string }[];
 };
 
 export type FeedbackGetResult = {

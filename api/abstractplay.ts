@@ -2236,7 +2236,7 @@ async function feedbackVoteAuth(userId: string, pars: FeedbackVotePars) {
 
 async function feedbackCommentAuth(userId: string, pars: FeedbackCommentPars) {
   try {
-    const result = await feedbackComment(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
+    const result = await feedbackComment(ddbDocClient, process.env.FEEDBACK_TABLE, s3Client, userId, pars);
     if (!result.ok) {
       return feedbackErrorResponse(result.message, result.statusCode ?? 400);
     }
