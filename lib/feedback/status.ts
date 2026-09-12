@@ -23,3 +23,14 @@ export function isTerminalStatus(kind: FeedbackKind, status: string): boolean {
 export function isValidStatusForKind(kind: FeedbackKind, status: string): boolean {
   return statusesForKind(kind).includes(status);
 }
+
+/** Map a non-terminal bug status to the equivalent feature status, or null if not reclassifiable. */
+export function mapBugStatusToFeatureStatus(bugStatus: string): string | null {
+  if (bugStatus === 'open') {
+    return 'open';
+  }
+  if (bugStatus === 'triaged') {
+    return 'under_review';
+  }
+  return null;
+}
