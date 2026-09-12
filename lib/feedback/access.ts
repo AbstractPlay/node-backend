@@ -21,6 +21,7 @@ import type {
   FeedbackPublicComment,
   FeedbackPublicPost,
   FeedbackSetAdminFieldsPars,
+  FeedbackReclassifyPars,
   FeedbackSetStatusPars,
   FeedbackSubscribePars,
   FeedbackUpdatePars,
@@ -62,7 +63,7 @@ import {
 } from './notifications.js';
 import { isUserSubscribed, listSubscriberIds } from './subscribe.js';
 import { toPublicHistorySummary } from './archive.js';
-import { isTerminalStatus } from './status.js';
+import { isTerminalStatus, mapBugStatusToFeatureStatus } from './status.js';
 import {
   FEEDBACK_LIST_MAX_LIMIT,
   FEEDBACK_LIST_SORTS,
@@ -77,6 +78,7 @@ import {
   validateFeedbackMinePars,
   validateFeedbackPresignUploadPars,
   validateFeedbackSetAdminFieldsPars,
+  validateFeedbackReclassifyPars,
   validateFeedbackSetStatusPars,
   validateFeedbackSubscribePars,
   validateFeedbackUpdatePars,
@@ -1509,6 +1511,118 @@ export async function feedbackSetAdminFields(
   }
 
   return { ok: true, data: { id } };
+}
+
+export async function feedbackReclassify(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  _adminUserId: string,
+  pars: FeedbackReclassifyPars,
+): Promise<FeedbackResult<{ id: string; kind: FeedbackKind; status: string }>> {
+  const validated = validateFeedbackReclassifyPars(pars);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+
+  const feedbackTable = getFeedbackTableName(tableName);
+  const { id } = validated.data;
+  const pk = postPk(id);
+  const metaResult = await client.send(new GetCommand({
+    TableName: feedbackTable,
+    Key: { pk, sk: metaSk() },
+  }));
+  if (!metaResult.Item) {
+    return { ok: false, message: 'feedback item not found.', statusCode: 404 };
+  }
+
+  const kind = metaResult.Item.kind as FeedbackKind;
+  if (kind !== 'bug') {
+    return { ok: false, message: 'only bug reports can be reclassified to feature ideas.', statusCode: 400 };
+  }
+
+  const currentStatus = String(metaResult.Item.status);
+  if (
+    metaResult.Item.terminalAt !== undefined
+    || metaResult.Item.archivedAt !== undefined
+    || isTerminalStatus('bug', currentStatus)
+  ) {
+    return { ok: false, message: 'terminal items cannot be reclassified.', statusCode: 400 };
+  }
+
+  const nextStatus = mapBugStatusToFeatureStatus(currentStatus);
+  if (!nextStatus) {
+    return { ok: false, message: 'terminal items cannot be reclassified.', statusCode: 400 };
+  }
+
+  const nextKind: FeedbackKind = 'feature';
+  const now = Date.now();
+  const createdAt = Number(metaResult.Item.createdAt);
+  const effectiveVotes = Number(metaResult.Item.effectiveVotes ?? 0);
+  const authorId = String(metaResult.Item.authorId);
+  const oldUserIndexSk = userIndexSk('bug', createdAt, id);
+  const newUserIndexSk = userIndexSk(nextKind, createdAt, id);
+
+  const transactItems: Record<string, unknown>[] = [
+    {
+      Update: {
+        TableName: feedbackTable,
+        Key: { pk, sk: metaSk() },
+        UpdateExpression: 'SET #kind = :kind, #status = :status, updatedAt = :ua, gsi2pk = :g2pk',
+        ExpressionAttributeNames: { '#kind': 'kind', '#status': 'status' },
+        ExpressionAttributeValues: {
+          ':kind': nextKind,
+          ':status': nextStatus,
+          ':ua': now,
+          ':g2pk': statusGsi2Pk(nextKind, nextStatus),
+        },
+      },
+    },
+    {
+      Delete: {
+        TableName: feedbackTable,
+        Key: { pk: `${USER_PK_PREFIX}${authorId}`, sk: oldUserIndexSk },
+      },
+    },
+    {
+      Put: {
+        TableName: feedbackTable,
+        Item: {
+          pk: `${USER_PK_PREFIX}${authorId}`,
+          sk: newUserIndexSk,
+          entityType: 'userIndex',
+          id,
+          kind: nextKind,
+          createdAt,
+        },
+      },
+    },
+  ];
+
+  for (const sort of FEEDBACK_LIST_SORTS) {
+    const values: Record<string, unknown> = {
+      ':kind': nextKind,
+      ':status': nextStatus,
+      ':ua': now,
+      ':g1pk': kindGsi1Pk(nextKind),
+    };
+    let updateExpression = 'SET #kind = :kind, #status = :status, updatedAt = :ua, gsi1pk = :g1pk';
+    if (sort === 'updated') {
+      values[':gsi1sk'] = listGsi1SkForSort('updated', effectiveVotes, createdAt, now, id);
+      updateExpression += ', gsi1sk = :gsi1sk';
+    }
+    transactItems.push({
+      Update: {
+        TableName: feedbackTable,
+        Key: { pk, sk: listSkForSort(sort) },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeNames: { '#kind': 'kind', '#status': 'status' },
+        ExpressionAttributeValues: values,
+      },
+    });
+  }
+
+  await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
+  return { ok: true, data: { id, kind: nextKind, status: nextStatus } };
 }
 
 export async function feedbackMine(

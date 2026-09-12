@@ -24,7 +24,9 @@ import {
   feedbackGet,
   feedbackList,
   feedbackMine,
+  feedbackReclassify,
   feedbackSetAdminFields,
+  feedbackSetStatus,
   feedbackSubscribe,
   feedbackUpdate,
   feedbackVote,
@@ -43,8 +45,10 @@ import {
 import {
   validateFeedbackCreatePars,
   validateFeedbackDeletePars,
+  validateFeedbackReclassifyPars,
   validateFeedbackSetAdminFieldsPars,
 } from '../lib/feedback/validate.js';
+import { mapBugStatusToFeatureStatus } from '../lib/feedback/status.js';
 import { notificationPk } from '../lib/notifications.js';
 
 const TABLE = 'abstract-play-feedback-test';
@@ -74,17 +78,25 @@ function itemKey(item: { pk: string; sk: string }) {
 
 type Store = Map<string, Record<string, unknown>>;
 
+function resolveAttributeName(field: string, names?: Record<string, string>): string {
+  if (field.startsWith('#') && names?.[field]) {
+    return names[field];
+  }
+  return field;
+}
+
 function applyUpdateExpression(
   existing: Record<string, unknown>,
   updateExpression: string,
   values: Record<string, unknown>,
+  names?: Record<string, string>,
 ) {
   const [setSection, removeSection] = updateExpression.split(/\s+REMOVE\s+/i);
   const setPart = setSection.replace(/^SET\s+/i, '');
   for (const assignment of setPart.split(',')) {
     const [field, placeholder] = assignment.trim().split(/\s*=\s*/);
     if (field && placeholder) {
-      existing[field] = values[placeholder];
+      existing[resolveAttributeName(field, names)] = values[placeholder];
     }
   }
   if (removeSection) {
@@ -110,6 +122,7 @@ function applyTransact(store: Store, command: TransactWriteCommand) {
         existing,
         action.Update.UpdateExpression ?? '',
         action.Update.ExpressionAttributeValues as Record<string, unknown>,
+        action.Update.ExpressionAttributeNames as Record<string, string> | undefined,
       );
       store.set(itemKey(key), existing);
     }
@@ -137,6 +150,7 @@ function createMockDocClient(store: Store) {
           existing,
           command.input.UpdateExpression ?? '',
           command.input.ExpressionAttributeValues as Record<string, unknown>,
+          command.input.ExpressionAttributeNames as Record<string, string> | undefined,
         );
         store.set(itemKey(key), existing);
         return {};
@@ -670,6 +684,90 @@ test('feedbackSetAdminFields sets effort on feature post', async () => {
   const meta = store.get(`${postPk(id)}:${metaSk()}`);
   assert.equal(meta?.effort, 'high');
   assert.equal(meta?.priority, 'urgent');
+});
+
+test('mapBugStatusToFeatureStatus maps non-terminal bug statuses', () => {
+  assert.equal(mapBugStatusToFeatureStatus('open'), 'open');
+  assert.equal(mapBugStatusToFeatureStatus('triaged'), 'under_review');
+  assert.equal(mapBugStatusToFeatureStatus('resolved'), null);
+  assert.equal(mapBugStatusToFeatureStatus('closed'), null);
+});
+
+test('validateFeedbackReclassifyPars requires id', () => {
+  const result = validateFeedbackReclassifyPars({});
+  assert.equal(result.ok, false);
+});
+
+test('feedbackReclassify moves open bug to feature', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Not a bug',
+    body: 'Feature request really',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const result = await feedbackReclassify(client, TABLE, ADMIN_ID, { id });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.data.kind, 'feature');
+    assert.equal(result.data.status, 'open');
+  }
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.equal(meta?.kind, 'feature');
+  assert.equal(meta?.status, 'open');
+  assert.equal(meta?.gsi2pk, 'STATUS#feature#open');
+  const listItem = store.get(`${postPk(id)}:${listSkForSort('recent')}`);
+  assert.equal(listItem?.kind, 'feature');
+  assert.equal(listItem?.gsi1pk, 'KIND#feature');
+  const userIndex = store.get(`${USER_PK_PREFIX}${USER_ID}:${userIndexSk('feature', meta!.createdAt as number, id)}`);
+  assert.ok(userIndex);
+  const listResult = await feedbackList(client, TABLE, { kind: 'feature' });
+  assert.equal(listResult.ok, true);
+  if (listResult.ok) {
+    assert.ok(listResult.data.items.some((item) => item.id === id));
+  }
+});
+
+test('feedbackReclassify rejects terminal bug', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Closed bug',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  await feedbackSetStatus(client, TABLE, ADMIN_ID, { id, status: 'closed' });
+  const result = await feedbackReclassify(client, TABLE, ADMIN_ID, { id });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.message, /terminal/i);
+  }
+});
+
+test('feedbackReclassify rejects feature post', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Already a feature',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const result = await feedbackReclassify(client, TABLE, ADMIN_ID, { id: createResult.data.id });
+  assert.equal(result.ok, false);
 });
 
 test('validateFeedbackSetAdminFieldsPars rejects reviewers on wishlist', () => {

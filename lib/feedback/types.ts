@@ -211,6 +211,10 @@ export type FeedbackSetStatusPars = {
   status?: string;
 };
 
+export type FeedbackReclassifyPars = {
+  id?: string;
+};
+
 export type FeedbackUpdatePars = {
   id?: string;
   title?: string;
