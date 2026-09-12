@@ -147,6 +147,7 @@ import {
   feedbackPresignUpload,
   feedbackSetAdminFields,
   feedbackSetStatus,
+  feedbackReclassify,
   feedbackSubscribe,
   feedbackUpdate,
   feedbackVote,
@@ -165,6 +166,7 @@ import {
   type FeedbackPresignUploadPars,
   type FeedbackSetAdminFieldsPars,
   type FeedbackSetStatusPars,
+  type FeedbackReclassifyPars,
   type FeedbackSubscribePars,
   type FeedbackUpdatePars,
   type FeedbackVotePars,
@@ -994,6 +996,8 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await feedbackSubscribeAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_set_status":
       return await feedbackSetStatusAuth(event.cognitoPoolClaims.sub, pars);
+    case "feedback_reclassify":
+      return await feedbackReclassifyAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_update":
       return await feedbackUpdateAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_set_admin_fields":
@@ -2011,6 +2015,26 @@ async function feedbackSetStatusAuth(userId: string, pars: FeedbackSetStatusPars
   } catch (error) {
     logGetItemError(error);
     return feedbackErrorResponse(`Unable to set feedback status for ${userId}`);
+  }
+}
+
+async function feedbackReclassifyAuth(userId: string, pars: FeedbackReclassifyPars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const result = await feedbackReclassify(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse(`Unable to reclassify feedback for ${userId}`);
   }
 }
 

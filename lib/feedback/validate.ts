@@ -34,6 +34,7 @@ import type {
   FeedbackAdminListPars,
   FeedbackMinePars,
   FeedbackSetAdminFieldsPars,
+  FeedbackReclassifyPars,
   FeedbackSetStatusPars,
   FeedbackSubscribePars,
   FeedbackUpdatePars,
@@ -318,6 +319,15 @@ export function validateFeedbackSetStatusPars(
     return { ok: false, message: `invalid status for kind ${kind}.` };
   }
   return { ok: true, data: { id: pars.id.trim(), status } };
+}
+
+export function validateFeedbackReclassifyPars(
+  pars: FeedbackReclassifyPars,
+): { ok: true; data: { id: string } } | { ok: false; message: string } {
+  if (!isNonEmptyString(pars.id)) {
+    return { ok: false, message: 'id is required.' };
+  }
+  return { ok: true, data: { id: pars.id.trim() } };
 }
 
 export function validateFeedbackUpdatePars(
