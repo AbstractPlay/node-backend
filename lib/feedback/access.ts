@@ -891,8 +891,8 @@ export async function feedbackComment(
   if (!metaResult.Item) {
     return { ok: false, message: 'feedback item not found.', statusCode: 404 };
   }
-  if (metaResult.Item.terminalAt !== undefined) {
-    return { ok: false, message: 'cannot comment on a closed item.', statusCode: 400 };
+  if (metaResult.Item.archivedAt !== undefined) {
+    return { ok: false, message: 'cannot comment on an archived item.', statusCode: 400 };
   }
 
   const kind = metaResult.Item.kind as FeedbackMetaItem['kind'];

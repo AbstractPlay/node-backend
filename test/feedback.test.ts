@@ -1074,6 +1074,79 @@ test('feedbackComment rejects attachments on wishlist', async () => {
   assert.equal(commentResult.ok, false);
 });
 
+test('feedbackComment allows comments on terminal but not archived items', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Closed bug',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const closeResult = await feedbackSetStatus(client, TABLE, ADMIN_ID, { id, status: 'closed' });
+  assert.equal(closeResult.ok, true);
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.ok(meta?.terminalAt);
+
+  const commentResult = await feedbackComment(client, TABLE, mockS3, VOTER_ID, {
+    id,
+    body: 'Follow-up after close',
+    subscribe: false,
+  });
+  assert.equal(commentResult.ok, true);
+  assert.equal(store.get(`${postPk(id)}:${metaSk()}`)?.commentCount, 1);
+
+  store.set(`${postPk(id)}:${metaSk()}`, {
+    ...store.get(`${postPk(id)}:${metaSk()}`)!,
+    archivedAt: Date.now(),
+  });
+  const archivedComment = await feedbackComment(client, TABLE, mockS3, VOTER_ID, {
+    id,
+    body: 'Too late',
+    subscribe: false,
+  });
+  assert.equal(archivedComment.ok, false);
+  if (!archivedComment.ok) {
+    assert.match(archivedComment.message, /archived/i);
+  }
+});
+
+test('feedbackSetStatus reopen removes terminalAt and restores board visibility', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Reopen me',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  await feedbackSetStatus(client, TABLE, ADMIN_ID, { id, status: 'closed' });
+  assert.ok(store.get(`${postPk(id)}:${metaSk()}`)?.terminalAt);
+
+  const reopenResult = await feedbackSetStatus(client, TABLE, ADMIN_ID, { id, status: 'open' });
+  assert.equal(reopenResult.ok, true);
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.equal(meta?.status, 'open');
+  assert.equal(meta?.terminalAt, undefined);
+
+  const listResult = await feedbackList(client, TABLE, { kind: 'bug', sort: 'recent' });
+  assert.equal(listResult.ok, true);
+  if (listResult.ok) {
+    assert.ok(listResult.data.items.some((item) => item.id === id));
+  }
+
+  const voteResult = await feedbackVote(client, TABLE, VOTER_ID, { id, vote: true });
+  assert.equal(voteResult.ok, true);
+});
+
 test('feedbackComment with subscribe false does not add SUB# for commenter', async () => {
   const store: Store = new Map();
   const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
