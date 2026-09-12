@@ -3,6 +3,7 @@ export const FEEDBACK_KINDS = ['bug', 'feature', 'wishlist'] as const;
 export const BUG_STATUSES = [
   'open',
   'triaged',
+  'monitoring',
   'resolved',
   'closed',
 ] as const;

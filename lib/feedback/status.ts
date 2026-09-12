@@ -32,5 +32,8 @@ export function mapBugStatusToFeatureStatus(bugStatus: string): string | null {
   if (bugStatus === 'triaged') {
     return 'under_review';
   }
+  if (bugStatus === 'monitoring') {
+    return 'planned';
+  }
   return null;
 }
