@@ -67,3 +67,8 @@ export const FEEDBACK_ARCHIVE_AFTER_TERMINAL_DAYS = 7;
 export const FEEDBACK_LIVE_RETENTION_AFTER_ARCHIVE_DAYS = 90;
 export const FEEDBACK_ARCHIVE_S3_PREFIX = 'archive';
 export const FEEDBACK_STAGING_MAX_AGE_HOURS = 24;
+
+/** In-app notification when a new bug, feature, or wishlist post is created (API path). */
+export const FEEDBACK_NEW_POST_NOTIFY_USER_IDS = [
+  '124dd3ce-b309-4d14-9c8e-856e56241dfe',
+] as const;

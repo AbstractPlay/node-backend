@@ -2,6 +2,7 @@ import { type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { createNotification } from '../notifications.js';
 import { isBotIdOnTable } from '../participants.js';
 import type { FeedbackKind } from './types.js';
+import { FEEDBACK_NEW_POST_NOTIFY_USER_IDS } from './constants.js';
 import { listSubscriberIds } from './subscribe.js';
 
 function getMainTableName(): string | undefined {
@@ -25,6 +26,30 @@ async function notifyRecipients(
     }
     await createNotification(client, mainTable, userId, body);
   }
+}
+
+export async function notifyFeedbackNewPost(
+  client: DynamoDBDocumentClient,
+  feedbackTable: string,
+  pars: {
+    postId: string;
+    kind: FeedbackKind;
+    title: string;
+    authorId: string;
+  },
+): Promise<void> {
+  const recipients = FEEDBACK_NEW_POST_NOTIFY_USER_IDS.filter(
+    (userId) => userId && userId !== pars.authorId,
+  );
+  if (recipients.length === 0) {
+    return;
+  }
+  await notifyRecipients(client, feedbackTable, [...recipients], {
+    type: 'feedbackNew',
+    postId: pars.postId,
+    kind: pars.kind,
+    title: pars.title,
+  });
 }
 
 export async function notifyFeedbackComment(
