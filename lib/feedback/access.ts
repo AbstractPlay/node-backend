@@ -60,6 +60,7 @@ import {
 import {
   notifyFeedbackComment,
   notifyFeedbackDeleted,
+  notifyFeedbackNewPost,
   notifyFeedbackReviewRequested,
   notifyFeedbackStatusChange,
 } from './notifications.js';
@@ -455,6 +456,16 @@ export async function feedbackCreate(
   ];
 
   await client.send(new TransactWriteCommand({ TransactItems: writes }));
+  try {
+    await notifyFeedbackNewPost(client, feedbackTable, {
+      postId: id,
+      kind: data.kind,
+      title: data.title,
+      authorId: userId,
+    });
+  } catch (error) {
+    console.error('notifyFeedbackNewPost failed', error);
+  }
   return { ok: true, data: { id } };
 }
 

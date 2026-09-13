@@ -49,6 +49,7 @@ import {
   validateFeedbackSetAdminFieldsPars,
 } from '../lib/feedback/validate.js';
 import { mapBugStatusToFeatureStatus } from '../lib/feedback/status.js';
+import { FEEDBACK_NEW_POST_NOTIFY_USER_IDS } from '../lib/feedback/constants.js';
 import { notificationPk } from '../lib/notifications.js';
 
 const TABLE = 'abstract-play-feedback-test';
@@ -243,6 +244,55 @@ test('validateFeedbackCreatePars accepts bug without attachments', () => {
   if (result.ok) {
     assert.equal(result.data.attachmentKeys, undefined);
   }
+});
+
+test('feedbackCreate notifies configured staff on new bug, feature, and wishlist', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  process.env.ABSTRACT_PLAY_TABLE = TABLE;
+  const staffId = FEEDBACK_NEW_POST_NOTIFY_USER_IDS[0]!;
+  const cases = [
+    { kind: 'bug' as const, title: 'New bug' },
+    { kind: 'feature' as const, title: 'New feature' },
+    { kind: 'wishlist' as const, title: 'New wishlist game', gameUrl: 'https://boardgamegeek.com/boardgame/13/catan' },
+  ];
+
+  for (const { kind, title, gameUrl } of cases) {
+    const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+      kind,
+      title,
+      body: 'Body text.',
+      ...(gameUrl ? { gameUrl } : {}),
+    });
+    assert.equal(createResult.ok, true);
+    if (!createResult.ok) {
+      return;
+    }
+    const notificationKey = [...store.keys()].find(
+      (key) => key.startsWith(`${notificationPk(staffId)}:`)
+        && (store.get(key)?.body as { postId?: string })?.postId === createResult.data.id,
+    );
+    assert.ok(notificationKey, `${kind} staff notification`);
+    const notification = store.get(notificationKey!);
+    assert.equal((notification?.body as { type?: string })?.type, 'feedbackNew');
+    assert.equal((notification?.body as { kind?: string })?.kind, kind);
+    assert.equal((notification?.body as { title?: string })?.title, title);
+  }
+
+  const staffCreate = await feedbackCreate(client, TABLE, mockS3, staffId, {
+    kind: 'bug',
+    title: 'Staff-authored bug',
+    body: 'No self-notify.',
+  });
+  assert.equal(staffCreate.ok, true);
+  if (!staffCreate.ok) {
+    return;
+  }
+  const selfNotifyKey = [...store.keys()].find(
+    (key) => key.startsWith(`${notificationPk(staffId)}:`)
+      && (store.get(key)?.body as { postId?: string })?.postId === staffCreate.data.id,
+  );
+  assert.equal(selfNotifyKey, undefined);
 });
 
 test('feedbackCreate auto-votes for author on bug, feature, and wishlist', async () => {
