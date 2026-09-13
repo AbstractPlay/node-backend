@@ -1,3 +1,5 @@
+import { gameinfo, variantUidsForBatchRating } from '@abstractplay/gameslib';
+
 export const GLICKO_RATING_START = 1200;
 export const GLICKO_RD_START = 350;
 export const GLICKO_VOLATILITY_START = 0.06;
@@ -50,13 +52,34 @@ export function defaultGlickoPrior(): GlickoStats {
   return toGlickoStats(GLICKO_RATING_START, GLICKO_RD_START, GLICKO_VOLATILITY_START, 0);
 }
 
+function resolveMetaUid(metaUidOrDisplayName: string): string {
+  if (gameinfo.has(metaUidOrDisplayName)) {
+    return metaUidOrDisplayName;
+  }
+  const lower = metaUidOrDisplayName.toLowerCase();
+  if (gameinfo.has(lower)) {
+    return lower;
+  }
+  const byName = [...gameinfo.values()].find(
+    (g) => g.name === metaUidOrDisplayName || g.name?.toLowerCase() === lower,
+  );
+  return byName?.uid ?? metaUidOrDisplayName;
+}
+
 export function lookupBatchRating(
   highest: UserGameRating[],
   displayName: string,
   variants: string[],
   userId: string,
+  playerCount = 2,
 ): UserGameRating {
-  const game = batchRatingGameLabel(displayName, variants);
+  const metaUid = resolveMetaUid(displayName);
+  const defs = gameinfo.get(metaUid)?.variants;
+  const canonical =
+    defs !== undefined && defs.length > 0
+      ? variantUidsForBatchRating(metaUid, playerCount, variants)
+      : variants;
+  const game = batchRatingGameLabel(displayName, canonical);
   const row = highest.find((r) => r.user === userId && r.game === game);
   if (row !== undefined) {
     return row;
