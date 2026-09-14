@@ -179,6 +179,8 @@ export type FeedbackListPars = {
   sort?: string;
   cursor?: string;
   limit?: string | number;
+  /** When true, list terminal posts that are not yet archived (hidden from the default board). */
+  closedOnly?: boolean;
 };
 
 export type FeedbackGetPars = {
