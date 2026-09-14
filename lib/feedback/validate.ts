@@ -220,7 +220,7 @@ export function validateFeedbackCreatePars(
 
 export function validateFeedbackListPars(
   pars: FeedbackListPars,
-): { ok: true; data: { kind: FeedbackKind; sort: FeedbackListSort; limit: number; cursor?: string } } | { ok: false; message: string } {
+): { ok: true; data: { kind: FeedbackKind; sort: FeedbackListSort; limit: number; cursor?: string; closedOnly: boolean } } | { ok: false; message: string } {
   if (!isNonEmptyString(pars.kind) || !isFeedbackKind(pars.kind)) {
     return { ok: false, message: 'kind must be bug, feature, or wishlist.' };
   }
@@ -230,7 +230,8 @@ export function validateFeedbackListPars(
     ? Math.min(FEEDBACK_LIST_MAX_LIMIT, Math.max(1, Math.floor(rawLimit)))
     : FEEDBACK_LIST_DEFAULT_LIMIT;
   const cursor = isNonEmptyString(pars.cursor) ? pars.cursor : undefined;
-  return { ok: true, data: { kind: pars.kind, sort, limit, cursor } };
+  const closedOnly = pars.closedOnly === true;
+  return { ok: true, data: { kind: pars.kind, sort, limit, cursor, closedOnly } };
 }
 
 export function validateFeedbackGetPars(

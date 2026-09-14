@@ -63,11 +63,11 @@ See [Game Move layout analytics](/backend/subsystems/game-move-layout-analytics/
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `feedback_list` | Public board listing | `kind` (`bug` \| `feature` \| `wishlist`), optional `sort` (`votes` \| `recent` \| `updated`, default `votes`), `limit`, `cursor` |
+| `feedback_list` | Public board listing | `kind` (`bug` \| `feature` \| `wishlist`), optional `sort` (`votes` \| `recent` \| `updated`, default `votes`), optional `closedOnly` (`true` lists terminal, not-yet-archived items only), `limit`, `cursor` |
 | `feedback_get` | Single post with comments and presigned attachment URLs | `id` |
 | `feedback_history_list` | Archived summaries for a kind | `kind` (`bug` \| `feature` \| `wishlist`), optional `limit`, `cursor` |
 
-Returns `{ items, nextCursor? }` for list; `{ post, comments, attachmentUrls, archived? }` for get when live rows still exist. After TTL purge, get returns `{ archived: true, purged: true, summary }` with no comments. Terminal items are excluded from `feedback_list`; archived summaries appear in `feedback_history_list`.
+Returns `{ items, nextCursor? }` for list; `{ post, comments, attachmentUrls, archived? }` for get when live rows still exist. After TTL purge, get returns `{ archived: true, purged: true, summary }` with no comments. By default, terminal items are excluded from `feedback_list`; pass `closedOnly: true` to list terminal posts that are not yet archived. Archived summaries appear in `feedback_history_list`.
 
 ## Maintenance
 

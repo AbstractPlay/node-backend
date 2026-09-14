@@ -208,9 +208,18 @@ function createMockDocClient(store: Store) {
         }
         const limit = command.input.Limit ?? items.length;
         const rawPage = items.slice(0, limit);
-        const filteredPage = command.input.FilterExpression?.includes('terminalAt')
-          ? rawPage.filter((item) => item.terminalAt === undefined)
-          : rawPage;
+        const filterExpr = command.input.FilterExpression ?? '';
+        let filteredPage = rawPage;
+        if (filterExpr.includes('attribute_not_exists(terminalAt)')) {
+          filteredPage = rawPage.filter((item) => item.terminalAt === undefined);
+        } else if (
+          filterExpr.includes('attribute_exists(terminalAt)')
+          && filterExpr.includes('attribute_not_exists(archivedAt)')
+        ) {
+          filteredPage = rawPage.filter((item) => (
+            item.terminalAt !== undefined && item.archivedAt === undefined
+          ));
+        }
         const lastRaw = rawPage[rawPage.length - 1];
         const hasMore = items.length > limit;
         return {
@@ -464,6 +473,53 @@ test('effectiveVotes includes legacyVoteCount on seeded post', async () => {
   if (voteOn.ok) {
     assert.equal(voteOn.data.voteCount, 1);
     assert.equal(voteOn.data.effectiveVotes, 43);
+  }
+});
+
+test('feedbackList closedOnly returns terminal items not yet archived', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const openId = 'open-bug';
+  const closedId = 'closed-bug';
+  const archivedId = 'archived-bug';
+  const now = Date.now();
+
+  await seedFeedbackPostForTests(client, TABLE, buildMetaItem(openId, USER_ID, 'Tester', {
+    kind: 'bug',
+    title: 'Open bug',
+    body: 'Still active',
+    status: 'open',
+    legacyVoteCount: 0,
+  }, now));
+
+  const closedMeta = buildMetaItem(closedId, USER_ID, 'Tester', {
+    kind: 'bug',
+    title: 'Fixed bug',
+    body: 'Done',
+    status: 'resolved',
+    legacyVoteCount: 0,
+  }, now - 1000);
+  closedMeta.terminalAt = now;
+  await seedFeedbackPostForTests(client, TABLE, closedMeta);
+
+  const archivedMeta = buildMetaItem(archivedId, USER_ID, 'Tester', {
+    kind: 'bug',
+    title: 'Old bug',
+    body: 'Archived',
+    status: 'closed',
+    legacyVoteCount: 0,
+  }, now - 2000);
+  archivedMeta.terminalAt = now - 500;
+  archivedMeta.archivedAt = now;
+  await seedFeedbackPostForTests(client, TABLE, archivedMeta);
+
+  const listResult = await feedbackList(client, TABLE, { kind: 'bug', sort: 'recent', closedOnly: true });
+  assert.equal(listResult.ok, true);
+  if (listResult.ok) {
+    const ids = listResult.data.items.map((item) => item.id);
+    assert.ok(!ids.includes(openId));
+    assert.ok(ids.includes(closedId));
+    assert.ok(!ids.includes(archivedId));
   }
 });
 
