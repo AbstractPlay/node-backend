@@ -155,7 +155,7 @@ function buildListFields(
   meta: Pick<
     FeedbackMetaItem,
     'id' | 'kind' | 'title' | 'status' | 'authorId' | 'authorName' | 'createdAt' | 'updatedAt'
-    | 'voteCount' | 'legacyVoteCount' | 'effectiveVotes' | 'commentCount' | 'attachmentKeys' | 'terminalAt'
+    | 'voteCount' | 'legacyVoteCount' | 'effectiveVotes' | 'commentCount' | 'attachmentKeys' | 'terminalAt' | 'archivedAt'
     | 'effort' | 'priority' | 'adminTags' | 'reviewers' | 'lastStaffCommentAt' | 'lastAuthorCommentAt'
     | 'gameUrl' | 'bggGameId' | 'normalizedGameUrl' | 'wishlistCategory' | 'wishlistCategoryNote'
     | 'legacyBggItemId' | 'legacyBggSubmitter'
@@ -176,6 +176,7 @@ function buildListFields(
     commentCount: meta.commentCount,
     attachmentKeys: meta.attachmentKeys,
     terminalAt: meta.terminalAt,
+    archivedAt: meta.archivedAt,
     effort: meta.effort,
     priority: meta.priority,
     adminTags: meta.adminTags,
@@ -486,6 +487,13 @@ function feedbackListCursorFromItem(item: Record<string, unknown>): string {
   });
 }
 
+function feedbackListFilterExpression(closedOnly: boolean): string {
+  if (closedOnly) {
+    return 'attribute_exists(terminalAt) AND attribute_not_exists(archivedAt)';
+  }
+  return 'attribute_not_exists(terminalAt)';
+}
+
 export async function feedbackList(
   client: DynamoDBDocumentClient,
   tableName: string | undefined,
@@ -497,8 +505,9 @@ export async function feedbackList(
   }
 
   const feedbackTable = getFeedbackTableName(tableName);
-  const { kind, sort, limit, cursor } = validated.data;
+  const { kind, sort, limit, cursor, closedOnly } = validated.data;
   const prefix = listSortPrefix(sort);
+  const filterExpression = feedbackListFilterExpression(closedOnly);
 
   const collected: Record<string, unknown>[] = [];
   let exclusiveStartKey: Record<string, unknown> | undefined = cursor
@@ -514,7 +523,7 @@ export async function feedbackList(
         ':pk': kindGsi1Pk(kind),
         ':prefix': prefix,
       },
-      FilterExpression: 'attribute_not_exists(terminalAt)',
+      FilterExpression: filterExpression,
       ScanIndexForward: false,
       Limit: limit + 1,
       ExclusiveStartKey: exclusiveStartKey,

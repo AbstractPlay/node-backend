@@ -243,8 +243,8 @@ export async function archivePost(
     await client.send(new UpdateCommand({
       TableName: tableName,
       Key: { pk: row.pk as string, sk: row.sk as string },
-      UpdateExpression: 'SET expiresAt = :expiresAt',
-      ExpressionAttributeValues: { ':expiresAt': expiresAt },
+      UpdateExpression: 'SET expiresAt = :expiresAt, archivedAt = :archivedAt',
+      ExpressionAttributeValues: { ':expiresAt': expiresAt, ':archivedAt': now },
     }));
   }
 
