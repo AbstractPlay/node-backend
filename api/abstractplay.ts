@@ -186,6 +186,10 @@ import {
 import { queryAllStandingChallenges } from '../lib/allStandingChallenges.js';
 import { validateAboutText } from '../lib/aboutText.js';
 import { validateUserDisplayName } from '../lib/userDisplayName.js';
+import {
+  DISPLAY_NAME_TAKEN_MESSAGE,
+  isDisplayNameTaken,
+} from '../lib/displayNameAvailability.js';
 import { checkAboutSaveAllowed } from '../lib/aboutSaves.js';
 import {
   createNotification,
@@ -3868,6 +3872,17 @@ async function newSetting(userId: string, pars: { attribute: string; value: stri
           headers,
         };
       }
+      const tableName = process.env.ABSTRACT_PLAY_TABLE;
+      if (!tableName) {
+        return formatReturnError('ABSTRACT_PLAY_TABLE is not configured.');
+      }
+      if (await isDisplayNameTaken(ddbDocClient, tableName, validated.name, userId)) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ message: DISPLAY_NAME_TAKEN_MESSAGE }),
+          headers,
+        };
+      }
       attr = "name";
       val = validated.name;
       break;
@@ -3996,6 +4011,17 @@ async function newProfile(claim: PartialClaims, pars: { name: any; consent: any;
     return {
       statusCode: 400,
       body: JSON.stringify({ message: validatedName.message }),
+      headers,
+    };
+  }
+  const tableName = process.env.ABSTRACT_PLAY_TABLE;
+  if (!tableName) {
+    return formatReturnError('ABSTRACT_PLAY_TABLE is not configured.');
+  }
+  if (await isDisplayNameTaken(ddbDocClient, tableName, validatedName.name, userid)) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: DISPLAY_NAME_TAKEN_MESSAGE }),
       headers,
     };
   }
