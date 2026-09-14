@@ -14,7 +14,7 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 | `me_dashboard` | Dashboard tables: active `games`, `notifications`, challenges, timeout sweep. Clears `USER.cleaned` when set by abandoned-account cron. Does not refresh notification seen state. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
 | `next_game` | Next game id in user's list | — |
 | `my_settings` | **Deprecated** — minimal id/name/email/language; use `me_profile` instead | — |
-| `new_setting` | Update name, language, country, bggid, about | `attribute`, `value` |
+| `new_setting` | Update name, language, country, bggid, about | `attribute`, `value`. For `name`, value must be unique among current human and bot display names (trim + case-insensitive). |
 | `new_profile` | Bulk profile update | profile fields |
 | `set_lastSeen` | Update last-seen timestamp (active dashboard game or watched game) | `gameId`, optional `interval` |
 | `dismiss_notification` | Remove an in-app dashboard notification (deleted from DynamoDB) | `sk` |
