@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   DeleteCommand,
@@ -52,6 +52,11 @@ import { mapBugStatusToFeatureStatus } from '../lib/feedback/status.js';
 import { FEEDBACK_NEW_POST_NOTIFY_USER_IDS } from '../lib/feedback/constants.js';
 import { notificationPk } from '../lib/notifications.js';
 
+vi.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: async (_s3: unknown, command: { input: { Key: string } }) =>
+    `https://feedback-attachments.test/${command.input.Key}?mock=1`,
+}));
+
 const TABLE = 'abstract-play-feedback-test';
 process.env.FEEDBACK_ATTACHMENTS_BUCKET = 'ap-feedback-attachments-test';
 const USER_ID = '31af49bc-2030-4adb-aec9-dc8fa418fec1';
@@ -72,8 +77,6 @@ const mockS3 = {
     throw new Error(`Unexpected S3 command: ${(command as { constructor: { name: string } }).constructor.name}`);
   },
 } as unknown as S3Client;
-
-const presignS3 = new S3Client({ region: 'us-east-1' });
 
 function itemKey(item: { pk: string; sk: string }) {
   return `${item.pk}:${item.sk}`;
@@ -1171,7 +1174,7 @@ test('feedbackComment stores attachments on bugs and features', async () => {
   assert.ok(Array.isArray(comment?.attachmentKeys));
   assert.match(String(comment?.attachmentKeys?.[0]), new RegExp(`^${id}/comments/`));
 
-  const getResult = await feedbackGet(client, TABLE, presignS3, { id });
+  const getResult = await feedbackGet(client, TABLE, mockS3, { id });
   assert.equal(getResult.ok, true);
   if (getResult.ok) {
     assert.equal(getResult.data.comments.length, 1);
