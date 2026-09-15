@@ -11,7 +11,7 @@ This page maps the protocol to concrete code in **node-backend**. Use it when bu
 
 ## Reference bot (`api/testBot.ts`)
 
-Deployed as the `testBot` Lambda when `testBotEnabled.dev` is true in [`serverless.yml`](../../serverless.yml).
+Deployed as the `testBot` Lambda on the **dev** stage only (`condition: TestBotEnabled` in [`serverless.yml`](../../serverless.yml)).
 
 | Route | Handler | Purpose |
 |-------|---------|---------|
