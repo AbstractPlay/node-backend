@@ -23,9 +23,9 @@ STREAM_ARN=$(aws dynamodb describe-table \
 if [ "$STREAM_ARN" != "None" ] && [ -n "$STREAM_ARN" ]; then
   echo "DynamoDB stream on ${TABLE}: ${STREAM_ARN}"
   echo "Deploying with gameProjector stream mapping enabled"
-  exec serverless deploy --stage "$STAGE" --param=enableGameProjectorStream=true
+  exec npx serverless deploy --stage "$STAGE" --param=enableGameProjectorStream=true
 else
   echo "No DynamoDB stream on ${TABLE} yet"
   echo "Deploying without gameProjector stream mapping (streams will be enabled on this deploy)"
-  exec serverless deploy --stage "$STAGE" --param=enableGameProjectorStream=false
+  exec npx serverless deploy --stage "$STAGE" --param=enableGameProjectorStream=false
 fi

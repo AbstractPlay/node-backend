@@ -39,11 +39,20 @@ With AWS profiles configured:
 
 ```bash
 npm run build
-serverless deploy              # dev (default stage)
-serverless --stage prod deploy # prod
+npx serverless deploy              # dev (default stage)
+npx serverless --stage prod deploy # prod
 ```
 
-Or use npm scripts: `npm run deploy-dev`, `npm run deploy-prod`, `npm run full-dev`, `npm run full-prod`.
+Or use npm scripts: `npm run deploy-dev`, `npm run deploy-prod`, `npm run full-dev`, `npm run full-prod` (they invoke the pinned `serverless` devDependency).
+
+### Serverless v4 and secrets
+
+Serverless Framework **v4** resolves `provider.environment` when you run `serverless package`, `print`, or `deploy`. CI and local deploys use the pinned **`serverless@4.42.0`** devDependency via `npx serverless` (no global Serverless install). The Dashboard org is **`abstractplay`** (`SERVERLESS_ORG` in CI; `org:` in `serverless.yml`).
+
+- **CI:** GitHub Actions set `SERVERLESS_ACCESS_KEY` (org secret), `SERVERLESS_ORG=abstractplay`, plus `TOTP_KEY`, VAPID keys, and `OPENSSH_PRIVATE_KEY` from repository secrets.
+- **Local:** Keep values in **`../apsecrets.yml`** (sibling of this repo, e.g. `ap/apsecrets.yml` next to `node-backend/`). That path is **outside** this git repository, so it cannot be committed here. [`serverless.yml`](../serverless.yml) uses `${env:VAR, file(../apsecrets.yml):key}` — CI environment variables win when set; otherwise the CLI reads the file.
+
+Expected keys in `../apsecrets.yml`: `totp_key`, `vapid_private_key`, `vapid_public_key`, `openssh_private_key` (YAML snake_case; `openssh_private_key` is OpenSSH PEM text for bot webhook signing).
 
 ## Stage configuration
 
@@ -100,6 +109,7 @@ Omit `OPS_ALERT_EMAIL` to skip the topic and alarm actions (dev deploys by defau
 
 ## Required GitHub secrets
 
+- `SERVERLESS_ACCESS_KEY` — Serverless Dashboard access key (org secret `abstractplay`)
 - `AWS_KEY`, `AWS_SECRET` — deploy credentials
 - `PAT_READ_PACKAGES` — npm install from GitHub Packages
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `TOTP_KEY`, `OPENSSH_PRIVATE_KEY`
