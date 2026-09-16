@@ -3,6 +3,7 @@
   "ChallengeBodyComment": "{{challenger}} vous défie sur le jeu {{- metaGame}} avec le commentaire : \"{{- comment}}\" Veuillez visiter https://play.abstractplay.com/ pour plus de détails.",
   "ChallengeRejectedBody": "{{quitter}} a décliné votre défi au jeu {{- metaGame}}. Le défi a été supprimé.",
   "ChallengeRejectedSubject": "AbstractPlay : défi rejeté",
+  "DirectChallengeOptOutNote": "Cet utilisateur a choisi de ne pas accepter les défis directs.",
   "ChallengeResponseComment": "Votre adversaire a commenté: \"{{- comment}}\"",
   "ChallengeRevokedBody": "{{name}} a annulé son défi sur {{- metaGame}}.",
   "ChallengeRevokedBodyComment": "{{name}} a annulé son défi sur {{- metaGame}} et a commenté : \"{{- comment}}\"",

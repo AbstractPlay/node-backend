@@ -3,6 +3,7 @@
   "ChallengeBodyComment": "{{challenger}} ti ha sfidato a una partita a {{- metaGame}} con la seguente nota: \"{{- comment}}\" Visita https://play.abstractplay.com/ per maggiori dettagli.",
   "ChallengeRejectedBody": "{{quitter}} ha rifiutato la sfida a {{- metaGame}}. La sfida è stata rimossa.",
   "ChallengeRejectedSubject": "AbstractPlay: Sfida rifiutata",
+  "DirectChallengeOptOutNote": "Questo utente ha scelto di non accettare sfide dirette.",
   "ChallengeResponseComment": "Il tuo avversario ha commentato: \"{{- comment}}\"",
   "ChallengeRevokedBody": "{{name}} ha revocato la sua sfida a {{- metaGame}}.",
   "ChallengeRevokedBodyComment": "{{name}} ha revocato la sua sfida a {{- metaGame}} e ha commentato: \"{{- comment}}\"",
