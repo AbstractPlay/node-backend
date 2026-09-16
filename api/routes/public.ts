@@ -1,12 +1,12 @@
 import type { AnnouncementGetPars, AnnouncementsListPars } from '../../lib/announcements/index.js';
 import { headers } from '../../lib/api/http.js';
 import type { ApiHandlerResult, PublicRouteHandler } from '../../lib/api/routeTypes.js';
+import { botMove } from '../abstractplay.js';
 import {
   allStandingChallenges,
   announcementGetOpen,
   announcementsListOpen,
   archiveTournaments,
-  botMove,
   challengeDetails,
   eventGetEvent,
   eventGetEvents,
@@ -29,7 +29,7 @@ import {
   reportProblem,
   standingChallenges,
   userNames,
-} from '../abstractplay.js';
+} from '../../lib/public/index.js';
 
 export const publicRoutes: Record<string, PublicRouteHandler> = {
   user_names: () => userNames(),
