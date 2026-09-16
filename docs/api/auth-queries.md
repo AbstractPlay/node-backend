@@ -82,7 +82,7 @@ Per-user board colours and preferred colour are configured via **Customize** (`s
 | `save_customization` | Per-game UI customization | `metaGame`, settings |
 | `delete_customization` | Remove customization | `metaGame` |
 | `update_standing` | SDG-style standing challenge preferences | `entries` |
-| `update_user_settings` | User settings blob | `settings` (full object). Optional `settings.all.profile.avatar`: `{ style, seed }` — style must be one of the allowlisted DiceBear style ids; seed is 1–64 chars (`A–Z`, `a–z`, `0–9`, `_`, `-`). Invalid avatar returns **400**. When avatar is saved, `avatarStyle` / `avatarSeed` are mirrored on both the `USER` and public `USERS` records (the `user_names` query reads `USERS`); when avatar is removed or reset to default (key omitted), those mirror fields are removed from both. |
+| `update_user_settings` | User settings blob | `settings` (full object). Optional `settings.all.profile.avatar`: `{ style, seed }` — style must be one of the allowlisted DiceBear style ids; seed is 1–64 chars (`A–Z`, `a–z`, `0–9`, `_`, `-`). Invalid avatar returns **400**. When avatar is saved, `avatarStyle` / `avatarSeed` are mirrored on both the `USER` and public `USERS` records (the `user_names` query reads `USERS`); when avatar is removed or reset to default (key omitted), those mirror fields are removed from both. Optional `settings.all.noDirectChallenges` (boolean): when `true`, incoming direct challenges are auto-declined with a system note; open challenges are unchanged. |
 
 ## Player blocking
 
