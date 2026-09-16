@@ -643,7 +643,7 @@ resources:
 
 functions:
   authQuery:
-    handler: api/abstractplay.authQuery
+    handler: api/authQuery.authQuery
     memorySize: 1024
     timeout: 120
     description: Abstract Play queries that need authorization.
@@ -661,7 +661,7 @@ functions:
               - email
               - 'cognito:username'
   botQuery:
-    handler: api/abstractplay.botQuery
+    handler: api/botQuery.botQuery
     memorySize: 1024
     description: Abstract Play queries for bots.
     logRetentionInDays: 30
@@ -677,7 +677,7 @@ functions:
             scopes:
               - ${self:custom.stageConfig.${self:provider.stage}.botOAuthScope}
   query:
-    handler: api/abstractplay.query
+    handler: api/query.query
     memorySize: 256
     description: Abstract Play queries that does not need authorization.
     logRetentionInDays: 30

@@ -41,7 +41,15 @@ Esbuild output under [`.test-artifacts/lambda-bundles/`](../.test-artifacts/lamb
 
 | Bundle | Bytes | KiB |
 |--------|------:|----:|
-| `api/abstractplay.mjs` | 787,570 | 769 |
+| `api/abstractplay.mjs` (Phase 0 single entry) | 787,570 | 769 |
+| `api/query.mjs` (Phase 2) | 399,570 | 390 |
+| `api/query.mjs` (Phase 4) | 405,477 | 396 |
+| `api/query.mjs` (Phase 5, post-auth split) | 407,429 | 398 |
+| `api/query.mjs` (Phase 6) | 409,926 | 401 |
+| `api/authQuery.mjs` (Phase 2) | 736,313 | 719 |
+| `api/authQuery.mjs` (Phase 5) | 739,895 | 723 |
+| `api/authQuery.mjs` (Phase 6) | 742,698 | 725 |
+| `api/botQuery.mjs` (Phase 2) | 300,117 | 293 |
 | `utils/bot-outbound.mjs` | 798,806 | 781 |
 | `utils/yourturn.mjs` | 251,850 | 246 |
 | `api/sockets/authHandler.mjs` | 47,628 | 47 |
@@ -49,7 +57,7 @@ Esbuild output under [`.test-artifacts/lambda-bundles/`](../.test-artifacts/lamb
 | `utils/game-projector.mjs` | 12,522 | 12 |
 | Other socket handlers | 121–7,058 | |
 
-**Note:** CI/test config lists a **single** entry `api/abstractplay.ts` ([`scripts/lambda-esbuild-config.mjs`](../scripts/lambda-esbuild-config.mjs)). All three HTTP Lambdas (`query`, `authQuery`, `botQuery`) use that same module today ([`serverless.yml`](../serverless.yml)), so each deploy artifact is expected to include the **full** application graph until Phase 2+ entry split.
+**Note (post–Phase 2):** Test bundles use three entries — `api/query.ts`, `api/authQuery.ts`, `api/botQuery.ts` ([`scripts/lambda-esbuild-config.mjs`](../scripts/lambda-esbuild-config.mjs)). Each re-exports from `abstractplay.ts`, so bundle **sizes** may still match the old single entry until Phase 3+ route extraction.
 
 ### Deploy package (baseline)
 
@@ -72,8 +80,8 @@ Files that **import** the monolith (must migrate in Phase 1 / 7):
 | [`utils/yourturn.ts`](../utils/yourturn.ts) | `createSendEmailCommand`, `logGetItemError`, `formatReturnError`, `initi18n`, `changeLanguageForPlayer`, `UserSettings` |
 | [`lib/botOutbound.ts`](../lib/botOutbound.ts) | dynamic `import('../api/abstractplay.js')` → `botRespondToChallenge` |
 | [`test/i18n.test.ts`](../test/i18n.test.ts) | `changeLanguageForPlayer`, `initi18n` |
-| [`test/lambdaInit.test.mjs`](../test/lambdaInit.test.mjs) | bundle `api/abstractplay.ts` (all three handlers) |
-| [`scripts/lambda-esbuild-config.mjs`](../scripts/lambda-esbuild-config.mjs) | `LAMBDA_HANDLER_ENTRIES` includes `api/abstractplay.ts` |
+| [`test/lambdaInit.test.mjs`](../test/lambdaInit.test.mjs) | bundles `api/query.ts`, `authQuery.ts`, `botQuery.ts` |
+| [`scripts/lambda-esbuild-config.mjs`](../scripts/lambda-esbuild-config.mjs) | three HTTP handler entries (Phase 2) |
 
 Docs references to `api/abstractplay.ts` (update in Phase 10): `docs/api/overview.md`, `docs/architecture.md`, `docs/index.md`, `docs/bots/*`, several `docs/subsystems/*`.
 
@@ -81,9 +89,9 @@ Docs references to `api/abstractplay.ts` (update in Phase 10): `docs/api/overvie
 
 | Endpoint | Serverless handler | Dispatch |
 |----------|-------------------|----------|
-| GET/POST `/query` | `api/abstractplay.query` | `switch (query)` ~L768 |
-| POST `/authQuery` | `api/abstractplay.authQuery` | `switch (query)` ~L887 |
-| POST `/botQuery` | `api/abstractplay.botQuery` | `switch (verb)` ~L865 |
+| GET/POST `/query` | `api/query.query` | `switch (query)` in `abstractplay.ts` |
+| POST `/authQuery` | `api/authQuery.authQuery` | `switch (query)` in `abstractplay.ts` |
+| POST `/botQuery` | `api/botQuery.botQuery` | `switch (verb)` in `abstractplay.ts` |
 
 ## Phase comparison template
 

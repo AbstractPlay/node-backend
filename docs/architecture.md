@@ -10,7 +10,7 @@ The API uses an RPC-style envelope rather than REST resources. Clients POST (or 
 | `/authQuery` | Cognito user JWT | `export const authQuery` | Player actions and authenticated reads |
 | `/botQuery` | Cognito M2M (bot pool) | `export const botQuery` | Bots submit moves |
 
-Source of truth for query names: switch statements in [`api/abstractplay.ts`](../api/abstractplay.ts).
+Source of truth for query names: route tables in [`api/routes/`](../api/routes/) (implementations in [`api/abstractplay.ts`](../api/abstractplay.ts) until domain extraction).
 
 ## Lambda functions
 
