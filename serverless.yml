@@ -1,25 +1,13 @@
-# Welcome to Serverless!
-#
-# This file is the main config file for your service.
-# It's very minimal at this point and uses default values.
-# You can always add more config options for more control.
-# We've included some commented out config examples here.
-# Just uncomment any of them to get that config option.
-#
-# For full config options, check the docs:
-#    docs.serverless.com
-#
-# Happy Coding!
-
 service: abstract-play
-# app and org for use with dashboard.serverless.com
-# app: apfront
-# org: wamelen
+org: abstractplay
 
 # You can pin your service to only deploy with a specific Serverless version
 # Check out our docs for more details
-frameworkVersion: '3'
+frameworkVersion: '4'
 configValidationMode: warn
+
+build:
+  esbuild: false
 
 params:
   default:
@@ -32,10 +20,6 @@ custom:
   scheduleEnabled:
     prod: true
     dev: false
-
-  testBotEnabled:
-    dev: true
-    prod: false
 
   recbucket:
     prod: "records.abstractplay.com"
@@ -148,10 +132,10 @@ provider:
     WEBSOCKET_DOMAIN: ${self:custom.stageConfig.${self:provider.stage}.wsDomain}
     WEBSOCKET_STAGE: ${self:provider.stage}
     WEBSOCKET_SQS: ${self:custom.stageConfig.${self:provider.stage}.wsSqs}
-    TOTP_KEY: ${env:TOTP_KEY}
-    VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY}
-    VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY}
-    OPENSSH_PRIVATE_KEY: ${env:OPENSSH_PRIVATE_KEY}
+    TOTP_KEY: ${env:TOTP_KEY, file(../apsecrets.yml):totp_key}
+    VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY, file(../apsecrets.yml):vapid_private_key}
+    VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY, file(../apsecrets.yml):vapid_public_key}
+    OPENSSH_PRIVATE_KEY: ${env:OPENSSH_PRIVATE_KEY, file(../apsecrets.yml):openssh_private_key, ''}
     BOT_OUTBOUND_QUEUE_URL:
       Ref: BotOutboundQueue
     PRESENCE_COALESCE_SQS:
@@ -179,9 +163,6 @@ provider:
           - '.amazonaws.com/'
           - ${self:provider.stage}
           - '/botQuery'
-    # TOTP_KEY: ${file(../apsecrets.yml):totp_key}
-    # VAPID_PRIVATE_KEY: ${file(../apsecrets.yml):vapid_private_key}
-    # VAPID_PUBLIC_KEY: ${file(../apsecrets.yml):vapid_public_key}
   iam:
     role:
       statements:
@@ -264,6 +245,10 @@ resources:
       Fn::And:
         - Condition: GameProjectorStreamEnabled
         - Condition: OpsAlertsEnabled
+    TestBotEnabled:
+      Fn::Equals:
+        - ${sls:stage}
+        - dev
 
   Resources:
     # One table design
@@ -665,7 +650,7 @@ functions:
     memorySize: 256
     description: Dev-only reference bot — full source and docs in api/testBot.ts
     logRetentionInDays: 30
-    enabled: ${self:custom.testBotEnabled.${self:provider.stage}}
+    condition: TestBotEnabled
     events:
       - http:
           path: testBot
