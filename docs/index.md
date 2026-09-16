@@ -1,6 +1,6 @@
 # Node Backend
 
-The Abstract Play backend is a Serverless Framework service on AWS: Node.js Lambdas backed by a single DynamoDB table (`abstract-play-{stage}`). Most application logic lives in [`api/abstractplay.ts`](../api/abstractplay.ts).
+The Abstract Play backend is a Serverless Framework service on AWS: Node.js Lambdas backed by a single DynamoDB table (`abstract-play-{stage}`). HTTP handlers are thin entries under [`api/`](../api/query.ts); business logic lives in [`lib/`](../lib/).
 
 ## Documentation
 

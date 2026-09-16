@@ -10,7 +10,7 @@ The API uses an RPC-style envelope rather than REST resources. Clients POST (or 
 | `/authQuery` | Cognito user JWT | `export const authQuery` | Player actions and authenticated reads |
 | `/botQuery` | Cognito M2M (bot pool) | `export const botQuery` | Bots submit moves |
 
-Source of truth for query names: route tables in [`api/routes/`](../api/routes/) (implementations in [`api/abstractplay.ts`](../api/abstractplay.ts) until domain extraction).
+Source of truth for query names: route tables in [`api/routes/`](../api/routes/). Handler logic is implemented in [`lib/`](../lib/) modules imported by those routes.
 
 ## Lambda functions
 
@@ -46,7 +46,8 @@ Defined in [`serverless.yml`](../serverless.yml):
 
 | Module | Responsibility |
 |--------|----------------|
-| [`api/abstractplay.ts`](../api/abstractplay.ts) | Main API logic (~10k lines) |
+| [`api/query.ts`](../api/query.ts), [`api/authQuery.ts`](../api/authQuery.ts), [`api/botQuery.ts`](../api/botQuery.ts) | HTTP Lambda entrypoints |
+| [`api/routes/`](../api/routes/) | RPC dispatch maps to `lib/*` handlers |
 | [`lib/ddb.ts`](../lib/ddb.ts) | Shared DynamoDB document client |
 | [`lib/participants.ts`](../lib/participants.ts) | Human vs bot identity, `BOT` records |
 | [`lib/botOutbound.ts`](../lib/botOutbound.ts) | Enqueue and deliver bot webhooks |

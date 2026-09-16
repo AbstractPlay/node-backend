@@ -64,7 +64,7 @@ Esbuild output under [`.test-artifacts/lambda-bundles/`](../.test-artifacts/lamb
 | `utils/game-projector.mjs` | 12,522 | 12 |
 | Other socket handlers | 121–7,058 | |
 
-**Note (post–Phase 2):** Test bundles use three entries — `api/query.ts`, `api/authQuery.ts`, `api/botQuery.ts` ([`scripts/lambda-esbuild-config.mjs`](../scripts/lambda-esbuild-config.mjs)). Each re-exports from `abstractplay.ts`, so bundle **sizes** may still match the old single entry until Phase 3+ route extraction.
+**Note:** Test bundles use three entries — `api/query.ts`, `api/authQuery.ts`, `api/botQuery.ts` ([`scripts/lambda-esbuild-config.mjs`](../scripts/lambda-esbuild-config.mjs)).
 
 ### Deploy package (baseline)
 
@@ -76,29 +76,19 @@ Esbuild output under [`.test-artifacts/lambda-bundles/`](../.test-artifacts/lamb
 | `.serverless/abstractplayLibs.zip` (Lambda layer) | 24,706,132 | 24,127 |
 | `.serverless/custom-resources.zip` | 12,787 | 12 |
 
-Serverless v4 emits one **service** zip here, not separate `query` / `authQuery` / `botQuery` files on disk. All three HTTP handlers still share `api/abstractplay.ts` in that bundle until Phase 2 entry split; compare per-handler sizes via `.test-artifacts/lambda-bundles/` or after separate handler entries exist.
+Serverless v4 emits one **service** zip here, not separate `query` / `authQuery` / `botQuery` files on disk. Compare per-handler sizes via `.test-artifacts/lambda-bundles/`.
 
-## Runtime import inventory (`api/abstractplay`)
+## Phase 10 — monolith retired (2026-09-16)
 
-Files that **import** the monolith (must migrate in Phase 1 / 7):
-
-| File | Import |
-|------|--------|
-| [`utils/yourturn.ts`](../utils/yourturn.ts) | `createSendEmailCommand`, `logGetItemError`, `formatReturnError`, `initi18n`, `changeLanguageForPlayer`, `UserSettings` |
-| [`lib/botOutbound.ts`](../lib/botOutbound.ts) | dynamic `import('../api/abstractplay.js')` → `botRespondToChallenge` |
-| [`test/i18n.test.ts`](../test/i18n.test.ts) | `changeLanguageForPlayer`, `initi18n` |
-| [`test/lambdaInit.test.mjs`](../test/lambdaInit.test.mjs) | bundles `api/query.ts`, `authQuery.ts`, `botQuery.ts` |
-| [`scripts/lambda-esbuild-config.mjs`](../scripts/lambda-esbuild-config.mjs) | three HTTP handler entries (Phase 2) |
-
-Docs references to `api/abstractplay.ts` (update in Phase 10): `docs/api/overview.md`, `docs/architecture.md`, `docs/index.md`, `docs/bots/*`, several `docs/subsystems/*`.
+`api/abstractplay.ts` removed. HTTP entries: `api/query.ts`, `api/authQuery.ts`, `api/botQuery.ts` → `api/routes/*` → `lib/*`. Move hooks: `lib/games/registerMoveHooks.ts` (imported from `playHandlers`). One-off migration scripts under `scripts/phase*.mjs` deleted.
 
 ## RPC surface (unchanged by split)
 
 | Endpoint | Serverless handler | Dispatch |
 |----------|-------------------|----------|
-| GET/POST `/query` | `api/query.query` | `switch (query)` in `abstractplay.ts` |
-| POST `/authQuery` | `api/authQuery.authQuery` | `switch (query)` in `abstractplay.ts` |
-| POST `/botQuery` | `api/botQuery.botQuery` | `switch (verb)` in `abstractplay.ts` |
+| GET/POST `/query` | `api/query.query` | `api/routes/public.ts` |
+| POST `/authQuery` | `api/authQuery.authQuery` | `api/routes/auth/index.ts` |
+| POST `/botQuery` | `api/botQuery.botQuery` | `api/routes/bot.ts` |
 
 ## Phase comparison template
 

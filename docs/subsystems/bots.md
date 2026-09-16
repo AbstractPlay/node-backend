@@ -8,7 +8,7 @@ Bots are first-class players with Cognito M2M credentials and an HTTPS webhook e
 
 | Component | Path |
 |-----------|------|
-| Owner API | [`api/abstractplay.ts`](../../api/abstractplay.ts) — `createBot`, `updateBot`, `deleteBot` |
+| Owner API | [`lib/bots/crud.ts`](../../lib/bots/crud.ts) — `createBot`, `updateBot`, `deleteBot` |
 | Outbound worker | [`utils/bot-outbound.ts`](../../utils/bot-outbound.ts) + [`lib/botOutbound.ts`](../../lib/botOutbound.ts) |
 | Reference bot | [`api/testBot.ts`](../../api/testBot.ts) (dev only) |
 | Verify / client libs | [`lib/botVerify.ts`](../../lib/botVerify.ts), [`lib/botClient.ts`](../../lib/botClient.ts) |

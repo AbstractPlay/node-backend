@@ -43,12 +43,10 @@ Errors use `formatReturnError()` with `statusCode` 500 (or 400 for validation) a
 | Endpoint | Lambda entry | Route table |
 |----------|--------------|-------------|
 | Public | [`api/query.ts`](../../api/query.ts) | [`api/routes/public.ts`](../../api/routes/public.ts) |
-| Auth | [`api/authQuery.ts`](../../api/authQuery.ts) | [`api/routes/auth.ts`](../../api/routes/auth.ts) |
+| Auth | [`api/authQuery.ts`](../../api/authQuery.ts) | [`api/routes/auth/`](../../api/routes/auth/) (`index.ts` merges domain route tables) |
 | Bots | [`api/botQuery.ts`](../../api/botQuery.ts) | [`api/routes/bot.ts`](../../api/routes/bot.ts) |
 
-Handler implementations remain in [`api/abstractplay.ts`](../../api/abstractplay.ts) until domain modules are extracted (Phase 4+).
-
-TypeScript types (`FullChallenge`, `FullUser`, `Game`, etc.) are defined in the same file. Docs list query names and intent; field-level contracts live in code.
+Handler implementations live under [`lib/`](../lib/) (e.g. `lib/public/`, `lib/games/`, `lib/profile/`, `lib/bots/`). Shared API types are in [`lib/api/types.ts`](../../lib/api/types.ts). Docs list query names and intent; field-level contracts live in code.
 
 ## Auth vs public overlap
 

@@ -2,12 +2,12 @@ import type { AuthRouteHandler } from '../../../lib/api/routeTypes.js';
 import {
   deleteGames,
   fixGames,
-  markAsPublished,
   onetimeFix,
   purgeRetiredCompletedGames,
-  testAsync,
   updateMetaGameCounts,
-} from '../../abstractplay.js';
+} from '../../../lib/games/adminHandlers.js';
+import { markAsPublished } from '../../../lib/games/playHandlers.js';
+import { testAsync } from '../../../lib/ops/testAsync.js';
 import { bindAuth } from './shared.js';
 
 export const coreAuthRoutes: Record<string, AuthRouteHandler> = {

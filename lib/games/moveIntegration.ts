@@ -1,4 +1,4 @@
-/** Registered from `api/abstractplay.ts` so move logic can stay in lib without importing the monolith. */
+/** Registered from `lib/games/registerMoveHooks.ts` on play-handler load. */
 
 export type EventGameUpdatePars = { eventid: string; gameid: string; winner: string[] };
 
