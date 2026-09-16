@@ -1,0 +1,100 @@
+# API split — Phase 0 baseline
+
+Captured **2026-09-16** before splitting [`api/abstractplay.ts`](../api/abstractplay.ts).
+
+Use this file to compare bundle sizes and monolith size after each migration phase.
+
+## Monolith size
+
+| Metric | Value |
+|--------|------:|
+| `api/abstractplay.ts` lines (non-empty) | 10,062 |
+| `async function` / handler implementations | ~170 |
+| Lambda exports | `query`, `authQuery`, `botQuery` |
+| Other runtime exports | `botRespondToChallenge`, `changeLanguageForPlayer`, `initi18n`, `createSendEmailCommand`, `formatReturnError`, `logGetItemError`, `handleCommonErrors` |
+
+### Approximate regions (by first line of symbol)
+
+| Region | Lines (approx) | Notes |
+|--------|----------------|-------|
+| Imports, locale setup, AWS clients, types | 1–666 | Duplicate `ddbDocClient` vs [`lib/ddb.ts`](../lib/ddb.ts) |
+| Lambda dispatch (`query` / `botQuery` / `authQuery` switches) | 740–1136 | ~27 public cases, ~75+ auth cases, 1 bot verb |
+| Catalog / challenges (public) | 1138–1593 | `userNames`, `games`, `metaGamesDetails`, … |
+| `game()` read path | 1594–1751 | Shared auth + public |
+| Playground auth glue | 1752–1916 | |
+| Announcements HTTP glue | 1917–2227 | Logic in `lib/announcements` |
+| Feedback HTTP glue | 2228–2660 | Logic in `lib/feedback` |
+| Player marks + public player pages | 2661–2973 | |
+| Game settings / inject state | 2974–3307 | |
+| Bot CRUD + Cognito | 3308–3831 | |
+| Me / profile / settings | 3832–4889 | Uses `lib/meQuery` |
+| Challenges (auth) | 4892–5798 | Includes `botRespondToChallenge` (exported) |
+| Moves, timeloss, comments, exploration | 5799–7379 | Largest block; heavy `gameslib` |
+| Tournaments | 7382–8162 | |
+| Events | 8163–9467 | |
+| Admin / ops / email helpers / misc | 9470–10574 | `deleteGames`, `test_push`, shared email/i18n exports |
+
+## Test Lambda bundles (`npm run build:lambda-bundles`)
+
+Esbuild output under [`.test-artifacts/lambda-bundles/`](../.test-artifacts/lambda-bundles/).  
+`gameslib` / `@aws-sdk/*` are **external** (loaded from Lambda layer at runtime), same as deploy.
+
+| Bundle | Bytes | KiB |
+|--------|------:|----:|
+| `api/abstractplay.mjs` | 787,570 | 769 |
+| `utils/bot-outbound.mjs` | 798,806 | 781 |
+| `utils/yourturn.mjs` | 251,850 | 246 |
+| `api/sockets/authHandler.mjs` | 47,628 | 47 |
+| `api/testBot.mjs` | 24,462 | 24 |
+| `utils/game-projector.mjs` | 12,522 | 12 |
+| Other socket handlers | 121–7,058 | |
+
+**Note:** CI/test config lists a **single** entry `api/abstractplay.ts` ([`scripts/lambda-esbuild-config.mjs`](../scripts/lambda-esbuild-config.mjs)). All three HTTP Lambdas (`query`, `authQuery`, `botQuery`) use that same module today ([`serverless.yml`](../serverless.yml)), so each deploy artifact is expected to include the **full** application graph until Phase 2+ entry split.
+
+### Deploy package (baseline)
+
+`serverless package --stage dev` completed successfully (~648s build including `build:layers`).
+
+| Artifact | Bytes | KiB |
+|----------|------:|----:|
+| `.serverless/abstract-play.zip` (service code bundle) | 1,100,095 | 1,074 |
+| `.serverless/abstractplayLibs.zip` (Lambda layer) | 24,706,132 | 24,127 |
+| `.serverless/custom-resources.zip` | 12,787 | 12 |
+
+Serverless v4 emits one **service** zip here, not separate `query` / `authQuery` / `botQuery` files on disk. All three HTTP handlers still share `api/abstractplay.ts` in that bundle until Phase 2 entry split; compare per-handler sizes via `.test-artifacts/lambda-bundles/` or after separate handler entries exist.
+
+## Runtime import inventory (`api/abstractplay`)
+
+Files that **import** the monolith (must migrate in Phase 1 / 7):
+
+| File | Import |
+|------|--------|
+| [`utils/yourturn.ts`](../utils/yourturn.ts) | `createSendEmailCommand`, `logGetItemError`, `formatReturnError`, `initi18n`, `changeLanguageForPlayer`, `UserSettings` |
+| [`lib/botOutbound.ts`](../lib/botOutbound.ts) | dynamic `import('../api/abstractplay.js')` → `botRespondToChallenge` |
+| [`test/i18n.test.ts`](../test/i18n.test.ts) | `changeLanguageForPlayer`, `initi18n` |
+| [`test/lambdaInit.test.mjs`](../test/lambdaInit.test.mjs) | bundle `api/abstractplay.ts` (all three handlers) |
+| [`scripts/lambda-esbuild-config.mjs`](../scripts/lambda-esbuild-config.mjs) | `LAMBDA_HANDLER_ENTRIES` includes `api/abstractplay.ts` |
+
+Docs references to `api/abstractplay.ts` (update in Phase 10): `docs/api/overview.md`, `docs/architecture.md`, `docs/index.md`, `docs/bots/*`, several `docs/subsystems/*`.
+
+## RPC surface (unchanged by split)
+
+| Endpoint | Serverless handler | Dispatch |
+|----------|-------------------|----------|
+| GET/POST `/query` | `api/abstractplay.query` | `switch (query)` ~L768 |
+| POST `/authQuery` | `api/abstractplay.authQuery` | `switch (query)` ~L887 |
+| POST `/botQuery` | `api/abstractplay.botQuery` | `switch (verb)` ~L865 |
+
+## Phase comparison template
+
+Copy for PR descriptions:
+
+```markdown
+### Bundle sizes vs baseline (docs/_api-split-baseline.md)
+| Function | Phase 0 | This PR |
+|----------|--------:|--------:|
+| query (test bundle or .serverless zip) | 787570 B | |
+| authQuery | (same module) | |
+| botQuery | (same module) | |
+| abstractplay.ts lines | 10062 | |
+```
