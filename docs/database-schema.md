@@ -106,6 +106,12 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - `body.type` values: `gameStart`, `gameEnd`, `ratingChange`, `challengeIssued`, `challengeDeclined`, `challengeRevoked`, `eventInvitation`, `completedGameChat`
   - `eventInvitation` is sent when an organizer saves the invite list on a moderated `ORGEVENT` (`event_update_invites`); not used for automated tournaments. Body includes `eventId`, `eventName`, `organizerId`, `organizerName`. Inspect rows with `bin/dump-dashboard.mjs` `--include-notifications` (read-only; does not refresh TTL)
 
+- **Announcements** — site news ([subsystem doc](/backend/subsystems/announcements/))
+  - pk: `ANNOUNCEMENT`, sk: `<id>` — canonical row (`title`, `body`, `status`, `publishedAt`, `attachmentKeys`, …)
+  - pk: `ANNOUNCEMENT_PUBLISHED`, sk: `<paddedPublishedAt>#<id>` — published list index (newest first via `Query` + `ScanIndexForward: false`)
+  - pk: `ANNOUNCEMENT`, sk: `REACTION#<emoji>#<userId>` — per-reaction rows (Phase 4)
+  - Attachments: S3 bucket `ap-announcements-attachments-<stage>`
+
 ## Game lists
 
 - **Current games by player** — per-player active game summaries (stream-maintained; Phase 3 reads from here)
