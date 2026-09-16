@@ -129,7 +129,7 @@ test('announcementPublish blocked on dev stage', async () => {
   const client = {
     send: async () => ({ Item: undefined }),
   } as unknown as DynamoDBDocumentClient;
-  const result = await announcementPublish(client, 'table', 'x');
+  const result = await announcementPublish(client, 'table', null, 'x');
   process.env.WEBSOCKET_STAGE = prev;
   assert.equal(result.ok, false);
   if (!result.ok) {
