@@ -4,6 +4,20 @@ export {
   putAnnouncementRecord,
   buildAnnouncementPutItems,
 } from './access.js';
+export {
+  announcementsAdminList,
+  announcementSave,
+  announcementGetAdmin,
+  announcementPresignUpload,
+  announcementPublish,
+  authorAttachmentPrefix,
+} from './admin.js';
+export type {
+  AnnouncementsAdminListPars,
+  AnnouncementAdminListItem,
+  AnnouncementSavePars,
+  AnnouncementPresignUploadPars,
+} from './admin.js';
 export type { AnnouncementsResult } from './access.js';
 export {
   normalizeDiscordContent,

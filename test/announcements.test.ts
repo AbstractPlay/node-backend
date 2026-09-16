@@ -7,6 +7,7 @@ import {
   announcementGet,
   putAnnouncementRecord,
 } from '../lib/announcements/access.js';
+import { announcementPublish, announcementSave } from '../lib/announcements/admin.js';
 import { publishedIndexSk } from '../lib/announcements/keys.js';
 import {
   normalizeDiscordContent,
@@ -120,6 +121,41 @@ test('putAnnouncementRecord writes canonical and index', async () => {
   });
   assert.equal(puts.length, 2);
   assert.ok(puts.every((c) => c instanceof PutCommand));
+});
+
+test('announcementPublish blocked on dev stage', async () => {
+  const prev = process.env.WEBSOCKET_STAGE;
+  process.env.WEBSOCKET_STAGE = 'dev';
+  const client = {
+    send: async () => ({ Item: undefined }),
+  } as unknown as DynamoDBDocumentClient;
+  const result = await announcementPublish(client, 'table', 'x');
+  process.env.WEBSOCKET_STAGE = prev;
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.code, 'announcements_publish_disabled_on_dev');
+    assert.equal(result.statusCode, 403);
+  }
+});
+
+test('announcementSave creates draft', async () => {
+  const puts: unknown[] = [];
+  const client = {
+    send: async (command: unknown) => {
+      if (command instanceof GetCommand) {
+        return { Item: undefined };
+      }
+      puts.push(command);
+      return {};
+    },
+  } as unknown as DynamoDBDocumentClient;
+
+  const result = await announcementSave(client, 'table', {
+    title: 'Hello',
+    body: 'World',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(puts.length, 1);
 });
 
 test('buildAnnouncementsRss includes guid', () => {
