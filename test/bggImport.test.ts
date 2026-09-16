@@ -94,8 +94,10 @@ test('buildWishlistMetaFromBggImport auto-votes mapped non-Striton authors', () 
   assert.equal(meta.voteCount, 1);
   assert.equal(meta.effectiveVotes, 43);
   const rows = buildBggImportAuthorEngagementRows(meta, withSubmitter, resolver);
-  assert.equal(rows.length, 3);
+  assert.equal(rows.length, 5);
   assert.equal(rows[0]?.entityType, 'subscribe');
   assert.equal(rows[1]?.entityType, 'vote');
   assert.equal(rows[2]?.entityType, 'userIndex');
+  assert.equal(rows[3]?.entityType, 'userVotedIndex');
+  assert.equal(rows[4]?.entityType, 'userWatchIndex');
 });
