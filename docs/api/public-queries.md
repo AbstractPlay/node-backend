@@ -73,7 +73,7 @@ Returns `{ items, nextCursor? }` for list; `{ post, comments, attachmentUrls, ar
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `announcements_list` | Published announcements, newest first | optional `limit` (default 50, max 100), optional `cursor` |
+| `announcements_list` | Published announcements, newest first | optional `limit` (default 50, max 100), optional `cursor`, optional `publishedAfter` (ms, inclusive), optional `publishedBefore` (ms, exclusive) |
 | `announcement_get` | Single announcement | `id` |
 
 List returns `{ items, nextCursor? }` where each item includes `id`, `title`, `body`, `publishedAt`, optional `attachmentKeys`, optional `reactionCounts`. Get adds presigned `attachmentUrls` when attachments exist.

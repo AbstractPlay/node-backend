@@ -73,6 +73,26 @@ test('announcementsList returns published index rows', async () => {
   assert.equal(result.data.items[0].id, 'abc');
 });
 
+test('announcementsList applies publishedAfter on sort key', async () => {
+  let queryInput: Record<string, unknown> | undefined;
+  const client = {
+    send: async (command: unknown) => {
+      if (command instanceof QueryCommand) {
+        queryInput = command.input as Record<string, unknown>;
+        return { Items: [] };
+      }
+      throw new Error('unexpected');
+    },
+  } as unknown as DynamoDBDocumentClient;
+
+  const after = 1_700_000_000_000;
+  const result = await announcementsList(client, 'table', { limit: 5, publishedAfter: after });
+  assert.equal(result.ok, true);
+  assert.match(String(queryInput?.KeyConditionExpression), /sk >= :skMin/);
+  const values = queryInput?.ExpressionAttributeValues as Record<string, string>;
+  assert.equal(values[':skMin'], `${String(after).padStart(13, '0')}#`);
+});
+
 test('announcementGet loads canonical row', async () => {
   const client = {
     send: async (command: unknown) => {
