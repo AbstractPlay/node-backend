@@ -32,6 +32,16 @@ Blocking affects **open challenges only**:
 
 See [Player blocking](/backend/subsystems/player-blocking/).
 
+## Direct-challenge opt-out
+
+Users may set `settings.all.noDirectChallenges` to `true` (dashboard checkbox; stored via `update_user_settings`). When a **direct** challenge names a human challengee who opted out:
+
+- The challenge is not announced to challengees (no challenged email/push/`challengeIssued` in-app notification).
+- The server immediately processes a decline as that user, with a fixed system note (`DirectChallengeOptOutNote`) sent to the challenger via the normal rejection path.
+- If multiple human challengees are named and any one opted out, the whole challenge is declined (same as a manual decline today).
+
+Open/standing challenges and the player block list are **not** affected.
+
 ## Bots
 
 Bot challengees are notified via the `bot-outbound` queue (HTTPS webhook), not email. Bots respond via their endpoint; moves go through `botQuery`.
