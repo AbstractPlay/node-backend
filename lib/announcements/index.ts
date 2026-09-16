@@ -11,8 +11,18 @@ export {
   announcementGetAdmin,
   announcementPresignUpload,
   announcementPublish,
+  announcementRetract,
   authorAttachmentPrefix,
 } from './admin.js';
+export { fanOutAnnouncementPublished } from './publishNotify.js';
+export {
+  syncAnnouncementNotifyIndex,
+  listAnnouncementNotifyUserIds,
+  wantsAnnouncementsEmailFromSettings,
+  userWantsAnnouncementNotifications,
+  ANNOUNCEMENT_NOTIFY_PK,
+  type AnnouncementNotifyUser,
+} from './announcementNotifyIndex.js';
 export { syncAnnouncementsRss } from './rssSync.js';
 export { announcementReact, announcementReactionsMine, ALLOWED_ANNOUNCEMENT_REACTIONS } from './reactions.js';
 export { announcementsMarkRead } from './markRead.js';

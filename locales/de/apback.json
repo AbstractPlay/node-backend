@@ -9,6 +9,8 @@
   "ChallengeRevokedBodyComment": "{{name}} hat seine Herausforderung für {{- metaGame}} zurückgezogen und kommentiert: \"{{- comment}}\"",
   "ChallengeRevokedSubject": "AbstractPlay: Herausforderung zurückgezogen",
   "ChallengeSubject": "AbstractPlay: Neue Herausforderung",
+  "AnnouncementSubject": "AbstractPlay: Website-Ankündigung",
+  "AnnouncementBody": "Eine neue Ankündigung wurde veröffentlicht: {{- title}}\n\nLies sie auf der Website: {{- link}}",
   "DearPlayer": "Hallo {{player}}",
   "EmailOut": "Das AbstractPlay-System.",
   "GameLink": "Du kannst die Partie unter https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}} ansehen.",
@@ -23,14 +25,7 @@
   "GameStartedSubject": "AbstractPlay: Partie gestartet",
   "PUSH": {
     "titles": {
-      "challenged": "Herausgefordert",
-      "declined": "Herausforderung abgelehnt",
-      "ended": "Partie beendet",
-      "revoked": "Herausforderung zurückgezogen",
-      "started": "Partie gestartet",
-      "yourturn": "Du bist am Zug",
-      "tournament": "Turnier gestartet",
-      "tournamentOver": "Turnier beendet"
+      "announcement": "Website-Ankündigung"
     }
   },
   "YourMove": "Du bist am Zug.",

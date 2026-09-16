@@ -76,7 +76,8 @@ Requires `USER.admin === true`. Records live in the main `abstract-play` table (
 | `announcements_admin_list` | List all announcements | optional `status`, `limit`, `cursor`. Returns `{ items, nextCursor? }`. |
 | `announcement_get` | Load one item | `id`. Admins see drafts; non-admins get published only (same as open API). |
 | `announcement_presign_upload` | Presigned S3 PUT for images | `announcementId`, `filename`, `contentType`, `contentLength` (png/jpeg/webp, max 5 MB). Returns `{ uploadUrl, key, headers }`. |
-| `announcement_publish` | First publish (draft → published) | `id`. **403** `announcements_publish_disabled_on_dev` when `WEBSOCKET_STAGE=dev`. Fan-out: Discord webhook (if configured), `news.rss` upload. |
+| `announcement_publish` | First publish (draft → published) | `id`. **403** `announcements_publish_disabled_on_dev` when `WEBSOCKET_STAGE=dev`. Fan-out: Discord webhook (if configured), `news.rss` upload, email/push for users with `notifications.announcements` enabled. |
+| `announcement_retract` | Hide published post from site/RSS | `id`. **403** `announcements_retract_disabled_on_dev` on dev. Sets `status: retracted` and removes published index row. |
 | `announcements_mark_read` | Bump read cursor | optional `readAt` (ms). Sets `settings.all.announcementsLastReadAt`. |
 | `announcement_react` | Toggle allowlisted emoji on published post | `id`, `emoji`. Returns `{ id, reactionCounts, myReactions }`. |
 | `announcement_reactions_mine` | Highlight state for list | `ids: string[]`. Returns `{ byAnnouncementId }`. |

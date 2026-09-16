@@ -9,6 +9,8 @@
   "ChallengeRevokedBodyComment": "{{name}} a annulé son défi sur {{- metaGame}} et a commenté : \"{{- comment}}\"",
   "ChallengeRevokedSubject": "AbstractPlay : défi annulé",
   "ChallengeSubject": "AbstractPlay : nouveau défi",
+  "AnnouncementSubject": "AbstractPlay : annonce du site",
+  "AnnouncementBody": "Une nouvelle annonce a été publiée : {{- title}}\n\nConsultez-la sur le site : {{- link}}",
   "DearPlayer": "Chèr(e) {{player}}",
   "EmailOut": "Le système AbstractPlay.",
   "GameLink": "Vous pouvez voir la partie sur https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}}.",
@@ -23,14 +25,7 @@
   "GameStartedSubject": "AbstractPlay : la partie a commencé",
   "PUSH": {
     "titles": {
-      "challenged": "Défié",
-      "declined": "Défi décliné",
-      "ended": "Partie terminée",
-      "revoked": "Défi annulé",
-      "started": "Partie commencée",
-      "yourturn": "À vous de jouer",
-      "tournament": "Le tournoi a commencé",
-      "tournamentOver": "Le tournoi s'est terminé"
+      "announcement": "Annonce du site"
     }
   },
   "YourMove": "C'est votre tour.",
