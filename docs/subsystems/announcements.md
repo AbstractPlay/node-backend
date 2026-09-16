@@ -121,6 +121,6 @@ Excerpt = plain-text first ~200 chars of body. Full markdown and images live on 
 
 ## Related
 
-- [Notifications](notifications.md) — email/push delivery
+- [Notifications](/backend/subsystems/notifications/) — email/push delivery
 - [Public queries](/backend/api/public-queries/) — `announcements_list`, `announcement_get`
 - [Auth queries](/backend/api/auth-queries/) — admin save/publish, mark_read, react
