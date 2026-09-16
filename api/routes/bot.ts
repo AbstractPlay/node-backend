@@ -1,7 +1,7 @@
 import { headers } from '../../lib/api/http.js';
 import type { ApiHandlerResult, BotRouteHandler } from '../../lib/api/routeTypes.js';
 import type { PartialClaims } from '../../lib/api/types.js';
-import { handleMove } from '../abstractplay.js';
+import { handleMove } from '../../lib/games/playHandlers.js';
 
 export const botRoutes: Record<string, BotRouteHandler> = {
   move: (claims, body) =>

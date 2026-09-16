@@ -84,34 +84,49 @@ function unflatten(flat) {
   return result;
 }
 
+/** Same recursive merge as `front/bin/translate.mjs` and `gameslib/scripts/translate.mjs`. */
+export function deepMerge(target, source) {
+  for (const [key, value] of Object.entries(source)) {
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      target[key] &&
+      typeof target[key] === "object" &&
+      !Array.isArray(target[key])
+    ) {
+      deepMerge(target[key], value);
+    } else {
+      target[key] = value;
+    }
+  }
+  return target;
+}
+
+function translationChunkAsNestedTree(translatedChunk) {
+  const flatStrings = Object.fromEntries(
+    Object.entries(translatedChunk).filter(([, v]) => typeof v === "string"),
+  );
+  if (Object.keys(flatStrings).some((k) => k.includes("."))) {
+    return unflatten(flatStrings);
+  }
+  if (Object.keys(flatStrings).length > 0) {
+    return unflatten(flatStrings);
+  }
+  return translatedChunk;
+}
+
 /**
  * Apply Gemini output for diffLeaves without replacing whole top-level objects.
  * Models may return flat dotted keys or a nested JSON tree; both are supported.
  */
 export function mergeTranslatedChunkIntoTarget(targetData, diffLeaves, translatedChunk) {
-  const nestedResponse =
-    translatedChunk && typeof translatedChunk === "object" && !Array.isArray(translatedChunk)
-      ? translatedChunk
-      : {};
+  deepMerge(targetData, translationChunkAsNestedTree(translatedChunk));
 
   for (const leafPath of Object.keys(diffLeaves)) {
-    const sourceValue = diffLeaves[leafPath];
-    let translatedValue = translatedChunk[leafPath];
-    if (typeof translatedValue !== "string") {
-      translatedValue = getLeafValue(nestedResponse, leafPath);
-    }
-    if (typeof translatedValue !== "string") {
-      const fromFlatUnflatten = unflatten(
-        Object.fromEntries(
-          Object.entries(translatedChunk).filter(([, v]) => typeof v === "string"),
-        ),
-      );
-      translatedValue = getLeafValue(fromFlatUnflatten, leafPath);
-    }
-    if (typeof translatedValue !== "string") {
+    if (typeof getLeafValue(targetData, leafPath) !== "string") {
       throw new Error(`Missing translation for leaf path: ${leafPath}`);
     }
-    setLeafValue(targetData, leafPath, translatedValue);
   }
 }
 

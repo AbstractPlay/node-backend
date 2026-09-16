@@ -51,6 +51,8 @@ Esbuild output under [`.test-artifacts/lambda-bundles/`](../.test-artifacts/lamb
 | `api/authQuery.mjs` (Phase 6) | 742,698 | 725 |
 | `api/query.mjs` (Phase 7 partial) | 384,692 | 376 |
 | `api/authQuery.mjs` (Phase 7 partial) | 716,066 | 700 |
+| `api/query.mjs` (Phase 7 complete) | 367,971 | 359 |
+| `api/authQuery.mjs` (Phase 7 complete) | 718,268 | 702 |
 | `api/botQuery.mjs` (Phase 2) | 300,117 | 293 |
 | `utils/bot-outbound.mjs` | 798,806 | 781 |
 | `utils/yourturn.mjs` | 251,850 | 246 |
