@@ -58,7 +58,7 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 | `feedback_reclassify` | Admin reclassify bug → feature | `id`. Open → `open`; triaged → `under_review`; monitoring → `planned`. Terminal bugs rejected. Returns `{ id, kind, status }`. |
 | `feedback_update` | Edit title/body | `id`, optional `title`, `body` (at least one). Author or admin. Writes `EDIT#` audit rows. |
 | `feedback_set_admin_fields` | Admin triage fields | `id`, optional `effort`, `priority`, `adminTags`, `wishlistCategory`, `wishlistCategoryNote`. |
-| `feedback_mine` | List caller's posts | optional `kind`, `limit`, `cursor`. Returns `{ items, nextCursor? }`. |
+| `feedback_mine` | List caller's feedback activity | optional `scope` (`submitted` default, `voted`, `watched`), `kind`, `limit`, `cursor`. Items include `userVoted` and `subscribed`. Returns `{ items, nextCursor? }`. |
 | `feedback_admin_list` | Admin dashboard list | `kind`, optional `status`, `effort`, `priority`, `needsResponse`, `limit`, `cursor`. Returns `{ items, nextCursor? }` with `needsResponse` per item. |
 | `feedback_delete` | Admin delete wishlist entry | `id`, `reason` (required). Permanently removes the post and notifies watchers. Wishlist only. Returns `{ id }`. |
 | `feedback_merge` | Admin merge duplicate wishlist entries | `survivorId`, `duplicateId`. Moves comments/votes to survivor and deletes duplicate. |

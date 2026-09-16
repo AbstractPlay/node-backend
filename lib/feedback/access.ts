@@ -19,6 +19,7 @@ import type {
   FeedbackMinePars,
   FeedbackPresignUploadPars,
   FeedbackPublicComment,
+  FeedbackMineListItem,
   FeedbackPublicPost,
   FeedbackSetAdminFieldsPars,
   FeedbackReclassifyPars,
@@ -42,10 +43,16 @@ import {
   statusGsi2Pk,
   subscribeSk,
   userIndexSk,
-  userPostsSkPrefix,
+  userVotedSk,
+  userWatchSk,
   voteSk,
   USER_PK_PREFIX,
 } from './keys.js';
+import {
+  buildUserVotedIndexItem,
+  buildUserWatchIndexItem,
+  userMineSkPrefixForScope,
+} from './userEngagementIndex.js';
 import {
   assertStagingKeysOwned,
   assertStagingObjectsExist,
@@ -454,6 +461,18 @@ export async function feedbackCreate(
         },
       },
     },
+    {
+      Put: {
+        TableName: feedbackTable,
+        Item: buildUserVotedIndexItem(userId, data.kind, now, id),
+      },
+    },
+    {
+      Put: {
+        TableName: feedbackTable,
+        Item: buildUserWatchIndexItem(userId, data.kind, now, id),
+      },
+    },
   ];
 
   await client.send(new TransactWriteCommand({ TransactItems: writes }));
@@ -805,6 +824,7 @@ export async function feedbackVote(
   const nextVoteCount = vote ? currentVoteCount + 1 : Math.max(0, currentVoteCount - 1);
   const effectiveVotes = nextVoteCount + legacyVoteCount;
   const createdAt = Number(metaResult.Item.createdAt);
+  const postKind = metaResult.Item.kind as FeedbackKind;
 
   const transactItems: Record<string, unknown>[] = vote
     ? [
@@ -864,6 +884,25 @@ export async function feedbackVote(
         Key: { pk, sk: listSkForSort(sort) },
         UpdateExpression: updateExpression,
         ExpressionAttributeValues: values,
+      },
+    });
+  }
+
+  if (vote) {
+    transactItems.push({
+      Put: {
+        TableName: feedbackTable,
+        Item: buildUserVotedIndexItem(userId, postKind, createdAt, id),
+      },
+    });
+  } else {
+    transactItems.push({
+      Delete: {
+        TableName: feedbackTable,
+        Key: {
+          pk: `${USER_PK_PREFIX}${userId}`,
+          sk: userVotedSk(postKind, createdAt, id),
+        },
       },
     });
   }
@@ -1025,6 +1064,12 @@ export async function feedbackComment(
         },
       },
     });
+    transactItems.push({
+      Put: {
+        TableName: feedbackTable,
+        Item: buildUserWatchIndexItem(userId, kind, createdAt, id),
+      },
+    });
   }
 
   await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
@@ -1075,24 +1120,53 @@ export async function feedbackSubscribe(
   }
 
   const now = Date.now();
+  const postKind = metaResult.Item.kind as FeedbackKind;
+  const createdAt = Number(metaResult.Item.createdAt);
   if (subscribe) {
-    await client.send(new PutCommand({
-      TableName: feedbackTable,
-      Item: {
-        pk,
-        sk: subscribeSk(userId),
-        entityType: 'subscribe',
-        userId,
-        createdAt: now,
-        source: 'manual',
-      },
+    await client.send(new TransactWriteCommand({
+      TransactItems: [
+        {
+          Put: {
+            TableName: feedbackTable,
+            Item: {
+              pk,
+              sk: subscribeSk(userId),
+              entityType: 'subscribe',
+              userId,
+              createdAt: now,
+              source: 'manual',
+            },
+          },
+        },
+        {
+          Put: {
+            TableName: feedbackTable,
+            Item: buildUserWatchIndexItem(userId, postKind, createdAt, id),
+          },
+        },
+      ],
     }));
     return { ok: true, data: { subscribed: true } };
   }
 
-  await client.send(new DeleteCommand({
-    TableName: feedbackTable,
-    Key: { pk, sk: subscribeSk(userId) },
+  await client.send(new TransactWriteCommand({
+    TransactItems: [
+      {
+        Delete: {
+          TableName: feedbackTable,
+          Key: { pk, sk: subscribeSk(userId) },
+        },
+      },
+      {
+        Delete: {
+          TableName: feedbackTable,
+          Key: {
+            pk: `${USER_PK_PREFIX}${userId}`,
+            sk: userWatchSk(postKind, createdAt, id),
+          },
+        },
+      },
+    ],
   }));
   return { ok: true, data: { subscribed: false } };
 }
@@ -1691,22 +1765,23 @@ export async function feedbackMine(
   tableName: string | undefined,
   userId: string,
   pars: FeedbackMinePars,
-): Promise<FeedbackResult<{ items: FeedbackPublicPost[]; nextCursor?: string }>> {
+): Promise<FeedbackResult<{ items: FeedbackMineListItem[]; nextCursor?: string }>> {
   const validated = validateFeedbackMinePars(pars);
   if (!validated.ok) {
     return { ok: false, message: validated.message, statusCode: 400 };
   }
 
   const feedbackTable = getFeedbackTableName(tableName);
-  const { kind, limit, cursor } = validated.data;
+  const { kind, scope, limit, cursor } = validated.data;
   const pk = `${USER_PK_PREFIX}${userId}`;
+  const skPrefix = userMineSkPrefixForScope(scope);
 
   const result = await client.send(new QueryCommand({
     TableName: feedbackTable,
     KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
     ExpressionAttributeValues: {
       ':pk': pk,
-      ':prefix': userPostsSkPrefix(),
+      ':prefix': skPrefix,
     },
     ScanIndexForward: false,
     Limit: limit + 1,
@@ -1719,16 +1794,29 @@ export async function feedbackMine(
   }
   indexItems = indexItems.slice(0, limit);
 
-  const items: FeedbackPublicPost[] = [];
+  const items: FeedbackMineListItem[] = [];
   for (const indexItem of indexItems) {
     const postId = String(indexItem.id);
     const metaResult = await client.send(new GetCommand({
       TableName: feedbackTable,
       Key: { pk: postPk(postId), sk: metaSk() },
     }));
-    if (metaResult.Item) {
-      items.push(toPublicPost(metaResult.Item));
+    if (!metaResult.Item) {
+      continue;
     }
+    const voteResult = await client.send(new GetCommand({
+      TableName: feedbackTable,
+      Key: { pk: postPk(postId), sk: voteSk(userId) },
+    }));
+    const subResult = await client.send(new GetCommand({
+      TableName: feedbackTable,
+      Key: { pk: postPk(postId), sk: subscribeSk(userId) },
+    }));
+    items.push({
+      ...toPublicPost(metaResult.Item),
+      userVoted: Boolean(voteResult.Item),
+      subscribed: Boolean(subResult.Item),
+    });
   }
 
   let nextCursor: string | undefined;

@@ -1,12 +1,33 @@
-import { type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { createNotification } from '../notifications.js';
+import {
+  GetCommand,
+  type DynamoDBDocumentClient,
+} from '@aws-sdk/lib-dynamodb';
+import { createNotification, type CreateNotificationOptions } from '../notifications.js';
 import { isBotIdOnTable } from '../participants.js';
 import type { FeedbackKind } from './types.js';
 import { FEEDBACK_NEW_POST_NOTIFY_USER_IDS } from './constants.js';
 import { listSubscriberIds } from './subscribe.js';
+import {
+  listFeedbackNewNotifyUserIds,
+  wantsFeedbackNewKindFromSettings,
+} from './feedbackNewNotifyIndex.js';
 
 function getMainTableName(): string | undefined {
   return process.env.ABSTRACT_PLAY_TABLE;
+}
+
+const FEEDBACK_NEW_ADMIN_IDS = new Set<string>(FEEDBACK_NEW_POST_NOTIFY_USER_IDS);
+
+async function loadUserSettings(
+  client: DynamoDBDocumentClient,
+  mainTable: string,
+  userId: string,
+): Promise<unknown> {
+  const result = await client.send(new GetCommand({
+    TableName: mainTable,
+    Key: { pk: 'USER', sk: userId },
+  }));
+  return result.Item?.settings;
 }
 
 async function notifyRecipients(
@@ -14,6 +35,7 @@ async function notifyRecipients(
   feedbackTable: string,
   recipients: string[],
   body: Parameters<typeof createNotification>[3],
+  options?: CreateNotificationOptions,
 ): Promise<void> {
   const mainTable = getMainTableName();
   if (!mainTable) {
@@ -24,7 +46,7 @@ async function notifyRecipients(
     if (await isBotIdOnTable(client, mainTable, userId)) {
       continue;
     }
-    await createNotification(client, mainTable, userId, body);
+    await createNotification(client, mainTable, userId, body, options);
   }
 }
 
@@ -38,17 +60,39 @@ export async function notifyFeedbackNewPost(
     authorId: string;
   },
 ): Promise<void> {
-  const recipients = FEEDBACK_NEW_POST_NOTIFY_USER_IDS.filter(
-    (userId) => userId && userId !== pars.authorId,
-  );
-  if (recipients.length === 0) {
+  const mainTable = getMainTableName();
+  if (!mainTable) {
     return;
   }
-  await notifyRecipients(client, feedbackTable, [...recipients], {
-    type: 'feedbackNew',
+
+  const body = {
+    type: 'feedbackNew' as const,
     postId: pars.postId,
     kind: pars.kind,
     title: pars.title,
+  };
+
+  const adminRecipients = FEEDBACK_NEW_POST_NOTIFY_USER_IDS.filter(
+    (userId) => userId && userId !== pars.authorId,
+  );
+  await notifyRecipients(client, feedbackTable, adminRecipients, body, {
+    bypassInAppPreference: true,
+  });
+
+  const optInIds = (await listFeedbackNewNotifyUserIds(client, feedbackTable, pars.kind))
+    .filter((userId) => userId && userId !== pars.authorId && !FEEDBACK_NEW_ADMIN_IDS.has(userId));
+
+  const settingsByUserId = new Map<string, unknown>();
+  for (const userId of optInIds) {
+    settingsByUserId.set(userId, await loadUserSettings(client, mainTable, userId));
+  }
+
+  const confirmedOptIn = optInIds.filter((userId) => (
+    wantsFeedbackNewKindFromSettings(settingsByUserId.get(userId), pars.kind)
+  ));
+
+  await notifyRecipients(client, feedbackTable, confirmedOptIn, body, {
+    bypassInAppPreference: true,
   });
 }
 

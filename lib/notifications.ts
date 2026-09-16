@@ -382,6 +382,8 @@ export function buildNotificationItem(
 
 export type CreateNotificationOptions = {
   userSettings?: InAppNotificationUserSettings;
+  /** When true, skip in-app category preference checks (e.g. feedback-new admin allowlist). */
+  bypassInAppPreference?: boolean;
 };
 
 export async function createNotification(
@@ -394,9 +396,11 @@ export async function createNotification(
   if (await isBotIdOnTable(client, tableName, userId)) {
     return;
   }
-  const category = inAppCategoryForBody(body);
-  if (!wantsInAppNotification(options?.userSettings, category)) {
-    return;
+  if (!options?.bypassInAppPreference) {
+    const category = inAppCategoryForBody(body);
+    if (!wantsInAppNotification(options?.userSettings, category)) {
+      return;
+    }
   }
   await putNotificationItem(client, tableName, userId, body);
 }
