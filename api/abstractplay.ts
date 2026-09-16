@@ -612,7 +612,6 @@ export {
   checkForTimeloss,
   getExploration,
   getPrivateExploration,
-  handleMove,
   invokePie,
   markAsPublished,
   saveExploration,
@@ -658,6 +657,8 @@ export {
 } from '../lib/bots/crud.js';
 
 export { pingBot, testPush } from '../lib/bots/ping.js';
+
+export { handleMove } from '../lib/bots/move.js';
 
 export {
   deleteCustomization,
