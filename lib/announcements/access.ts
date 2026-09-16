@@ -10,6 +10,8 @@ import {
   ANNOUNCEMENT_PUBLISHED_PK,
   announcementSk,
   publishedIndexSk,
+  publishedIndexSkLowerBound,
+  publishedIndexSkUpperBoundExclusive,
 } from './keys.js';
 import { presignAnnouncementAttachmentUrls } from './attachments.js';
 import type {
@@ -68,10 +70,30 @@ export async function announcementsList(
     return { ok: false, message: 'Invalid cursor.', statusCode: 400 };
   }
 
+  const publishedAfter = Number.isFinite(pars.publishedAfter) ? pars.publishedAfter! : undefined;
+  const publishedBefore = Number.isFinite(pars.publishedBefore) ? pars.publishedBefore! : undefined;
+  if (publishedAfter !== undefined && publishedBefore !== undefined && publishedAfter >= publishedBefore) {
+    return { ok: false, message: 'publishedAfter must be less than publishedBefore.', statusCode: 400 };
+  }
+
+  let keyCondition = 'pk = :pk';
+  const expressionValues: Record<string, unknown> = { ':pk': ANNOUNCEMENT_PUBLISHED_PK };
+  if (publishedAfter !== undefined && publishedBefore !== undefined) {
+    keyCondition += ' AND sk BETWEEN :skMin AND :skMax';
+    expressionValues[':skMin'] = publishedIndexSkLowerBound(publishedAfter);
+    expressionValues[':skMax'] = publishedIndexSkUpperBoundExclusive(publishedBefore);
+  } else if (publishedAfter !== undefined) {
+    keyCondition += ' AND sk >= :skMin';
+    expressionValues[':skMin'] = publishedIndexSkLowerBound(publishedAfter);
+  } else if (publishedBefore !== undefined) {
+    keyCondition += ' AND sk < :skMax';
+    expressionValues[':skMax'] = publishedIndexSkUpperBoundExclusive(publishedBefore);
+  }
+
   const result = await client.send(new QueryCommand({
     TableName: tableName,
-    KeyConditionExpression: 'pk = :pk',
-    ExpressionAttributeValues: { ':pk': ANNOUNCEMENT_PUBLISHED_PK },
+    KeyConditionExpression: keyCondition,
+    ExpressionAttributeValues: expressionValues,
     ExclusiveStartKey: decoded ? { pk: ANNOUNCEMENT_PUBLISHED_PK, sk: decoded.sk } : undefined,
     Limit: limit,
     ScanIndexForward: false,

@@ -31,6 +31,10 @@ export type AnnouncementPublicItem = {
 export type AnnouncementsListPars = {
   limit?: number;
   cursor?: string;
+  /** Inclusive: items with publishedAt >= this (ms). */
+  publishedAfter?: number;
+  /** Exclusive: items with publishedAt < this (ms). */
+  publishedBefore?: number;
 };
 
 export type AnnouncementGetPars = {
