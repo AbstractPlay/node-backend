@@ -3,6 +3,7 @@
   "ChallengeBodyComment": "{{challenger}} te ha desafiado a una partida de {{- metaGame}} con la nota: \"{{- comment}}\". Visita https://play.abstractplay.com/ para más detalles.",
   "ChallengeRejectedBody": "{{quitter}} ha rechazado el desafío de {{- metaGame}}. El desafío ha sido eliminado.",
   "ChallengeRejectedSubject": "AbstractPlay: Desafío rechazado",
+  "DirectChallengeOptOutNote": "Este usuario ha optado por no aceptar desafíos directos.",
   "ChallengeResponseComment": "Tu oponente comentó: \"{{- comment}}\"",
   "ChallengeRevokedBody": "{{name}} ha retirado su desafío de {{- metaGame}}.",
   "ChallengeRevokedBodyComment": "{{name}} ha retirado su desafío de {{- metaGame}} y comentó: \"{{- comment}}\"",

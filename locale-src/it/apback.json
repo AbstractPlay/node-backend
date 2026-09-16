@@ -39,6 +39,10 @@
     "src": "Dear {{player}}",
     "out": "Caro {{player}}"
   },
+  "DirectChallengeOptOutNote": {
+    "src": "This user has chosen not to accept direct challenges.",
+    "out": "Questo utente ha scelto di non accettare sfide dirette."
+  },
   "EmailOut": {
     "src": "The AbstractPlay system.",
     "out": "Il sistema AbstractPlay."
