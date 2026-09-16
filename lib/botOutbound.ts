@@ -246,7 +246,7 @@ export async function processBotChallengeMessage(message: BotOutboundChallengeMe
   const result = await postToBot(bot, payload, 'POST', 200);
   const accepted = result.statusCode === 200;
 
-  const { botRespondToChallenge } = await import('../api/abstractplay.js');
+  const { botRespondToChallenge } = await import('./challenges/authHandlers.js');
   await botRespondToChallenge(
     message.botId,
     message.challengeId,
