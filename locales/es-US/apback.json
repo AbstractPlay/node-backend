@@ -25,7 +25,14 @@
   "GameStartedSubject": "AbstractPlay: partida iniciada",
   "PUSH": {
     "titles": {
-      "announcement": "Anuncio del sitio"
+      "challenged": "Te han desafiado",
+      "declined": "Desafío rechazado",
+      "ended": "Fin de la partida",
+      "revoked": "Desafío cancelado",
+      "started": "Partida iniciada",
+      "yourturn": "Tu turno",
+      "tournament": "Torneo iniciado",
+      "tournamentOver": "Torneo finalizado"
     }
   },
   "YourMove": "Es tu turno de mover.",

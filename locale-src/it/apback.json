@@ -113,7 +113,7 @@
   },
   "PUSH.titles.revoked": {
     "src": "Challenge revoked",
-    "out": "Sfida revocata"
+    "out": "Sfida annullata"
   },
   "PUSH.titles.started": {
     "src": "Game started",
