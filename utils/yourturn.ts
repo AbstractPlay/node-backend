@@ -4,7 +4,9 @@ import { DynamoDBDocumentClient, GetCommand, QueryCommand,  } from '@aws-sdk/lib
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import i18n from '../lib/i18nInstance.js';
 import type { Handler } from "aws-lambda";
-import { createSendEmailCommand, logGetItemError, formatReturnError, initi18n, changeLanguageForPlayer, UserSettings } from '../api/abstractplay.js';
+import { createSendEmailCommand, initi18n, changeLanguageForPlayer } from '../lib/api/i18n.js';
+import { logGetItemError, formatReturnError } from '../lib/api/http.js';
+import type { UserSettings } from '../lib/api/types.js';
 import { gameinfo } from '@abstractplay/gameslib';
 
 const REGION = "us-east-1";

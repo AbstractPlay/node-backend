@@ -52,7 +52,7 @@ Serverless Framework **v4** resolves `provider.environment` when you run `server
 - **CI:** GitHub Actions set `SERVERLESS_ACCESS_KEY` (org secret), `SERVERLESS_ORG=abstractplay`, plus `TOTP_KEY`, VAPID keys, and `OPENSSH_PRIVATE_KEY` from repository secrets.
 - **Local:** Keep values in **`../apsecrets.yml`** (sibling of this repo, e.g. `ap/apsecrets.yml` next to `node-backend/`). That path is **outside** this git repository, so it cannot be committed here. [`serverless.yml`](../serverless.yml) uses `${env:VAR, file(../apsecrets.yml):key}` — CI environment variables win when set; otherwise the CLI reads the file.
 
-Expected keys in `../apsecrets.yml`: `totp_key`, `vapid_private_key`, `vapid_public_key`, `openssh_private_key` (YAML snake_case; `openssh_private_key` is OpenSSH PEM text for bot webhook signing).
+Expected keys in `../apsecrets.yml`: `totp_key`, `vapid_private_key`, `vapid_public_key`, `openssh_private_key`, `announcements_discord_webhook_url` (YAML snake_case; `openssh_private_key` is OpenSSH PEM text for bot webhook signing). For CI prod deploy, also set GitHub secret `ANNOUNCEMENTS_DISCORD_WEBHOOK_URL` (same webhook URL).
 
 ## Stage configuration
 

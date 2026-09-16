@@ -1,41 +1,39 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, BatchGetCommand, QueryCommandInput, GetCommandOutput, PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
-import { SQSClient, SendMessageCommand, SendMessageCommandOutput, SendMessageRequest } from "@aws-sdk/client-sqs";
-import { CognitoIdentityProviderClient, CreateUserPoolClientCommand, DeleteUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
+import { PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand, BatchGetCommand, QueryCommandInput, GetCommandOutput, PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput, QueryCommandOutput } from '@aws-sdk/lib-dynamodb';
+import { SendMessageCommand, SendMessageCommandOutput, SendMessageRequest } from "@aws-sdk/client-sqs";
+import { CreateUserPoolClientCommand, DeleteUserPoolClientCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, validateVariantSelection } from '@abstractplay/gameslib';
 import { localizedGameName } from '../lib/gameDisplayName.js';
-import { applyGameslibBundlesTo } from '../lib/gameslibLocales.js';
 import { effectiveFlags, flagSetIncludes, structuralFlags, applyPerspectivePlayerRotations } from '../lib/effectiveGameFlags.js';
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import { SendEmailCommand } from '@aws-sdk/client-ses';
 import webpush from "web-push";
 import { validateToken } from '@sunknudsen/totp';
 import i18n from '../lib/i18nInstance.js';
-import en from '../locales/en/apback.json';
-import fr from '../locales/fr/apback.json';
-import de from '../locales/de/apback.json';
-import it from '../locales/it/apback.json';
-import esUS from '../locales/es-US/apback.json';
-import pt from '../locales/pt/apback.json';
-import ta from '../locales/ta/apback.json';
+import { ddbDocClient } from '../lib/ddb.js';
+import { sesClient, s3Client, sqsClient, cognitoClient } from '../lib/api/clients.js';
+import {
+  headers,
+  cachedListHeaders,
+  feedbackListHeaders,
+  parseLambdaIntegrationBody,
+  formatReturnError,
+  logGetItemError,
+  handleCommonErrors,
+} from '../lib/api/http.js';
+import {
+  changeLanguageForPlayer,
+  createSendEmailCommand,
+  initi18n,
+} from '../lib/api/i18n.js';
+import { sendCommandWithRetry } from '../lib/api/ddbRetry.js';
+import type { User, UserSettings, UserLastSeen, UsersData, PartialClaims } from '../lib/api/types.js';
 
-const LOCALE_RESOURCES = { en, fr, de, it, "es-US": esUS, pt, ta } as const;
-const REGISTERED_LANGUAGES = Object.keys(LOCALE_RESOURCES);
+export type { UserSettings, UserLastSeen, User, UsersData } from '../lib/api/types.js';
+export { changeLanguageForPlayer, createSendEmailCommand, initi18n } from '../lib/api/i18n.js';
+export { formatReturnError, logGetItemError, handleCommonErrors } from '../lib/api/http.js';
 
-function resolvePlayerLanguage(language: string | undefined): string {
-  if (language && REGISTERED_LANGUAGES.includes(language)) {
-    return language;
-  }
-  if (language) {
-    const lower = language.toLowerCase();
-    if (lower === "es" || lower.startsWith("es-")) {
-      return "es-US";
-    }
-  }
-  return "en";
-}
 import { wsBroadcast } from '../lib/wsBroadcast.js';
 import { checkInGameCommentAuth } from '../lib/commentAuth.js';
 import {
@@ -201,11 +199,9 @@ import {
   feedbackNewKindsFromSettings,
   syncFeedbackNewNotifyIndex,
 } from '../lib/feedback/feedbackNewNotifyIndex.js';
-import { S3Client } from '@aws-sdk/client-s3';
 import {
   queryRecentCompletedGames,
   updateCompletedGameCommentedFlag,
-  RECENT_COMPLETED_CACHE_TTL_MS,
   type RecentCompletedGamesPars,
 } from '../lib/recentCompletedGames.js';
 import { queryAllStandingChallenges } from '../lib/allStandingChallenges.js';
@@ -236,42 +232,6 @@ import {
   type NotificationGame,
   type NotificationScore,
 } from '../lib/notifications.js';
-
-const REGION = "us-east-1";
-const sesClient = new SESClient({ region: REGION });
-const s3Client = new S3Client({ region: REGION });
-const sqsClient = new SQSClient({ region: REGION });
-const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
-const clnt = new DynamoDBClient({ region: REGION });
-const marshallOptions = {
-  // Whether to automatically convert empty strings, blobs, and sets to `null`.
-  convertEmptyValues: false, // false, by default.
-  // Whether to remove undefined values while marshalling.
-  removeUndefinedValues: true, // false, by default.
-  // Whether to convert typeof object to map attribute.
-  convertClassInstanceToMap: false, // false, by default.
-};
-const unmarshallOptions = {
-  // Whether to return numbers as a string instead of converting them to native JavaScript numbers.
-  wrapNumbers: false, // false, by default.
-};
-const translateConfig = { marshallOptions, unmarshallOptions };
-const ddbDocClient = DynamoDBDocumentClient.from(clnt, translateConfig);
-const headers = {
-  'content-type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Credentials': true,
-  "Access-Control-Allow-Headers": "*",
-  "Access-Control-Allow-Methods": "*",
-};
-const cachedListHeaders = {
-  ...headers,
-  'Cache-Control': `public, max-age=${Math.floor(RECENT_COMPLETED_CACHE_TTL_MS / 1000)}`,
-};
-const feedbackListHeaders = {
-  ...headers,
-  'Cache-Control': 'no-cache, no-store, must-revalidate',
-};
 
 // Types
 type MetaGameCounts = {
@@ -315,46 +275,6 @@ type FullChallenge = {
   dateIssued?: number;
 }
 
-export type UserSettings = {
-  [k: string]: any;
-  all?: {
-    [k: string]: any;
-    annotate?: boolean;
-    notifications?: {
-      gameStart: boolean;
-      gameEnd: boolean;
-      challenges: boolean;
-      yourturn: boolean;
-      tournamentStart: boolean;
-      tournamentEnd: boolean;
-    };
-    inAppNotifications?: {
-      challenges: boolean;
-      gameStart: boolean;
-      gameEnd: boolean;
-      ratingChange: boolean;
-      eventInvitation: boolean;
-      completedGameChat: boolean;
-      tournamentStart: boolean;
-      tournamentEnd: boolean;
-    }
-  }
-};
-
-export type UserLastSeen = {
-  id: string;
-  name: string;
-  lastSeen?: number;
-};
-
-export type User = {
-  id: string;
-  name: string;
-  time?: number;
-  settings?: UserSettings;
-  draw?: string;
-}
-
 type FullUser = {
   pk?: string,
   sk?: string,
@@ -392,19 +312,6 @@ type FullUser = {
   /** Set by abandoned-account dashboard cleanup cron; cleared on me() login. */
   cleaned?: boolean;
 }
-
-export type UsersData = {
-  id: string;
-  name: string;
-  country: string;
-  lastSeen: number;
-  stars: string[];
-  bggid?: string;
-  avatarStyle?: string;
-  avatarSeed?: string;
-  bot: boolean;
-  admin?: boolean;
-};
 
 type Bot = ClientBot;
 
@@ -662,34 +569,6 @@ type StandingChallengeRec = {
   standing: StandingChallenge[];
 };
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-async function sendCommandWithRetry<T = any>(command: any, maxRetries = 8, initialDelay = 100, maxDelay = 5000): Promise<T> {
-  let retries = 0;
-  while (retries < maxRetries) {
-    try {
-      // @ts-ignore
-      return await ddbDocClient.send(command) as T;
-    } catch (err: any) {
-      if (['ThrottlingException', 'ProvisionedThroughputExceededException', 'InternalServerError', 'ServiceUnavailable'].includes(err.name)) {
-        retries++;
-        if (retries >= maxRetries) {
-          console.error(`Command failed after ${maxRetries} retries.`);
-          throw err;
-        }
-        const delay = Math.min(initialDelay * Math.pow(2, retries - 1), maxDelay);
-        const jitter = delay * 0.1 * Math.random();
-        console.log(`Retryable error (${err.name}) caught. Retrying in ${Math.round(delay + jitter)}ms...`);
-        await sleep(delay + jitter);
-      } else {
-        throw err;
-      }
-    }
-  }
-  // This should never be reached due to the throw in the catch block
-  throw new Error(`Command failed after ${maxRetries} retries without a retryable error`);
-}
-
 const DEFAULT_META_GAME_COUNTS = {
   currentgames: 0,
   completedgames: 0,
@@ -831,16 +710,6 @@ export const query = async (event: { queryStringParameters: any; body?: string; 
   }
 }
 
-function parseLambdaIntegrationBody(body: string | Record<string, unknown> | undefined): Record<string, unknown> {
-  if (body === undefined || body === null) {
-    throw new Error("Missing request body");
-  }
-  if (typeof body === "string") {
-    return JSON.parse(body) as Record<string, unknown>;
-  }
-  return body;
-}
-
 export const botQuery = async (event: { body: string | Record<string, unknown>; cognitoPoolClaims: PartialClaims; }) => {
   console.log("botQuery: ", event.body);
   console.log("botQuery claims:", {
@@ -875,8 +744,6 @@ export const botQuery = async (event: { body: string | Record<string, unknown>; 
       };
   }
 }
-
-type PartialClaims = { sub: string; email: string; email_verified: boolean };
 
 // It looks like there is no way to "run and forget", you need to finish all work before returning a response to the front end. :(
 // Make sure the @typescript-eslint/no-floating-promises linter rule passes, otherwise promise might (at best?) only be fullfilled on the next call to the API...
@@ -10260,133 +10127,6 @@ function shuffle(array: any[]) {
     const temp = array[i];
     array[i] = array[j];
     array[j] = temp;
-  }
-}
-
-export async function changeLanguageForPlayer(player: { language: string | undefined; }) {
-  const lng = resolvePlayerLanguage(player.language);
-  if (i18n.language !== lng) {
-    await i18n.changeLanguage(lng);
-  }
-}
-
-export function createSendEmailCommand(toAddress: string, player: any, subject: any, body: string) {
-  console.log("toAddress", toAddress, "player", player, "body", body);
-  const fullbody = i18n.t("DearPlayer", { player }) + '\r\n\r\n' + body + "\r\n\r\n" + i18n.t("EmailOut");
-  return new SendEmailCommand({
-    Destination: {
-      ToAddresses: [
-        toAddress
-      ],
-    },
-    Message: {
-      Body: {
-        Text: {
-          Charset: "UTF-8",
-          Data: fullbody
-        },
-      },
-      Subject: {
-        Charset: "UTF-8",
-        Data: subject
-      },
-    },
-    Source: "abstractplay@mail.abstractplay.com"
-  });
-}
-
-export async function initi18n(language: string) {
-  await i18n.init({
-    lng: language,
-    fallbackLng: 'en',
-    resources: Object.fromEntries(
-      Object.entries(LOCALE_RESOURCES).map(([lng, translation]) => [
-        lng,
-        { translation },
-      ]),
-    ),
-  });
-
-  applyGameslibBundlesTo(i18n);
-}
-
-function clientErrorMessage(err: unknown): string | undefined {
-  if (!(err instanceof Error)) return undefined;
-  if (err.name === 'UserFacingError') {
-    const ufe = err as Error & { client?: string };
-    return ufe.client || err.message;
-  }
-  if (err.message === 'It is not your turn!') {
-    return err.message;
-  }
-  return undefined;
-}
-
-export function formatReturnError(message: string, err?: unknown) {
-  return {
-    statusCode: 500,
-    body: JSON.stringify({
-      message: clientErrorMessage(err) ?? message
-    }),
-    headers
-  };
-}
-
-// Handles errors during GetItem execution. Use recommendations in error messages below to
-// add error handling specific to your application use-case.
-export function logGetItemError(err: unknown) {
-  if (!err) {
-    console.error('Encountered error object was empty');
-    return;
-  }
-  if (!(err as { code: any; message: any; }).code) {
-    if (err instanceof Error) {
-      console.error(`An exception occurred, investigate and configure retry strategy. Error: ${err.message}`);
-      if (err.stack) {
-        console.error('Stack trace:', err.stack);
-      }
-    } else {
-      console.error(`An exception occurred, investigate and configure retry strategy. Error: ${JSON.stringify(err)}`);
-    }
-    return;
-  }
-  // here are no API specific errors to handle for GetItem, common DynamoDB API errors are handled below
-  handleCommonErrors(err as { code: any; message: any; });
-}
-
-export function handleCommonErrors(err: { code: any; message: any; }) {
-  switch (err.code) {
-    case 'InternalServerError':
-      console.error(`Internal Server Error, generally safe to retry with exponential back-off. Error: ${err.message}`);
-      return;
-    case 'ProvisionedThroughputExceededException':
-      console.error(`Request rate is too high. If you're using a custom retry strategy make sure to retry with exponential back-off. `
-        + `Otherwise consider reducing frequency of requests or increasing provisioned capacity for your table or secondary index. Error: ${err.message}`);
-      return;
-    case 'ResourceNotFoundException':
-      console.error(`One of the tables was not found, verify table exists before retrying. Error: ${err.message}`);
-      return;
-    case 'ServiceUnavailable':
-      console.error(`Had trouble reaching DynamoDB. generally safe to retry with exponential back-off. Error: ${err.message}`);
-      return;
-    case 'ThrottlingException':
-      console.error(`Request denied due to throttling, generally safe to retry with exponential back-off. Error: ${err.message}`);
-      return;
-    case 'UnrecognizedClientException':
-      console.error(`The request signature is incorrect most likely due to an invalid AWS access key ID or secret key, fix before retrying. `
-        + `Error: ${err.message}`);
-      return;
-    case 'ValidationException':
-      console.error(`The input fails to satisfy the constraints specified by DynamoDB, `
-        + `fix input before retrying. Error: ${err.message}`);
-      return;
-    case 'RequestLimitExceeded':
-      console.error(`Throughput exceeds the current throughput limit for your account, `
-        + `increase account level throughput before retrying. Error: ${err.message}`);
-      return;
-    default:
-      console.error(`An exception occurred, investigate and configure retry strategy. Error: ${err.message}`);
-      return;
   }
 }
 
