@@ -25,14 +25,7 @@
   "GameStartedSubject": "AbstractPlay : la partie a commencé",
   "PUSH": {
     "titles": {
-      "challenged": "Défi reçu",
-      "declined": "Défi refusé",
-      "ended": "Partie terminée",
-      "revoked": "Défi annulé",
-      "started": "Partie commencée",
-      "yourturn": "À votre tour",
-      "tournament": "Tournoi commencé",
-      "tournamentOver": "Tournoi terminé"
+      "announcement": "Annonce du site"
     }
   },
   "YourMove": "C'est votre tour.",
