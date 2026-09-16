@@ -236,10 +236,18 @@ export type FeedbackSetAdminFieldsPars = {
   wishlistCategoryNote?: string;
 };
 
+export type FeedbackMineScope = 'submitted' | 'voted' | 'watched';
+
 export type FeedbackMinePars = {
   kind?: string;
+  scope?: string;
   cursor?: string;
   limit?: string | number;
+};
+
+export type FeedbackMineListItem = FeedbackPublicPost & {
+  userVoted?: boolean;
+  subscribed?: boolean;
 };
 
 export type FeedbackAdminListPars = {

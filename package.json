@@ -29,6 +29,7 @@
     "report-discord-feedback-users": "tsx bin/report-discord-feedback-users.mjs",
     "feedback-archive": "tsx bin/feedback-archive.mjs",
     "feedback-attachment-cleanup": "tsx bin/feedback-attachment-cleanup.mjs",
+    "backfill-feedback-user-engagement": "tsx bin/backfill-feedback-user-engagement-indexes.mjs",
     "backfill-wishlist-bgg-images": "tsx bin/backfill-wishlist-bgg-images.mjs",
     "backfill-blank-user-names": "tsx bin/backfill-blank-user-names.mjs",
     "sync-deps": "ap-install-deps --stage dev",
