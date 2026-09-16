@@ -271,7 +271,7 @@ export function isTestBotOwner(userId: string | undefined): boolean {
 }
 
 // =============================================================================
-// authQuery dashboard handlers (wired from abstractplay.ts — dev only)
+// authQuery dashboard handlers (wired from api/routes/auth — dev only)
 // =============================================================================
 
 type PartialClaims = { sub?: string };

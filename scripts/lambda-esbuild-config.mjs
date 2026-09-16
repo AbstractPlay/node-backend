@@ -15,7 +15,9 @@ export const LAMBDA_ESBUILD_EXTERNAL = [
 
 /** Handler entry modules (unique serverless `handler` paths before the dot). */
 export const LAMBDA_HANDLER_ENTRIES = [
-  "api/abstractplay.ts",
+  "api/query.ts",
+  "api/authQuery.ts",
+  "api/botQuery.ts",
   "api/testBot.ts",
   "utils/yourturn.ts",
   "utils/bot-outbound.ts",

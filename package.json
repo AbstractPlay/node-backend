@@ -6,7 +6,7 @@
   "scripts": {
     "build:lambda-bundles": "node scripts/build-lambda-test-bundles.mjs",
     "pretest": "npm run build:lambda-bundles",
-    "test": "npm run typecheck && vitest run && node --test test/lambdaInit.test.mjs test/scripts/locale-prune.test.mjs test/scripts/check-weblate-branch.test.mjs",
+    "test": "npm run typecheck && vitest run && node --test test/lambdaInit.test.mjs test/scripts/locale-prune.test.mjs test/scripts/translate-merge.test.mjs test/scripts/check-weblate-branch.test.mjs",
     "test:watch": "vitest",
     "test:scripts": "node --test test/scripts/*.test.mjs",
     "typecheck": "tsc --noEmit",

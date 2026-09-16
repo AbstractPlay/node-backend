@@ -1,0 +1,37 @@
+import type { AuthRouteHandler } from '../../../lib/api/routeTypes.js';
+import {
+  feedbackAdminListAuth,
+  feedbackCommentAuth,
+  feedbackCreateAuth,
+  feedbackDeleteAuth,
+  feedbackGetAuth,
+  feedbackHoldRetentionAuth,
+  feedbackMergeAuth,
+  feedbackMineAuth,
+  feedbackPresignUploadAuth,
+  feedbackReclassifyAuth,
+  feedbackSetAdminFieldsAuth,
+  feedbackSetStatusAuth,
+  feedbackSubscribeAuth,
+  feedbackUpdateAuth,
+  feedbackVoteAuth,
+} from '../../../lib/feedback/authHandlers.js';
+import { bindAuth } from './shared.js';
+
+export const feedbackAuthRoutes: Record<string, AuthRouteHandler> = {
+  feedback_create: bindAuth(feedbackCreateAuth),
+  feedback_presign_upload: bindAuth(feedbackPresignUploadAuth),
+  feedback_vote: bindAuth(feedbackVoteAuth),
+  feedback_comment: bindAuth(feedbackCommentAuth),
+  feedback_subscribe: bindAuth(feedbackSubscribeAuth),
+  feedback_set_status: bindAuth(feedbackSetStatusAuth),
+  feedback_reclassify: bindAuth(feedbackReclassifyAuth),
+  feedback_update: bindAuth(feedbackUpdateAuth),
+  feedback_set_admin_fields: bindAuth(feedbackSetAdminFieldsAuth),
+  feedback_mine: bindAuth(feedbackMineAuth),
+  feedback_admin_list: bindAuth(feedbackAdminListAuth),
+  feedback_merge: bindAuth(feedbackMergeAuth),
+  feedback_delete: bindAuth(feedbackDeleteAuth),
+  feedback_hold_retention: bindAuth(feedbackHoldRetentionAuth),
+  feedback_get: bindAuth(feedbackGetAuth),
+};

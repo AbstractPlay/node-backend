@@ -65,7 +65,7 @@ Attributes: `event`, `sessionId`, `layout`, `resolvedFrom`, `metaGame`, `ts` (se
 - **No TTL** — purge or archive manually if volume grows.
 - **Rate limits (UTC day):** 100 events per logged-in user (server); 25 per anonymous session (server + client cap).
 
-Implementation: [`lib/layoutEvents.ts`](../../lib/layoutEvents.ts), wired from [`api/abstractplay.ts`](../../api/abstractplay.ts) (auth + public `query` handlers).
+Implementation: [`lib/layoutEvents.ts`](../../lib/layoutEvents.ts), wired from [`lib/analytics/authHandlers.ts`](../../lib/analytics/authHandlers.ts) and [`lib/public/analytics.ts`](../../lib/public/analytics.ts).
 
 ## CLI dump
 

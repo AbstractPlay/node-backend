@@ -31,7 +31,7 @@ Bot owners manage bots through authenticated `authQuery` endpoints. Creating a b
 
 Store `clientSecret` immediately — it is not retrievable later except via secret rotation.
 
-Implementation: `createBot()` in [`api/abstractplay.ts`](../../api/abstractplay.ts).
+Implementation: `createBot()` in [`lib/bots/crud.ts`](../../lib/bots/crud.ts).
 
 ## Update a bot
 
