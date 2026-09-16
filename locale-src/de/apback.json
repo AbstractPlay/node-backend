@@ -109,7 +109,7 @@
   },
   "PUSH.titles.ended": {
     "src": "Game over",
-    "out": "Partie beendet"
+    "out": "Spiel beendet"
   },
   "PUSH.titles.revoked": {
     "src": "Challenge revoked",
@@ -117,7 +117,7 @@
   },
   "PUSH.titles.started": {
     "src": "Game started",
-    "out": "Partie gestartet"
+    "out": "Spiel gestartet"
   },
   "PUSH.titles.tournament": {
     "src": "Tournament started",

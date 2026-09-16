@@ -101,11 +101,11 @@
   },
   "PUSH.titles.challenged": {
     "src": "Challenged",
-    "out": "Défié"
+    "out": "Défi reçu"
   },
   "PUSH.titles.declined": {
     "src": "Challenge declined",
-    "out": "Défi décliné"
+    "out": "Défi refusé"
   },
   "PUSH.titles.ended": {
     "src": "Game over",
@@ -121,15 +121,15 @@
   },
   "PUSH.titles.tournament": {
     "src": "Tournament started",
-    "out": "Le tournoi a commencé"
+    "out": "Tournoi commencé"
   },
   "PUSH.titles.tournamentOver": {
     "src": "Tournament ended",
-    "out": "Le tournoi s'est terminé"
+    "out": "Tournoi terminé"
   },
   "PUSH.titles.yourturn": {
     "src": "Your turn",
-    "out": "À vous de jouer"
+    "out": "À votre tour"
   },
   "TournamentCancelBody": {
     "src": "Not enough players signed up for Tournament {{number}} of the {{- metaGame}} series and the tournament had to be cancelled.",
