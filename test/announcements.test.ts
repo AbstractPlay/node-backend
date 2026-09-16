@@ -1,13 +1,18 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import {
   announcementsList,
   announcementGet,
   putAnnouncementRecord,
 } from '../lib/announcements/access.js';
-import { announcementPublish, announcementSave } from '../lib/announcements/admin.js';
+import { announcementPublish, announcementRetract, announcementSave } from '../lib/announcements/admin.js';
+import {
+  syncAnnouncementNotifyIndex,
+  listAnnouncementNotifyUserIds,
+  userWantsAnnouncementNotifications,
+} from '../lib/announcements/announcementNotifyIndex.js';
 import { publishedIndexSk } from '../lib/announcements/keys.js';
 import {
   normalizeDiscordContent,
@@ -156,6 +161,89 @@ test('announcementPublish blocked on dev stage', async () => {
     assert.equal(result.code, 'announcements_publish_disabled_on_dev');
     assert.equal(result.statusCode, 403);
   }
+});
+
+test('userWantsAnnouncementNotifications defaults off', () => {
+  assert.equal(userWantsAnnouncementNotifications(undefined), false);
+  assert.equal(userWantsAnnouncementNotifications({ all: { notifications: {} } }), false);
+  assert.equal(userWantsAnnouncementNotifications({
+    all: { notifications: { announcements: true } },
+  }), true);
+});
+
+test('syncAnnouncementNotifyIndex writes and lists opt-in user', async () => {
+  const table = 'table';
+  const store = new Map<string, Record<string, unknown>>();
+  const key = (pk: string, sk: string) => `${pk}\0${sk}`;
+  const client = {
+    send: async (command: unknown) => {
+      if (command instanceof PutCommand) {
+        const input = command.input as { Item: Record<string, unknown> };
+        const item = input.Item;
+        store.set(key(String(item.pk), String(item.sk)), item);
+        return {};
+      }
+      if (command instanceof DeleteCommand) {
+        const input = command.input as unknown as { Key: { pk: string; sk: string } };
+        store.delete(key(input.Key.pk, input.Key.sk));
+        return {};
+      }
+      if (command instanceof QueryCommand) {
+        const input = command.input as {
+          ExpressionAttributeValues?: Record<string, string>;
+        };
+        const pk = input.ExpressionAttributeValues?.[':pk'];
+        const items = [...store.values()].filter((item) => item.pk === pk);
+        return { Items: items };
+      }
+      throw new Error('unexpected');
+    },
+  } as unknown as DynamoDBDocumentClient;
+
+  await syncAnnouncementNotifyIndex(client, table, 'user-1', {
+    all: { notifications: { announcements: true } },
+  });
+  let ids = await listAnnouncementNotifyUserIds(client, table);
+  assert.deepEqual(ids, ['user-1']);
+
+  await syncAnnouncementNotifyIndex(client, table, 'user-1', {
+    all: { notifications: { announcements: false } },
+  });
+  ids = await listAnnouncementNotifyUserIds(client, table);
+  assert.deepEqual(ids, []);
+});
+
+test('announcementRetract removes published index row', async () => {
+  const prev = process.env.WEBSOCKET_STAGE;
+  process.env.WEBSOCKET_STAGE = 'prod';
+  const commands: unknown[] = [];
+  const client = {
+    send: async (command: unknown) => {
+      commands.push(command);
+      if (command instanceof GetCommand) {
+        return {
+          Item: {
+            pk: ANNOUNCEMENT_PK,
+            sk: 'abc',
+            id: 'abc',
+            status: 'published',
+            title: 'T',
+            body: 'B',
+            publishedAt: 1000,
+            createdAt: 1000,
+            updatedAt: 1000,
+            source: 'ap',
+          },
+        };
+      }
+      return {};
+    },
+  } as unknown as DynamoDBDocumentClient;
+
+  const result = await announcementRetract(client, 'table', null, 'abc');
+  process.env.WEBSOCKET_STAGE = prev;
+  assert.equal(result.ok, true);
+  assert.ok(commands.some((c) => c instanceof DeleteCommand));
 });
 
 test('announcementSave creates draft', async () => {

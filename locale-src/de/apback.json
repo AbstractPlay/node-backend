@@ -1,4 +1,12 @@
 {
+  "AnnouncementBody": {
+    "src": "A new announcement was published: {{- title}}\n\nRead it on the site: {{- link}}",
+    "out": "Eine neue Ankündigung wurde veröffentlicht: {{- title}}\n\nLies sie auf der Website: {{- link}}"
+  },
+  "AnnouncementSubject": {
+    "src": "AbstractPlay: site announcement",
+    "out": "AbstractPlay: Website-Ankündigung"
+  },
   "ChallengeBody": {
     "src": "{{challenger}} has challenged you to a game of {{- metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
     "out": "{{challenger}} hat dich zu einer Partie {{- metaGame}} herausgefordert. Bitte besuche https://play.abstractplay.com/ für weitere Details."
@@ -86,6 +94,10 @@
   "GameStartedSubject": {
     "src": "AbstractPlay: game started",
     "out": "AbstractPlay: Partie gestartet"
+  },
+  "PUSH.titles.announcement": {
+    "src": "Site announcement",
+    "out": "Website-Ankündigung"
   },
   "PUSH.titles.challenged": {
     "src": "Challenged",
