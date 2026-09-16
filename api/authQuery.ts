@@ -1,5 +1,5 @@
 import type { PartialClaims } from '../lib/api/types.js';
-import { runAuthQuery } from './routes/auth.js';
+import { runAuthQuery } from './routes/auth/index.js';
 
 export const authQuery = async (event: {
   body: { query: any; pars: any };

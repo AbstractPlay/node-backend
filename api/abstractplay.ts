@@ -137,6 +137,7 @@ import { setSeenTime } from '../lib/games/setSeenTime.js';
 import { feedbackErrorResponse } from '../lib/api/feedbackHttp.js';
 import { game } from '../lib/games/getGame.js';
 import { timeloss } from '../lib/games/timeloss.js';
+import { sendUserPush } from '../lib/push/sendUserPush.js';
 import {
   logRecommendationEvent,
   type RecommendationEventPars,
@@ -651,945 +652,22 @@ async function unblock_player(blockingPlayerId: string, pars: { playerId: string
 
 
 
-type GameMarkPars = { metaGame: string; id: string };
 
-async function listPlaygroundSavesAuth(userId: string) {
-  try {
-    const saves = await listPlaygroundSaves(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-    );
-    return {
-      statusCode: 200,
-      body: JSON.stringify(saves),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to list playground saves for ${userId}`);
-  }
+
+
+
+
+
+
+
+
+
+
+
+
+async function sendPush(opts: PushOptions) {
+  return sendUserPush(opts);
 }
-
-async function getPlaygroundSaveAuth(userId: string, pars: { id: string }) {
-  if (!pars?.id) {
-    return formatReturnError('id is required.');
-  }
-  try {
-    const save = await getPlaygroundSave(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      pars.id,
-    );
-    if (save === undefined) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ message: 'Playground save not found.' }),
-        headers,
-      };
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(save),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to get playground save ${pars.id}`);
-  }
-}
-
-async function createPlaygroundSaveAuth(userId: string, pars: PlaygroundSaveInput) {
-  const validated = validatePlaygroundSaveInput(pars);
-  if (!validated.ok) {
-    return formatReturnError(validated.message);
-  }
-  const id = uuid();
-  try {
-    const record = await putPlaygroundSave(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      id,
-      validated.data,
-    );
-    return {
-      statusCode: 200,
-      body: JSON.stringify(record),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to create playground save for ${userId}: ${error}`);
-  }
-}
-
-async function savePlaygroundSaveAuth(userId: string, pars: PlaygroundSaveInput & { id: string }) {
-  if (!pars?.id) {
-    return formatReturnError('id is required.');
-  }
-  const validated = validatePlaygroundSaveInput(pars);
-  if (!validated.ok) {
-    return formatReturnError(validated.message);
-  }
-  try {
-    const existing = await getPlaygroundSave(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      pars.id,
-    );
-    if (existing === undefined) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ message: 'Playground save not found.' }),
-        headers,
-      };
-    }
-    const record = await putPlaygroundSave(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      pars.id,
-      validated.data,
-    );
-    return {
-      statusCode: 200,
-      body: JSON.stringify(record),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to save playground save ${pars.id}: ${error}`);
-  }
-}
-
-async function deletePlaygroundSaveAuth(userId: string, pars: { id: string }) {
-  if (!pars?.id) {
-    return formatReturnError('id is required.');
-  }
-  try {
-    const existing = await getPlaygroundSave(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      pars.id,
-    );
-    if (existing === undefined) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ message: 'Playground save not found.' }),
-        headers,
-      };
-    }
-    await deletePlaygroundSave(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      pars.id,
-    );
-    return {
-      statusCode: 200,
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to delete playground save ${pars.id}`);
-  }
-}
-
-function markResultResponse(result: MarkResult, successBody?: unknown) {
-  if (!result.ok) {
-    return formatReturnError(result.message);
-  }
-  return {
-    statusCode: 200,
-    body: JSON.stringify(successBody ?? { message: 'Success' }),
-    headers,
-  };
-}
-
-async function announcementSaveAuth(userId: string, pars: AnnouncementSavePars) {
-  try {
-    if (!(await isFeedbackAdmin(userId))) {
-      return feedbackErrorResponse('admin access required.', 403);
-    }
-    const tableName = process.env.ABSTRACT_PLAY_TABLE;
-    if (!tableName) {
-      return feedbackErrorResponse('Announcements are not configured.', 500);
-    }
-    const result = await announcementSaveWithOptionalRss(ddbDocClient, tableName, s3Client, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse('Unable to save announcement.');
-  }
-}
-
-async function announcementsAdminListAuth(userId: string, pars: AnnouncementsAdminListPars) {
-  try {
-    if (!(await isFeedbackAdmin(userId))) {
-      return feedbackErrorResponse('admin access required.', 403);
-    }
-    const tableName = process.env.ABSTRACT_PLAY_TABLE;
-    if (!tableName) {
-      return feedbackErrorResponse('Announcements are not configured.', 500);
-    }
-    const result = await announcementsAdminList(ddbDocClient, tableName, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        items: result.data.items,
-        nextCursor: result.data.nextCursor,
-      }),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse('Unable to list announcements.');
-  }
-}
-
-async function announcementGetAuth(userId: string, pars: AnnouncementGetPars) {
-  try {
-    const tableName = process.env.ABSTRACT_PLAY_TABLE;
-    if (!tableName) {
-      return feedbackErrorResponse('Announcements are not configured.', 500);
-    }
-    const id = pars?.id;
-    const isAdmin = await isFeedbackAdmin(userId);
-    if (isAdmin) {
-      const result = await announcementGetAdmin(ddbDocClient, tableName, s3Client, id);
-      if (!result.ok) {
-        return feedbackErrorResponse(result.message, result.statusCode ?? 404);
-      }
-      return {
-        statusCode: 200,
-        body: JSON.stringify(result.data),
-        headers,
-      };
-    }
-    const result = await announcementGet(ddbDocClient, tableName, s3Client, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 404);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse('Unable to load announcement.');
-  }
-}
-
-async function announcementPresignUploadAuth(userId: string, pars: AnnouncementPresignUploadPars) {
-  try {
-    if (!(await isFeedbackAdmin(userId))) {
-      return feedbackErrorResponse('admin access required.', 403);
-    }
-    const tableName = process.env.ABSTRACT_PLAY_TABLE;
-    if (!tableName) {
-      return feedbackErrorResponse('Announcements are not configured.', 500);
-    }
-    const result = await announcementPresignUpload(s3Client, ddbDocClient, tableName, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse('Unable to presign upload.');
-  }
-}
-
-async function notifyAnnouncementPublishedUsers(record: { id: string; title: string }) {
-  const tableName = process.env.ABSTRACT_PLAY_TABLE;
-  if (!tableName) {
-    return;
-  }
-  const link = `${announcementsSiteUrl()}/news/${record.id}`;
-  try {
-    await fanOutAnnouncementPublished(ddbDocClient, tableName, async (user) => {
-      const player = user as FullUser;
-      await changeLanguageForPlayer(player);
-      const subject = i18n.t('AnnouncementSubject');
-      const body = i18n.t('AnnouncementBody', { title: record.title, link });
-      let emailed = false;
-      let pushed = false;
-      if (user.email) {
-        const comm = createSendEmailCommand(user.email, user.name ?? user.id, subject, body);
-        await sesClient.send(comm);
-        emailed = true;
-      }
-      try {
-        await sendPush({
-          userId: user.id,
-          topic: 'announcements',
-          title: i18n.t('PUSH.titles.announcement'),
-          body: record.title,
-          url: `/news/${record.id}`,
-        });
-        pushed = true;
-      } catch (pushErr) {
-        logGetItemError(pushErr);
-      }
-      return { emailed, pushed };
-    });
-  } catch (error) {
-    logGetItemError(error);
-  }
-}
-
-async function announcementPublishAuth(userId: string, pars: AnnouncementGetPars) {
-  try {
-    if (!(await isFeedbackAdmin(userId))) {
-      return feedbackErrorResponse('admin access required.', 403);
-    }
-    const tableName = process.env.ABSTRACT_PLAY_TABLE;
-    if (!tableName) {
-      return feedbackErrorResponse('Announcements are not configured.', 500);
-    }
-    const result = await announcementPublish(ddbDocClient, tableName, s3Client, pars.id);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400, result.code);
-    }
-    await notifyAnnouncementPublishedUsers({
-      id: result.data.id,
-      title: result.data.title,
-    });
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ id: result.data.id, publishedAt: result.data.publishedAt }),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse('Unable to publish announcement.');
-  }
-}
-
-async function announcementRetractAuth(userId: string, pars: AnnouncementGetPars) {
-  try {
-    if (!(await isFeedbackAdmin(userId))) {
-      return feedbackErrorResponse('admin access required.', 403);
-    }
-    const tableName = process.env.ABSTRACT_PLAY_TABLE;
-    if (!tableName) {
-      return feedbackErrorResponse('Announcements are not configured.', 500);
-    }
-    const result = await announcementRetract(ddbDocClient, tableName, s3Client, pars.id);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400, result.code);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse('Unable to retract announcement.');
-  }
-}
-
-type AnnouncementsMarkReadPars = { readAt?: number };
-type AnnouncementReactPars = { id: string; emoji: string };
-type AnnouncementReactionsMinePars = { ids: string[] };
-
-async function announcementsMarkReadAuth(userId: string, pars: AnnouncementsMarkReadPars) {
-  try {
-    const tableName = process.env.ABSTRACT_PLAY_TABLE;
-    if (!tableName) {
-      return feedbackErrorResponse('Announcements are not configured.', 500);
-    }
-    const result = await announcementsMarkRead(ddbDocClient, tableName, userId, pars?.readAt);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse('Unable to mark announcements read.');
-  }
-}
-
-async function announcementReactAuth(userId: string, pars: AnnouncementReactPars) {
-  try {
-    const tableName = process.env.ABSTRACT_PLAY_TABLE;
-    if (!tableName) {
-      return feedbackErrorResponse('Announcements are not configured.', 500);
-    }
-    const result = await announcementReact(ddbDocClient, tableName, userId, pars.id, pars.emoji);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse('Unable to update reaction.');
-  }
-}
-
-async function announcementReactionsMineAuth(userId: string, pars: AnnouncementReactionsMinePars) {
-  try {
-    const tableName = process.env.ABSTRACT_PLAY_TABLE;
-    if (!tableName) {
-      return feedbackErrorResponse('Announcements are not configured.', 500);
-    }
-    const result = await announcementReactionsMine(ddbDocClient, tableName, userId, pars?.ids ?? []);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse('Unable to load reactions.');
-  }
-}
-
-
-async function feedbackHoldRetentionAuth(userId: string, pars: FeedbackHoldRetentionPars) {
-  try {
-    const result = await feedbackHoldRetention(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse('Unable to update retention hold.');
-  }
-}
-
-async function feedbackGetAuth(userId: string, pars: FeedbackGetPars) {
-  try {
-    const result = await feedbackGet(
-      ddbDocClient,
-      process.env.FEEDBACK_TABLE,
-      s3Client,
-      pars,
-      userId,
-    );
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse('Unable to load feedback item.');
-  }
-}
-
-async function feedbackPresignUploadAuth(userId: string, pars: FeedbackPresignUploadPars) {
-  try {
-    const result = await feedbackPresignUpload(s3Client, userId, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to presign upload for ${userId}`);
-  }
-}
-
-async function feedbackSubscribeAuth(userId: string, pars: FeedbackSubscribePars) {
-  try {
-    const result = await feedbackSubscribe(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to update subscription for ${userId}`);
-  }
-}
-
-async function isFeedbackAdmin(userId: string): Promise<boolean> {
-  const user = await ddbDocClient.send(new GetCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { pk: 'USER', sk: userId },
-  }));
-  return user.Item?.admin === true;
-}
-
-async function feedbackSetStatusAuth(userId: string, pars: FeedbackSetStatusPars) {
-  try {
-    if (!(await isFeedbackAdmin(userId))) {
-      return feedbackErrorResponse('admin access required.', 403);
-    }
-    const result = await feedbackSetStatus(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to set feedback status for ${userId}`);
-  }
-}
-
-async function feedbackReclassifyAuth(userId: string, pars: FeedbackReclassifyPars) {
-  try {
-    if (!(await isFeedbackAdmin(userId))) {
-      return feedbackErrorResponse('admin access required.', 403);
-    }
-    const result = await feedbackReclassify(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to reclassify feedback for ${userId}`);
-  }
-}
-
-async function feedbackUpdateAuth(userId: string, pars: FeedbackUpdatePars) {
-  try {
-    const isAdmin = await isFeedbackAdmin(userId);
-    const result = await feedbackUpdate(
-      ddbDocClient,
-      process.env.FEEDBACK_TABLE,
-      s3Client,
-      userId,
-      pars,
-      isAdmin,
-    );
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to update feedback for ${userId}`);
-  }
-}
-
-async function feedbackSetAdminFieldsAuth(userId: string, pars: FeedbackSetAdminFieldsPars) {
-  try {
-    if (!(await isFeedbackAdmin(userId))) {
-      return feedbackErrorResponse('admin access required.', 403);
-    }
-    const result = await feedbackSetAdminFields(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to set feedback admin fields for ${userId}`);
-  }
-}
-
-async function feedbackMineAuth(userId: string, pars: FeedbackMinePars) {
-  try {
-    const result = await feedbackMine(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to list feedback for ${userId}`);
-  }
-}
-
-async function feedbackAdminListAuth(userId: string, pars: FeedbackAdminListPars) {
-  try {
-    if (!(await isFeedbackAdmin(userId))) {
-      return feedbackErrorResponse('admin access required.', 403);
-    }
-    const result = await feedbackAdminList(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to list feedback for admin ${userId}`);
-  }
-}
-
-
-async function feedbackMergeAuth(userId: string, pars: FeedbackMergePars) {
-  try {
-    if (!(await isFeedbackAdmin(userId))) {
-      return feedbackErrorResponse('admin access required.', 403);
-    }
-    const result = await feedbackMerge(ddbDocClient, process.env.FEEDBACK_TABLE, s3Client, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to merge wishlist items for ${userId}`);
-  }
-}
-
-async function feedbackDeleteAuth(userId: string, pars: FeedbackDeletePars) {
-  try {
-    if (!(await isFeedbackAdmin(userId))) {
-      return feedbackErrorResponse('admin access required.', 403);
-    }
-    const result = await feedbackDelete(
-      ddbDocClient,
-      process.env.FEEDBACK_TABLE,
-      s3Client,
-      userId,
-      pars,
-    );
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to delete wishlist item for ${userId}`);
-  }
-}
-
-async function feedbackCreateAuth(userId: string, pars: FeedbackCreatePars) {
-  try {
-    const result = await feedbackCreate(
-      ddbDocClient,
-      process.env.FEEDBACK_TABLE,
-      s3Client,
-      userId,
-      pars,
-    );
-    if (!result.ok) {
-      const body: Record<string, unknown> = { message: result.message };
-      if (result.existingId) {
-        body.existingId = result.existingId;
-      }
-      if (result.code) {
-        body.code = result.code;
-      }
-      return {
-        statusCode: result.statusCode ?? 400,
-        body: JSON.stringify(body),
-        headers,
-      };
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to create feedback for ${userId}`);
-  }
-}
-
-async function feedbackVoteAuth(userId: string, pars: FeedbackVotePars) {
-  try {
-    const result = await feedbackVote(ddbDocClient, process.env.FEEDBACK_TABLE, userId, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to vote on feedback for ${userId}`);
-  }
-}
-
-async function feedbackCommentAuth(userId: string, pars: FeedbackCommentPars) {
-  try {
-    const result = await feedbackComment(ddbDocClient, process.env.FEEDBACK_TABLE, s3Client, userId, pars);
-    if (!result.ok) {
-      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.data),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return feedbackErrorResponse(`Unable to comment on feedback for ${userId}`);
-  }
-}
-
-async function logRecommendationEventAuth(userId: string, pars: RecommendationEventPars) {
-  try {
-    const result = await logRecommendationEvent(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      pars,
-    );
-    if (!result.ok) {
-      return formatReturnError(result.message);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ ok: true }),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to log recommendation event for ${userId}`);
-  }
-}
-
-async function logLayoutEventAuth(userId: string, pars: LayoutEventPars) {
-  try {
-    const result = await logLayoutEvent(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      pars,
-    );
-    if (!result.ok) {
-      return formatReturnError(result.message);
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ ok: true }),
-      headers,
-    };
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to log layout event for ${userId}`);
-  }
-}
-
-function parseGameMarkPars(pars: GameMarkPars): GameMarkPars | undefined {
-  if (!pars?.metaGame || !pars?.id) {
-    return undefined;
-  }
-  return { metaGame: pars.metaGame, id: pars.id };
-}
-
-async function watchGameAuth(userId: string, pars: GameMarkPars) {
-  const parsed = parseGameMarkPars(pars);
-  if (parsed === undefined) {
-    return formatReturnError('metaGame and id are required.');
-  }
-  try {
-    const result = await watchGame(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      parsed.metaGame,
-      parsed.id,
-    );
-    if (!result.ok) {
-      return markResultResponse(result);
-    }
-    const watchedGames = await listWatchedGames(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, userId);
-    return markResultResponse(result, watchedGames);
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to watch game ${parsed.id}`);
-  }
-}
-
-async function unwatchGameAuth(userId: string, pars: GameMarkPars) {
-  const parsed = parseGameMarkPars(pars);
-  if (parsed === undefined) {
-    return formatReturnError('metaGame and id are required.');
-  }
-  try {
-    const result = await unwatchGame(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      parsed.id,
-    );
-    if (!result.ok) {
-      return markResultResponse(result);
-    }
-    const watchedGames = await listWatchedGames(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, userId);
-    return markResultResponse(result, watchedGames);
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to unwatch game ${parsed.id}`);
-  }
-}
-
-async function highlightGameAuth(userId: string, pars: GameMarkPars) {
-  const parsed = parseGameMarkPars(pars);
-  if (parsed === undefined) {
-    return formatReturnError('metaGame and id are required.');
-  }
-  try {
-    const result = await highlightGame(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      parsed.metaGame,
-      parsed.id,
-    );
-    if (!result.ok) {
-      return markResultResponse(result);
-    }
-    const highlights = await listHighlights(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, userId);
-    return markResultResponse(result, highlights);
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to highlight game ${parsed.id}`);
-  }
-}
-
-async function unhighlightGameAuth(userId: string, pars: GameMarkPars) {
-  const parsed = parseGameMarkPars(pars);
-  if (parsed === undefined) {
-    return formatReturnError('metaGame and id are required.');
-  }
-  try {
-    const result = await unhighlightGame(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      parsed.metaGame,
-      parsed.id,
-    );
-    if (!result.ok) {
-      return markResultResponse(result);
-    }
-    const highlights = await listHighlights(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, userId);
-    return markResultResponse(result, highlights);
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to unhighlight game ${parsed.id}`);
-  }
-}
-
-async function recommendGameAuth(userId: string, pars: GameMarkPars) {
-  const parsed = parseGameMarkPars(pars);
-  if (parsed === undefined) {
-    return formatReturnError('metaGame and id are required.');
-  }
-  try {
-    const result = await recommendGame(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      parsed.metaGame,
-      parsed.id,
-    );
-    if (!result.ok) {
-      return markResultResponse(result);
-    }
-    const representatives = await listUserRecommendations(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, userId);
-    return markResultResponse(result, representatives);
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to recommend game ${parsed.id}`);
-  }
-}
-
-async function unrecommendGameAuth(userId: string, pars: GameMarkPars) {
-  const parsed = parseGameMarkPars(pars);
-  if (parsed === undefined) {
-    return formatReturnError('metaGame and id are required.');
-  }
-  try {
-    const result = await unrecommendGame(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId,
-      parsed.metaGame,
-      parsed.id,
-    );
-    if (!result.ok) {
-      return markResultResponse(result);
-    }
-    const representatives = await listUserRecommendations(ddbDocClient, process.env.ABSTRACT_PLAY_TABLE!, userId);
-    return markResultResponse(result, representatives);
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to unrecommend game ${parsed.id}`);
-  }
-}
-
 
 async function toggleStar(userid: string, pars: { metaGame: string }) {
   try {
@@ -1762,82 +840,9 @@ async function updateGameSettings(userid: string, pars: { game: string, settings
 }
 
 
-async function dismissNotificationAuth(userid: string, pars: { sk?: string }) {
-  if (!pars.sk) {
-    return formatReturnError('sk is required');
-  }
 
-  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-  try {
-    const deleted = await deleteUserNotification(ddbDocClient, tableName, userid, pars.sk);
-    if (!deleted) {
-      return formatReturnError('Notification not found');
-    }
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ success: true }),
-      headers,
-    };
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to dismiss notification for ${userid}`);
-  }
-}
 
-async function dismissAllNotificationsAuth(userid: string) {
-  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-  try {
-    await dismissAllNotifications(ddbDocClient, tableName, userid);
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ success: true, notifications: [] }),
-      headers,
-    };
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to dismiss all notifications for ${userid}`);
-  }
-}
 
-async function listNotificationsAuth(userid: string) {
-  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-  try {
-    const notifications = await loadNotificationsForDashboard(
-      ddbDocClient,
-      tableName,
-      userid,
-      { refreshExpiry: false },
-    );
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ notifications }),
-      headers,
-    };
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to list notifications for ${userid}`);
-  }
-}
-
-async function markNotificationsSeenAuth(userid: string, pars: { sks?: string[] }) {
-  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-  try {
-    const notifications = await markNotificationsSeen(
-      ddbDocClient,
-      tableName,
-      userid,
-      { sks: pars.sks },
-    );
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ notifications }),
-      headers,
-    };
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to mark notifications seen for ${userid}`);
-  }
-}
 
 async function updateUserSettings(userid: string, pars: { settings: any; }) {
   try {
@@ -7614,19 +6619,6 @@ async function deleteGames(userId: string, pars: { metaGame: string, cbit: numbe
 }
 
 
-async function sendPush(opts: PushOptions) {
-  console.log(`Sending push: ${JSON.stringify(opts)}`);
-  const { userId } = opts;
-  let subscriptions;
-  try {
-    subscriptions = await queryPushSubscriptions(userId);
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to fetch push credentials for ${userId}`);
-  }
-
-  await sendPushToSubscriptions(opts, subscriptions, webpush.sendNotification.bind(webpush), logGetItemError);
-}
 
 
 async function invokePie(userid: string, pars: { id: string, metaGame: string, cbit: number }) {
@@ -8475,17 +7467,8 @@ const getAllUsers = async (): Promise<FullUser[]> => {
   return result
 }
 
-/** Route dispatch (Phase 3) — public query handlers live in lib/public; re-exported below. */
+/** Route dispatch — thin auth glue re-exported from lib (Phase 5). */
 export {
-  announcementGetAuth,
-  announcementPresignUploadAuth,
-  announcementPublishAuth,
-  announcementReactAuth,
-  announcementReactionsMineAuth,
-  announcementRetractAuth,
-  announcementSaveAuth,
-  announcementsAdminListAuth,
-  announcementsMarkReadAuth,
   beginBotSecretRotation,
   block_player,
   botMove,
@@ -8493,14 +7476,10 @@ export {
   timeloss,
   checkForTimeloss,
   createBot,
-  createPlaygroundSaveAuth,
   deleteBot,
   deleteCustomization,
   deleteGames,
-  deletePlaygroundSaveAuth,
   deletePush,
-  dismissAllNotificationsAuth,
-  dismissNotificationAuth,
   endATournament,
   eventClose,
   eventCreate,
@@ -8515,6 +7494,66 @@ export {
   eventUpdateResult,
   eventUpdateStart,
   eventWithdraw,
+  finalizeBotSecretRotation,
+  fixGames,
+  game,
+  getExploration,
+  getPrivateExploration,
+  handleMove,
+  injectState,
+  invokePie,
+  joinTournament,
+  markAsPublished,
+  meDashboard,
+  meProfile,
+  mySettings,
+  newChallenge,
+  newProfile,
+  newSetting,
+  newTournament,
+  nextGame,
+  onetimeFix,
+  pingBot,
+  purgeRetiredCompletedGames,
+  respondedChallenge,
+  revokeChallenge,
+  saveCustomization,
+  saveExploration,
+  savePush,
+  saveTags,
+  setLastSeen,
+  setPublicRivalries,
+  setPush,
+  startSoloGame,
+  submitComment,
+  submitMove,
+  testAsync,
+  testPush,
+  toggleStar,
+  unblock_player,
+  updateBot,
+  updateCommented,
+  updateGameSettings,
+  updateMetaGameCounts,
+  updateNote,
+  updateStanding,
+  updateUserSettings,
+  withdrawTournament,
+};
+
+export {
+  announcementGetAuth,
+  announcementPresignUploadAuth,
+  announcementPublishAuth,
+  announcementReactAuth,
+  announcementReactionsMineAuth,
+  announcementRetractAuth,
+  announcementSaveAuth,
+  announcementsAdminListAuth,
+  announcementsMarkReadAuth,
+} from '../lib/announcements/authHandlers.js';
+
+export {
   feedbackAdminListAuth,
   feedbackCommentAuth,
   feedbackCreateAuth,
@@ -8530,65 +7569,36 @@ export {
   feedbackSubscribeAuth,
   feedbackUpdateAuth,
   feedbackVoteAuth,
-  finalizeBotSecretRotation,
-  fixGames,
-  game,
-  getExploration,
+} from '../lib/feedback/authHandlers.js';
+
+export {
+  createPlaygroundSaveAuth,
+  deletePlaygroundSaveAuth,
   getPlaygroundSaveAuth,
-  getPrivateExploration,
-  handleMove,
-  highlightGameAuth,
-  injectState,
-  invokePie,
-  joinTournament,
-  listNotificationsAuth,
   listPlaygroundSavesAuth,
-  logLayoutEventAuth,
-  logRecommendationEventAuth,
-  markAsPublished,
-  markNotificationsSeenAuth,
-  meDashboard,
-  meProfile,
-  mySettings,
-  newChallenge,
-  newProfile,
-  newSetting,
-  newTournament,
-  nextGame,
-  onetimeFix,
-  pingBot,
-  purgeRetiredCompletedGames,
-  recommendGameAuth,
-  respondedChallenge,
-  revokeChallenge,
-  saveCustomization,
-  saveExploration,
   savePlaygroundSaveAuth,
-  savePush,
-  saveTags,
-  setLastSeen,
-  setPublicRivalries,
-  setPush,
-  startSoloGame,
-  submitComment,
-  submitMove,
-  testAsync,
-  testPush,
-  toggleStar,
-  unblock_player,
+} from '../lib/playground/authHandlers.js';
+
+export {
+  dismissAllNotificationsAuth,
+  dismissNotificationAuth,
+  listNotificationsAuth,
+  markNotificationsSeenAuth,
+} from '../lib/notifications/authHandlers.js';
+
+export {
+  highlightGameAuth,
+  recommendGameAuth,
   unhighlightGameAuth,
   unrecommendGameAuth,
   unwatchGameAuth,
-  updateBot,
-  updateCommented,
-  updateGameSettings,
-  updateMetaGameCounts,
-  updateNote,
-  updateStanding,
-  updateUserSettings,
   watchGameAuth,
-  withdrawTournament,
-};
+} from '../lib/playerGameMarks/authHandlers.js';
+
+export {
+  logLayoutEventAuth,
+  logRecommendationEventAuth,
+} from '../lib/analytics/authHandlers.js';
 
 export {
   allStandingChallenges,
