@@ -25,6 +25,14 @@
   "GameStartedSubject": "AbstractPlay: Partie gestartet",
   "PUSH": {
     "titles": {
+      "challenged": "Herausgefordert",
+      "declined": "Herausforderung abgelehnt",
+      "ended": "Spiel beendet",
+      "revoked": "Herausforderung zurückgezogen",
+      "started": "Spiel gestartet",
+      "yourturn": "Du bist am Zug",
+      "tournament": "Turnier gestartet",
+      "tournamentOver": "Turnier beendet",
       "announcement": "Website-Ankündigung"
     }
   },

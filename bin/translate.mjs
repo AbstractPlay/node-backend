@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { pruneManagedLocale, pruneToSourceShape } from "./locale-prune.mjs";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -81,6 +82,37 @@ function unflatten(flat) {
     setLeafValue(result, leafPath, value);
   }
   return result;
+}
+
+/**
+ * Apply Gemini output for diffLeaves without replacing whole top-level objects.
+ * Models may return flat dotted keys or a nested JSON tree; both are supported.
+ */
+export function mergeTranslatedChunkIntoTarget(targetData, diffLeaves, translatedChunk) {
+  const nestedResponse =
+    translatedChunk && typeof translatedChunk === "object" && !Array.isArray(translatedChunk)
+      ? translatedChunk
+      : {};
+
+  for (const leafPath of Object.keys(diffLeaves)) {
+    const sourceValue = diffLeaves[leafPath];
+    let translatedValue = translatedChunk[leafPath];
+    if (typeof translatedValue !== "string") {
+      translatedValue = getLeafValue(nestedResponse, leafPath);
+    }
+    if (typeof translatedValue !== "string") {
+      const fromFlatUnflatten = unflatten(
+        Object.fromEntries(
+          Object.entries(translatedChunk).filter(([, v]) => typeof v === "string"),
+        ),
+      );
+      translatedValue = getLeafValue(fromFlatUnflatten, leafPath);
+    }
+    if (typeof translatedValue !== "string") {
+      throw new Error(`Missing translation for leaf path: ${leafPath}`);
+    }
+    setLeafValue(targetData, leafPath, translatedValue);
+  }
 }
 
 function getEmbeddedSrcTracking(targetData) {
@@ -301,13 +333,10 @@ async function translateFile(sourcePath) {
       }
 
       const translatedChunk = JSON.parse(rawText);
-      const nestedChunk = unflatten(translatedChunk);
-      for (const [key, value] of Object.entries(nestedChunk)) {
-        targetData[key] = value;
-      }
+      mergeTranslatedChunkIntoTarget(targetData, diffLeaves, translatedChunk);
       for (const leafPath of Object.keys(diffLeaves)) {
         const sourceValue = diffLeaves[leafPath];
-        const translatedValue = translatedChunk[leafPath] ?? getLeafValue(targetData, leafPath);
+        const translatedValue = getLeafValue(targetData, leafPath);
         srcTracking[leafPath] = makeTrackingEntry(sourceValue, translatedValue);
       }
 
@@ -336,4 +365,7 @@ async function run() {
   }
 }
 
-run();
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  run();
+}
