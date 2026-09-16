@@ -33,24 +33,22 @@ test("gameslib loads via ESM import", async () => {
   assert.equal(typeof gl.GameFactory, "function");
 });
 
-test("abstractplay ESM bundle loads (Lambda cold-start path)", async () => {
-  const ap = await importBundle("api/abstractplay.ts");
-  const handlers = ap.default ?? ap;
-  assert.equal(typeof handlers.query, "function");
-  assert.equal(typeof handlers.authQuery, "function");
-  assert.equal(typeof handlers.botQuery, "function");
-});
+const API_HTTP_HANDLER_EXPORTS = {
+  "api/query.ts": "query",
+  "api/authQuery.ts": "authQuery",
+  "api/botQuery.ts": "botQuery",
+};
 
 for (const handlerEntry of LAMBDA_HANDLER_ENTRIES) {
-  if (handlerEntry === "api/abstractplay.ts") {
-    continue;
-  }
-
   const label = handlerEntry.replace(/\.ts$/, "");
+  const apiExport = API_HTTP_HANDLER_EXPORTS[handlerEntry];
+
   test(`Lambda ESM bundle loads: ${label}`, async () => {
     const mod = await importBundle(handlerEntry);
     const handlers = mod.default ?? mod;
-    const fn = handlers.handler ?? handlers;
+    const fn = apiExport
+      ? handlers[apiExport]
+      : handlers.handler ?? handlers;
     assert.equal(typeof fn, "function", `${label} must export a handler function`);
   });
 }
