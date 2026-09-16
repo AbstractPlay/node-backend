@@ -21,6 +21,18 @@ custom:
     prod: true
     dev: false
 
+  testBotHttpEvents:
+    dev:
+      - http:
+          path: testBot
+          method: get
+          cors: true
+      - http:
+          path: testBot
+          method: post
+          cors: true
+    prod: []
+
   recbucket:
     prod: "records.abstractplay.com"
     dev: "records.abstractplay.com"
@@ -245,10 +257,6 @@ resources:
       Fn::And:
         - Condition: GameProjectorStreamEnabled
         - Condition: OpsAlertsEnabled
-    TestBotEnabled:
-      Fn::Equals:
-        - ${sls:stage}
-        - dev
 
   Resources:
     # One table design
@@ -650,16 +658,7 @@ functions:
     memorySize: 256
     description: Dev-only reference bot — full source and docs in api/testBot.ts
     logRetentionInDays: 30
-    condition: TestBotEnabled
-    events:
-      - http:
-          path: testBot
-          method: get
-          cors: true
-      - http:
-          path: testBot
-          method: post
-          cors: true
+    events: ${self:custom.testBotHttpEvents.${self:provider.stage}, []}
   yourturn:
     handler: utils/yourturn.handler
     description: Sends out "your turn" notifications
