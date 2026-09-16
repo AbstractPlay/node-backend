@@ -135,6 +135,7 @@ provider:
     ABSTRACT_PLAY_TABLE: abstract-play-${self:provider.stage}
     FEEDBACK_TABLE: abstract-play-feedback-${self:provider.stage}
     FEEDBACK_ATTACHMENTS_BUCKET: ap-feedback-attachments-${self:provider.stage}
+    ANNOUNCEMENTS_ATTACHMENTS_BUCKET: ap-announcements-attachments-${self:provider.stage}
     userpool: ${self:custom.stageConfig.${self:provider.stage}.userpool}
     userpoolId: ${self:custom.stageConfig.${self:provider.stage}.userpoolId}
     userpoolClient: ${self:custom.stageConfig.${self:provider.stage}.userpoolClient}
@@ -216,11 +217,13 @@ provider:
             - 'arn:aws:s3:::abstractplay-db-dump/*'
             - 'arn:aws:s3:::records.abstractplay.com/*'
             - 'arn:aws:s3:::ap-feedback-attachments-${self:provider.stage}/*'
+            - 'arn:aws:s3:::ap-announcements-attachments-${self:provider.stage}/*'
         - Effect: 'Allow'
           Action:
             - 's3:ListBucket'
           Resource:
             - 'arn:aws:s3:::ap-feedback-attachments-${self:provider.stage}'
+            - 'arn:aws:s3:::ap-announcements-attachments-${self:provider.stage}'
         - Effect: Allow
           Action:
             - cognito-idp:AdminCreateUser
@@ -344,6 +347,32 @@ resources:
           AttributeName: expiresAt
           Enabled: true
         TableName: ${self:provider.environment.FEEDBACK_TABLE}
+
+    AnnouncementsAttachmentsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ap-announcements-attachments-${self:provider.stage}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        CorsConfiguration:
+          CorsRules:
+            -
+              AllowedHeaders:
+                - "*"
+              AllowedMethods:
+                - GET
+                - PUT
+                - HEAD
+              AllowedOrigins:
+                - "https://play.abstractplay.com"
+                - "https://play.dev.abstractplay.com"
+                - "http://localhost:3000"
+              ExposedHeaders:
+                - ETag
+              MaxAge: 3000
 
     FeedbackAttachmentsBucket:
       Type: AWS::S3::Bucket
