@@ -66,6 +66,20 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 
 Data lives in DynamoDB table `abstract-play-feedback-{stage}` (not the main `abstract-play` table).
 
+## Announcements (admin)
+
+Requires `USER.admin === true`. Records live in the main `abstract-play` table (`pk=ANNOUNCEMENT`).
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `announcement_save` | Create or update draft; edit published body (no fan-out) | optional `id`, `title`, `body`, `attachmentKeys`, `adminNote`. Returns `{ id, status, updatedAt }`. |
+| `announcements_admin_list` | List all announcements | optional `status`, `limit`, `cursor`. Returns `{ items, nextCursor? }`. |
+| `announcement_get` | Load one item | `id`. Admins see drafts; non-admins get published only (same as open API). |
+| `announcement_presign_upload` | Presigned S3 PUT for images | `announcementId`, `filename`, `contentType`, `contentLength` (png/jpeg/webp, max 5 MB). Returns `{ uploadUrl, key, headers }`. |
+| `announcement_publish` | First publish (draft → published) | `id`. **403** `announcements_publish_disabled_on_dev` when `WEBSOCKET_STAGE=dev`. |
+
+Public read: open `announcements_list` / `announcement_get` (published only).
+
 Nightly jobs: `utils/feedback-archive` Lambda (`npm run feedback-archive`) snapshots terminal posts to S3, writes `HISTORY#` rows, sets `archivedAt` and `expiresAt` TTL on live rows. `utils/feedback-attachment-cleanup` Lambda (`npm run feedback-attachment-cleanup`) deletes `{postId}/` screenshot objects after purge and sweeps stale `staging/` uploads; keeps `archive/{postId}.json` snapshots.
 
 ## Push, tags, customizations

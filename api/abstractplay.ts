@@ -179,8 +179,16 @@ import {
 import {
   announcementsList,
   announcementGet,
+  announcementsAdminList,
+  announcementSave,
+  announcementGetAdmin,
+  announcementPresignUpload,
+  announcementPublish,
   type AnnouncementsListPars,
   type AnnouncementGetPars,
+  type AnnouncementsAdminListPars,
+  type AnnouncementSavePars,
+  type AnnouncementPresignUploadPars,
 } from '../lib/announcements/index.js';
 import {
   feedbackNewKindsFromSettings,
@@ -1033,6 +1041,16 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await feedbackHoldRetentionAuth(event.cognitoPoolClaims.sub, pars);
     case "feedback_get":
       return await feedbackGetAuth(event.cognitoPoolClaims.sub, pars);
+    case "announcement_save":
+      return await announcementSaveAuth(event.cognitoPoolClaims.sub, pars);
+    case "announcements_admin_list":
+      return await announcementsAdminListAuth(event.cognitoPoolClaims.sub, pars);
+    case "announcement_get":
+      return await announcementGetAuth(event.cognitoPoolClaims.sub, pars);
+    case "announcement_presign_upload":
+      return await announcementPresignUploadAuth(event.cognitoPoolClaims.sub, pars);
+    case "announcement_publish":
+      return await announcementPublishAuth(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
       return await injectState(event.cognitoPoolClaims.sub, pars);
     case "update_game_settings":
@@ -1873,10 +1891,10 @@ function markResultResponse(result: MarkResult, successBody?: unknown) {
   };
 }
 
-function feedbackErrorResponse(message: string, statusCode = 500) {
+function feedbackErrorResponse(message: string, statusCode = 500, code?: string) {
   return {
     statusCode,
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(code ? { message, code } : { message }),
     headers,
   };
 }
@@ -1923,6 +1941,139 @@ async function announcementGetOpen(pars: AnnouncementGetPars) {
   } catch (error) {
     logGetItemError(error);
     return feedbackErrorResponse('Unable to load announcement.');
+  }
+}
+
+async function announcementSaveAuth(userId: string, pars: AnnouncementSavePars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const tableName = process.env.ABSTRACT_PLAY_TABLE;
+    if (!tableName) {
+      return feedbackErrorResponse('Announcements are not configured.', 500);
+    }
+    const result = await announcementSave(ddbDocClient, tableName, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to save announcement.');
+  }
+}
+
+async function announcementsAdminListAuth(userId: string, pars: AnnouncementsAdminListPars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const tableName = process.env.ABSTRACT_PLAY_TABLE;
+    if (!tableName) {
+      return feedbackErrorResponse('Announcements are not configured.', 500);
+    }
+    const result = await announcementsAdminList(ddbDocClient, tableName, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        items: result.data.items,
+        nextCursor: result.data.nextCursor,
+      }),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to list announcements.');
+  }
+}
+
+async function announcementGetAuth(userId: string, pars: AnnouncementGetPars) {
+  try {
+    const tableName = process.env.ABSTRACT_PLAY_TABLE;
+    if (!tableName) {
+      return feedbackErrorResponse('Announcements are not configured.', 500);
+    }
+    const id = pars?.id;
+    const isAdmin = await isFeedbackAdmin(userId);
+    if (isAdmin) {
+      const result = await announcementGetAdmin(ddbDocClient, tableName, s3Client, id);
+      if (!result.ok) {
+        return feedbackErrorResponse(result.message, result.statusCode ?? 404);
+      }
+      return {
+        statusCode: 200,
+        body: JSON.stringify(result.data),
+        headers,
+      };
+    }
+    const result = await announcementGet(ddbDocClient, tableName, s3Client, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 404);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to load announcement.');
+  }
+}
+
+async function announcementPresignUploadAuth(userId: string, pars: AnnouncementPresignUploadPars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const tableName = process.env.ABSTRACT_PLAY_TABLE;
+    if (!tableName) {
+      return feedbackErrorResponse('Announcements are not configured.', 500);
+    }
+    const result = await announcementPresignUpload(s3Client, ddbDocClient, tableName, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to presign upload.');
+  }
+}
+
+async function announcementPublishAuth(userId: string, pars: AnnouncementGetPars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const tableName = process.env.ABSTRACT_PLAY_TABLE;
+    if (!tableName) {
+      return feedbackErrorResponse('Announcements are not configured.', 500);
+    }
+    const result = await announcementPublish(ddbDocClient, tableName, pars.id);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400, result.code);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to publish announcement.');
   }
 }
 
