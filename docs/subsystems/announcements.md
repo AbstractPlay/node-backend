@@ -60,8 +60,8 @@ Register handlers in `api/abstractplay.ts` (or dedicated module) alongside feedb
 | Channel | Setting key | Default | When |
 |---------|-------------|---------|------|
 | In-app bell rows | `inAppNotifications.announcements` | on | Synthetic list only |
-| Email | `notifications.announcements` (email map) | **off** | First `announcement_publish` only |
-| Push | `notifications.announcements` (push map) | off | Optional later; first publish only |
+| Email | `notifications.announcements` (email map) | **off** | First `announcement_publish` only; recipients from `ANNOUNCEMENT_NOTIFY` index (synced on `update_user_settings`) |
+| Push | `notifications.announcements` (same email map) | off | First `announcement_publish` only |
 
 Edits to published posts do **not** re-send email/push or reset unread cursor.
 

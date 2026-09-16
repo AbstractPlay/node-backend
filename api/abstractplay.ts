@@ -184,6 +184,8 @@ import {
   announcementGetAdmin,
   announcementPresignUpload,
   announcementPublish,
+  announcementRetract,
+  fanOutAnnouncementPublished,
   announcementReact,
   announcementReactionsMine,
   announcementsMarkRead,
@@ -193,6 +195,8 @@ import {
   type AnnouncementSavePars,
   type AnnouncementPresignUploadPars,
 } from '../lib/announcements/index.js';
+import { announcementsSiteUrl } from '../lib/announcements/siteUrl.js';
+import { syncAnnouncementNotifyIndex } from '../lib/announcements/announcementNotifyIndex.js';
 import {
   feedbackNewKindsFromSettings,
   syncFeedbackNewNotifyIndex,
@@ -1054,6 +1058,8 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await announcementPresignUploadAuth(event.cognitoPoolClaims.sub, pars);
     case "announcement_publish":
       return await announcementPublishAuth(event.cognitoPoolClaims.sub, pars);
+    case "announcement_retract":
+      return await announcementRetractAuth(event.cognitoPoolClaims.sub, pars);
     case "announcements_mark_read":
       return await announcementsMarkReadAuth(event.cognitoPoolClaims.sub, pars);
     case "announcement_react":
@@ -2062,6 +2068,44 @@ async function announcementPresignUploadAuth(userId: string, pars: AnnouncementP
   }
 }
 
+async function notifyAnnouncementPublishedUsers(record: { id: string; title: string }) {
+  const tableName = process.env.ABSTRACT_PLAY_TABLE;
+  if (!tableName) {
+    return;
+  }
+  const link = `${announcementsSiteUrl()}/news/${record.id}`;
+  try {
+    await fanOutAnnouncementPublished(ddbDocClient, tableName, async (user) => {
+      const player = user as FullUser;
+      await changeLanguageForPlayer(player);
+      const subject = i18n.t('AnnouncementSubject');
+      const body = i18n.t('AnnouncementBody', { title: record.title, link });
+      let emailed = false;
+      let pushed = false;
+      if (user.email) {
+        const comm = createSendEmailCommand(user.email, user.name ?? user.id, subject, body);
+        await sesClient.send(comm);
+        emailed = true;
+      }
+      try {
+        await sendPush({
+          userId: user.id,
+          topic: 'announcements',
+          title: i18n.t('PUSH.titles.announcement'),
+          body: record.title,
+          url: `/news/${record.id}`,
+        });
+        pushed = true;
+      } catch (pushErr) {
+        logGetItemError(pushErr);
+      }
+      return { emailed, pushed };
+    });
+  } catch (error) {
+    logGetItemError(error);
+  }
+}
+
 async function announcementPublishAuth(userId: string, pars: AnnouncementGetPars) {
   try {
     if (!(await isFeedbackAdmin(userId))) {
@@ -2075,6 +2119,34 @@ async function announcementPublishAuth(userId: string, pars: AnnouncementGetPars
     if (!result.ok) {
       return feedbackErrorResponse(result.message, result.statusCode ?? 400, result.code);
     }
+    await notifyAnnouncementPublishedUsers({
+      id: result.data.id,
+      title: result.data.title,
+    });
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ id: result.data.id, publishedAt: result.data.publishedAt }),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to publish announcement.');
+  }
+}
+
+async function announcementRetractAuth(userId: string, pars: AnnouncementGetPars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const tableName = process.env.ABSTRACT_PLAY_TABLE;
+    if (!tableName) {
+      return feedbackErrorResponse('Announcements are not configured.', 500);
+    }
+    const result = await announcementRetract(ddbDocClient, tableName, s3Client, pars.id);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400, result.code);
+    }
     return {
       statusCode: 200,
       body: JSON.stringify(result.data),
@@ -2082,7 +2154,7 @@ async function announcementPublishAuth(userId: string, pars: AnnouncementGetPars
     };
   } catch (error) {
     logGetItemError(error);
-    return feedbackErrorResponse('Unable to publish announcement.');
+    return feedbackErrorResponse('Unable to retract announcement.');
   }
 }
 
@@ -3189,6 +3261,15 @@ async function updateUserSettings(userid: string, pars: { settings: any; }) {
         await syncFeedbackNewNotifyIndex(ddbDocClient, feedbackTable, userid, kinds);
       } catch (syncErr) {
         console.error('syncFeedbackNewNotifyIndex failed', syncErr);
+      }
+    }
+
+    const mainTable = process.env.ABSTRACT_PLAY_TABLE;
+    if (mainTable) {
+      try {
+        await syncAnnouncementNotifyIndex(ddbDocClient, mainTable, userid, settings);
+      } catch (syncErr) {
+        console.error('syncAnnouncementNotifyIndex failed', syncErr);
       }
     }
 

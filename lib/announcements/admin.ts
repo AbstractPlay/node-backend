@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import {
   DynamoDBDocumentClient,
+  DeleteCommand,
   GetCommand,
   PutCommand,
   QueryCommand,
@@ -13,7 +14,9 @@ import { announcementsSiteUrl } from './siteUrl.js';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   ANNOUNCEMENT_PK,
+  ANNOUNCEMENT_PUBLISHED_PK,
   announcementSk,
+  publishedIndexSk,
 } from './keys.js';
 import {
   announcementGet,
@@ -413,7 +416,7 @@ export async function announcementPublish(
   tableName: string,
   s3: S3Client | null,
   id: string,
-): Promise<AnnouncementsResult<{ id: string; publishedAt: number }>> {
+): Promise<AnnouncementsResult<{ id: string; publishedAt: number; title: string }>> {
   if (process.env.WEBSOCKET_STAGE === 'dev') {
     return {
       ok: false,
@@ -477,7 +480,65 @@ export async function announcementPublish(
     }
   }
 
-  return { ok: true, data: { id: existing.id, publishedAt: now } };
+  return { ok: true, data: { id: existing.id, publishedAt: now, title: record.title } };
+}
+
+export async function announcementRetract(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  s3: S3Client | null,
+  id: string,
+): Promise<AnnouncementsResult<{ id: string }>> {
+  if (process.env.WEBSOCKET_STAGE === 'dev') {
+    return {
+      ok: false,
+      message: 'Retracting announcements is disabled on dev.',
+      statusCode: 403,
+      code: 'announcements_retract_disabled_on_dev',
+    };
+  }
+
+  const trimmed = id?.trim();
+  if (!trimmed) {
+    return { ok: false, message: 'id is required.', statusCode: 400 };
+  }
+
+  const existing = await loadCanonical(client, tableName, trimmed);
+  if (!existing) {
+    return { ok: false, message: 'Announcement not found.', statusCode: 404 };
+  }
+  if (existing.status !== 'published') {
+    return { ok: false, message: 'Only published announcements can be retracted.', statusCode: 400 };
+  }
+
+  const now = Date.now();
+  const record: AnnouncementRecord = {
+    ...existing,
+    status: 'retracted',
+    updatedAt: now,
+  };
+
+  await client.send(new PutCommand({
+    TableName: tableName,
+    Item: record,
+  }));
+
+  await client.send(new DeleteCommand({
+    TableName: tableName,
+    Key: {
+      pk: ANNOUNCEMENT_PUBLISHED_PK,
+      sk: publishedIndexSk(existing.publishedAt, existing.id),
+    },
+  }));
+
+  if (s3) {
+    const rss = await syncAnnouncementsRss(s3, client, tableName);
+    if (!rss.ok) {
+      return { ok: false, message: rss.message, statusCode: 500 };
+    }
+  }
+
+  return { ok: true, data: { id: existing.id } };
 }
 
 /** Re-export public get for tests */
