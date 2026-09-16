@@ -21,6 +21,7 @@
   { "slug": "subsystems/bots" },
   { "slug": "subsystems/websockets" },
   { "slug": "subsystems/notifications" },
+  { "slug": "subsystems/announcements" },
   { "slug": "subsystems/player-blocking", "title": "Player blocking" },
   { "slug": "subsystems/recommendations", "title": "Recommendations" },
   { "slug": "subsystems/game-move-layout-analytics", "title": "Game Move layout analytics" }

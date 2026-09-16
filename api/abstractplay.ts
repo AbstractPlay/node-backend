@@ -177,6 +177,12 @@ import {
   type FeedbackHoldRetentionPars,
 } from '../lib/feedback/index.js';
 import {
+  announcementsList,
+  announcementGet,
+  type AnnouncementsListPars,
+  type AnnouncementGetPars,
+} from '../lib/announcements/index.js';
+import {
   feedbackNewKindsFromSettings,
   syncFeedbackNewNotifyIndex,
 } from '../lib/feedback/feedbackNewNotifyIndex.js';
@@ -795,6 +801,10 @@ export const query = async (event: { queryStringParameters: any; body?: string; 
       return await feedbackWishlistSearchOpen(pars);
     case "feedback_history_list":
       return await feedbackHistoryListOpen(pars);
+    case "announcements_list":
+      return await announcementsListOpen(pars as AnnouncementsListPars);
+    case "announcement_get":
+      return await announcementGetOpen(pars as AnnouncementGetPars);
     default:
       return {
         statusCode: 500,
@@ -1869,6 +1879,51 @@ function feedbackErrorResponse(message: string, statusCode = 500) {
     body: JSON.stringify({ message }),
     headers,
   };
+}
+
+async function announcementsListOpen(pars: AnnouncementsListPars) {
+  try {
+    const tableName = process.env.ABSTRACT_PLAY_TABLE;
+    if (!tableName) {
+      return feedbackErrorResponse('Announcements are not configured.', 500);
+    }
+    const result = await announcementsList(ddbDocClient, tableName, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        items: result.data.items,
+        nextCursor: result.data.nextCursor,
+      }),
+      headers: feedbackListHeaders,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to list announcements.');
+  }
+}
+
+async function announcementGetOpen(pars: AnnouncementGetPars) {
+  try {
+    const tableName = process.env.ABSTRACT_PLAY_TABLE;
+    if (!tableName) {
+      return feedbackErrorResponse('Announcements are not configured.', 500);
+    }
+    const result = await announcementGet(ddbDocClient, tableName, s3Client, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 404);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers: feedbackListHeaders,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to load announcement.');
+  }
 }
 
 async function feedbackListOpen(pars: FeedbackListPars) {

@@ -69,6 +69,17 @@ See [Game Move layout analytics](/backend/subsystems/game-move-layout-analytics/
 
 Returns `{ items, nextCursor? }` for list; `{ post, comments, attachmentUrls, archived? }` for get when live rows still exist. After TTL purge, get returns `{ archived: true, purged: true, summary }` with no comments. By default, terminal items are excluded from `feedback_list`; pass `closedOnly: true` to list terminal posts that are not yet archived. Archived summaries appear in `feedback_history_list`.
 
+## Announcements (site news)
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `announcements_list` | Published announcements, newest first | optional `limit` (default 50, max 100), optional `cursor` |
+| `announcement_get` | Single announcement | `id` |
+
+List returns `{ items, nextCursor? }` where each item includes `id`, `title`, `body`, `publishedAt`, optional `attachmentKeys`, optional `reactionCounts`. Get adds presigned `attachmentUrls` when attachments exist.
+
+See [Announcements](/backend/subsystems/announcements/).
+
 ## Maintenance
 
 | Query | Purpose | Key `pars` |
