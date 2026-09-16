@@ -35,7 +35,7 @@ export function buildAnnouncementsRss(
     <item>
       <title>${escapeXml(title)}</title>
       <description>${description}</description>
-      <link>${siteUrl}/news</link>
+      <link>${siteUrl}/news/${escapeXml(item.id)}</link>
       <pubDate>${pubDate}</pubDate>
       <guid isPermaLink="false">${escapeXml(item.id)}</guid>
     </item>

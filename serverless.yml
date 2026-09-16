@@ -76,6 +76,7 @@ custom:
   stageConfig:
     dev:
       profile: AbstractPlayDev
+      siteHost: play.dev.abstractplay.com
       userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_2zrzbEjoU
       userpoolId: us-east-1_2zrzbEjoU
       userpoolClient: 14mpql1tmvntup4p2anm4jt782
@@ -89,6 +90,7 @@ custom:
 
     prod:
       profile: AbstractPlayProd
+      siteHost: play.abstractplay.com
       userpool: arn:aws:cognito-idp:us-east-1:153672715141:userpool/us-east-1_YCjgSZHJm
       userpoolId: us-east-1_YCjgSZHJm
       userpoolClient: 2isan3ctk1aabt2v6r6aptlpg
@@ -136,6 +138,9 @@ provider:
     FEEDBACK_TABLE: abstract-play-feedback-${self:provider.stage}
     FEEDBACK_ATTACHMENTS_BUCKET: ap-feedback-attachments-${self:provider.stage}
     ANNOUNCEMENTS_ATTACHMENTS_BUCKET: ap-announcements-attachments-${self:provider.stage}
+    ANNOUNCEMENTS_RSS_BUCKET: abstract-play-${self:provider.stage}
+    ANNOUNCEMENTS_RSS_KEY: news.rss
+    ANNOUNCEMENTS_SITE_URL: https://${self:custom.stageConfig.${self:provider.stage}.siteHost}
     userpool: ${self:custom.stageConfig.${self:provider.stage}.userpool}
     userpoolId: ${self:custom.stageConfig.${self:provider.stage}.userpoolId}
     userpoolClient: ${self:custom.stageConfig.${self:provider.stage}.userpoolClient}
@@ -218,12 +223,14 @@ provider:
             - 'arn:aws:s3:::records.abstractplay.com/*'
             - 'arn:aws:s3:::ap-feedback-attachments-${self:provider.stage}/*'
             - 'arn:aws:s3:::ap-announcements-attachments-${self:provider.stage}/*'
+            - 'arn:aws:s3:::abstract-play-${self:provider.stage}/*'
         - Effect: 'Allow'
           Action:
             - 's3:ListBucket'
           Resource:
             - 'arn:aws:s3:::ap-feedback-attachments-${self:provider.stage}'
             - 'arn:aws:s3:::ap-announcements-attachments-${self:provider.stage}'
+            - 'arn:aws:s3:::abstract-play-${self:provider.stage}'
         - Effect: Allow
           Action:
             - cognito-idp:AdminCreateUser

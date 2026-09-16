@@ -180,10 +180,13 @@ import {
   announcementsList,
   announcementGet,
   announcementsAdminList,
-  announcementSave,
+  announcementSaveWithOptionalRss,
   announcementGetAdmin,
   announcementPresignUpload,
   announcementPublish,
+  announcementReact,
+  announcementReactionsMine,
+  announcementsMarkRead,
   type AnnouncementsListPars,
   type AnnouncementGetPars,
   type AnnouncementsAdminListPars,
@@ -1051,6 +1054,12 @@ export const authQuery = async (event: { body: { query: any; pars: any; }; cogni
       return await announcementPresignUploadAuth(event.cognitoPoolClaims.sub, pars);
     case "announcement_publish":
       return await announcementPublishAuth(event.cognitoPoolClaims.sub, pars);
+    case "announcements_mark_read":
+      return await announcementsMarkReadAuth(event.cognitoPoolClaims.sub, pars);
+    case "announcement_react":
+      return await announcementReactAuth(event.cognitoPoolClaims.sub, pars);
+    case "announcement_reactions_mine":
+      return await announcementReactionsMineAuth(event.cognitoPoolClaims.sub, pars);
     case "set_game_state":
       return await injectState(event.cognitoPoolClaims.sub, pars);
     case "update_game_settings":
@@ -1953,7 +1962,7 @@ async function announcementSaveAuth(userId: string, pars: AnnouncementSavePars) 
     if (!tableName) {
       return feedbackErrorResponse('Announcements are not configured.', 500);
     }
-    const result = await announcementSave(ddbDocClient, tableName, pars);
+    const result = await announcementSaveWithOptionalRss(ddbDocClient, tableName, s3Client, pars);
     if (!result.ok) {
       return feedbackErrorResponse(result.message, result.statusCode ?? 400);
     }
@@ -2062,7 +2071,7 @@ async function announcementPublishAuth(userId: string, pars: AnnouncementGetPars
     if (!tableName) {
       return feedbackErrorResponse('Announcements are not configured.', 500);
     }
-    const result = await announcementPublish(ddbDocClient, tableName, pars.id);
+    const result = await announcementPublish(ddbDocClient, tableName, s3Client, pars.id);
     if (!result.ok) {
       return feedbackErrorResponse(result.message, result.statusCode ?? 400, result.code);
     }
@@ -2074,6 +2083,73 @@ async function announcementPublishAuth(userId: string, pars: AnnouncementGetPars
   } catch (error) {
     logGetItemError(error);
     return feedbackErrorResponse('Unable to publish announcement.');
+  }
+}
+
+type AnnouncementsMarkReadPars = { readAt?: number };
+type AnnouncementReactPars = { id: string; emoji: string };
+type AnnouncementReactionsMinePars = { ids: string[] };
+
+async function announcementsMarkReadAuth(userId: string, pars: AnnouncementsMarkReadPars) {
+  try {
+    const tableName = process.env.ABSTRACT_PLAY_TABLE;
+    if (!tableName) {
+      return feedbackErrorResponse('Announcements are not configured.', 500);
+    }
+    const result = await announcementsMarkRead(ddbDocClient, tableName, userId, pars?.readAt);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to mark announcements read.');
+  }
+}
+
+async function announcementReactAuth(userId: string, pars: AnnouncementReactPars) {
+  try {
+    const tableName = process.env.ABSTRACT_PLAY_TABLE;
+    if (!tableName) {
+      return feedbackErrorResponse('Announcements are not configured.', 500);
+    }
+    const result = await announcementReact(ddbDocClient, tableName, userId, pars.id, pars.emoji);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to update reaction.');
+  }
+}
+
+async function announcementReactionsMineAuth(userId: string, pars: AnnouncementReactionsMinePars) {
+  try {
+    const tableName = process.env.ABSTRACT_PLAY_TABLE;
+    if (!tableName) {
+      return feedbackErrorResponse('Announcements are not configured.', 500);
+    }
+    const result = await announcementReactionsMine(ddbDocClient, tableName, userId, pars?.ids ?? []);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to load reactions.');
   }
 }
 

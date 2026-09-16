@@ -7,11 +7,15 @@ export {
 export {
   announcementsAdminList,
   announcementSave,
+  announcementSaveWithOptionalRss,
   announcementGetAdmin,
   announcementPresignUpload,
   announcementPublish,
   authorAttachmentPrefix,
 } from './admin.js';
+export { syncAnnouncementsRss } from './rssSync.js';
+export { announcementReact, announcementReactionsMine, ALLOWED_ANNOUNCEMENT_REACTIONS } from './reactions.js';
+export { announcementsMarkRead } from './markRead.js';
 export type {
   AnnouncementsAdminListPars,
   AnnouncementAdminListItem,

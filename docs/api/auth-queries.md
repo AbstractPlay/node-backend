@@ -76,7 +76,10 @@ Requires `USER.admin === true`. Records live in the main `abstract-play` table (
 | `announcements_admin_list` | List all announcements | optional `status`, `limit`, `cursor`. Returns `{ items, nextCursor? }`. |
 | `announcement_get` | Load one item | `id`. Admins see drafts; non-admins get published only (same as open API). |
 | `announcement_presign_upload` | Presigned S3 PUT for images | `announcementId`, `filename`, `contentType`, `contentLength` (png/jpeg/webp, max 5 MB). Returns `{ uploadUrl, key, headers }`. |
-| `announcement_publish` | First publish (draft → published) | `id`. **403** `announcements_publish_disabled_on_dev` when `WEBSOCKET_STAGE=dev`. |
+| `announcement_publish` | First publish (draft → published) | `id`. **403** `announcements_publish_disabled_on_dev` when `WEBSOCKET_STAGE=dev`. Fan-out: Discord webhook (if configured), `news.rss` upload. |
+| `announcements_mark_read` | Bump read cursor | optional `readAt` (ms). Sets `settings.all.announcementsLastReadAt`. |
+| `announcement_react` | Toggle allowlisted emoji on published post | `id`, `emoji`. Returns `{ id, reactionCounts, myReactions }`. |
+| `announcement_reactions_mine` | Highlight state for list | `ids: string[]`. Returns `{ byAnnouncementId }`. |
 
 Public read: open `announcements_list` / `announcement_get` (published only).
 

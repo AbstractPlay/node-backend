@@ -6,7 +6,10 @@ import {
   PutCommand,
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
+import { postAnnouncementDiscordMirror } from './discord.js';
+import { syncAnnouncementsRss } from './rssSync.js';
+import { announcementsSiteUrl } from './siteUrl.js';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   ANNOUNCEMENT_PK,
@@ -147,14 +150,16 @@ export async function announcementsAdminList(
     ScanIndexForward: false,
   }));
 
-  let items = (result.Items ?? []).map((row) => ({
-    id: String(row.id),
-    status: row.status as AnnouncementStatus,
-    title: String(row.title ?? ''),
-    publishedAt: Number(row.publishedAt ?? 0),
-    updatedAt: Number(row.updatedAt ?? 0),
-    createdAt: Number(row.createdAt ?? 0),
-  }));
+  let items = (result.Items ?? [])
+    .filter((row) => row.status && !String(row.sk).startsWith('REACTION#'))
+    .map((row) => ({
+      id: String(row.id),
+      status: row.status as AnnouncementStatus,
+      title: String(row.title ?? ''),
+      publishedAt: Number(row.publishedAt ?? 0),
+      updatedAt: Number(row.updatedAt ?? 0),
+      createdAt: Number(row.createdAt ?? 0),
+    }));
 
   if (pars.status) {
     items = items.filter((item) => item.status === pars.status);
@@ -262,6 +267,24 @@ export async function announcementSave(
   return { ok: true, data: { id, status, updatedAt: now } };
 }
 
+async function persistAnnouncementRecord(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  record: AnnouncementRecord,
+): Promise<void> {
+  await client.send(new PutCommand({
+    TableName: tableName,
+    Item: record,
+  }));
+  if (record.status === 'published') {
+    const { publishedIndex } = buildAnnouncementPutItems(record);
+    await client.send(new PutCommand({
+      TableName: tableName,
+      Item: publishedIndex,
+    }));
+  }
+}
+
 export async function announcementGetAdmin(
   client: DynamoDBDocumentClient,
   tableName: string,
@@ -366,9 +389,29 @@ export async function announcementPresignUpload(
   };
 }
 
+export async function announcementSaveWithOptionalRss(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  s3: S3Client | null,
+  pars: AnnouncementSavePars,
+): Promise<AnnouncementsResult<{ id: string; status: AnnouncementStatus; updatedAt: number }>> {
+  const saveResult = await announcementSave(client, tableName, pars);
+  if (!saveResult.ok) {
+    return saveResult;
+  }
+  if (saveResult.data.status === 'published' && s3) {
+    const rss = await syncAnnouncementsRss(s3, client, tableName);
+    if (!rss.ok) {
+      return { ok: false, message: rss.message, statusCode: 500 };
+    }
+  }
+  return saveResult;
+}
+
 export async function announcementPublish(
   client: DynamoDBDocumentClient,
   tableName: string,
+  s3: S3Client | null,
   id: string,
 ): Promise<AnnouncementsResult<{ id: string; publishedAt: number }>> {
   if (process.env.WEBSOCKET_STAGE === 'dev') {
@@ -400,18 +443,39 @@ export async function announcementPublish(
   }
 
   const now = Date.now();
-  await putAnnouncementRecord(client, tableName, {
-    id: existing.id,
+  let record: AnnouncementRecord = {
+    ...existing,
     status: 'published',
-    title: existing.title,
-    body: existing.body,
     publishedAt: now,
-    createdAt: existing.createdAt,
     updatedAt: now,
-    source: existing.source,
-    attachmentKeys: existing.attachmentKeys,
-    reactionCounts: existing.reactionCounts,
-  });
+    reactionCounts: existing.reactionCounts ?? {},
+  };
+
+  await persistAnnouncementRecord(client, tableName, record);
+
+  const siteUrl = announcementsSiteUrl();
+  if (!record.discordMessageId) {
+    const discord = await postAnnouncementDiscordMirror(
+      record.title,
+      record.body,
+      record.id,
+      siteUrl,
+    );
+    if (!discord.ok) {
+      return { ok: false, message: discord.message, statusCode: 502 };
+    }
+    if (discord.posted && discord.messageId) {
+      record = { ...record, discordMessageId: discord.messageId, updatedAt: Date.now() };
+      await persistAnnouncementRecord(client, tableName, record);
+    }
+  }
+
+  if (s3) {
+    const rss = await syncAnnouncementsRss(s3, client, tableName);
+    if (!rss.ok) {
+      return { ok: false, message: rss.message, statusCode: 500 };
+    }
+  }
 
   return { ok: true, data: { id: existing.id, publishedAt: now } };
 }
