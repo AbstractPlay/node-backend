@@ -24,7 +24,7 @@ const MAX_LIMIT = 100;
 
 export type AnnouncementsResult<T> =
   | { ok: true; data: T }
-  | { ok: false; message: string; statusCode?: number };
+  | { ok: false; message: string; statusCode?: number; code?: string };
 
 function encodeCursor(lastSk: string): string {
   return Buffer.from(JSON.stringify({ sk: lastSk }), 'utf8').toString('base64url');

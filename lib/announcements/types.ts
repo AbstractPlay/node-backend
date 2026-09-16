@@ -16,6 +16,7 @@ export type AnnouncementRecord = {
   reactionCounts?: Record<string, number>;
   discordMessageId?: string;
   editedAt?: number;
+  adminNote?: string;
 };
 
 export type AnnouncementPublicItem = {
