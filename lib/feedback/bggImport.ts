@@ -17,6 +17,7 @@ import {
   userIndexSk,
   voteSk,
 } from './keys.js';
+import { buildUserVotedIndexItem, buildUserWatchIndexItem } from './userEngagementIndex.js';
 
 export type BggWishlistXmlItem = {
   '@_objectname'?: string;
@@ -280,6 +281,8 @@ export function buildBggImportAuthorEngagementRows(
       kind: 'wishlist',
       createdAt,
     },
+    buildUserVotedIndexItem(author.authorId, 'wishlist', createdAt, meta.id),
+    buildUserWatchIndexItem(author.authorId, 'wishlist', createdAt, meta.id),
   ];
 }
 

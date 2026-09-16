@@ -38,6 +38,32 @@ export function userIndexSk(kind: FeedbackKind, createdAt: number, id: string): 
   return `POST#${kind}#${createdAt}#${id}`;
 }
 
+export function userVotedSkPrefix(): string {
+  return 'VOTED#';
+}
+
+export function userWatchSkPrefix(): string {
+  return 'WATCH#';
+}
+
+export function userVotedSk(kind: FeedbackKind, createdAt: number, id: string): string {
+  return `VOTED#${kind}#${createdAt}#${id}`;
+}
+
+export function userWatchSk(kind: FeedbackKind, createdAt: number, id: string): string {
+  return `WATCH#${kind}#${createdAt}#${id}`;
+}
+
+export const FEEDBACK_NOTIFY_PK_PREFIX = 'FEEDBACK_NOTIFY#';
+
+export function feedbackNotifyPk(kind: FeedbackKind): string {
+  return `${FEEDBACK_NOTIFY_PK_PREFIX}${kind}`;
+}
+
+export function feedbackNotifySk(userId: string): string {
+  return `USER#${userId}`;
+}
+
 export function kindGsi1Pk(kind: FeedbackKind): string {
   return `KIND#${kind}`;
 }

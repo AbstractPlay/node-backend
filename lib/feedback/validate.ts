@@ -524,9 +524,14 @@ export function validateFeedbackSetAdminFieldsPars(
   return { ok: true, data };
 }
 
+const FEEDBACK_MINE_SCOPES = ['submitted', 'voted', 'watched'] as const;
+
 export function validateFeedbackMinePars(
   pars: FeedbackMinePars,
-): { ok: true; data: { kind?: FeedbackKind; limit: number; cursor?: string } } | { ok: false; message: string } {
+): {
+  ok: true;
+  data: { kind?: FeedbackKind; scope: typeof FEEDBACK_MINE_SCOPES[number]; limit: number; cursor?: string };
+} | { ok: false; message: string } {
   let kind: FeedbackKind | undefined;
   if (pars.kind !== undefined && pars.kind !== '') {
     if (!isNonEmptyString(pars.kind) || !isFeedbackKind(pars.kind)) {
@@ -534,12 +539,19 @@ export function validateFeedbackMinePars(
     }
     kind = pars.kind;
   }
+  let scope: typeof FEEDBACK_MINE_SCOPES[number] = 'submitted';
+  if (pars.scope !== undefined && pars.scope !== '') {
+    if (!isNonEmptyString(pars.scope) || !FEEDBACK_MINE_SCOPES.includes(pars.scope as typeof FEEDBACK_MINE_SCOPES[number])) {
+      return { ok: false, message: 'scope must be submitted, voted, or watched.' };
+    }
+    scope = pars.scope as typeof FEEDBACK_MINE_SCOPES[number];
+  }
   const rawLimit = pars.limit === undefined ? FEEDBACK_LIST_DEFAULT_LIMIT : Number(pars.limit);
   const limit = Number.isFinite(rawLimit)
     ? Math.min(FEEDBACK_LIST_MAX_LIMIT, Math.max(1, Math.floor(rawLimit)))
     : FEEDBACK_LIST_DEFAULT_LIMIT;
   const cursor = isNonEmptyString(pars.cursor) ? pars.cursor : undefined;
-  return { ok: true, data: { kind, limit, cursor } };
+  return { ok: true, data: { kind, scope, limit, cursor } };
 }
 
 export function validateFeedbackAdminListPars(

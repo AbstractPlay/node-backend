@@ -43,6 +43,10 @@ import {
   voteSk,
 } from '../lib/feedback/keys.js';
 import {
+  listFeedbackNewNotifyUserIds,
+  syncFeedbackNewNotifyIndex,
+} from '../lib/feedback/feedbackNewNotifyIndex.js';
+import {
   validateFeedbackCreatePars,
   validateFeedbackDeletePars,
   validateFeedbackReclassifyPars,
@@ -1027,7 +1031,89 @@ test('feedbackMine returns posts authored by user', async () => {
   assert.equal(mineResult.ok, true);
   if (mineResult.ok) {
     assert.ok(mineResult.data.items.some((item) => item.id === createResult.data.id));
+    const row = mineResult.data.items.find((item) => item.id === createResult.data.id);
+    assert.equal(row?.userVoted, true);
+    assert.equal(row?.subscribed, true);
   }
+});
+
+test('feedbackMine voted scope lists posts the user voted on', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Vote target',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const voteResult = await feedbackVote(client, TABLE, VOTER_ID, {
+    id: createResult.data.id,
+    vote: true,
+  });
+  assert.equal(voteResult.ok, true);
+  const votedMine = await feedbackMine(client, TABLE, VOTER_ID, { scope: 'voted' });
+  assert.equal(votedMine.ok, true);
+  if (votedMine.ok) {
+    assert.ok(votedMine.data.items.some((item) => item.id === createResult.data.id));
+  }
+  assert.ok([...store.values()].some((item) => (
+    item.pk === `${USER_PK_PREFIX}${VOTER_ID}` && String(item.sk).startsWith('VOTED#')
+  )));
+});
+
+test('feedbackMine watched scope lists subscribed posts', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Watch target',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  await feedbackSubscribe(client, TABLE, VOTER_ID, {
+    id: createResult.data.id,
+    subscribe: true,
+  });
+  const watchedMine = await feedbackMine(client, TABLE, VOTER_ID, { scope: 'watched' });
+  assert.equal(watchedMine.ok, true);
+  if (watchedMine.ok) {
+    assert.ok(watchedMine.data.items.some((item) => item.id === createResult.data.id));
+    assert.equal(watchedMine.data.items[0]?.subscribed, true);
+  }
+});
+
+test('syncFeedbackNewNotifyIndex and notify opt-in recipient', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  process.env.ABSTRACT_PLAY_TABLE = 'abstract-play-test';
+  await syncFeedbackNewNotifyIndex(client, TABLE, VOTER_ID, { bug: true });
+  const ids = await listFeedbackNewNotifyUserIds(client, TABLE, 'bug');
+  assert.ok(ids.includes(VOTER_ID));
+  store.set('USER:' + VOTER_ID, {
+    pk: 'USER',
+    sk: VOTER_ID,
+    settings: { all: { feedbackNewKinds: { bug: true } } },
+  });
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Opt-in notify',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const notifyKey = [...store.keys()].find(
+    (key) => key.startsWith(`${notificationPk(VOTER_ID)}:`)
+      && (store.get(key)?.body as { postId?: string })?.postId === createResult.data.id,
+  );
+  assert.ok(notifyKey, 'opt-in user receives feedbackNew');
 });
 
 test('feedbackAdminList filters by priority', async () => {

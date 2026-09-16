@@ -176,6 +176,10 @@ import {
   type FeedbackHistoryListPars,
   type FeedbackHoldRetentionPars,
 } from '../lib/feedback/index.js';
+import {
+  feedbackNewKindsFromSettings,
+  syncFeedbackNewNotifyIndex,
+} from '../lib/feedback/feedbackNewNotifyIndex.js';
 import { S3Client } from '@aws-sdk/client-s3';
 import {
   queryRecentCompletedGames,
@@ -2894,6 +2898,17 @@ async function updateUserSettings(userid: string, pars: { settings: any; }) {
       ddbDocClient.send(userUpdate),
       ddbDocClient.send(usersAvatarUpdate),
     ]);
+
+    const feedbackTable = process.env.FEEDBACK_TABLE;
+    if (feedbackTable) {
+      try {
+        const kinds = feedbackNewKindsFromSettings(settings);
+        await syncFeedbackNewNotifyIndex(ddbDocClient, feedbackTable, userid, kinds);
+      } catch (syncErr) {
+        console.error('syncFeedbackNewNotifyIndex failed', syncErr);
+      }
+    }
+
     console.log("Success - user settings updated");
     return {
       statusCode: 200,
