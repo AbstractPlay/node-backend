@@ -17,7 +17,6 @@ import {
   headers,
   cachedListHeaders,
   feedbackListHeaders,
-  parseLambdaIntegrationBody,
   formatReturnError,
   logGetItemError,
   handleCommonErrors,
@@ -80,7 +79,6 @@ import {
   renameBotDisplayName,
   validateBotDisplayName,
 } from '../lib/botNames.js';
-import { testBotStatus, updateTestBot } from './testBot.js';
 import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } from '../lib/gameState.js';
 import { adjustShardedCounts, ensureShardedMetaGameCountEntry } from '../lib/gameProjector.js';
 import { adminDeleteGame } from '../lib/adminDeleteGame.js';
@@ -614,392 +612,6 @@ async function ensureMissingMetaGameCounts(): Promise<void> {
   }
   console.log(`Initializing sharded METAGAMES# counts for new games: ${missing.join(', ')}`);
   await Promise.all(missing.map(metaGame => ensureMetaGameCountEntry(metaGame)));
-}
-
-export const query = async (event: { queryStringParameters: any; body?: string; httpMethod: string; }) => {
-  console.log(event);
-
-  let pars;
-  let query;
-
-  // Handle both GET (query parameters) and POST (JSON body) requests
-  if (event.httpMethod === 'POST' && event.body) {
-    try {
-      const bodyData = JSON.parse(event.body);
-      query = bodyData.query;
-      pars = bodyData.pars || {};
-    } catch (error) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          message: "Invalid JSON in request body"
-        }),
-        headers
-      };
-    }
-  } else {
-    // Existing GET request handling
-    pars = event.queryStringParameters;
-    query = pars.query;
-  }
-
-  console.log(pars);
-  switch (query) {
-    case "user_names":
-      return await userNames();
-    case "challenge_details":
-      return await challengeDetails(pars);
-    case "standing_challenges":
-      return await standingChallenges(pars);
-    case "all_standing_challenges":
-      return await allStandingChallenges();
-    case "recent_completed_games":
-      return await recentCompletedGames(pars);
-    case "games":
-      return await games(pars);
-    case "meta_games":
-      return await metaGamesDetails();
-    case "get_game":
-      return await game("", pars);
-    case "get_public_exploration":
-      return await getPublicExploration(pars);
-    case "bot_move":
-      return await botMove(pars);
-    case "get_tournaments":
-      return await getTournaments();
-    case "get_old_tournaments":
-      return await getOldTournaments(pars);
-    case "get_tournament":
-      return await getTournament(pars);
-    case "archive_tournaments":
-      return await archiveTournaments();
-    case "get_event":
-      return await eventGetEvent(pars);
-    case "get_events":
-      return await eventGetEvents();
-    case "player_highlights":
-      return await playerHighlights(pars);
-    case "player_about":
-      return await playerAbout(pars);
-    case "representative_games":
-      return await representativeGames(pars);
-    case "log_gamemove_layout_event":
-      return await logLayoutEventOpen(pars);
-    case "report_problem":
-      return await reportProblem(pars);
-    case "feedback_list":
-      return await feedbackListOpen(pars);
-    case "feedback_get":
-      return await feedbackGetOpen(pars);
-    case "wishlist_search":
-      return await feedbackWishlistSearchOpen(pars);
-    case "feedback_history_list":
-      return await feedbackHistoryListOpen(pars);
-    case "announcements_list":
-      return await announcementsListOpen(pars as AnnouncementsListPars);
-    case "announcement_get":
-      return await announcementGetOpen(pars as AnnouncementGetPars);
-    default:
-      return {
-        statusCode: 500,
-        body: JSON.stringify({
-          message: `Unable to execute unknown open query '${pars.query}'`
-        }),
-        headers
-      };
-  }
-}
-
-export const botQuery = async (event: { body: string | Record<string, unknown>; cognitoPoolClaims: PartialClaims; }) => {
-  console.log("botQuery: ", event.body);
-  console.log("botQuery claims:", {
-    sub: event.cognitoPoolClaims?.sub,
-    email: event.cognitoPoolClaims?.email,
-    email_verified: event.cognitoPoolClaims?.email_verified,
-  });
-  let body: Record<string, unknown>;
-  try {
-    body = parseLambdaIntegrationBody(event.body);
-  } catch (error) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({
-        message: "Invalid JSON in request body"
-      }),
-      headers
-    };
-  }
-
-  const verb = body.verb;
-  switch (verb) {
-    case "move":
-      return await handleMove(event.cognitoPoolClaims, body as { gameid: string; move: string; metaGame: string; });
-    default:
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          message: `Unknown bot verb '${verb}'`
-        }),
-        headers
-      };
-  }
-}
-
-// It looks like there is no way to "run and forget", you need to finish all work before returning a response to the front end. :(
-// Make sure the @typescript-eslint/no-floating-promises linter rule passes, otherwise promise might (at best?) only be fullfilled on the next call to the API...
-export const authQuery = async (event: { body: { query: any; pars: any; }; cognitoPoolClaims: PartialClaims; }) => {
-  console.log("authQuery: ", event.body.query);
-  const query = event.body.query;
-  const pars = event.body.pars;
-  switch (query) {
-    case "me":
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          deprecated: true,
-          message: 'me is retired. Use me_profile for site-wide bootstrap and me_dashboard for the /me page.',
-          useInstead: ['me_profile', 'me_dashboard'],
-        }),
-        headers,
-      };
-    case "me_profile":
-      return await meProfile(event.cognitoPoolClaims);
-    case "me_dashboard":
-      return await meDashboard(event.cognitoPoolClaims, pars);
-    case "create_bot":
-    case "createBot":
-      return await createBot(event.cognitoPoolClaims, pars);
-    case "update_bot":
-    case "updateBot":
-      return await updateBot(event.cognitoPoolClaims, pars);
-    case "delete_bot":
-    case "deleteBot":
-      return await deleteBot(event.cognitoPoolClaims, pars);
-    case "begin_bot_secret_rotation":
-    case "beginBotSecretRotation":
-      return await beginBotSecretRotation(event.cognitoPoolClaims, pars);
-    case "finalize_bot_secret_rotation":
-    case "finalizeBotSecretRotation":
-      return await finalizeBotSecretRotation(event.cognitoPoolClaims, pars);
-    case "test_bot_status":
-      return await testBotStatus(event.cognitoPoolClaims);
-    case "update_test_bot":
-      return await updateTestBot(event.cognitoPoolClaims, pars);
-    case "next_game":
-      return await nextGame(event.cognitoPoolClaims.sub);
-    case "my_settings":
-      return await mySettings(event.cognitoPoolClaims);
-    case "new_setting":
-      return await newSetting(event.cognitoPoolClaims.sub, pars);
-    case "new_profile":
-      return await newProfile(event.cognitoPoolClaims, pars);
-    case "set_push":
-      return await setPush(event.cognitoPoolClaims.sub, pars);
-    case "set_public_rivalries":
-      return await setPublicRivalries(event.cognitoPoolClaims.sub, pars);
-    case "save_push":
-      return await savePush(event.cognitoPoolClaims.sub, pars);
-    case "delete_push":
-      return await deletePush(event.cognitoPoolClaims.sub, pars);
-    case "save_tags":
-      return await saveTags(event.cognitoPoolClaims.sub, pars);
-    case "save_customization":
-      return await saveCustomization(event.cognitoPoolClaims.sub, pars);
-    case "delete_customization":
-      return await deleteCustomization(event.cognitoPoolClaims.sub, pars);
-    case "update_standing":
-      return await updateStanding(event.cognitoPoolClaims.sub, pars);
-    case "block_player":
-      return await block_player(event.cognitoPoolClaims.sub, pars);
-    case "unblock_player":
-      return await unblock_player(event.cognitoPoolClaims.sub, pars);
-    case "standing_challenges":
-      return await standingChallenges({ ...pars, userId: event.cognitoPoolClaims.sub });
-    case "all_standing_challenges":
-      return await allStandingChallenges(event.cognitoPoolClaims.sub);
-    case "new_challenge":
-      return await newChallenge(event.cognitoPoolClaims.sub, pars);
-    case "challenge_revoke":
-      return await revokeChallenge(event.cognitoPoolClaims.sub, pars);
-    case "challenge_response":
-      return await respondedChallenge(event.cognitoPoolClaims.sub, pars);
-    case "start_solo_game":
-      return await startSoloGame(event.cognitoPoolClaims.sub, pars);
-    case "submit_move":
-      return await submitMove(event.cognitoPoolClaims.sub, pars);
-    case "timeloss":
-      return await checkForTimeloss(event.cognitoPoolClaims.sub, pars);
-    case "abandoned":
-      return await checkForAbandonedGame(event.cognitoPoolClaims.sub, pars);
-    case "invoke_pie":
-      return await invokePie(event.cognitoPoolClaims.sub, pars);
-    case "update_note":
-      return await updateNote(event.cognitoPoolClaims.sub, pars);
-    case "update_commented":
-      return await updateCommented(event.cognitoPoolClaims.sub, pars);
-    case "set_lastSeen":
-      return await setLastSeen(event.cognitoPoolClaims.sub, pars);
-    case "dismiss_notification":
-      return await dismissNotificationAuth(event.cognitoPoolClaims.sub, pars);
-    case "dismiss_all_notifications":
-      return await dismissAllNotificationsAuth(event.cognitoPoolClaims.sub);
-    case "list_notifications":
-      return await listNotificationsAuth(event.cognitoPoolClaims.sub);
-    case "mark_notifications_seen":
-      return await markNotificationsSeenAuth(event.cognitoPoolClaims.sub, pars);
-    case "submit_comment":
-      return await submitComment(event.cognitoPoolClaims.sub, pars);
-    case "save_exploration":
-      return await saveExploration(event.cognitoPoolClaims.sub, pars);
-    case "get_exploration":
-      return await getExploration(event.cognitoPoolClaims.sub, pars);
-    case "get_private_exploration":
-      return await getPrivateExploration(event.cognitoPoolClaims.sub, pars);
-    case "get_game":
-      return await game(event.cognitoPoolClaims.sub, pars);
-    case "list_playground_saves":
-      return await listPlaygroundSavesAuth(event.cognitoPoolClaims.sub);
-    case "get_playground_save":
-      return await getPlaygroundSaveAuth(event.cognitoPoolClaims.sub, pars);
-    case "create_playground_save":
-      return await createPlaygroundSaveAuth(event.cognitoPoolClaims.sub, pars);
-    case "save_playground_save":
-      return await savePlaygroundSaveAuth(event.cognitoPoolClaims.sub, pars);
-    case "delete_playground_save":
-      return await deletePlaygroundSaveAuth(event.cognitoPoolClaims.sub, pars);
-    case "toggle_star":
-      return await toggleStar(event.cognitoPoolClaims.sub, pars);
-    case "watch_game":
-      return await watchGameAuth(event.cognitoPoolClaims.sub, pars);
-    case "unwatch_game":
-      return await unwatchGameAuth(event.cognitoPoolClaims.sub, pars);
-    case "highlight_game":
-      return await highlightGameAuth(event.cognitoPoolClaims.sub, pars);
-    case "unhighlight_game":
-      return await unhighlightGameAuth(event.cognitoPoolClaims.sub, pars);
-    case "recommend_game":
-      return await recommendGameAuth(event.cognitoPoolClaims.sub, pars);
-    case "unrecommend_game":
-      return await unrecommendGameAuth(event.cognitoPoolClaims.sub, pars);
-    case "log_recommendation_event":
-      return await logRecommendationEventAuth(event.cognitoPoolClaims.sub, pars);
-    case "log_gamemove_layout_event":
-      return await logLayoutEventAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_create":
-      return await feedbackCreateAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_presign_upload":
-      return await feedbackPresignUploadAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_vote":
-      return await feedbackVoteAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_comment":
-      return await feedbackCommentAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_subscribe":
-      return await feedbackSubscribeAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_set_status":
-      return await feedbackSetStatusAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_reclassify":
-      return await feedbackReclassifyAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_update":
-      return await feedbackUpdateAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_set_admin_fields":
-      return await feedbackSetAdminFieldsAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_mine":
-      return await feedbackMineAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_admin_list":
-      return await feedbackAdminListAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_merge":
-      return await feedbackMergeAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_delete":
-      return await feedbackDeleteAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_hold_retention":
-      return await feedbackHoldRetentionAuth(event.cognitoPoolClaims.sub, pars);
-    case "feedback_get":
-      return await feedbackGetAuth(event.cognitoPoolClaims.sub, pars);
-    case "announcement_save":
-      return await announcementSaveAuth(event.cognitoPoolClaims.sub, pars);
-    case "announcements_admin_list":
-      return await announcementsAdminListAuth(event.cognitoPoolClaims.sub, pars);
-    case "announcement_get":
-      return await announcementGetAuth(event.cognitoPoolClaims.sub, pars);
-    case "announcement_presign_upload":
-      return await announcementPresignUploadAuth(event.cognitoPoolClaims.sub, pars);
-    case "announcement_publish":
-      return await announcementPublishAuth(event.cognitoPoolClaims.sub, pars);
-    case "announcement_retract":
-      return await announcementRetractAuth(event.cognitoPoolClaims.sub, pars);
-    case "announcements_mark_read":
-      return await announcementsMarkReadAuth(event.cognitoPoolClaims.sub, pars);
-    case "announcement_react":
-      return await announcementReactAuth(event.cognitoPoolClaims.sub, pars);
-    case "announcement_reactions_mine":
-      return await announcementReactionsMineAuth(event.cognitoPoolClaims.sub, pars);
-    case "set_game_state":
-      return await injectState(event.cognitoPoolClaims.sub, pars);
-    case "update_game_settings":
-      return await updateGameSettings(event.cognitoPoolClaims.sub, pars);
-    case "update_user_settings":
-      return await updateUserSettings(event.cognitoPoolClaims.sub, pars);
-    case "update_meta_game_counts":
-      return await updateMetaGameCounts(event.cognitoPoolClaims.sub);
-    case "purge_retired_completed_games":
-      return await purgeRetiredCompletedGames(event.cognitoPoolClaims.sub);
-    case "mark_published":
-      return await markAsPublished(event.cognitoPoolClaims.sub, pars);
-    case "new_tournament":
-      return await newTournament(event.cognitoPoolClaims.sub, pars);
-    case "join_tournament":
-      return await joinTournament(event.cognitoPoolClaims.sub, pars);
-    case "withdraw_tournament":
-      return await withdrawTournament(event.cognitoPoolClaims.sub, pars);
-    case "event_create":
-      return await eventCreate(event.cognitoPoolClaims.sub, pars);
-    case "event_delete":
-      return await eventDelete(event.cognitoPoolClaims.sub, pars);
-    case "event_publish":
-      return await eventPublish(event.cognitoPoolClaims.sub, pars);
-    case "event_register":
-      return await eventRegister(event.cognitoPoolClaims.sub, pars);
-    case "event_withdraw":
-      return await eventWithdraw(event.cognitoPoolClaims.sub, pars);
-    case "event_update_start":
-      return await eventUpdateStart(event.cognitoPoolClaims.sub, pars);
-    case "event_update_name":
-      return await eventUpdateName(event.cognitoPoolClaims.sub, pars);
-    case "event_update_desc":
-      return await eventUpdateDesc(event.cognitoPoolClaims.sub, pars);
-    case "event_update_invites":
-      return await eventUpdateInvites(event.cognitoPoolClaims.sub, pars);
-    case "event_update_result":
-      return await eventUpdateResult(event.cognitoPoolClaims.sub, pars);
-    case "event_update_divisions":
-      return await eventUpdateDivisions(event.cognitoPoolClaims.sub, pars);
-    case "event_create_games":
-      return await eventCreateGames(event.cognitoPoolClaims.sub, pars);
-    case "event_close":
-      return await eventClose(event.cognitoPoolClaims.sub, pars);
-    case "ping_bot":
-      return await pingBot(event.cognitoPoolClaims.sub, pars);
-    case "onetime_fix":
-      return await onetimeFix(event.cognitoPoolClaims.sub);
-    case "fix_games":
-      return await fixGames(event.cognitoPoolClaims.sub, pars);
-    case "test_push":
-      return await testPush(event.cognitoPoolClaims.sub);
-    case "test_async":
-      return await testAsync(event.cognitoPoolClaims.sub, pars);
-    case "delete_games":
-      return await deleteGames(event.cognitoPoolClaims.sub, pars);
-    case "end_tournament":
-      return await endATournament(event.cognitoPoolClaims.sub, pars);
-    default:
-      return {
-        statusCode: 500,
-        body: JSON.stringify({
-          message: `Unable to execute unknown query '${query}'`
-        }),
-        headers
-      };
-  }
 }
 
 async function userNames() {
@@ -10311,3 +9923,142 @@ const getAllUsers = async (): Promise<FullUser[]> => {
   }
   return result
 }
+
+/** Route dispatch (Phase 3) — implementations stay in this module until domain extraction. */
+export {
+  allStandingChallenges,
+  announcementGetAuth,
+  announcementGetOpen,
+  announcementPresignUploadAuth,
+  announcementPublishAuth,
+  announcementReactAuth,
+  announcementReactionsMineAuth,
+  announcementRetractAuth,
+  announcementSaveAuth,
+  announcementsAdminListAuth,
+  announcementsListOpen,
+  announcementsMarkReadAuth,
+  archiveTournaments,
+  beginBotSecretRotation,
+  block_player,
+  botMove,
+  challengeDetails,
+  checkForAbandonedGame,
+  checkForTimeloss,
+  createBot,
+  createPlaygroundSaveAuth,
+  deleteBot,
+  deleteCustomization,
+  deleteGames,
+  deletePlaygroundSaveAuth,
+  deletePush,
+  dismissAllNotificationsAuth,
+  dismissNotificationAuth,
+  endATournament,
+  eventClose,
+  eventCreate,
+  eventCreateGames,
+  eventDelete,
+  eventGetEvent,
+  eventGetEvents,
+  eventPublish,
+  eventRegister,
+  eventUpdateDesc,
+  eventUpdateDivisions,
+  eventUpdateInvites,
+  eventUpdateName,
+  eventUpdateResult,
+  eventUpdateStart,
+  eventWithdraw,
+  feedbackAdminListAuth,
+  feedbackCommentAuth,
+  feedbackCreateAuth,
+  feedbackDeleteAuth,
+  feedbackGetAuth,
+  feedbackGetOpen,
+  feedbackHistoryListOpen,
+  feedbackHoldRetentionAuth,
+  feedbackListOpen,
+  feedbackMergeAuth,
+  feedbackMineAuth,
+  feedbackPresignUploadAuth,
+  feedbackReclassifyAuth,
+  feedbackSetAdminFieldsAuth,
+  feedbackSetStatusAuth,
+  feedbackSubscribeAuth,
+  feedbackUpdateAuth,
+  feedbackVoteAuth,
+  feedbackWishlistSearchOpen,
+  finalizeBotSecretRotation,
+  fixGames,
+  game,
+  games,
+  getExploration,
+  getOldTournaments,
+  getPlaygroundSaveAuth,
+  getPrivateExploration,
+  getPublicExploration,
+  getTournament,
+  getTournaments,
+  handleMove,
+  highlightGameAuth,
+  injectState,
+  invokePie,
+  joinTournament,
+  listNotificationsAuth,
+  listPlaygroundSavesAuth,
+  logLayoutEventAuth,
+  logLayoutEventOpen,
+  logRecommendationEventAuth,
+  markAsPublished,
+  markNotificationsSeenAuth,
+  meDashboard,
+  meProfile,
+  metaGamesDetails,
+  mySettings,
+  newChallenge,
+  newProfile,
+  newSetting,
+  newTournament,
+  nextGame,
+  onetimeFix,
+  pingBot,
+  playerAbout,
+  playerHighlights,
+  purgeRetiredCompletedGames,
+  recentCompletedGames,
+  recommendGameAuth,
+  representativeGames,
+  reportProblem,
+  respondedChallenge,
+  revokeChallenge,
+  saveCustomization,
+  saveExploration,
+  savePlaygroundSaveAuth,
+  savePush,
+  saveTags,
+  setLastSeen,
+  setPublicRivalries,
+  setPush,
+  standingChallenges,
+  startSoloGame,
+  submitComment,
+  submitMove,
+  testAsync,
+  testPush,
+  toggleStar,
+  unblock_player,
+  unhighlightGameAuth,
+  unrecommendGameAuth,
+  unwatchGameAuth,
+  updateBot,
+  updateCommented,
+  updateGameSettings,
+  updateMetaGameCounts,
+  updateNote,
+  updateStanding,
+  updateUserSettings,
+  userNames,
+  watchGameAuth,
+  withdrawTournament,
+};

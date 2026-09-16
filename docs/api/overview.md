@@ -40,11 +40,13 @@ Errors use `formatReturnError()` with `statusCode` 500 (or 400 for validation) a
 
 ## Source of truth
 
-| Endpoint | Lambda entry | Dispatch |
-|----------|--------------|----------|
-| Public | [`api/query.ts`](../../api/query.ts) | `switch (query)` in [`api/abstractplay.ts`](../../api/abstractplay.ts) |
-| Auth | [`api/authQuery.ts`](../../api/authQuery.ts) | `switch (query)` in `abstractplay.ts` |
-| Bots | [`api/botQuery.ts`](../../api/botQuery.ts) | `switch (verb)` in `abstractplay.ts` |
+| Endpoint | Lambda entry | Route table |
+|----------|--------------|-------------|
+| Public | [`api/query.ts`](../../api/query.ts) | [`api/routes/public.ts`](../../api/routes/public.ts) |
+| Auth | [`api/authQuery.ts`](../../api/authQuery.ts) | [`api/routes/auth.ts`](../../api/routes/auth.ts) |
+| Bots | [`api/botQuery.ts`](../../api/botQuery.ts) | [`api/routes/bot.ts`](../../api/routes/bot.ts) |
+
+Handler implementations remain in [`api/abstractplay.ts`](../../api/abstractplay.ts) until domain modules are extracted (Phase 4+).
 
 TypeScript types (`FullChallenge`, `FullUser`, `Game`, etc.) are defined in the same file. Docs list query names and intent; field-level contracts live in code.
 
