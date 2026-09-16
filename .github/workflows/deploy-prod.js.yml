@@ -28,6 +28,7 @@ env:
     TOTP_KEY: ${{ secrets.TOTP_KEY }}
     OPENSSH_PRIVATE_KEY: ${{ secrets.OPENSSH_PRIVATE_KEY }}
     OPS_ALERT_EMAIL: ${{ secrets.OPS_ALERT_EMAIL }}
+    ANNOUNCEMENTS_DISCORD_WEBHOOK_URL: ${{ secrets.ANNOUNCEMENTS_DISCORD_WEBHOOK_URL }}
 
 jobs:
   deploy-prod:

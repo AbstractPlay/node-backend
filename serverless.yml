@@ -154,6 +154,7 @@ provider:
     VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY, file(../apsecrets.yml):vapid_private_key}
     VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY, file(../apsecrets.yml):vapid_public_key}
     OPENSSH_PRIVATE_KEY: ${env:OPENSSH_PRIVATE_KEY, file(../apsecrets.yml):openssh_private_key, ''}
+    ANNOUNCEMENTS_DISCORD_WEBHOOK_URL: ${env:ANNOUNCEMENTS_DISCORD_WEBHOOK_URL, file(../apsecrets.yml):announcements_discord_webhook_url, ''}
     BOT_OUTBOUND_QUEUE_URL:
       Ref: BotOutboundQueue
     PRESENCE_COALESCE_SQS:
