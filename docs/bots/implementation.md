@@ -47,7 +47,7 @@ Deployed as the `testBot` Lambda with HTTP routes on **dev** only (`custom.testB
 ## AP-side delivery pipeline
 
 ```
-abstractplay.ts
+lib/challenges/authHandlers.ts / lib/games/playHandlers.ts
   newChallenge / submitMove / notifyRegisteredBotsTurn
     → enqueueBotOutbound({ type: 'challenge' | 'move', ... })
       → SQS BotOutboundQueue
@@ -56,7 +56,7 @@ abstractplay.ts
             → postToBot() with signed body
 ```
 
-Challenge acceptance triggers `botRespondToChallenge()` → `respondedChallenge()` in `abstractplay.ts`.
+Challenge acceptance triggers `botRespondToChallenge()` → `respondedChallenge()` in `lib/challenges/authHandlers.ts`.
 
 ## Adapting for production
 

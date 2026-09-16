@@ -47,7 +47,7 @@ Single-table keys (stage table `abstract-play-dev` / `abstract-play-prod`):
 | `announcement_react` | Auth | Toggle allowlisted emoji |
 | `announcement_reactions_mine` | Auth | `{ ids: string[] }` → user's emojis per id |
 
-Register handlers in `api/abstractplay.ts` (or dedicated module) alongside feedback patterns.
+Register handlers in [`lib/announcements/authHandlers.ts`](../../lib/announcements/authHandlers.ts) alongside feedback patterns.
 
 ## Unread and in-app bell (front)
 

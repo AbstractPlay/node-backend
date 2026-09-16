@@ -1,55 +1,21 @@
 import type { AuthRouteHandler } from '../../../lib/api/routeTypes.js';
 import {
   deleteGames,
-  endATournament,
-  eventClose,
-  eventCreate,
-  eventCreateGames,
-  eventDelete,
-  eventPublish,
-  eventRegister,
-  eventUpdateDesc,
-  eventUpdateDivisions,
-  eventUpdateInvites,
-  eventUpdateName,
-  eventUpdateResult,
-  eventUpdateStart,
-  eventWithdraw,
   fixGames,
-  joinTournament,
-  markAsPublished,
-  newTournament,
   onetimeFix,
   purgeRetiredCompletedGames,
-  testAsync,
   updateMetaGameCounts,
-  withdrawTournament,
-} from '../../abstractplay.js';
+} from '../../../lib/games/adminHandlers.js';
+import { markAsPublished } from '../../../lib/games/playHandlers.js';
+import { testAsync } from '../../../lib/ops/testAsync.js';
 import { bindAuth } from './shared.js';
 
 export const coreAuthRoutes: Record<string, AuthRouteHandler> = {
   update_meta_game_counts: (claims) => updateMetaGameCounts(claims.sub),
   purge_retired_completed_games: (claims) => purgeRetiredCompletedGames(claims.sub),
   mark_published: bindAuth(markAsPublished),
-  new_tournament: bindAuth(newTournament),
-  join_tournament: bindAuth(joinTournament),
-  withdraw_tournament: bindAuth(withdrawTournament),
-  event_create: bindAuth(eventCreate),
-  event_delete: bindAuth(eventDelete),
-  event_publish: bindAuth(eventPublish),
-  event_register: bindAuth(eventRegister),
-  event_withdraw: bindAuth(eventWithdraw),
-  event_update_start: bindAuth(eventUpdateStart),
-  event_update_name: bindAuth(eventUpdateName),
-  event_update_desc: bindAuth(eventUpdateDesc),
-  event_update_invites: bindAuth(eventUpdateInvites),
-  event_update_result: bindAuth(eventUpdateResult),
-  event_update_divisions: bindAuth(eventUpdateDivisions),
-  event_create_games: bindAuth(eventCreateGames),
-  event_close: bindAuth(eventClose),
   onetime_fix: (claims) => onetimeFix(claims.sub),
   fix_games: bindAuth(fixGames),
   test_async: bindAuth(testAsync),
   delete_games: bindAuth(deleteGames),
-  end_tournament: bindAuth(endATournament),
 };

@@ -32,7 +32,7 @@ Implementation: [`utils/yourturn.ts`](../../utils/yourturn.ts).
 
 ## Push topics
 
-Push messages use topics such as `challenges` and game-related channels. See `sendPush()` usage in [`api/abstractplay.ts`](../../api/abstractplay.ts).
+Push messages use topics such as `challenges` and game-related channels. See [`lib/push/sendUserPush.ts`](../../lib/push/sendUserPush.ts).
 
 Realtime `yourturn` push is sent after each move when it becomes a player's turn. Solo games (`numPlayers === 1`) are skipped — the player is always on move.
 
@@ -92,7 +92,7 @@ Implementation: backend-crons `rating-change-notifications` Lambda (`src/functio
 
 **Event invitations** apply only to human-moderated [organized events](/backend/subsystems/events/) (`ORGEVENT`) updated through `event_update_invites`. Each save notifies newly added invitees and any existing invitee who does not yet have an active `eventInvitation` for that event (for example, invited before this feature shipped). Re-saving an unchanged invite list does not duplicate notifications. Automated tournament sign-up does not use this path.
 
-Implementation: [`lib/notifications.ts`](../../lib/notifications.ts), wired from [`api/abstractplay.ts`](../../api/abstractplay.ts).
+Implementation: [`lib/notifications.ts`](../../lib/notifications.ts), wired from `lib/games/playHandlers.ts` and auth route handlers.
 
 ### Admin read-only dump
 

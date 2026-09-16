@@ -14,12 +14,14 @@ import {
   getPrivateExploration,
   invokePie,
   saveExploration,
-  setLastSeen,
   submitComment,
   submitMove,
+} from '../../../lib/games/playHandlers.js';
+import {
+  setLastSeen,
   updateCommented,
   updateNote,
-} from '../../abstractplay.js';
+} from '../../../lib/games/adminHandlers.js';
 import { bindAuth } from './shared.js';
 
 export const gamesAuthRoutes: Record<string, AuthRouteHandler> = {

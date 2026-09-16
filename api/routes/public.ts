@@ -1,7 +1,7 @@
 import type { AnnouncementGetPars, AnnouncementsListPars } from '../../lib/announcements/index.js';
 import { headers } from '../../lib/api/http.js';
 import type { ApiHandlerResult, PublicRouteHandler } from '../../lib/api/routeTypes.js';
-import { botMove } from '../abstractplay.js';
+import { botMove } from '../../lib/games/playHandlers.js';
 import {
   allStandingChallenges,
   announcementGetOpen,

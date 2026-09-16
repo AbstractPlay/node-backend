@@ -62,7 +62,7 @@ Attributes: `event`, `batchId`, `surface`, `tier`, `expiresAt`, plus event-speci
 - **TTL:** `expiresAt` (Unix epoch seconds, ~90 days). DynamoDB TTL is enabled on this attribute at the table level.
 - **Rate limit:** 50 events per user per UTC calendar day (server-side).
 
-Implementation: [`lib/recommendationEvents.ts`](../../lib/recommendationEvents.ts), wired from [`api/abstractplay.ts`](../../api/abstractplay.ts).
+Implementation: [`lib/recommendationEvents.ts`](../../lib/recommendationEvents.ts), wired from analytics auth/public handlers.
 
 ## Offline read path
 

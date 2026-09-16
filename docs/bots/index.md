@@ -6,7 +6,7 @@ Most bot framework code lives in this repository:
 
 | Area | Location |
 |------|----------|
-| Owner API (create, update, delete) | [`api/abstractplay.ts`](../../api/abstractplay.ts) |
+| Owner API (create, update, delete) | [`lib/bots/crud.ts`](../../lib/bots/crud.ts) |
 | Outbound webhooks (challenge, move) | [`lib/botOutbound.ts`](../../lib/botOutbound.ts), [`utils/bot-outbound.ts`](../../utils/bot-outbound.ts) |
 | Signature verification (bot side) | [`lib/botVerify.ts`](../../lib/botVerify.ts) |
 | OAuth + `botQuery` client (bot side) | [`lib/botClient.ts`](../../lib/botClient.ts) |

@@ -58,7 +58,7 @@ The `testBot` Lambda is enabled on the **dev** stage only. Full protocol documen
 ## Project layout
 
 ```
-api/           Main Lambda handlers (abstractplay.ts, sockets/, testBot.ts)
+api/           Lambda entries (query.ts, authQuery.ts, botQuery.ts, routes/, sockets/, testBot.ts)
 lib/           Shared libraries (bots, DDB, WebSocket broadcast)
 utils/         Scheduled jobs (yourturn, bot-outbound consumer)
 locales/       i18n strings for emails and push notifications
