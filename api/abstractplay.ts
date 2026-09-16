@@ -188,6 +188,7 @@ import {
   type RecentCompletedGamesPars,
 } from '../lib/recentCompletedGames.js';
 import { queryAllStandingChallenges } from '../lib/allStandingChallenges.js';
+import { declinesDirectChallenges } from '../lib/challenges.js';
 import { validateAboutText } from '../lib/aboutText.js';
 import { validateUserDisplayName } from '../lib/userDisplayName.js';
 import {
@@ -4536,6 +4537,25 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
   }
   const challengeId = uuid();
   const botChallengees: { id: string }[] = [];
+  const humanChallengees: { id: string; name?: string }[] = [];
+  if (challenge.challengees !== undefined) {
+    for (const challengee of challenge.challengees) {
+      if (await isBotId(challengee.id)) {
+        botChallengees.push(challengee);
+      } else {
+        humanChallengees.push(challengee);
+      }
+    }
+  }
+
+  let directChallengeOptOutUser: FullUser | undefined;
+  let challengeePlayers: FullUser[] = [];
+  if (humanChallengees.length > 0) {
+    challengeePlayers = await getPlayers(humanChallengees.map(c => c.id));
+    directChallengeOptOutUser = challengeePlayers.find(p => declinesDirectChallenges(p.settings));
+  }
+  const skipChallengeeNotify = directChallengeOptOutUser !== undefined;
+
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Item: {
@@ -4571,43 +4591,34 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
   }));
 
   const list: Promise<any>[] = [addChallenge, updateChallenger];
-  if (challenge.challengees !== undefined) {
-    const humanChallengees: { id: string; name?: string }[] = [];
-    for (const challengee of challenge.challengees) {
-      if (await isBotId(challengee.id)) {
-        botChallengees.push(challengee);
-      } else {
-        humanChallengees.push(challengee);
-        list.push(
-          ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "USER", "sk": challengee.id },
-            ExpressionAttributeValues: { ":c": new Set([challengeId]) },
-            ExpressionAttributeNames: { "#cr": "challenges_received" },
-            UpdateExpression: "add #cr :c",
-          }))
-        );
-      }
-    }
+  for (const challengee of humanChallengees) {
+    list.push(
+      ddbDocClient.send(new UpdateCommand({
+        TableName: process.env.ABSTRACT_PLAY_TABLE,
+        Key: { "pk": "USER", "sk": challengee.id },
+        ExpressionAttributeValues: { ":c": new Set([challengeId]) },
+        ExpressionAttributeNames: { "#cr": "challenges_received" },
+        UpdateExpression: "add #cr :c",
+      }))
+    );
+  }
+  if (humanChallengees.length > 0 && !skipChallengeeNotify) {
     try {
-      if (humanChallengees.length > 0) {
-        list.push(sendChallengedEmail(challenge.challenger.name, humanChallengees as User[], challenge.metaGame, challenge.comment));
-        const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-        const challengeNote = optionalNotificationNote(challenge.comment);
-        const challengeePlayers = await getPlayers(humanChallengees.map(c => c.id));
-        const challengeeSettings = inAppSettingsMapFromUsers(challengeePlayers);
-        for (const challengee of humanChallengees) {
-          list.push(createNotification(ddbDocClient, tableName, challengee.id, {
-            type: 'challengeIssued',
-            challengeId,
-            metaGame: challenge.metaGame,
-            challengerId: challenge.challenger.id,
-            challengerName: challenge.challenger.name,
-            ...(challengeNote ? { note: challengeNote } : {}),
-          }, {
-            userSettings: challengeeSettings.get(challengee.id),
-          }));
-        }
+      list.push(sendChallengedEmail(challenge.challenger.name, humanChallengees as User[], challenge.metaGame, challenge.comment));
+      const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+      const challengeNote = optionalNotificationNote(challenge.comment);
+      const challengeeSettings = inAppSettingsMapFromUsers(challengeePlayers);
+      for (const challengee of humanChallengees) {
+        list.push(createNotification(ddbDocClient, tableName, challengee.id, {
+          type: 'challengeIssued',
+          challengeId,
+          metaGame: challenge.metaGame,
+          challengerId: challenge.challenger.id,
+          challengerName: challenge.challenger.name,
+          ...(challengeNote ? { note: challengeNote } : {}),
+        }, {
+          userSettings: challengeeSettings.get(challengee.id),
+        }));
       }
     } catch (error) {
       logGetItemError(error);
@@ -4617,6 +4628,17 @@ async function newChallenge(userid: string, challenge: FullChallenge) {
   try {
     await Promise.all(list);
     console.log("Successfully added challenge" + challengeId);
+
+    if (skipChallengeeNotify && directChallengeOptOutUser !== undefined) {
+      await initi18n('en');
+      return await respondedChallenge(directChallengeOptOutUser.id, {
+        response: false,
+        id: challengeId,
+        standing: false,
+        metaGame: challenge.metaGame,
+        comment: i18n.t('DirectChallengeOptOutNote'),
+      });
+    }
 
     for (const challengee of botChallengees) {
       await enqueueBotOutbound({

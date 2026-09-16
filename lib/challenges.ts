@@ -1,5 +1,17 @@
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 
+/** True when the user has opted out of receiving direct (named) challenges. */
+export function declinesDirectChallenges(settings: unknown): boolean {
+  if (settings === null || settings === undefined || typeof settings !== 'object') {
+    return false;
+  }
+  const all = (settings as { all?: unknown }).all;
+  if (all === null || all === undefined || typeof all !== 'object') {
+    return false;
+  }
+  return (all as { noDirectChallenges?: unknown }).noDirectChallenges === true;
+}
+
 export async function getChallengesByIds(
   client: DynamoDBDocumentClient,
   tableName: string,
