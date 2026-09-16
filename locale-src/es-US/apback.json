@@ -101,7 +101,7 @@
   },
   "PUSH.titles.challenged": {
     "src": "Challenged",
-    "out": "Desafiado"
+    "out": "Te han desafiado"
   },
   "PUSH.titles.declined": {
     "src": "Challenge declined",
@@ -113,7 +113,7 @@
   },
   "PUSH.titles.revoked": {
     "src": "Challenge revoked",
-    "out": "Desafío retirado"
+    "out": "Desafío cancelado"
   },
   "PUSH.titles.started": {
     "src": "Game started",
