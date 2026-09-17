@@ -18,8 +18,16 @@ Separate from per-challenge standing records: `REALSTANDING` / `<userid>` stores
 1. **Issue** — `new_challenge` with challenger, challengees (direct), variants, clocks, etc.
 2. **List open** — `standing_challenges` per metaGame, or `all_standing_challenges` site-wide (public unfiltered; auth filters blocked issuers).
 3. **Respond** — `challenge_response` accept/decline; accepted players join `players` list.
-4. **Revoke** — `challenge_revoke` by challenger.
+4. **Revoke** — `challenge_revoke` by challenger (cancels the whole challenge).
 5. **Game start** — when enough players accept, a `GAME` record is created.
+
+### Multi-player seats (`numPlayers > 2`)
+
+Challenges track **`openSlots`**: seats anyone may fill (listed on open challenges when `openSlots > 0` on a direct challenge). Named invitees stay on **`challengees`** until they accept or decline.
+
+- **Leave / decline** (not revoke): frees a seat (`openSlots++` on direct challenges; standing challenges update `players` in place). The challenge **stays** active except **2-player direct** decline, which still removes the whole challenge.
+- **Closed issue**: first opponent required; further seats may be named or open (`openSlots`). All-open multi-player challenges use **`standing: true`** (open type), not closed with every seat open.
+- **Discoverability**: direct challenges with `openSlots > 0` upsert a **`STANDINGCHALLENGE#<metaGame>`** listing projection (`fillableDirect: true`) for the game’s open-challenge list.
 
 Standing challenges for two-player games support a `duration` field: `0` = indefinite; `>0` = expires after that many acceptances.
 

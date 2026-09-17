@@ -3,6 +3,9 @@
     "ChallengeBodyComment": "{{challenger}} has challenged you to a game of {{- metaGame}} with note: \"{{- comment}}\" Please visit https://play.abstractplay.com/ for more details.",
     "ChallengeRejectedBody": "{{quitter}} has declined the {{- metaGame}} challenge. The challenge has been removed.",
     "ChallengeRejectedSubject": "AbstractPlay: Challenge rejected",
+    "ChallengeSlotOpenedChallengerBody": "{{quitter}} left your {{- metaGame}} challenge. {{count}} seat(s) are now open to anyone.",
+    "ChallengeSlotOpenedSubject": "AbstractPlay: challenge seat opened",
+    "ChallengeParticipantLeftBody": "{{quitter}} left the {{- metaGame}} challenge. It is still open for other players.",
     "DirectChallengeOptOutNote": "This user has chosen not to accept direct challenges.",
     "ChallengeResponseComment": "Your opponent commented: \"{{- comment}}\"",
     "ChallengeRevokedBody": "{{name}} has revoked his {{- metaGame}} challenge.",
@@ -27,6 +30,8 @@
         "titles": {
             "challenged": "Challenged",
             "declined": "Challenge declined",
+            "slotOpened": "Challenge seat opened",
+            "participantLeft": "Player left challenge",
             "ended": "Game over",
             "revoked": "Challenge revoked",
             "started": "Game started",

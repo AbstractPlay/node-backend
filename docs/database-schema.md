@@ -170,8 +170,12 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `STANDINGCHALLENGE#<metaGame>`
   - sk: `<challengeid>`
 
-- **Direct challenges** — challenge details
+- **Direct challenges** — challenge details (`openSlots` = seats open to anyone; named invitees on `challengees`)
   - pk: `CHALLENGE`
+  - sk: `<challengeid>`
+
+- **Fillable direct listing** — same `sk` as the direct challenge; `fillableDirect: true` when `openSlots > 0` (canonical row remains `CHALLENGE`)
+  - pk: `STANDINGCHALLENGE#<metaGame>`
   - sk: `<challengeid>`
 
 - **SDG-style standing requests** — standing requests for open challenges with a limit

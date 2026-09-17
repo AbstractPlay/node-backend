@@ -56,6 +56,8 @@ export function inAppCategoryForBody(body: NotificationBody): InAppNotificationC
     case 'challengeIssued':
     case 'challengeDeclined':
     case 'challengeRevoked':
+    case 'challengeSlotOpened':
+    case 'challengeParticipantLeft':
       return 'challenges';
     case 'gameStart':
       return 'gameStart';
@@ -164,6 +166,22 @@ export type NotificationBody =
     revokerId: string;
     revokerName: string;
     note?: string;
+  }
+  | {
+    type: 'challengeSlotOpened';
+    challengeId: string;
+    metaGame: string;
+    participantId: string;
+    participantName: string;
+    openSlots: number;
+    note?: string;
+  }
+  | {
+    type: 'challengeParticipantLeft';
+    challengeId: string;
+    metaGame: string;
+    participantId: string;
+    participantName: string;
   }
   | {
     type: 'eventInvitation';
