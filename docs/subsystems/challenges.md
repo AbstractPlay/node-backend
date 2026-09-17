@@ -28,6 +28,7 @@ Challenges track **`openSlots`**: seats anyone may fill (listed on open challeng
 - **Leave / decline** (not revoke): frees a seat (`openSlots++` on direct challenges; standing challenges update `players` in place). The challenge **stays** active except **2-player direct** decline, which still removes the whole challenge.
 - **Closed issue**: first opponent required; further seats may be named or open (`openSlots`). All-open multi-player challenges use **`standing: true`** (open type), not closed with every seat open.
 - **Discoverability**: direct challenges with `openSlots > 0` upsert a **`STANDINGCHALLENGE#<metaGame>`** listing projection (`fillableDirect: true`) for the game’s open-challenge list.
+- **Uniqueness**: each user id may appear at most once among `players` and `challengees` (the challenger is seated once in `players`). Join and persist paths reject duplicates.
 
 Standing challenges for two-player games support a `duration` field: `0` = indefinite; `>0` = expires after that many acceptances.
 

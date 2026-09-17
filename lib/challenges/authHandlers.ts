@@ -30,7 +30,9 @@ import { validateChallengeVariantUids } from './variantUids.js';
 import { shuffle } from './shuffle.js';
 import {
   applySeatLeave,
+  assertCanJoinChallenge,
   effectiveOpenSlots,
+  validateChallengeParticipantUniqueness,
   validateDirectChallengeSeats,
 } from './seatAccounting.js';
 import {
@@ -129,6 +131,16 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
   );
   if (seatErr) {
     return formatReturnError(seatErr);
+  }
+  const participantErr = validateChallengeParticipantUniqueness({
+    numPlayers: challenge.numPlayers,
+    challenger: challenge.challenger,
+    players: [challenge.challenger],
+    challengees: (challenge.challengees ?? []) as User[],
+    openSlots,
+  });
+  if (participantErr) {
+    return formatReturnError(participantErr);
   }
 
   const addChallenge = ddbDocClient.send(new PutCommand({
@@ -788,6 +800,10 @@ async function partialRemoveChallenge(
     pk,
     sk: challengeId,
   };
+  const participantErr = validateChallengeParticipantUniqueness(item);
+  if (participantErr) {
+    throw new Error(participantErr);
+  }
   list.push(ddbDocClient.send(new PutCommand({
     TableName: tableName,
     Item: item,
@@ -1005,13 +1021,14 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
   if (openSlotAccept && userid === challenge.challenger.id) {
     throw new Error('Challenger cannot fill an open seat on their own challenge');
   }
+  const joinErr = assertCanJoinChallenge(challenge, userid);
+  if (joinErr) {
+    throw new Error(joinErr);
+  }
   if (openSlotAccept) {
     challenge.openSlots = effectiveOpenSlots(challenge) - 1;
   }
   const players = challenge.players;
-  if (players?.some(p => p.id === userid)) {
-    throw new Error('Already in this challenge');
-  }
   if ((players ? players.length : 0) === challenge.numPlayers - 1) {
     // Enough players accepted. Start game.
     const gameId = uuid();
@@ -1019,6 +1036,9 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     if (challenge.seating === 'random') {
       playerIDs = players!.map(player => player.id) as string[];
       playerIDs.push(userid);
+      if (new Set(playerIDs).size !== playerIDs.length) {
+        throw new Error('A player may only appear once in a challenge');
+      }
       shuffle(playerIDs);
     } else if (challenge.seating === 's1') {
       playerIDs.push(challenge.challenger.id);
@@ -1114,6 +1134,14 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     }
     challenge.challengees = challengees;
     players!.push(newplayer);
+    const afterJoinErr = validateChallengeParticipantUniqueness({
+      ...challenge,
+      players: players!,
+      challengees,
+    });
+    if (afterJoinErr) {
+      throw new Error(afterJoinErr);
+    }
     const storagePk = loaded.storagePk;
     const persistId = String(challenge.id ?? challenge.sk ?? challengeId);
     const updateChallenge = ddbDocClient.send(new PutCommand({

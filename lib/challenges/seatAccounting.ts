@@ -13,6 +13,54 @@ export function effectiveOpenSlots(challenge: { openSlots?: number }): number {
   return challenge.openSlots ?? 0;
 }
 
+/** Each user id may appear at most once across players and challengees (challenger may appear once in players). */
+export function validateChallengeParticipantUniqueness(
+  challenge: SeatChallenge,
+): string | undefined {
+  const challengerId = challenge.challenger?.id;
+  if (!challengerId) {
+    return 'Challenge missing challenger';
+  }
+
+  const playerIds = (challenge.players ?? []).map(p => p.id);
+  if (new Set(playerIds).size !== playerIds.length) {
+    return 'A player may only appear once in a challenge';
+  }
+
+  const challengeeIds = (challenge.challengees ?? []).map(c => c.id);
+  if (new Set(challengeeIds).size !== challengeeIds.length) {
+    return 'Duplicate named opponents';
+  }
+
+  if (challengeeIds.includes(challengerId)) {
+    return 'Challenger cannot also be a named opponent';
+  }
+
+  const seated = new Set(playerIds);
+  for (const id of challengeeIds) {
+    if (seated.has(id)) {
+      return 'A player cannot be both invited and seated';
+    }
+  }
+
+  return undefined;
+}
+
+/** Reject joining when the user already occupies a seat or the record is corrupt. */
+export function assertCanJoinChallenge(
+  challenge: SeatChallenge,
+  userid: string,
+): string | undefined {
+  const uniqErr = validateChallengeParticipantUniqueness(challenge);
+  if (uniqErr) {
+    return uniqErr;
+  }
+  if (challenge.players?.some(p => p.id === userid)) {
+    return 'Already in this challenge';
+  }
+  return undefined;
+}
+
 export function seatInvariantHolds(challenge: SeatChallenge): boolean {
   const players = challenge.players?.length ?? 0;
   const challengees = challenge.challengees?.length ?? 0;
