@@ -7,5 +7,22 @@
   "GameOverResult_win": "Anda menang!",
   "GameOverResult_draw": "Permainan berakhir seri.",
   "GameOverResult_lose": "Anda kalah.",
-  "DearPlayer": "Yang terhormat {{player}}"
+  "DearPlayer": "Yang terhormat {{player}}",
+  "ChallengeSubject": "AbstractPlay: Tantangan baru",
+  "EmailOut": "Sistem AbstractPlay.",
+  "GameOverScores": "Skor akhir sebagai berikut: {{scores}}.",
+  "GameOverSubject": "AbstractPlay: permainan berakhir",
+  "PUSH": {
+    "titles": {
+      "ended": "Permainan berakhir",
+      "started": "Permainan dimulai",
+      "yourturn": "Giliranmu",
+      "tournament": "Turnamen dimulai",
+      "tournamentOver": "Turnamen berakhir",
+      "challenged": "Ditantang"
+    }
+  },
+  "YourMoveSubject": "AbstractPlay: Gerakanmu",
+  "ChallengeRejectedSubject": "AbstractPlay: Tantangan ditolak",
+  "GameStartedSubject": "AbstractPlay:Permainan dimulai"
 }
