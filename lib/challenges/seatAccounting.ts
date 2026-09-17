@@ -64,10 +64,12 @@ export type SeatLeaveResult = {
 };
 
 export function applySeatLeave(challenge: SeatChallenge, quitterId: string): SeatLeaveResult {
+  const players = [...(challenge.players ?? [])];
+  const challengees = [...(challenge.challengees ?? [])];
   const copy: SeatChallenge = {
     ...challenge,
-    players: [...(challenge.players ?? [])],
-    challengees: [...(challenge.challengees ?? [])],
+    players,
+    challengees,
     openSlots: effectiveOpenSlots(challenge),
   };
 
@@ -79,12 +81,14 @@ export function applySeatLeave(challenge: SeatChallenge, quitterId: string): Sea
     return { challenge: copy, mode: 'full' };
   }
 
-  const wasInChallengees = copy.challengees!.some(c => c.id === quitterId);
+  const wasInChallengees = challengees.some(c => c.id === quitterId);
+  const challengerCopiesInPlayers = players.filter(p => p.id === quitterId).length;
   const wasInPlayers =
-    quitterId !== copy.challenger.id && copy.players!.some(p => p.id === quitterId);
+    players.some(p => p.id === quitterId)
+    && (quitterId !== copy.challenger.id || challengerCopiesInPlayers > 1);
 
   if (wasInChallengees) {
-    copy.challengees = copy.challengees!.filter(c => c.id !== quitterId);
+    copy.challengees = challengees.filter(c => c.id !== quitterId);
     if (!copy.standing) {
       copy.openSlots = effectiveOpenSlots(copy) + 1;
     }
@@ -92,7 +96,21 @@ export function applySeatLeave(challenge: SeatChallenge, quitterId: string): Sea
   }
 
   if (wasInPlayers) {
-    copy.players = copy.players!.filter(p => p.id !== quitterId);
+    if (quitterId === copy.challenger.id && challengerCopiesInPlayers > 1) {
+      let seenChallenger = false;
+      copy.players = players.filter((p) => {
+        if (p.id !== quitterId) {
+          return true;
+        }
+        if (!seenChallenger) {
+          seenChallenger = true;
+          return true;
+        }
+        return false;
+      });
+    } else {
+      copy.players = players.filter(p => p.id !== quitterId);
+    }
     if (!copy.standing) {
       copy.openSlots = effectiveOpenSlots(copy) + 1;
     }

@@ -85,6 +85,24 @@ describe('challenge seat accounting', () => {
     assert.equal(mode, 'full');
   });
 
+  it('challenger who filled own open slot can leave partially', () => {
+    const { challenge, mode } = applySeatLeave(
+      {
+        numPlayers: 3,
+        standing: false,
+        challenger: alice,
+        players: [alice, alice],
+        challengees: [],
+        openSlots: 1,
+      },
+      alice.id,
+    );
+    assert.equal(mode, 'partial');
+    assert.equal(challenge.players?.length, 1);
+    assert.equal(challenge.players?.[0]?.id, alice.id);
+    assert.equal(challenge.openSlots, 2);
+  });
+
   it('3p standing withdraw is partial without openSlots', () => {
     const { challenge, mode } = applySeatLeave(
       {
