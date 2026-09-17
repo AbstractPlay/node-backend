@@ -2,6 +2,8 @@ import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   applySeatLeave,
+  assertCanJoinChallenge,
+  validateChallengeParticipantUniqueness,
   validateDirectChallengeSeats,
   seatInvariantHolds,
 } from '../lib/challenges/seatAccounting.js';
@@ -101,6 +103,48 @@ describe('challenge seat accounting', () => {
     assert.equal(challenge.players?.length, 1);
     assert.equal(challenge.players?.[0]?.id, alice.id);
     assert.equal(challenge.openSlots, 2);
+  });
+
+  it('rejects duplicate seated players', () => {
+    assert.match(
+      validateChallengeParticipantUniqueness({
+        numPlayers: 3,
+        challenger: alice,
+        players: [alice, bob, bob],
+        challengees: [],
+        openSlots: 0,
+      }) ?? '',
+      /once/i,
+    );
+  });
+
+  it('rejects joining when already seated', () => {
+    assert.equal(
+      assertCanJoinChallenge(
+        {
+          numPlayers: 3,
+          challenger: alice,
+          players: [alice, bob],
+          challengees: [charlie],
+          openSlots: 0,
+        },
+        bob.id,
+      ),
+      'Already in this challenge',
+    );
+  });
+
+  it('rejects invited player also seated', () => {
+    assert.match(
+      validateChallengeParticipantUniqueness({
+        numPlayers: 3,
+        challenger: alice,
+        players: [alice, bob],
+        challengees: [bob],
+        openSlots: 0,
+      }) ?? '',
+      /invited and seated/i,
+    );
   });
 
   it('3p standing withdraw is partial without openSlots', () => {
