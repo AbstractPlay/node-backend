@@ -3,6 +3,9 @@
   "ChallengeBodyComment": "{{challenger}} ti ha sfidato a una partita a {{- metaGame}} con la seguente nota: \"{{- comment}}\" Visita https://play.abstractplay.com/ per maggiori dettagli.",
   "ChallengeRejectedBody": "{{quitter}} ha rifiutato la sfida a {{- metaGame}}. La sfida è stata rimossa.",
   "ChallengeRejectedSubject": "AbstractPlay: Sfida rifiutata",
+  "ChallengeSlotOpenedChallengerBody": "{{quitter}} ha abbandonato la tua sfida a {{- metaGame}}. {{count}} posto/i è/sono ora aperto/i a chiunque.",
+  "ChallengeSlotOpenedSubject": "AbstractPlay: posto sfida aperto",
+  "ChallengeParticipantLeftBody": "{{quitter}} ha abbandonato la sfida a {{- metaGame}}. È ancora aperta per altri giocatori.",
   "DirectChallengeOptOutNote": "Questo utente ha scelto di non accettare sfide dirette.",
   "ChallengeResponseComment": "Il tuo avversario ha commentato: \"{{- comment}}\"",
   "ChallengeRevokedBody": "{{name}} ha revocato la sua sfida a {{- metaGame}}.",
@@ -27,6 +30,8 @@
     "titles": {
       "challenged": "Sfida ricevuta",
       "declined": "Sfida rifiutata",
+      "slotOpened": "Posto sfida aperto",
+      "participantLeft": "Un giocatore ha abbandonato la sfida",
       "ended": "Partita terminata",
       "revoked": "Sfida annullata",
       "started": "Partita iniziata",

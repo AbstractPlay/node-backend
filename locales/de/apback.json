@@ -3,6 +3,9 @@
   "ChallengeBodyComment": "{{challenger}} hat dich zu einer Partie {{- metaGame}} herausgefordert mit der Anmerkung: \"{{- comment}}\". Bitte besuche https://play.abstractplay.com/ für weitere Details.",
   "ChallengeRejectedBody": "{{quitter}} hat die Herausforderung für {{- metaGame}} abgelehnt. Die Herausforderung wurde entfernt.",
   "ChallengeRejectedSubject": "AbstractPlay: Herausforderung abgelehnt",
+  "ChallengeSlotOpenedChallengerBody": "{{quitter}} hat deine {{- metaGame}}-Herausforderung verlassen. {{count}} Platz/Plätze ist/sind jetzt für alle offen.",
+  "ChallengeSlotOpenedSubject": "AbstractPlay: Platz in Herausforderung freigegeben",
+  "ChallengeParticipantLeftBody": "{{quitter}} hat die {{- metaGame}}-Herausforderung verlassen. Sie ist weiterhin für andere Spieler offen.",
   "DirectChallengeOptOutNote": "Dieser Benutzer hat sich dazu entschieden, keine direkten Herausforderungen anzunehmen.",
   "ChallengeResponseComment": "Dein Gegner hat kommentiert: \"{{- comment}}\"",
   "ChallengeRevokedBody": "{{name}} hat seine Herausforderung für {{- metaGame}} zurückgezogen.",
@@ -27,6 +30,8 @@
     "titles": {
       "challenged": "Herausgefordert",
       "declined": "Herausforderung abgelehnt",
+      "slotOpened": "Platz in Herausforderung freigegeben",
+      "participantLeft": "Spieler hat Herausforderung verlassen",
       "ended": "Spiel beendet",
       "revoked": "Herausforderung zurückgezogen",
       "started": "Spiel gestartet",

@@ -15,6 +15,10 @@
     "src": "{{challenger}} has challenged you to a game of {{- metaGame}} with note: \"{{- comment}}\" Please visit https://play.abstractplay.com/ for more details.",
     "out": "{{challenger}} ti ha sfidato a una partita a {{- metaGame}} con la seguente nota: \"{{- comment}}\" Visita https://play.abstractplay.com/ per maggiori dettagli."
   },
+  "ChallengeParticipantLeftBody": {
+    "src": "{{quitter}} left the {{- metaGame}} challenge. It is still open for other players.",
+    "out": "{{quitter}} ha abbandonato la sfida a {{- metaGame}}. È ancora aperta per altri giocatori."
+  },
   "ChallengeRejectedBody": {
     "src": "{{quitter}} has declined the {{- metaGame}} challenge. The challenge has been removed.",
     "out": "{{quitter}} ha rifiutato la sfida a {{- metaGame}}. La sfida è stata rimossa."
@@ -38,6 +42,14 @@
   "ChallengeRevokedSubject": {
     "src": "AbstractPlay: challenge revoked",
     "out": "AbstractPlay: sfida revocata"
+  },
+  "ChallengeSlotOpenedChallengerBody": {
+    "src": "{{quitter}} left your {{- metaGame}} challenge. {{count}} seat(s) are now open to anyone.",
+    "out": "{{quitter}} ha abbandonato la tua sfida a {{- metaGame}}. {{count}} posto/i è/sono ora aperto/i a chiunque."
+  },
+  "ChallengeSlotOpenedSubject": {
+    "src": "AbstractPlay: challenge seat opened",
+    "out": "AbstractPlay: posto sfida aperto"
   },
   "ChallengeSubject": {
     "src": "AbstractPlay: new challenge",
@@ -111,9 +123,17 @@
     "src": "Game over",
     "out": "Partita terminata"
   },
+  "PUSH.titles.participantLeft": {
+    "src": "Player left challenge",
+    "out": "Un giocatore ha abbandonato la sfida"
+  },
   "PUSH.titles.revoked": {
     "src": "Challenge revoked",
     "out": "Sfida annullata"
+  },
+  "PUSH.titles.slotOpened": {
+    "src": "Challenge seat opened",
+    "out": "Posto sfida aperto"
   },
   "PUSH.titles.started": {
     "src": "Game started",

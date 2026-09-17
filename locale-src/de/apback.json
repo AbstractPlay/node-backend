@@ -15,6 +15,10 @@
     "src": "{{challenger}} has challenged you to a game of {{- metaGame}} with note: \"{{- comment}}\" Please visit https://play.abstractplay.com/ for more details.",
     "out": "{{challenger}} hat dich zu einer Partie {{- metaGame}} herausgefordert mit der Anmerkung: \"{{- comment}}\". Bitte besuche https://play.abstractplay.com/ für weitere Details."
   },
+  "ChallengeParticipantLeftBody": {
+    "src": "{{quitter}} left the {{- metaGame}} challenge. It is still open for other players.",
+    "out": "{{quitter}} hat die {{- metaGame}}-Herausforderung verlassen. Sie ist weiterhin für andere Spieler offen."
+  },
   "ChallengeRejectedBody": {
     "src": "{{quitter}} has declined the {{- metaGame}} challenge. The challenge has been removed.",
     "out": "{{quitter}} hat die Herausforderung für {{- metaGame}} abgelehnt. Die Herausforderung wurde entfernt."
@@ -38,6 +42,14 @@
   "ChallengeRevokedSubject": {
     "src": "AbstractPlay: challenge revoked",
     "out": "AbstractPlay: Herausforderung zurückgezogen"
+  },
+  "ChallengeSlotOpenedChallengerBody": {
+    "src": "{{quitter}} left your {{- metaGame}} challenge. {{count}} seat(s) are now open to anyone.",
+    "out": "{{quitter}} hat deine {{- metaGame}}-Herausforderung verlassen. {{count}} Platz/Plätze ist/sind jetzt für alle offen."
+  },
+  "ChallengeSlotOpenedSubject": {
+    "src": "AbstractPlay: challenge seat opened",
+    "out": "AbstractPlay: Platz in Herausforderung freigegeben"
   },
   "ChallengeSubject": {
     "src": "AbstractPlay: new challenge",
@@ -111,9 +123,17 @@
     "src": "Game over",
     "out": "Spiel beendet"
   },
+  "PUSH.titles.participantLeft": {
+    "src": "Player left challenge",
+    "out": "Spieler hat Herausforderung verlassen"
+  },
   "PUSH.titles.revoked": {
     "src": "Challenge revoked",
     "out": "Herausforderung zurückgezogen"
+  },
+  "PUSH.titles.slotOpened": {
+    "src": "Challenge seat opened",
+    "out": "Platz in Herausforderung freigegeben"
   },
   "PUSH.titles.started": {
     "src": "Game started",
