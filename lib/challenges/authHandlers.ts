@@ -776,17 +776,22 @@ async function partialRemoveChallenge(
   const tableName = process.env.ABSTRACT_PLAY_TABLE!;
   const list: Promise<unknown>[] = [];
   const pk = loaded.storagePk;
+  const challengeId = String(
+    (challenge as { id?: string; sk?: string }).id
+    ?? challenge.sk
+    ?? (loaded.item as { id?: string; sk?: string }).id
+    ?? loaded.item.sk,
+  );
   const item = {
     ...challenge,
+    id: challengeId,
     pk,
-    sk: challenge.sk ?? (challenge as { id?: string }).id,
+    sk: challengeId,
   };
   list.push(ddbDocClient.send(new PutCommand({
     TableName: tableName,
     Item: item,
   })));
-
-  const challengeId = String((challenge as { id?: string; sk?: string }).id ?? challenge.sk);
   const standingKey = `${challenge.metaGame}#${challengeId}`;
 
   if (!(await isBotId(quitter))) {
@@ -877,7 +882,7 @@ async function removeAChallenge(
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": challenge.challenger.id },
       UpdateExpression: "DELETE challenges_issued :c",
-      ExpressionAttributeValues: { ":c": new Set([challenge.id]) }
+      ExpressionAttributeValues: { ":c": new Set([challengeId]) }
     })));
     // Remove from challenged
     for (const challengee of challenge.challengees ?? []) {
@@ -886,7 +891,7 @@ async function removeAChallenge(
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: { "pk": "USER", "sk": challengee.id },
           UpdateExpression: "DELETE challenges_received :c",
-          ExpressionAttributeValues: { ":c": new Set([challenge.id]) }
+          ExpressionAttributeValues: { ":c": new Set([challengeId]) }
         })));
       }
     }
@@ -904,7 +909,7 @@ async function removeAChallenge(
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": challenge.challenger.id },
       UpdateExpression: "DELETE challenges_standing :c",
-      ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challenge.id]) }
+      ExpressionAttributeValues: { ":c": new Set([`${challenge.metaGame}#${challengeId}`]) }
     })));
   }
 
@@ -924,7 +929,9 @@ async function removeAChallenge(
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": player.id },
       UpdateExpression: "DELETE challenges_accepted :c",
-      ExpressionAttributeValues: { ":c": new Set([standing ? challenge.metaGame + '#' + challenge.id : challenge.id]) }
+      ExpressionAttributeValues: {
+        ":c": new Set([standing ? `${challenge.metaGame}#${challengeId}` : challengeId]),
+      }
     })));
   }
 
@@ -935,18 +942,18 @@ async function removeAChallenge(
         new DeleteCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
-            "pk": "CHALLENGE", "sk": challenge.id
+            "pk": "CHALLENGE", "sk": challengeId
           },
         }))
     );
   } else if (revoked || expired) {
-    console.log(`removing challenge ${challenge.metaGame + '#' + challenge.id}`);
+    console.log(`removing challenge ${challenge.metaGame + '#' + challengeId}`);
     list.push(
       ddbDocClient.send(
         new DeleteCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
-            "pk": "STANDINGCHALLENGE#" + challenge.metaGame, "sk": challenge.id
+            "pk": "STANDINGCHALLENGE#" + challenge.metaGame, "sk": challengeId
           },
         }))
     );
@@ -995,10 +1002,16 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     logGetItemError(`userid ${userid} wasn't a challengee, challenge ${challengeId}`);
     throw new Error("Can't accept a challenge if you weren't challenged");
   }
+  if (openSlotAccept && userid === challenge.challenger.id) {
+    throw new Error('Challenger cannot fill an open seat on their own challenge');
+  }
   if (openSlotAccept) {
     challenge.openSlots = effectiveOpenSlots(challenge) - 1;
   }
   const players = challenge.players;
+  if (players?.some(p => p.id === userid)) {
+    throw new Error('Already in this challenge');
+  }
   if ((players ? players.length : 0) === challenge.numPlayers - 1) {
     // Enough players accepted. Start game.
     const gameId = uuid();
