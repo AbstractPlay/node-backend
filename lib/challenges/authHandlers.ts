@@ -28,6 +28,18 @@ import { getPlayers } from '../players/getPlayers.js';
 import { declinesDirectChallenges } from '../challenges.js';
 import { validateChallengeVariantUids } from './variantUids.js';
 import { shuffle } from './shuffle.js';
+import {
+  applySeatLeave,
+  assertCanJoinChallenge,
+  effectiveOpenSlots,
+  validateChallengeParticipantUniqueness,
+  validateDirectChallengeSeats,
+} from './seatAccounting.js';
+import {
+  deleteFillableProjection,
+  syncFillableProjection,
+} from './fillableProjection.js';
+import { loadChallengeById } from './loadChallenge.js';
 import { getChallenges } from '../profile/me.js';
 import { loadDashboardGames } from '../dashboardGames.js';
 import { sendUserPush } from '../push/sendUserPush.js';
@@ -50,6 +62,7 @@ type Challenge = {
 type FullChallenge = {
   pk?: string;
   sk?: string;
+  id?: string;
   metaGame: string;
   numPlayers: number;
   standing?: boolean;
@@ -67,6 +80,8 @@ type FullChallenge = {
   noExplore?: boolean;
   comment?: string;
   dateIssued?: number;
+  openSlots?: number;
+  fillableDirect?: boolean;
 };
 
 type FullUser = {
@@ -108,6 +123,26 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
   }
   const skipChallengeeNotify = directChallengeOptOutUser !== undefined;
 
+  const openSlots = challenge.openSlots ?? 0;
+  const seatErr = validateDirectChallengeSeats(
+    challenge.numPlayers,
+    (challenge.challengees ?? []) as User[],
+    openSlots,
+  );
+  if (seatErr) {
+    return formatReturnError(seatErr);
+  }
+  const participantErr = validateChallengeParticipantUniqueness({
+    numPlayers: challenge.numPlayers,
+    challenger: challenge.challenger,
+    players: [challenge.challenger],
+    challengees: (challenge.challengees ?? []) as User[],
+    openSlots,
+  });
+  if (participantErr) {
+    return formatReturnError(participantErr);
+  }
+
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Item: {
@@ -131,6 +166,7 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
       "noExplore": challenge.noExplore || false,
       "comment": challenge.comment || "",
       "dateIssued": Date.now(),
+      "openSlots": openSlots,
     }
   }));
 
@@ -143,6 +179,7 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
   }));
 
   const list: Promise<any>[] = [addChallenge, updateChallenger];
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
   for (const challengee of humanChallengees) {
     list.push(
       ddbDocClient.send(new UpdateCommand({
@@ -180,6 +217,34 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
   try {
     await Promise.all(list);
     console.log("Successfully added challenge" + challengeId);
+
+    if (openSlots > 0) {
+      await syncFillableProjection(
+        ddbDocClient,
+        tableName,
+        {
+          id: challengeId,
+          metaGame: challenge.metaGame,
+          standing: false,
+          openSlots,
+          numPlayers: challenge.numPlayers,
+          seating: challenge.seating,
+          variants: challenge.variants,
+          challenger: challenge.challenger,
+          players: [challenge.challenger],
+          challengees: challenge.challengees,
+          clockStart: challenge.clockStart,
+          clockInc: challenge.clockInc,
+          clockMax: challenge.clockMax,
+          clockHard: challenge.clockHard,
+          rated: challenge.rated,
+          noExplore: challenge.noExplore || false,
+          comment: challenge.comment || "",
+          dateIssued: Date.now(),
+        },
+        (mg, d) => updateStandingChallengeCount(mg, d),
+      );
+    }
 
     if (skipChallengeeNotify && directChallengeOptOutUser !== undefined) {
       await initi18n('en');
@@ -513,8 +578,12 @@ export async function respondedChallenge(userid: string, pars: { response: boole
     // challenge was rejected
     let challenge: Challenge | undefined;
     let work2: Promise<any> | undefined;
+    let partialLeave = false;
     try {
-      ({ challenge, work: work2 } = await removeChallenge(pars.id, pars.metaGame, standing, false, userid));
+      const removeResult = await removeChallenge(pars.id, pars.metaGame, standing, false, userid);
+      challenge = removeResult.challenge;
+      work2 = removeResult.work;
+      partialLeave = removeResult.partialLeave === true;
       await work2;
       console.log("Successfully removed challenge " + pars.id);
       ret = {
@@ -528,50 +597,127 @@ export async function respondedChallenge(userid: string, pars: { response: boole
       logGetItemError(err);
       return formatReturnError("Failed to remove challenge");
     }
-    // send e-mails
     if (challenge !== undefined) {
       await initi18n('en');
-      // Inform everyone (except the decliner, he knows).
-      const players: FullUser[] = await getPlayers(await filterHumanIds(challenge.challengees!.map(c => c.id).filter(id => id !== userid).concat(challenge.players.map(c => c.id))));
-      const quitter = challenge.challengees!.find(c => c.id === userid)!.name;
       const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+      const quitterParts = await getParticipants([userid]);
+      const quitterName = quitterParts[0]?.name ?? userid;
       const declineNote = !standing ? optionalNotificationNote(pars.comment) : undefined;
-      for (const player of players) {
-        await changeLanguageForPlayer(player);
-        const metaGame = localizedGameName(challenge.metaGame);
-        let body = i18n.t("ChallengeRejectedBody", { quitter, metaGame });
-        if (comment !== ".") {
-          body += " " + i18n.t("ChallengeResponseComment", { comment });
-        }
-        if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
-          if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges)) {
-            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), body);
-            work.push(sesClient.send(comm));
-          } else {
-            console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
+      const metaGameDisplay = localizedGameName(challenge.metaGame);
+      const openAfter = effectiveOpenSlots(challenge as FullChallenge);
+
+      if (partialLeave) {
+        const challengerId = challenge.challenger.id;
+        const challengerUsers = await getPlayers([challengerId]);
+        const challenger = challengerUsers[0];
+        if (challenger) {
+          await changeLanguageForPlayer(challenger);
+          let body = i18n.t("ChallengeSlotOpenedChallengerBody", {
+            quitter: quitterName,
+            metaGame: metaGameDisplay,
+            count: openAfter,
+          });
+          if (comment !== ".") {
+            body += " " + i18n.t("ChallengeResponseComment", { comment });
           }
-        } else {
-          console.log(`No verified email address found for ${player.name} (${player.id})`);
-        }
-        // push notifications are sent no matter what
-        work.push(sendUserPush({
-          userId: player.id,
-          topic: "challenges",
-          title: i18n.t("PUSH.titles.declined"),
-          body: body,
-          url: "/",
-        }));
-        if (!standing) {
-          work.push(createNotification(ddbDocClient, tableName, player.id, {
-            type: 'challengeDeclined',
+          if (challenger.email) {
+            if ((challenger.settings?.all?.notifications === undefined) || (challenger.settings.all.notifications.challenges)) {
+              work.push(sesClient.send(createSendEmailCommand(
+                challenger.email,
+                challenger.name,
+                i18n.t("ChallengeSlotOpenedSubject"),
+                body,
+              )));
+            }
+          }
+          work.push(sendUserPush({
+            userId: challengerId,
+            topic: "challenges",
+            title: i18n.t("PUSH.titles.slotOpened"),
+            body,
+            url: "/",
+          }));
+          work.push(createNotification(ddbDocClient, tableName, challengerId, {
+            type: 'challengeSlotOpened',
             challengeId: pars.id,
             metaGame: challenge.metaGame,
-            declinerId: userid,
-            declinerName: quitter,
+            participantId: userid,
+            participantName: quitterName,
+            openSlots: openAfter,
             ...(declineNote ? { note: declineNote } : {}),
           }, {
-            userSettings: player.settings as InAppNotificationUserSettings | undefined,
+            userSettings: challenger.settings as InAppNotificationUserSettings | undefined,
           }));
+        }
+
+        const otherIds = await filterHumanIds(
+          challenge.players
+            .map(c => c.id)
+            .concat((challenge.challengees ?? []).map(c => c.id))
+            .filter(id => id !== userid && id !== challengerId),
+        );
+        const others = await getPlayers(otherIds);
+        for (const player of others) {
+          await changeLanguageForPlayer(player);
+          let body = i18n.t("ChallengeParticipantLeftBody", { quitter: quitterName, metaGame: metaGameDisplay });
+          if (comment !== ".") {
+            body += " " + i18n.t("ChallengeResponseComment", { comment });
+          }
+          work.push(sendUserPush({
+            userId: player.id,
+            topic: "challenges",
+            title: i18n.t("PUSH.titles.participantLeft"),
+            body,
+            url: "/",
+          }));
+          if (!standing) {
+            work.push(createNotification(ddbDocClient, tableName, player.id, {
+              type: 'challengeParticipantLeft',
+              challengeId: pars.id,
+              metaGame: challenge.metaGame,
+              participantId: userid,
+              participantName: quitterName,
+            }, {
+              userSettings: player.settings as InAppNotificationUserSettings | undefined,
+            }));
+          }
+        }
+      } else {
+        const players: FullUser[] = await getPlayers(await filterHumanIds(
+          (challenge.challengees ?? []).map(c => c.id).filter(id => id !== userid)
+            .concat(challenge.players.map(c => c.id)),
+        ));
+        for (const player of players) {
+          await changeLanguageForPlayer(player);
+          let body = i18n.t("ChallengeRejectedBody", { quitter: quitterName, metaGame: metaGameDisplay });
+          if (comment !== ".") {
+            body += " " + i18n.t("ChallengeResponseComment", { comment });
+          }
+          if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
+            if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges)) {
+              const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), body);
+              work.push(sesClient.send(comm));
+            }
+          }
+          work.push(sendUserPush({
+            userId: player.id,
+            topic: "challenges",
+            title: i18n.t("PUSH.titles.declined"),
+            body: body,
+            url: "/",
+          }));
+          if (!standing) {
+            work.push(createNotification(ddbDocClient, tableName, player.id, {
+              type: 'challengeDeclined',
+              challengeId: pars.id,
+              metaGame: challenge.metaGame,
+              declinerId: userid,
+              declinerName: quitterName,
+              ...(declineNote ? { note: declineNote } : {}),
+            }, {
+              userSettings: player.settings as InAppNotificationUserSettings | undefined,
+            }));
+          }
         }
       }
     }
@@ -580,31 +726,148 @@ export async function respondedChallenge(userid: string, pars: { response: boole
   return ret;
 }
 
-async function removeChallenge(challengeId: string, metaGame: string, standing: boolean, revoked: boolean, quitter: string) {
-  const chall = await ddbDocClient.send(
-    new GetCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: {
-        "pk": standing ? "STANDINGCHALLENGE#" + metaGame : "CHALLENGE",
-        "sk": challengeId
-      },
-    }));
-  if (chall.Item === undefined) {
-    // The challenge might have been revoked or rejected by another user (while you were deciding)
+type RemoveChallengeResult = {
+  challenge?: Challenge & { openSlots?: number; challengees?: User[] };
+  work?: Promise<unknown>;
+  partialLeave?: boolean;
+};
+
+async function removeChallenge(
+  challengeId: string,
+  metaGame: string,
+  standing: boolean,
+  revoked: boolean,
+  quitter: string,
+): Promise<RemoveChallengeResult> {
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+  const loaded = await loadChallengeById(ddbDocClient, tableName, challengeId, metaGame, {
+    preferStanding: standing,
+  });
+  if (loaded === undefined) {
     console.log("Challenge not found");
-    return { "challenge": undefined, "work": undefined };
+    return { challenge: undefined, work: undefined };
   }
-  const challenge = chall.Item as Challenge;
-  if (revoked && challenge.challenger.id !== quitter)
+  const challenge = loaded.item as Challenge & FullChallenge;
+  const storageStanding = loaded.isStanding;
+  if (revoked && challenge.challenger.id !== quitter) {
     throw new Error(`${quitter} tried to revoke a challenge that they did not create.`);
-  if (!revoked && !(challenge.players.find((p: { id: any; }) => p.id === quitter) || (!standing && challenge.challengees!.find((p: { id: any; }) => p.id === quitter))))
+  }
+  const inPlayers = challenge.players?.find((p: { id: string }) => p.id === quitter);
+  const inChallengees = challenge.challengees?.find((p: { id: string }) => p.id === quitter);
+  if (!revoked && !inPlayers && !inChallengees) {
     throw new Error(`${quitter} tried to leave a challenge that they are not part of.`);
-  return { challenge, "work": removeAChallenge(challenge, standing, revoked, false, quitter) };
+  }
+
+  if (!revoked) {
+    const leave = applySeatLeave(challenge as FullChallenge, quitter);
+    if (leave.mode === 'partial') {
+      return {
+        challenge: leave.challenge as Challenge & FullChallenge,
+        work: partialRemoveChallenge(loaded, leave.challenge as FullChallenge, quitter, storageStanding),
+        partialLeave: true,
+      };
+    }
+  }
+
+  return {
+    challenge,
+    work: removeAChallenge(challenge, storageStanding, revoked, false, quitter, loaded),
+    partialLeave: false,
+  };
+}
+
+async function partialRemoveChallenge(
+  loaded: Awaited<ReturnType<typeof loadChallengeById>>,
+  challenge: FullChallenge,
+  quitter: string,
+  storageStanding: boolean,
+): Promise<void> {
+  if (loaded === undefined) {
+    return;
+  }
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+  const list: Promise<unknown>[] = [];
+  const pk = loaded.storagePk;
+  const challengeId = String(
+    (challenge as { id?: string; sk?: string }).id
+    ?? challenge.sk
+    ?? (loaded.item as { id?: string; sk?: string }).id
+    ?? loaded.item.sk,
+  );
+  const item = {
+    ...challenge,
+    id: challengeId,
+    pk,
+    sk: challengeId,
+  };
+  const participantErr = validateChallengeParticipantUniqueness(item);
+  if (participantErr) {
+    throw new Error(participantErr);
+  }
+  list.push(ddbDocClient.send(new PutCommand({
+    TableName: tableName,
+    Item: item,
+  })));
+  const standingKey = `${challenge.metaGame}#${challengeId}`;
+
+  if (!(await isBotId(quitter))) {
+    if (!storageStanding) {
+      list.push(sendCommandWithRetry(new UpdateCommand({
+        TableName: tableName,
+        Key: { pk: "USER", sk: quitter },
+        UpdateExpression: "DELETE challenges_received :c",
+        ExpressionAttributeValues: { ":c": new Set([challengeId]) },
+      })));
+      list.push(sendCommandWithRetry(new UpdateCommand({
+        TableName: tableName,
+        Key: { pk: "USER", sk: quitter },
+        UpdateExpression: "DELETE challenges_accepted :c",
+        ExpressionAttributeValues: { ":c": new Set([challengeId]) },
+      })));
+    } else {
+      list.push(sendCommandWithRetry(new UpdateCommand({
+        TableName: tableName,
+        Key: { pk: "USER", sk: quitter },
+        UpdateExpression: "DELETE challenges_accepted :c",
+        ExpressionAttributeValues: { ":c": new Set([standingKey]) },
+      })));
+    }
+  }
+
+  if (!storageStanding) {
+    if (effectiveOpenSlots(challenge) > 0) {
+      list.push(syncFillableProjection(
+        ddbDocClient,
+        tableName,
+        { ...challenge, id: challengeId } as FullChallenge & { id: string },
+        (mg, d) => updateStandingChallengeCount(mg, d),
+      ));
+    } else {
+      list.push(deleteFillableProjection(
+        ddbDocClient,
+        tableName,
+        challenge.metaGame,
+        challengeId,
+        (mg, d) => updateStandingChallengeCount(mg, d),
+      ));
+    }
+  }
+
+  await Promise.all(list);
 }
 
 // Remove the challenge either because the game has started, or someone withrew: either challenger revoked the challenge or someone withdrew an acceptance, or didn't accept the challenge.
-async function removeAChallenge(challenge: { [x: string]: any; challenger?: any; id?: any; challengees?: any; numPlayers?: any; metaGame?: any; players?: any; }, standing: any, revoked: boolean, started: boolean, quitter: string) {
+async function removeAChallenge(
+  challenge: { [x: string]: any; challenger?: any; id?: any; challengees?: any; numPlayers?: any; metaGame?: any; players?: any; sk?: string },
+  standing: boolean,
+  revoked: boolean,
+  started: boolean,
+  quitter: string,
+  _loaded?: Awaited<ReturnType<typeof loadChallengeById>>,
+) {
   const list: Promise<any>[] = [];
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+  const challengeId = String(challenge.id ?? challenge.sk);
 
   // determine if a standing challenge has expired
   let expired = false;
@@ -635,31 +898,34 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": challenge.challenger.id },
       UpdateExpression: "DELETE challenges_issued :c",
-      ExpressionAttributeValues: { ":c": new Set([challenge.id]) }
+      ExpressionAttributeValues: { ":c": new Set([challengeId]) }
     })));
     // Remove from challenged
-    for (const challengee of challenge.challengees) {
+    for (const challengee of challenge.challengees ?? []) {
       if (!(await isBotId(challengee.id))) {
         list.push(sendCommandWithRetry(new UpdateCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: { "pk": "USER", "sk": challengee.id },
           UpdateExpression: "DELETE challenges_received :c",
-          ExpressionAttributeValues: { ":c": new Set([challenge.id]) }
+          ExpressionAttributeValues: { ":c": new Set([challengeId]) }
         })));
       }
     }
-  } else if (
-    revoked
-    || challenge.numPlayers > 2 // Had to duplicate the standing challenge when someone accepted but there were still spots left. Remove the duplicated standing challenge
-    || expired
-  ) {
+    list.push(deleteFillableProjection(
+      ddbDocClient,
+      tableName,
+      challenge.metaGame,
+      challengeId,
+      (mg, d) => updateStandingChallengeCount(mg, d),
+    ));
+  } else if (revoked || expired) {
     // Remove from challenger
     console.log(`removing duplicated challenge ${standing ? challenge.metaGame + '#' + challenge.id : challenge.id} from challenger ${challenge.challenger.id}`);
     list.push(sendCommandWithRetry(new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": challenge.challenger.id },
       UpdateExpression: "DELETE challenges_standing :c",
-      ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challenge.id]) }
+      ExpressionAttributeValues: { ":c": new Set([`${challenge.metaGame}#${challengeId}`]) }
     })));
   }
 
@@ -679,7 +945,9 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
       TableName: process.env.ABSTRACT_PLAY_TABLE,
       Key: { "pk": "USER", "sk": player.id },
       UpdateExpression: "DELETE challenges_accepted :c",
-      ExpressionAttributeValues: { ":c": new Set([standing ? challenge.metaGame + '#' + challenge.id : challenge.id]) }
+      ExpressionAttributeValues: {
+        ":c": new Set([standing ? `${challenge.metaGame}#${challengeId}` : challengeId]),
+      }
     })));
   }
 
@@ -690,22 +958,18 @@ async function removeAChallenge(challenge: { [x: string]: any; challenger?: any;
         new DeleteCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
-            "pk": "CHALLENGE", "sk": challenge.id
+            "pk": "CHALLENGE", "sk": challengeId
           },
         }))
     );
-  } else if (
-    revoked
-    || challenge.numPlayers > 2 // Had to duplicate the standing challenge when someone accepted but there were still spots left. Remove the duplicated standing challenge
-    || expired
-  ) {
-    console.log(`removing challenge ${challenge.metaGame + '#' + challenge.id}`);
+  } else if (revoked || expired) {
+    console.log(`removing challenge ${challenge.metaGame + '#' + challengeId}`);
     list.push(
       ddbDocClient.send(
         new DeleteCommand({
           TableName: process.env.ABSTRACT_PLAY_TABLE,
           Key: {
-            "pk": "STANDINGCHALLENGE#" + challenge.metaGame, "sk": challenge.id
+            "pk": "STANDINGCHALLENGE#" + challenge.metaGame, "sk": challengeId
           },
         }))
     );
@@ -725,25 +989,44 @@ async function updateStandingChallengeCount(metaGame: any, diff: number) {
 }
 
 async function acceptChallenge(userid: string, metaGame: string, challengeId: string, standing: boolean) {
-  const challengeData = await ddbDocClient.send(
-    new GetCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: {
-        "pk": standing ? "STANDINGCHALLENGE#" + metaGame : "CHALLENGE", "sk": challengeId
-      },
-    }));
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+  const loaded = await loadChallengeById(ddbDocClient, tableName, challengeId, metaGame, {
+    preferStanding: standing,
+  });
 
-  if (challengeData.Item === undefined) {
-    // The challenge might have been revoked or rejected by another user (while you were deciding)
+  if (loaded === undefined) {
     console.log("Challenge not found");
     return;
   }
 
-  const challenge = challengeData.Item as FullChallenge;
-  const challengees = standing || !challenge.challengees ? [] : challenge.challengees.filter((c: { id: any; }) => c.id != userid);
-  if (!standing && challengees.length !== (challenge.challengees ? challenge.challengees.length : 0) - 1) {
+  const challenge = loaded.item as FullChallenge;
+  const storageStanding = loaded.isStanding;
+  const namedChallengee = challenge.challengees?.find(c => c.id === userid);
+  const openSlotAccept =
+    !storageStanding
+    && challenge.numPlayers > 2
+    && !namedChallengee
+    && effectiveOpenSlots(challenge) > 0;
+
+  if (!storageStanding && !namedChallengee && !openSlotAccept) {
     logGetItemError(`userid ${userid} wasn't a challengee, challenge ${challengeId}`);
     throw new Error("Can't accept a challenge if you weren't challenged");
+  }
+
+  let challengees = standing || !challenge.challengees ? [] : challenge.challengees.filter(c => c.id !== userid);
+  if (!storageStanding && namedChallengee && challengees.length !== (challenge.challengees?.length ?? 0) - 1) {
+    logGetItemError(`userid ${userid} wasn't a challengee, challenge ${challengeId}`);
+    throw new Error("Can't accept a challenge if you weren't challenged");
+  }
+  if (openSlotAccept && userid === challenge.challenger.id) {
+    throw new Error('Challenger cannot fill an open seat on their own challenge');
+  }
+  const joinErr = assertCanJoinChallenge(challenge, userid);
+  if (joinErr) {
+    throw new Error(joinErr);
+  }
+  if (openSlotAccept) {
+    challenge.openSlots = effectiveOpenSlots(challenge) - 1;
   }
   const players = challenge.players;
   if ((players ? players.length : 0) === challenge.numPlayers - 1) {
@@ -753,6 +1036,9 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     if (challenge.seating === 'random') {
       playerIDs = players!.map(player => player.id) as string[];
       playerIDs.push(userid);
+      if (new Set(playerIDs).size !== playerIDs.length) {
+        throw new Error('A player may only appear once in a challenge');
+      }
       shuffle(playerIDs);
     } else if (challenge.seating === 's1') {
       playerIDs.push(challenge.challenger.id);
@@ -809,7 +1095,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     }));
     const list: Promise<any>[] = [];
     list.push(addGame);
-    list.push(removeAChallenge(challenge, standing, false, true, ''));
+    list.push(removeAChallenge(challenge, storageStanding, false, true, '', loaded));
 
     try {
       await Promise.all(list);
@@ -839,89 +1125,76 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
   } else {
     // Still waiting on more players to accept.
     // Update challenge
-    let newplayer: User | undefined;
-    if (standing) {
+    let newplayer: User;
+    if (namedChallengee) {
+      newplayer = namedChallengee;
+    } else {
       const playerFull = await getParticipants([userid]);
-      newplayer = { "id": playerFull[0].id, "name": playerFull[0].name };
-    } else {
-      newplayer = challenge.challengees!.find(c => c.id == userid);
-      if (!newplayer)
-        throw new Error("Can't accept a challenge if you weren't challenged");
+      newplayer = { id: playerFull[0].id, name: playerFull[0].name };
     }
-    let updateChallenge: Promise<any>;
-    if (!standing || challenge.numPlayers == 2 || (players && players.length !== 1)) {
-      challenge.challengees = challengees;
-      players!.push(newplayer);
-      updateChallenge = ddbDocClient.send(new PutCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Item: challenge
-      }));
-    } else {
-      // need to duplicate the challenge, because numPlayers > 2 and we have our first accepter
-      ({ challengeId, work: updateChallenge } = await duplicateStandingChallenge(challenge, newplayer));
+    challenge.challengees = challengees;
+    players!.push(newplayer);
+    const afterJoinErr = validateChallengeParticipantUniqueness({
+      ...challenge,
+      players: players!,
+      challengees,
+    });
+    if (afterJoinErr) {
+      throw new Error(afterJoinErr);
     }
-    // Update accepter
-    const challengeValue = new Set([standing ? challenge.metaGame + '#' + challengeId : challengeId]);
+    const storagePk = loaded.storagePk;
+    const persistId = String(challenge.id ?? challenge.sk ?? challengeId);
+    const updateChallenge = ddbDocClient.send(new PutCommand({
+      TableName: tableName,
+      Item: {
+        ...challenge,
+        pk: storagePk,
+        sk: persistId,
+        id: persistId,
+      },
+    }));
 
-    const userUpdates: Promise<any>[] = [updateChallenge];
+    const acceptedKey = storageStanding ? `${challenge.metaGame}#${persistId}` : persistId;
+    const challengeValue = new Set([acceptedKey]);
+
+    const userUpdates: Promise<unknown>[] = [updateChallenge];
+    if (!storageStanding && effectiveOpenSlots(challenge) >= 0) {
+      userUpdates.push(syncFillableProjection(
+        ddbDocClient,
+        tableName,
+        { ...challenge, id: persistId } as FullChallenge & { id: string },
+        (mg, d) => updateStandingChallengeCount(mg, d),
+      ));
+      if (effectiveOpenSlots(challenge) === 0) {
+        userUpdates.push(deleteFillableProjection(
+          ddbDocClient,
+          tableName,
+          challenge.metaGame,
+          persistId,
+          (mg, d) => updateStandingChallengeCount(mg, d),
+        ));
+      }
+    }
     if (!(await isBotId(userid))) {
+      if (namedChallengee) {
+        userUpdates.push(sendCommandWithRetry(new UpdateCommand({
+          TableName: tableName,
+          Key: { pk: "USER", sk: userid },
+          UpdateExpression: "DELETE challenges_received :c",
+          ExpressionAttributeValues: { ":c": challengeValue },
+        })));
+      }
       userUpdates.push(sendCommandWithRetry(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USER", "sk": userid },
-        UpdateExpression: "DELETE challenges_received :c",
-        ExpressionAttributeValues: { ":c": challengeValue }
-      })));
-      userUpdates.push(sendCommandWithRetry(new UpdateCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: { "pk": "USER", "sk": userid },
+        TableName: tableName,
+        Key: { pk: "USER", sk: userid },
         UpdateExpression: "ADD challenges_accepted :c",
-        ExpressionAttributeValues: { ":c": challengeValue }
+        ExpressionAttributeValues: { ":c": challengeValue },
       })));
     }
 
     await Promise.all(userUpdates);
     return;
   }
-}
-
-async function duplicateStandingChallenge(challenge: { [x: string]: any; metaGame?: any; numPlayers?: any; standing?: any; seating?: any; variants?: any; challenger?: any; clockStart?: any; clockInc?: any; clockMax?: any; clockHard?: any; rated?: any; }, newplayer: any) {
-  const challengeId = uuid();
-  console.log("Duplicate challenge with newplayer", newplayer);
-  const addChallenge = ddbDocClient.send(new PutCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Item: {
-      "pk": "STANDINGCHALLENGE#" + challenge.metaGame,
-      "sk": challengeId,
-      "id": challengeId,
-      "metaGame": challenge.metaGame,
-      "numPlayers": challenge.numPlayers,
-      "standing": challenge.standing,
-      "seating": challenge.seating,
-      "variants": challenge.variants,
-      "challenger": challenge.challenger,
-      "players": [challenge.challenger, newplayer], // users that have accepted
-      "challengees": [challenge.challenger, newplayer], // users that have accepted
-      "clockStart": challenge.clockStart,
-      "clockInc": challenge.clockInc,
-      "clockMax": challenge.clockMax,
-      "clockHard": challenge.clockHard,
-      "noExplore": challenge.noExplore || false,
-      "rated": challenge.rated,
-      "dateIssued": challenge.dateIssued,
-    }
-  }));
-
-  const updateStandingChallengeCnt = updateStandingChallengeCount(challenge.metaGame, 1);
-
-  const updateChallenger = ddbDocClient.send(new UpdateCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "USER", "sk": challenge.challenger.id },
-    ExpressionAttributeValues: { ":c": new Set([challenge.metaGame + '#' + challengeId]) },
-    ExpressionAttributeNames: { "#cs": "challenges_standing" },
-    UpdateExpression: "add #cs :c",
-  }));
-
-  return { challengeId, "work": Promise.all([addChallenge, updateStandingChallengeCnt, updateChallenger]) };
 }
 
 
