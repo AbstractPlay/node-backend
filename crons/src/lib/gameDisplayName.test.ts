@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import i18n from 'i18next';
 import { gameinfo } from '@abstractplay/gameslib';
-import { localizedGameName } from './gameDisplayName.js';
-import { changeLanguageForPlayer, initApbackI18n } from './apbackI18n.js';
+import { localizedGameName } from '@backend/lib/gameDisplayName.js';
+import { changeLanguageForPlayer, initApbackI18n } from '@backend/lib/apbackI18n.js';
 
 describe('tournament email i18n', () => {
   beforeEach(async () => {

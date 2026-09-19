@@ -37,7 +37,7 @@ Queries and updates `TOURNAMENT` records on `abstract-play-{stage}`. Uses retry 
 
 ### Email / i18n
 
-Uses i18next with `apback` strings under `src/locales/` (exported from node-backend at build/CI time; see [Getting started](/crons/getting-started/#email-strings-apback)). Email templates reference tournament name, meta game, and player lists.
+Uses i18next with repo-root `locales/*/apback.json` bundled via `@backend/lib/apbackI18n` (see [Getting started](/crons/getting-started/#email-strings-apback)). Email templates reference tournament name, meta game, and player lists.
 
 ### Related backend docs
 

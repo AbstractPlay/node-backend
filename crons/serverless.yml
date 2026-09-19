@@ -47,6 +47,9 @@ custom:
       - "@abstractplay/renderer"
       - "@sparticuz/chromium"
       - "puppeteer-core"
+    esbuildOptions:
+      alias:
+        "@backend/lib": "../lib"
   scriptable:
     hooks:
       before:package:createDeploymentArtifacts: npm run build:layers

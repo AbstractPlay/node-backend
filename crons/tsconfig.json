@@ -9,7 +9,10 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "baseUrl": "./src"
+    "baseUrl": ".",
+    "paths": {
+      "@backend/lib/*": ["../lib/*"]
+    }
   },
   "include": [
     "src/**/*.ts",

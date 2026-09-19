@@ -82,7 +82,7 @@ The service role grants:
 | `@abstractplay/gameslib` | records, records-ttm, records-move-times, summarize, player-summary-fanout, rating-change-notifications, starttournaments | `GameFactory`, `gameinfo`, `genRecord`, `addResource` |
 | `@abstractplay/recranks` | records, summarize | `APGameRecord`, ELO/Glicko2/Trueskill raters |
 | `ion-js`, `fflate` | dump consumers | Parse gzipped ION export files |
-| `i18next` | starttournaments, inactive-challenge-cleanup, records/thumbnails (gameslib labels) | Vendored `apback` email/push copy; gameslib bundles for meta-game names |
+| `i18next` | starttournaments, inactive-challenge-cleanup, records/thumbnails (gameslib labels) | Root `locales/*/apback.json` via `@backend/lib/apbackI18n`; gameslib bundles for meta-game names |
 
 `records-cooccur` uses `ion-js` and `fflate` only (no gameslib layer).
 
@@ -91,9 +91,8 @@ The service role grants:
 ```
 src/functions/     Lambda handlers
 src/types/         Record and StatSummary TypeScript types
-src/locales/       Generated apback JSON (CI/local sync from node-backend; not committed)
 src/utils/         Shared utilities (e.g. isoToCountryCode, cooccurPmi)
-scripts/           build-layers.mjs, locale sync/check, operator helpers
+scripts/           build-layers.mjs, operator helpers
 serverless.yml     Infrastructure and schedules
 ```
 

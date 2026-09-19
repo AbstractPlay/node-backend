@@ -6,11 +6,11 @@ import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCo
 // import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
-import { localizedGameName } from '../lib/gameDisplayName.js';
+import { localizedGameName } from '@backend/lib/gameDisplayName.js';
 import {
   changeLanguageForPlayer,
   initApbackI18n,
-} from '../lib/apbackI18n.js';
+} from '@backend/lib/apbackI18n.js';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
 import { Handler } from "aws-lambda";
@@ -26,7 +26,7 @@ import {
   loadExistingTournamentGames,
   type ExistingTournamentGame,
 } from "../lib/tournamentPairing.js";
-import { tournamentPlaySupported } from "../lib/tournamentGame.js";
+import { tournamentPlaySupported } from "@backend/lib/tournamentGame.js";
 import {
   acquireTournamentStartingLock,
   loadItem,

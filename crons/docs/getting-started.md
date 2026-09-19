@@ -55,25 +55,16 @@ Most batch functions expect prod S3 buckets and a completed DB dump. For code ch
 
 ## Email strings (`apback`)
 
-Canonical copy lives in [node-backend `locales/`](https://github.com/AbstractPlay/node-backend/tree/develop/locales) (Weblate). Lambdas import `src/locales/*/apback.json`, but those files are **not committed** (like generated assets elsewhere in the monorepo workflow).
+Canonical copy lives in repo-root [`locales/`](https://github.com/AbstractPlay/node-backend/tree/develop/locales) (Weblate). Crons Lambdas bundle those JSON files at build time via [`lib/apbackI18n.ts`](https://github.com/AbstractPlay/node-backend/blob/develop/lib/apbackI18n.ts) (`@backend/lib/apbackI18n.js` in handler imports).
 
-**Local:** clone node-backend as a sibling (`../node-backend`) or set `NODE_BACKEND_ROOT`, then:
-
-```bash
-npm run sync-apback-locales
-```
-
-`npm test` runs `pretest`, which syncs automatically when `src/locales/` is missing.
-
-**CI / deploy:** workflows check out node-backend and run `sync-apback-locales` before build, test, and Serverless deploy. Do not open translation-only PRs here.
+`npm test` runs `pretest`, which fails if vendored `src/locales/*/apback.json` copies exist. Do not open translation-only PRs under `crons/`.
 
 ## Project layout
 
 ```
 src/functions/     Lambda handlers (one file per function)
 src/types/         Shared TypeScript types
-src/locales/       Generated apback JSON (see README there; sync from node-backend)
-scripts/           Repo tooling (layers build, locale sync, ops helpers)
+scripts/           Repo tooling (layers build, ops helpers)
 bin/               Local-only ops scripts (gitignored; not in CI)
 serverless.yml     Function definitions and schedules
 docs/              Developer documentation (published at /crons/)

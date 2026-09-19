@@ -22,6 +22,19 @@
             "@typescript-eslint/no-empty-function": "off",
             "@typescript-eslint/no-extra-semi": "off"
           }
+        },
+        {
+            "files": ["src/**/*.ts"],
+            "rules": {
+                "no-restricted-imports": ["error", {
+                    "patterns": [
+                        {
+                            "group": ["**/api/**", "**/authHandlers*"],
+                            "message": "Cron code must use shared leaf modules (@backend/lib/*) only"
+                        }
+                    ]
+                }]
+            }
         }
     ],
     "parser": "@typescript-eslint/parser",
