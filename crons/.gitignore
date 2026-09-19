@@ -1,0 +1,15 @@
+# package directories
+node_modules
+jspm_packages
+
+# Serverless directories
+.serverless
+/api/*.js
+/utils/*.js
+.vscode/
+bin/*
+dist/
+
+# Generated from node-backend (see src/locales/README.md)
+src/locales/**
+!src/locales/README.md
