@@ -66,7 +66,7 @@ Implementation: [`lib/recommendationEvents.ts`](../../lib/recommendationEvents.t
 
 ## Offline read path
 
-Nightly `records-rec-analytics` (backend-crons) scans `RECOMMENDS#` rows, aggregates anonymized funnel metrics, and writes to private ops S3 (`recommendations/analytics/`). See [Recommendation analytics](/crons/recommendations-analytics/).
+Nightly `records-rec-analytics` (crons stack) scans `RECOMMENDS#` rows, aggregates anonymized funnel metrics, and writes to private ops S3 (`recommendations/analytics/`). See [Recommendation analytics](/crons/recommendations-analytics/).
 
 The live recommender continues to use static nightly artifacts (`cooccur.json`, `mvtimes.json`, gameslib tags, player records) — not impression rows. Optional `tuning.json` weight updates remain deferred.
 

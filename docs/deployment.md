@@ -20,13 +20,15 @@ Each deploy runs **two** Serverless stacks (API first, then crons):
 | API / WebSocket | `abstract-play` | `bash bin/serverless-deploy.sh <stage> <profile>` |
 | Scheduled jobs | `abstract-play-backend-crons` | `bash crons/scripts/serverless-deploy.sh <stage>` |
 
+The former [backend-crons](https://github.com/AbstractPlay/backend-crons) repository is **archived**; deploy and develop only from this repo’s `crons/` workspace.
+
 Crons source lives in [`crons/`](https://github.com/AbstractPlay/node-backend/tree/develop/crons). See [Crons deployment](/crons/deployment/).
 
 ## AP dependency pins (`ci-deps.*.json`)
 
 Canonical pins live in `ci-deps.dev.json` and `ci-deps.prod.json`. CI runs `npm ci` → manifest validation → `ap-install-deps --stage dev|prod` → strict lockfile check → build/test.
 
-After a merge that touches dependency files, run `npm run sync-deps` on `develop` (or `npm run sync-deps:prod` on `main`) and commit root and `crons/` `ci-deps.*.json`, `package.json`, and the root `package-lock.json` together. `npm run sync-deps` runs `ap-install-deps` at the repo root and updates `crons/package.json` / `crons/ci-deps.*.json` from the lockfile. Do not hand-merge AP version strings in `package.json`.
+After a merge that touches dependency files, run `npm run sync-deps` on `develop` (or `npm run sync-deps:prod` on `main`) and commit root `ci-deps.*.json`, root and `crons/package.json`, and the root `package-lock.json` together. `npm run sync-deps` runs `ap-install-deps` at the repo root (pins include `recranks` for the crons workspace) and updates `crons/package.json` from the lockfile. Do not hand-merge AP version strings in `package.json`.
 
 `ci-deps.prod.json` is protected on `main` via `.gitattributes` (`merge=ours`). `ci-deps.dev.json` is protected on `develop` the same way (e.g. when merging `l10n/weblate`). `package.json` and `package-lock.json` are regenerated via `sync-deps`, not merge=ours.
 

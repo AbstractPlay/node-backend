@@ -1,5 +1,5 @@
 /**
- * Keep crons/package.json and crons/ci-deps.* aligned with the root lockfile.
+ * Keep crons/package.json AP pins aligned with the root lockfile and ci-deps.*.json.
  * ap-install-deps must run from repo root (workspace hoists node_modules there).
  */
 import fs from "node:fs";
@@ -50,19 +50,10 @@ for (const pkg of Object.values(AP)) {
 }
 writeJson(cronsPkgPath, cronsPkg);
 
-const out = {
-  updatedAt: new Date().toISOString(),
-  source: rootManifest.source ?? `sync-crons-ap-deps from ${stage}`,
+const summary = {
+  stage,
+  gameslib: cronsPkg.dependencies[AP.gameslib],
+  renderer: cronsPkg.dependencies[AP.renderer],
+  recranks: cronsPkg.dependencies[AP.recranks],
 };
-if (lockVersions[AP.renderer] ?? rootManifest.renderer) {
-  out.renderer = lockVersions[AP.renderer] ?? rootManifest.renderer;
-}
-if (lockVersions[AP.gameslib] ?? rootManifest.gameslib) {
-  out.gameslib = lockVersions[AP.gameslib] ?? rootManifest.gameslib;
-}
-if (lockVersions[AP.recranks] ?? rootManifest.recranks) {
-  out.recranks = lockVersions[AP.recranks] ?? rootManifest.recranks;
-}
-writeJson(path.join(CRONS_ROOT, `ci-deps.${stage}.json`), out);
-
-console.log(`sync-crons-ap-deps: updated crons for stage=${stage}`, out);
+console.log("sync-crons-ap-deps: updated crons/package.json from root lockfile", summary);
