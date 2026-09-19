@@ -696,40 +696,6 @@ functions:
     description: Dev-only reference bot — full source and docs in api/testBot.ts
     logRetentionInDays: 30
     events: ${self:custom.testBotHttpEvents.${self:provider.stage}, []}
-  yourturn:
-    handler: utils/yourturn.handler
-    description: Sends out "your turn" notifications
-    logRetentionInDays: 30
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-yourturn
-          description: Send out "your turn" notifications
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          schedule: cron(0 14,22 * * ? *)
-  feedback-archive:
-    handler: utils/feedback-archive.handler
-    description: Archive terminal feedback posts to S3 and HISTORY summaries
-    timeout: 900
-    memorySize: 1024
-    logRetentionInDays: 30
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-feedback-archive
-          description: Archive terminal feedback nightly
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          schedule: cron(0 4 * * ? *)
-  feedback-attachment-cleanup:
-    handler: utils/feedback-attachment-cleanup.handler
-    description: Delete orphaned feedback attachment objects from S3
-    timeout: 900
-    memorySize: 1024
-    logRetentionInDays: 30
-    events:
-      - eventBridge:
-          name: abstractplay-${self:provider.stage}-feedback-attachment-cleanup
-          description: Purge archived feedback attachments and stale staging uploads
-          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
-          schedule: cron(30 4 * * ? *)
   bot-outbound:
     handler: utils/bot-outbound.handler
     description: Contacts bot HTTPS endpoints for challenges and move notifications

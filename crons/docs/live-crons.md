@@ -69,6 +69,20 @@ Revokes open (`STANDINGCHALLENGE#`) and direct (`CHALLENGE`) challenges issued b
 
 See [Inactive challenge cleanup](/crons/inactive-challenge-cleanup/) for full detail.
 
+## `yourturn`
+
+**Schedule:** 14:00 and 22:00 UTC daily  
+**Source:** [`src/functions/yourturn.ts`](../src/functions/yourturn.ts) (logic in [`utils/yourturn.ts`](../../../utils/yourturn.ts))
+
+Batch "your turn" emails for active multiplayer games. Uses SES and gameslib `gameinfo` for localized game names. See [Notifications](/backend/subsystems/notifications/).
+
+## `feedback-archive` / `feedback-attachment-cleanup`
+
+**Schedules:** 04:00 and 04:30 UTC daily  
+**Sources:** [`feedback-archive.ts`](../src/functions/feedback-archive.ts), [`feedback-attachment-cleanup.ts`](../src/functions/feedback-attachment-cleanup.ts) (shared `lib/feedback/*` at repo root)
+
+Nightly feedback lifecycle: archive terminal posts to S3, then purge attachment objects. Local dry runs: `npm run feedback-archive` / `npm run feedback-attachment-cleanup` from node-backend root.
+
 ## `standingchallenges`
 
 **Schedule:** 00:00 and 12:00 UTC daily  
@@ -95,6 +109,9 @@ serverless invoke -f dashboard-cruft-cleanup --stage prod
 serverless invoke -f inactive-challenge-cleanup --stage prod
 serverless invoke -f starttournaments --stage prod
 serverless invoke -f standingchallenges --stage prod
+serverless invoke -f yourturn --stage prod
+serverless invoke -f feedback-archive --stage prod
+serverless invoke -f feedback-attachment-cleanup --stage prod
 ```
 
 Use prod with care — these mutate live data.

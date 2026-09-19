@@ -73,6 +73,8 @@ provider:
     retentionInDays: 30   # set to any valid retention period (1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653)
   environment:
     ABSTRACT_PLAY_TABLE: abstract-play-${self:provider.stage}
+    FEEDBACK_TABLE: abstract-play-feedback-${self:provider.stage}
+    FEEDBACK_ATTACHMENTS_BUCKET: ap-feedback-attachments-${self:provider.stage}
   iam:
     role:
       statements:
@@ -128,6 +130,18 @@ provider:
             - "arn:aws:s3:::abstractplay-db-dump/*"
             - "arn:aws:s3:::${self:custom.opsbucket}/*"
             - "arn:aws:s3:::${self:custom.renderBucketName}/*"
+        - Effect: Allow
+          Action:
+            - s3:ListBucket
+          Resource:
+            - arn:aws:s3:::ap-feedback-attachments-${self:provider.stage}
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+          Resource:
+            - arn:aws:s3:::ap-feedback-attachments-${self:provider.stage}/*
 
 functions:
   dumpdb:
@@ -428,6 +442,45 @@ functions:
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # Midnight and noon UTC every day
           schedule: cron(0 0,12 * * ? *)
+
+  yourturn:
+    handler: src/functions/yourturn.handler
+    description: Sends out "your turn" notification emails
+    logRetentionInDays: 30
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-yourturn
+          description: Send out "your turn" notifications
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(0 14,22 * * ? *)
+
+  feedback-archive:
+    handler: src/functions/feedback-archive.handler
+    description: Archive terminal feedback posts to S3 and HISTORY summaries
+    timeout: 900
+    memorySize: 1024
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-feedback-archive
+          description: Archive terminal feedback nightly
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(0 4 * * ? *)
+
+  feedback-attachment-cleanup:
+    handler: src/functions/feedback-attachment-cleanup.handler
+    description: Delete orphaned feedback attachment objects from S3
+    timeout: 900
+    memorySize: 1024
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-feedback-attachment-cleanup
+          description: Purge archived feedback attachments and stale staging uploads
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(30 4 * * ? *)
 
   inactive-challenge-cleanup:
     handler: src/functions/inactive-challenge-cleanup.handler

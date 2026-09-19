@@ -25,7 +25,6 @@ Defined in [`serverless.yml`](../serverless.yml):
 | `disconnect` | WebSocket `$disconnect` | Remove connection |
 | `subscribe` | WebSocket `subscribe` route | Authenticate and subscribe to topics |
 | `messageHandler` | SQS `ws-messages` queue | Broadcast WebSocket messages |
-| `yourturn` | EventBridge cron (14:00 and 22:00 UTC) | Batch "your turn" emails |
 | `bot-outbound` | SQS `bot-outbound` queue | HTTPS webhooks to external bots |
 | `testBot` | API Gateway HTTP (dev only) | Reference bot implementation |
 
@@ -57,7 +56,7 @@ Defined in [`serverless.yml`](../serverless.yml):
 | [`lib/wsBroadcast.ts`](../lib/wsBroadcast.ts) | Queue WebSocket fan-out |
 | [`api/sockets/`](../api/sockets/) | WebSocket connect/disconnect/subscribe handlers |
 | [`api/testBot.ts`](../api/testBot.ts) | Reference bot (dev only) |
-| [`utils/yourturn.ts`](../utils/yourturn.ts) | Scheduled notification job |
+Scheduled batch jobs (`yourturn`, feedback archive, records pipeline, etc.) run in the **crons** stack — see [Crons architecture](/crons/architecture/) and [`utils/yourturn.ts`](../utils/yourturn.ts) (handler entry under `crons/src/functions/`).
 
 ## Side effects
 
