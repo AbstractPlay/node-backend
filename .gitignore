@@ -4,6 +4,8 @@ jspm_packages
 
 # Serverless directories
 .serverless
+crons/.serverless
+crons/.esbuild
 .esbuild/
 .test-artifacts/
 dist/
