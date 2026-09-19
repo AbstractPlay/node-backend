@@ -9,9 +9,9 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "baseUrl": ".",
+    "baseUrl": "./src",
     "paths": {
-      "@backend/lib/*": ["../lib/*"]
+      "@backend/lib/*": ["../../lib/*"]
     }
   },
   "include": [
