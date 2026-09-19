@@ -23,7 +23,7 @@ PR CI: [`.github/workflows/test.yml`](../../.github/workflows/test.yml) job **`t
 
 ## AP dependency pins
 
-Pins live in **`crons/ci-deps.dev.json`** and **`crons/ci-deps.prod.json`**, kept in sync with the root lockfile by `node scripts/sync-crons-ap-deps.mjs` (chained from root `npm run sync-deps` / `npm run sync-deps:prod`).
+AP pins live in the **repo-root** [`ci-deps.dev.json`](https://github.com/AbstractPlay/node-backend/blob/develop/ci-deps.dev.json) and [`ci-deps.prod.json`](https://github.com/AbstractPlay/node-backend/blob/develop/ci-deps.prod.json) (gameslib, renderer, recranks). Root `npm run sync-deps` runs `ap-install-deps` then `scripts/sync-crons-ap-deps.mjs`, which copies resolved versions into `crons/package.json`.
 
 Do not run `ap-install-deps` from `crons/` alone in a workspace checkout — use root `npm run sync-deps`.
 

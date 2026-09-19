@@ -63,7 +63,7 @@ jobs:
 
     - name: Reject merge conflict markers in dep files
       run: |
-        if grep -r '^<<<<<<<' package.json package-lock.json ci-deps.dev.json ci-deps.prod.json crons/ci-deps.dev.json crons/ci-deps.prod.json crons/package.json 2>/dev/null; then
+        if grep -r '^<<<<<<<' package.json package-lock.json ci-deps.dev.json ci-deps.prod.json crons/package.json 2>/dev/null; then
           echo "Conflict markers found in dependency files"
           exit 1
         fi
@@ -94,7 +94,6 @@ jobs:
           ci-deps.prod.json
           package-lock.json
           package.json
-          crons/ci-deps.prod.json
           crons/package.json
 
     - name: Set CI version
