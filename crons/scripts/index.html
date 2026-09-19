@@ -1,0 +1,348 @@
+<!--
+    This is the file that generates the file listing for the records.abstractplay.com S3 bucket.
+    It is here simply so the file is in source control somewhere.
+-->
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css"
+        />
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"
+            integrity="sha512-SfTiTlX6kk+qitfevl/7LibUOeJWlt9rbyDn92a1DqWOw9vWG2MFoays0sgObmWazO5BQPiFucnnEAjpAB+/Sw=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"
+        />
+        <style>
+            /* Overall font definitions */
+            @import url("https://fonts.googleapis.com/css2?family=Cardo:wght@700&family=Josefin+Sans&display=swap");
+
+            /* Colour definitions */
+            :root {
+                --main-bg-color: white;
+                --main-fg-color: #1a3e6f;
+                --main-fg-color-lighter: #c3d6f1;
+                --bg-color2: #999999;
+                --secondary-color-1: #ff6633;
+                --secondary-color-1-lighter: #ff8962;
+                --secondary-color-1-bg: #ffe8e0;
+                --secondary-color-2: #99cccc;
+                --secondary-color-2-lighter: #e6f2f2;
+                --secondary-color-3: #008ca8;
+                --secondary-color-3-lighter: #009fbf;
+                --secondary-color-3-bg: #eefcff;
+            }
+
+            h1,
+            h2,
+            h3,
+            h4,
+            h5,
+            h6 {
+                font-family: "Cardo", serif;
+            }
+
+            body,
+            button,
+            input,
+            select,
+            textarea {
+                font-family: "Josefin Sans", sans-serif;
+                font-size: 1em;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+                background-color: var(--main-bg-color);
+            }
+
+            html {
+                box-sizing: border-box;
+            }
+
+            *,
+            *:before,
+            *:after {
+                box-sizing: inherit;
+            }
+
+            /* Link handling */
+            /* a {
+                color: var(--secondary-color-3);
+                text-decoration: underline;
+            } */
+
+            /* Add a little bit of space after checkboxes and radio buttons */
+            input[type="checkbox"],
+            input[type="radio"] {
+                margin-right: 0.25em;
+            }
+
+            /* Only used to colour buttons until I can figure out how to override Bulma colours */
+            .apButton {
+                background: linear-gradient(
+                    180deg,
+                    var(--secondary-color-3-lighter) 0%,
+                    var(--secondary-color-3) 100%
+                );
+                color: white;
+            }
+
+            .apButton:hover {
+                background: var(--main-fg-color);
+                color: white;
+            }
+
+            .apButtonAlert {
+                background: linear-gradient(
+                    180deg,
+                    var(--secondary-color-1-lighter) 0%,
+                    var(--secondary-color-1) 100%
+                );
+                color: white;
+            }
+
+            .apButtonAlert:hover {
+                background: var(--main-fg-color);
+                color: white;
+            }
+
+        </style>
+        <title>Abstract Play Records</title>
+    </head>
+    <body>
+        <main class="container p-6">
+            <div class="content">
+                <p class="title">Abstract Play Records</p>
+                <p>Game reports adhere to a schema, available in the <a href="https://github.com/AbstractPlay/recranks/blob/main/src/schemas/gamerecord.json">Abstract Play Records and Rankings repository</a>.</p>
+                <p id="manifestMeta" class="is-size-7 has-text-grey" hidden></p>
+            </div>
+            <div id="summarySection" class="content" hidden>
+                <p class="subtitle is-5">Summary files</p>
+                <p class="is-size-7">Tiered analytics exports and per-player slice index (<code>_manifest.json</code> <code>summaryFiles</code>).</p>
+                <table class="table is-fullwidth">
+                    <thead>
+                        <tr>
+                            <th>Role</th>
+                            <th>File</th>
+                            <th>Size</th>
+                            <th>Last modified</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summaryBody"></tbody>
+                </table>
+            </div>
+            <div class="content">
+                <p class="subtitle is-5">All JSON records</p>
+            </div>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>File</th>
+                        <th>Size</th>
+                        <th>Last modified</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+
+                </tbody>
+            </table>
+        </main>
+        <script type="text/javascript">
+            function loadJSON(filePath) {
+                var json = loadTextFileAjaxSync(filePath, "application/json");
+                return JSON.parse(json);
+            }
+
+            function loadTextFileAjaxSync(filePath, mimeType) {
+                var xmlhttp = new XMLHttpRequest();
+                xmlhttp.open("GET", filePath, false);
+                if (mimeType != null && xmlhttp.overrideMimeType) {
+                    xmlhttp.overrideMimeType(mimeType);
+                }
+                xmlhttp.send();
+                if (xmlhttp.status === 200 && xmlhttp.readyState === 4) {
+                    return xmlhttp.responseText;
+                }
+                throw new Error("Unable to load " + filePath + " (HTTP " + xmlhttp.status + ")");
+            }
+
+            function escapeHtml(text) {
+                return String(text)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;");
+            }
+
+            /** v2 manifest ({ objects, summaryFiles }) or legacy root array. */
+            function normalizeManifest(raw) {
+                if (raw == null) {
+                    throw new Error("_manifest.json is empty");
+                }
+                if (Array.isArray(raw)) {
+                    return {
+                        version: 1,
+                        generated: null,
+                        summaryFiles: null,
+                        objects: raw,
+                    };
+                }
+                if (typeof raw !== "object") {
+                    throw new Error("_manifest.json has unexpected type");
+                }
+                var objects = raw.objects;
+                if (!Array.isArray(objects)) {
+                    if (Array.isArray(raw.Contents)) {
+                        objects = raw.Contents;
+                    } else {
+                        objects = [];
+                    }
+                }
+                return {
+                    version: raw.version != null ? raw.version : 2,
+                    generated: raw.generated != null ? raw.generated : null,
+                    summaryFiles: raw.summaryFiles != null ? raw.summaryFiles : null,
+                    objects: objects,
+                };
+            }
+
+            function s3Key(obj) {
+                return obj.Key != null ? obj.Key : obj.key;
+            }
+
+            function s3Size(obj) {
+                return obj.Size != null ? obj.Size : obj.size;
+            }
+
+            function s3LastModified(obj) {
+                var value = obj.LastModified != null ? obj.LastModified : obj.lastModified;
+                if (value == null) {
+                    return null;
+                }
+                return String(value);
+            }
+
+            function formatSize(size) {
+                if (size == null || isNaN(Number(size))) {
+                    return "—";
+                }
+                size = Number(size);
+                if (size <= 1024) {
+                    return size + "b";
+                }
+                if (size < 1024 * 1024) {
+                    return (Math.floor((size / 1024) * 100) / 100) + "k";
+                }
+                return (Math.floor((size / 1024 / 1024) * 100) / 100) + "M";
+            }
+
+            function formatDate(iso) {
+                return iso == null ? "—" : String(iso);
+            }
+
+            function objectCells(key, size, lastModified) {
+                var safeKey = escapeHtml(key);
+                return (
+                    '<td><a href="' + safeKey + '">' + safeKey + "</a></td>" +
+                    "<td>" + formatSize(size) + "</td>" +
+                    "<td>" + formatDate(lastModified) + "</td>"
+                );
+            }
+
+            function objectRow(key, size, lastModified) {
+                return "<tr>" + objectCells(key, size, lastModified) + "</tr>";
+            }
+
+            function summaryLabel(role) {
+                var labels = {
+                    monolith: "Monolith",
+                    site: "Tier 0 — site",
+                    players: "Tier 1 — players",
+                    ratings: "Tier 2 — ratings",
+                    playerManifest: "Player slice manifest",
+                };
+                return labels[role] || role;
+            }
+
+            function showError(message) {
+                var tbody = document.getElementById("tableBody");
+                tbody.innerHTML =
+                    '<tr><td colspan="3" class="has-text-danger">' + escapeHtml(message) + "</td></tr>";
+            }
+
+            document.addEventListener("DOMContentLoaded", function () {
+                try {
+                    var manifest = normalizeManifest(loadJSON("_manifest.json"));
+                    var objects = manifest.objects;
+                    if (!Array.isArray(objects)) {
+                        throw new Error("_manifest.json objects is not an array");
+                    }
+
+                    if (manifest.generated != null) {
+                        var meta = document.getElementById("manifestMeta");
+                        meta.hidden = false;
+                        meta.textContent =
+                            "Manifest v" + manifest.version + " generated " + manifest.generated;
+                    }
+
+                    if (manifest.summaryFiles != null) {
+                        var summarySection = document.getElementById("summarySection");
+                        var summaryBody = document.getElementById("summaryBody");
+                        summarySection.hidden = false;
+                        var summaryRows = "";
+                        var pattern = manifest.summaryFiles.playerSummaryPattern;
+                        if (pattern) {
+                            summaryRows +=
+                                '<tr><td>Per-player slices</td><td><code>' +
+                                escapeHtml(pattern) +
+                                "</code></td><td>—</td><td>—</td></tr>";
+                        }
+                        var summaryRoles = ["monolith", "site", "players", "ratings", "playerManifest"];
+                        for (var i = 0; i < summaryRoles.length; i++) {
+                            var role = summaryRoles[i];
+                            var entry = manifest.summaryFiles[role];
+                            if (entry == null || entry.key == null) {
+                                continue;
+                            }
+                            summaryRows +=
+                                "<tr><td>" +
+                                escapeHtml(summaryLabel(role)) +
+                                "</td>" +
+                                objectCells(entry.key, entry.size, entry.lastModified) +
+                                "</tr>";
+                        }
+                        summaryBody.innerHTML = summaryRows;
+                    }
+
+                    var data = [];
+                    for (var j = 0; j < objects.length; j++) {
+                        var obj = objects[j];
+                        var key = s3Key(obj);
+                        if (key && key.indexOf(".json", key.length - 5) !== -1 && key.indexOf("_") !== 0) {
+                            data.push(obj);
+                        }
+                    }
+                    data.sort(function (a, b) {
+                        return s3Key(a).localeCompare(s3Key(b));
+                    });
+
+                    var tbodyStr = "";
+                    for (var k = 0; k < data.length; k++) {
+                        var rec = data[k];
+                        tbodyStr += objectRow(s3Key(rec), s3Size(rec), s3LastModified(rec));
+                    }
+                    document.getElementById("tableBody").innerHTML = tbodyStr;
+                } catch (err) {
+                    showError(err && err.message ? err.message : String(err));
+                }
+            });
+        </script>
+    </body>
+</html>
+
