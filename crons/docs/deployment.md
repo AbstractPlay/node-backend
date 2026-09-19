@@ -9,7 +9,7 @@ Same GitHub Actions workflows as the API ([`deploy-dev.js.yml`](../../.github/wo
 | Step | Command |
 |------|---------|
 | API | `bash bin/serverless-deploy.sh <stage> <profile>` |
-| Crons | `bash crons/bin/serverless-deploy.sh <stage>` |
+| Crons | `bash crons/scripts/serverless-deploy.sh <stage>` |
 
 | Branch / trigger | Stage |
 |------------------|-------|
@@ -34,7 +34,7 @@ From repo root (after API deploy):
 ```bash
 npm run build -w abstractplay-backend-crons   # eslint in crons/
 npm run test:crons:layers                     # optional but recommended
-bash crons/bin/serverless-deploy.sh dev       # or prod
+bash crons/scripts/serverless-deploy.sh dev   # or prod
 ```
 
 Or from `crons/`:

@@ -18,7 +18,7 @@ Each deploy runs **two** Serverless stacks (API first, then crons):
 | Stack | Service name | Deploy (CI) |
 |-------|----------------|-------------|
 | API / WebSocket | `abstract-play` | `bash bin/serverless-deploy.sh <stage> <profile>` |
-| Scheduled jobs | `abstract-play-backend-crons` | `bash crons/bin/serverless-deploy.sh <stage>` |
+| Scheduled jobs | `abstract-play-backend-crons` | `bash crons/scripts/serverless-deploy.sh <stage>` |
 
 Crons source lives in [`crons/`](../crons/). See [Crons deployment](/crons/deployment/).
 
