@@ -1,14 +1,14 @@
 # Docs repository integration
 
-Integration with the [AbstractPlay/docs](https://github.com/AbstractPlay/docs) repository:
+[AbstractPlay/docs](https://github.com/AbstractPlay/docs) aggregates crons documentation from this monorepo:
 
-- Submodule: `vendor/node-backend` → `https://github.com/AbstractPlay/node-backend.git` (`develop` / `main`)
-- Prebuild: sync cron docs from `vendor/node-backend/crons/docs` → `/crons/` (see AbstractPlay/docs prebuild config)
-- Site nav: **Crons** section at `/crons/`
-- Deploy workflows fetch `vendor/backend-crons` with renderer, gameslib, node-backend, and recranks
+- Submodule `vendor/node-backend` → `https://github.com/AbstractPlay/node-backend.git` (`develop` / `main`).
+- Prebuild: `vendor/node-backend/crons/docs` → site prefix `/crons/` (`scripts/crons-docs.js` + `syncDocsFromSrc` in `scripts/prebuild.js`).
+- Site nav: **Crons** section at `/crons/` (`crons/docs/nav.json`).
+- No `vendor/backend-crons` submodule (retired with monorepo merge).
 
-Local prebuild falls back to a sibling `../backend-crons` checkout when the submodule does not yet contain `/docs` (e.g. before docs land on `develop`).
+Local prebuild: sibling `../node-backend` with `crons/docs/` when the vendor pin predates the merge.
 
 Published URL prefix: `/crons/` (e.g. `/crons/pipeline/`).
 
-Docs rebuild trigger: unconditional `dep_update_dev` / `dep_update_prod` dispatch on push deploy (gameslib/renderer pattern).
+Docs rebuild trigger: node-backend deploy workflow dispatches `dep_update_dev` / `dep_update_prod` when a push changes `docs/` or `crons/docs/`.

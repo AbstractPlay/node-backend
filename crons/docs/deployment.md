@@ -1,84 +1,66 @@
 # Deployment
 
+Crons deploy from the [node-backend](https://github.com/AbstractPlay/node-backend) monorepo (`crons/` directory). CI and manual deploys always run the **API stack first**, then this stack.
+
 ## Automatic deploys
 
-GitHub Actions deploy via Serverless Framework:
+Same GitHub Actions workflows as the API ([`deploy-dev.js.yml`](../../.github/workflows/deploy-dev.js.yml), [`deploy-prod.js.yml`](../../.github/workflows/deploy-prod.js.yml)):
 
-| Branch / trigger | Workflow | Stage |
-|------------------|----------|-------|
-| `develop` push | [`.github/workflows/deploy-dev.js.yml`](../.github/workflows/deploy-dev.js.yml) | `dev` |
-| `main` push | [`.github/workflows/deploy-prod.js.yml`](../.github/workflows/deploy-prod.js.yml) | `prod` |
-| `repository_dispatch` `dep_update_dev` | deploy-dev | `dev` |
-| `repository_dispatch` `dep_update_prod` | deploy-prod | `prod` |
+| Step | Command |
+|------|---------|
+| API | `bash bin/serverless-deploy.sh <stage> <profile>` |
+| Crons | `bash crons/bin/serverless-deploy.sh <stage>` |
 
-Upstream repos (notably [gameslib](https://github.com/AbstractPlay/gameslib)) dispatch `dep_update_dev` / `dep_update_prod` after package publishes, which redeploys backend-crons with updated dependencies.
+| Branch / trigger | Stage |
+|------------------|-------|
+| `develop` push | `dev` |
+| `main` push | `prod` |
+| `repository_dispatch` `dep_update_*` | matching stage |
 
-## AP dependency pins (`ci-deps.*.json`)
+Gameslib (and similar) should dispatch **`dep_update_*` only to node-backend** — both stacks redeploy from one workflow.
 
-Canonical pins: `gameslib`, `renderer`, and `recranks` in `ci-deps.dev.json` / `ci-deps.prod.json`. CI runs `npm ci` → validate manifests → `ap-install-deps --stage dev|prod` → strict lockfile check → build/test.
+PR CI: [`.github/workflows/test.yml`](../../.github/workflows/test.yml) job **`test-crons`** runs `lint:crons`, `test:crons`, and `test:crons:layers`.
 
-After a merge that touches dependency files, run `npm run sync-deps` on `develop` (or `npm run sync-deps:prod` on `main`) and commit `ci-deps.*.json`, `package.json`, and `package-lock.json` together.
+## AP dependency pins
 
-`ci-deps.prod.json` is protected on `main` via `.gitattributes` (`merge=ours`).
+Pins live in **`crons/ci-deps.dev.json`** and **`crons/ci-deps.prod.json`**, kept in sync with the root lockfile by `node scripts/sync-crons-ap-deps.mjs` (chained from root `npm run sync-deps` / `npm run sync-deps:prod`).
 
-## Dev vs prod CI (legacy note)
-
-**Dev** (`develop`):
-
-- Pins `@abstractplay/gameslib@development` and `@abstractplay/renderer@development`
-- Deletes `package-lock.json` and runs fresh `npm i`
-- Bumps version to `ci-{run_id}` prerelease
-
-**Prod** (`main`):
-
-- Uses `latest` from `package.json`
-- Same lockfile refresh pattern
-
-Both run `npm run build` (ESLint) then `serverless deploy`. The `build:layers` hook runs automatically via `serverless-scriptable-plugin` before packaging.
+Do not run `ap-install-deps` from `crons/` alone in a workspace checkout — use root `npm run sync-deps`.
 
 ## Manual deploy
 
-With AWS profiles configured:
+From repo root (after API deploy):
 
 ```bash
-npm run build:layers
-npm run build
-serverless deploy              # dev (default stage)
-serverless --stage prod deploy # prod
+npm run build -w abstractplay-backend-crons   # eslint in crons/
+npm run test:crons:layers                     # optional but recommended
+bash crons/bin/serverless-deploy.sh dev       # or prod
 ```
 
-Or: `npm run deploy-dev`, `npm run deploy-prod`, `npm run full-dev`, `npm run full-prod`.
+Or from `crons/`:
+
+```bash
+cd crons
+npm run build
+npm run test:layers
+npx serverless deploy --stage dev
+```
+
+AWS profile comes from `params` in [`serverless.yml`](../serverless.yml) (`AbstractPlayDev` / `AbstractPlayProd`).
 
 ## Schedules
 
-EventBridge cron rules are **enabled only on prod** (`custom.scheduleEnabled.prod: true`). Dev stacks contain the Lambdas but scheduled invocations are off — invoke manually if needed.
+EventBridge cron rules are **enabled only on prod** (`custom.scheduleEnabled.prod: true`). Dev stacks contain the Lambdas but scheduled invocations are off.
 
 ## Ops alerts (email)
 
-On **prod** deploy, CloudWatch alarms for **records** and **summarize** Lambda errors are wired to the shared SNS topic from [node-backend](/backend/deployment/) (`abstractplay-ops-alerts-prod`). No separate topic or email subscription is created in this stack — use the node-backend ops-alerts setup (and its one-time SNS confirm) for notifications.
+On **prod**, CloudWatch alarms in this stack publish to the SNS topic exported by the API stack (`abstract-play-prod-OpsAlertsTopicArn`). Confirm the ops-alerts email subscription via [node-backend deployment](/backend/deployment/#ops-alerts-email).
 
-| Alarm | Signal |
-|-------|--------|
-| `abstractplay-crons-records-errors-prod` | Lambda `Errors` ≥ 1 in 1 minute (catches init crashes) |
-| `abstractplay-crons-summarize-errors-prod` | Lambda `Errors` ≥ 1 in 1 minute (catches init crashes) |
+## Documentation site
 
-Dev deploys skip these alarms.
-
-These alarms catch Lambda failures (timeouts, unhandled exceptions, init errors). They do **not** catch `summarize` early exits when `ALL.json` cannot be read — that path logs and returns without throwing. For stale `_summary.json` detection, add a separate S3 freshness check.
-
-## Required GitHub secrets
-
-| Secret | Purpose |
-|--------|---------|
-| `AWS_KEY`, `AWS_SECRET` | Deploy credentials |
-| `PAT_READ_PACKAGES` | npm install from GitHub Packages |
-| `PAT_WORKFLOWS` | Trigger docs rebuild (see below) |
-
-## Documentation deploys
-
-On every successful **push** deploy, the workflow dispatches `dep_update_dev` or `dep_update_prod` to the [docs](https://github.com/AbstractPlay/docs) repository so the site rebuilds with updated crons documentation (gameslib/renderer pattern — unconditional, not limited to `docs/` changes).
+Cron docs live in `crons/docs/` and publish under `/crons/` on the [docs site](https://docs.abstractplay.com). The [AbstractPlay/docs](https://github.com/AbstractPlay/docs) prebuild syncs `vendor/node-backend/crons/docs` (no separate `backend-crons` submodule). Maintainer checklist: [`_docs-repo-integration.md`](https://github.com/AbstractPlay/node-backend/blob/develop/crons/docs/_docs-repo-integration.md).
 
 ## Related
 
-- [Getting started](/crons/getting-started/)
-- [Architecture](/crons/architecture/)
+- [Pipeline](/crons/pipeline/)
+- [Backend deployment](/backend/deployment/)

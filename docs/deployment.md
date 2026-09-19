@@ -13,11 +13,20 @@ GitHub Actions deploy via Serverless Framework:
 
 Downstream repos (e.g. gameslib) can trigger backend redeploys after package publishes.
 
+Each deploy runs **two** Serverless stacks (API first, then crons):
+
+| Stack | Service name | Deploy (CI) |
+|-------|----------------|-------------|
+| API / WebSocket | `abstract-play` | `bash bin/serverless-deploy.sh <stage> <profile>` |
+| Scheduled jobs | `abstract-play-backend-crons` | `bash crons/bin/serverless-deploy.sh <stage>` |
+
+Crons source lives in [`crons/`](../crons/). See [Crons deployment](/crons/deployment/).
+
 ## AP dependency pins (`ci-deps.*.json`)
 
 Canonical pins live in `ci-deps.dev.json` and `ci-deps.prod.json`. CI runs `npm ci` → manifest validation → `ap-install-deps --stage dev|prod` → strict lockfile check → build/test.
 
-After a merge that touches dependency files, run `npm run sync-deps` on `develop` (or `npm run sync-deps:prod` on `main`) and commit `ci-deps.*.json`, `package.json`, and `package-lock.json` together. Do not hand-merge AP version strings in `package.json`.
+After a merge that touches dependency files, run `npm run sync-deps` on `develop` (or `npm run sync-deps:prod` on `main`) and commit root and `crons/` `ci-deps.*.json`, `package.json`, and the root `package-lock.json` together. `npm run sync-deps` runs `ap-install-deps` at the repo root and updates `crons/package.json` / `crons/ci-deps.*.json` from the lockfile. Do not hand-merge AP version strings in `package.json`.
 
 `ci-deps.prod.json` is protected on `main` via `.gitattributes` (`merge=ours`). `ci-deps.dev.json` is protected on `develop` the same way (e.g. when merging `l10n/weblate`). `package.json` and `package-lock.json` are regenerated via `sync-deps`, not merge=ours.
 
@@ -130,7 +139,7 @@ Bot pools are separate per stage — see [Bots](/backend/subsystems/bots/).
 
 ## Documentation deploys
 
-When a push to `develop` or `main` includes changes under `docs/`, the deploy workflow dispatches `dep_update_dev` / `dep_update_prod` to the [docs](https://github.com/AbstractPlay/docs) repository so the site rebuilds with updated submodule content.
+When a push to `develop` or `main` includes changes under `docs/` or `crons/docs/`, the deploy workflow dispatches `dep_update_dev` / `dep_update_prod` to the [docs](https://github.com/AbstractPlay/docs) repository so the site rebuilds (after the docs repo vendors this monorepo and syncs `/crons/` — see `crons/docs/_docs-repo-integration.md`).
 
 ## Related
 

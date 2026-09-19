@@ -30,7 +30,7 @@ jobs:
 
       - name: Reject merge conflict markers in dep files
         run: |
-          if grep -r '^<<<<<<<' package.json package-lock.json ci-deps.dev.json ci-deps.prod.json 2>/dev/null; then
+          if grep -r '^<<<<<<<' package.json package-lock.json ci-deps.dev.json ci-deps.prod.json crons/ci-deps.dev.json crons/ci-deps.prod.json crons/package.json 2>/dev/null; then
             echo "Conflict markers found in dependency files"
             exit 1
           fi
@@ -44,6 +44,9 @@ jobs:
       - name: Install pinned AP dependencies
         run: npx ap-install-deps --stage dev
 
+      - name: Sync crons AP manifests from lockfile
+        run: node scripts/sync-crons-ap-deps.mjs --stage dev
+
       - name: Verify lockfile matches ci-deps
         run: npx ap-check-ci-deps --stage dev --strict
 
@@ -54,3 +57,37 @@ jobs:
 
       - name: Test (Lambda init smoke)
         run: npm test
+
+  test-crons:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Pin npm
+        run: npm install -g npm@11.6.2
+
+      - name: Create .npmrc
+        run: echo "@abstractplay:registry=https://npm.pkg.github.com/" > .npmrc
+      - run: echo "//npm.pkg.github.com/:_authToken=${{secrets.PAT_READ_PACKAGES}}" >> .npmrc
+
+      - name: Install NPM dependencies
+        run: npm ci
+
+      - name: Install pinned AP dependencies
+        run: npx ap-install-deps --stage dev
+
+      - name: Sync crons AP manifests from lockfile
+        run: node scripts/sync-crons-ap-deps.mjs --stage dev
+
+      - name: Lint crons
+        run: npm run lint:crons
+
+      - name: Test crons
+        run: npm run test:crons
+
+      - name: Test crons Lambda layers
+        run: npm run test:crons:layers
