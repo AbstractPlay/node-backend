@@ -157,7 +157,7 @@ jobs:
       run: bash bin/serverless-deploy.sh dev AbstractPlayDev
 
     - name: Deploy crons stack
-      run: bash crons/bin/serverless-deploy.sh dev
+      run: bash crons/scripts/serverless-deploy.sh dev
 
     - name: Trigger docs rebuild
       if: github.event_name == 'push'
