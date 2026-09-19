@@ -20,7 +20,7 @@ Each deploy runs **two** Serverless stacks (API first, then crons):
 | API / WebSocket | `abstract-play` | `bash bin/serverless-deploy.sh <stage> <profile>` |
 | Scheduled jobs | `abstract-play-backend-crons` | `bash crons/scripts/serverless-deploy.sh <stage>` |
 
-Crons source lives in [`crons/`](../crons/). See [Crons deployment](/crons/deployment/).
+Crons source lives in [`crons/`](https://github.com/AbstractPlay/node-backend/tree/develop/crons). See [Crons deployment](/crons/deployment/).
 
 ## AP dependency pins (`ci-deps.*.json`)
 
