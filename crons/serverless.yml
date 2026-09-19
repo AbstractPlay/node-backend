@@ -1,0 +1,704 @@
+service: abstract-play-backend-crons
+org: abstractplay
+
+frameworkVersion: "4"
+
+build:
+  esbuild: false
+
+custom:
+  scheduleEnabled:
+    prod: true
+    dev: false
+  # node-backend exports abstract-play-${stage}-OpsAlertsTopicArn (abstractplay-ops-alerts-${stage})
+  opsAlertsTopicImport: abstract-play-${self:provider.stage}-OpsAlertsTopicArn
+  recbucket:
+    prod: "records.abstractplay.com"
+    dev: "records.abstractplay.com"
+  dumpbucket: "abstractplay-db-dump"
+  opsbucket: "private-ops-153672715141-us-east-1-an"
+  renderBucketName: "thumbnails-prerender-${self:provider.stage}"
+  rendererCdnUrl: "https://renderer.dev.abstractplay.com/APRender.min.js"
+  esbuild:
+    tsconfig: "./tsconfig.json"
+    bundle: true
+    sourcemap: false # Sourcemaps are large and not needed in production
+    format: "esm"
+    outExtension:
+      ".js": ".mjs"
+    platform: "node"
+    target: "node24"
+    external:
+      - "@abstractplay/gameslib"
+      - "@abstractplay/recranks"
+      - "@abstractplay/renderer"
+      - "@sparticuz/chromium"
+      - "puppeteer-core"
+      - "@aws-sdk/*"
+      - "@smithy/*"
+      - "buffer"
+      - "fs"
+      - "stream-json"
+      - "stream-chain"
+      - "web-push"
+    exclude:
+      - "@abstractplay/gameslib"
+      - "@abstractplay/recranks"
+      - "@abstractplay/renderer"
+      - "@sparticuz/chromium"
+      - "puppeteer-core"
+    alias:
+      "@backend/lib": "../lib"
+  scriptable:
+    hooks:
+      before:package:createDeploymentArtifacts: npm run build:layers
+
+params:
+  dev:
+    profile: AbstractPlayDev
+  prod:
+    profile: AbstractPlayProd
+
+plugins:
+  - serverless-esbuild
+  - serverless-scriptable-plugin
+
+provider:
+  name: aws
+  runtime: nodejs24.x
+  versionFunctions: false
+  stage: ${opt:stage, "dev"}
+  profile: ${param:profile}
+  region: us-east-1
+  memorySize: 1024
+  logs:
+    retentionInDays: 30   # set to any valid retention period (1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653)
+  environment:
+    ABSTRACT_PLAY_TABLE: abstract-play-${self:provider.stage}
+    FEEDBACK_TABLE: abstract-play-feedback-${self:provider.stage}
+    FEEDBACK_ATTACHMENTS_BUCKET: ap-feedback-attachments-${self:provider.stage}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:BatchGetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:ExportTableToPointInTime
+            - dynamodb:BatchWriteItem
+            - sqs:SendMessage
+            - sqs:SendMessageBatch
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+            - sqs:GetQueueUrl
+            - ses:SendEmail
+            - ses:SendRawEmail
+            - cloudwatch:PutMetricData
+          Resource: "*"
+        - Effect: "Allow"
+          Action:
+            - "s3:ListBucket"
+          Resource:
+            - "arn:aws:s3:::abstractplay-db-dump"
+            - "arn:aws:s3:::records.abstractplay.com"
+            - "arn:aws:s3:::${self:custom.opsbucket}"
+            - "arn:aws:s3:::${self:custom.renderBucketName}"
+        - Effect: "Allow"
+          Action:
+            - "s3:GetObject"
+          Resource:
+            - "arn:aws:s3:::abstractplay-db-dump/*"
+            - "arn:aws:s3:::records.abstractplay.com/*"
+            - "arn:aws:s3:::${self:custom.renderBucketName}/*"
+            - "arn:aws:s3:::thumbnails.abstractplay.com/*"
+        - Effect: "Allow"
+          Action:
+            - "s3:GetObject"
+          Resource:
+            - "arn:aws:s3:::${self:custom.opsbucket}/*"
+        - Effect: "Allow"
+          Action:
+            - "s3:PutObject"
+            - "s3:DeleteObject"
+          Resource:
+            - "arn:aws:s3:::records.abstractplay.com/*"
+            - "arn:aws:s3:::thumbnails.abstractplay.com/*"
+            - "arn:aws:s3:::abstractplay-db-dump/*"
+            - "arn:aws:s3:::${self:custom.opsbucket}/*"
+            - "arn:aws:s3:::${self:custom.renderBucketName}/*"
+        - Effect: Allow
+          Action:
+            - s3:ListBucket
+          Resource:
+            - arn:aws:s3:::ap-feedback-attachments-${self:provider.stage}
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+          Resource:
+            - arn:aws:s3:::ap-feedback-attachments-${self:provider.stage}/*
+
+functions:
+  dumpdb:
+    handler: src/functions/dumpdb.handler
+    description: Triggers a full export of production DB to S3
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-dumpdb
+          description: Triggers a full export of production DB to S3
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # midnight UTC daily
+          schedule: cron(0 0 * * ? *)
+
+  records:
+    handler: src/functions/records.handler
+    description: Generates static lists of game records
+    timeout: 900
+    memorySize: 10240
+    logRetentionInDays: 30
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-records
+          description: Generates static lists of game records
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 3am UTC daily (uses latest completed dump by LastModified)
+          schedule: cron(0 3 * * ? *)
+
+  records-ttm:
+    handler: src/functions/records-ttm.handler
+    description: Generates static time-to-move results of each game
+    timeout: 900
+    memorySize: 10240
+    logRetentionInDays: 30
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-records-ttm
+          description: Generates static time-to-move results of each game
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 3am UTC daily (uses latest completed dump by LastModified)
+          schedule: cron(0 3 * * ? *)
+
+  records-move-times:
+    handler: src/functions/records-move-times.handler
+    description: Generates list of moves made in past 180 days
+    timeout: 900
+    memorySize: 10240
+    logRetentionInDays: 30
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-records-move-times
+          description: Generates list of moves made in past 180 days
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 3am UTC daily (uses latest completed dump by LastModified)
+          schedule: cron(0 3 * * ? *)
+
+  records-cooccur:
+    handler: src/functions/records-cooccur.handler
+    description: Builds PMI game co-occurrence matrix for recommendations
+    timeout: 900
+    memorySize: 10240
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-records-cooccur
+          description: Builds PMI game co-occurrence matrix for recommendations
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 3am UTC daily (uses latest completed dump by LastModified)
+          schedule: cron(0 3 * * ? *)
+
+  dashboard-cruft-cleanup:
+    handler: src/functions/dashboard-cruft-cleanup.handler
+    description: Prunes stale dashboard index cruft for long-inactive users (S3 dump candidates + live DDB confirm)
+    timeout: 900
+    memorySize: 1024
+    logRetentionInDays: 30
+    environment:
+      DASHBOARD_CRUFT_BATCH_SIZE: 75
+      ABANDONED_ACCOUNT_INACTIVE_MS: 31536000000
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-dashboard-cruft-cleanup
+          description: Daily abandoned-account dashboard cruft cleanup
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 3am UTC daily (after dumpdb export; uses latest completed ION dump for candidates)
+          schedule: cron(0 3 * * ? *)
+
+  records-rec-analytics:
+    handler: src/functions/records-rec-analytics.handler
+    description: Aggregates recommendation impression events to private ops S3
+    timeout: 900
+    memorySize: 1024
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-records-rec-analytics
+          description: Nightly recommendation impression funnel analytics
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 3am UTC daily (live DynamoDB scan of RECOMMENDS# events)
+          schedule: cron(0 3 * * ? *)
+
+  records-manifest:
+    handler: src/functions/records-manifest.handler
+    description: Generates manifest file for records bucket
+    timeout: 900
+    memorySize: 10240
+    logRetentionInDays: 30
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-records-manifest-early
+          description: Manifest after records batch outputs
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 4am UTC daily
+          schedule: cron(0 4 * * ? *)
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-records-manifest-late
+          description: Manifest after summarize and player-summary fan-out
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 7:30am UTC daily (summarize 6:00, fan-out 6:15, workers finish before this)
+          schedule: cron(30 7 * * ? *)
+
+  summarize:
+    handler: src/functions/summarize.handler
+    description: Summarize generated game reports
+    timeout: 900
+    memorySize: 5120
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-summarize
+          description: Summarize generated game reports
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 6am UTC daily (giving plenty of time for the record generation to complete)
+          schedule: cron(0 6 * * ? *)
+
+  thumbnails:
+    handler: src/functions/thumbnails.handler
+    description: Generates random thumbnails daily from latest DB dump
+    timeout: 300
+    memorySize: 5120
+    logRetentionInDays: 7
+    environment:
+      RENDER_BUCKET: ${self:custom.renderBucketName}
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-thumbnails
+          description: Generates random thumbnails daily
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 6am UTC daily (independent of summarize; reads ION dump directly)
+          schedule: cron(0 6 * * ? *)
+
+  thumbnails-verify:
+    handler: src/functions/thumbnails-verify.handler
+    description: Verifies thumbnail SVG Last-Modified is not older than JSON after render pipeline
+    timeout: 300
+    memorySize: 512
+    logRetentionInDays: 7
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-thumbnails-verify
+          description: Checks JSON/SVG freshness one hour after thumbnails cron
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 7am UTC daily (after thumbnails + render pipeline)
+          schedule: cron(0 7 * * ? *)
+
+  s3-to-sqs:
+    handler: src/functions/s3-to-sqs.handler
+    description: Triggered when new objects are written to prerender S3, pushes job info to SQS
+    timeout: 30
+    memorySize: 512
+    logRetentionInDays: 7
+    environment:
+      SQS_URL: !Ref RenderQueue
+      TARGET_QUEUE_ARN: !GetAtt RenderQueue.Arn
+      RENDER_BUCKET: ${self:custom.renderBucketName}
+    events:
+      - s3:
+          bucket: ${self:custom.renderBucketName}
+          existing: true
+          event: s3:ObjectCreated:*
+
+  sqs-to-render:
+    handler: src/functions/sqs-to-render.handler
+    description: Consumes SQS messages, renders SVG, writes to output bucket, deletes prerender original
+    timeout: 300
+    memorySize: 2048
+    logRetentionInDays: 7
+    environment:
+      RENDER_BUCKET: ${self:custom.renderBucketName}
+      RENDERER_CDN_URL: ${self:custom.rendererCdnUrl}
+    layers:
+      - !Ref AbstractplayChromiumLambdaLayer
+      - !Ref AbstractplayGameslibLambdaLayer
+      - !Ref AbstractplayRendererLambdaLayer
+    events:
+      - sqs:
+          arn: !GetAtt RenderQueue.Arn
+
+  player-summary-fanout:
+    handler: src/functions/player-summary-fanout.handler
+    description: Enqueues per-player summary slice writes after summarize
+    timeout: 300
+    memorySize: 1024
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    logRetentionInDays: 30
+    environment:
+      PLAYER_SUMMARY_QUEUE_URL: !Ref PlayerSummaryQueue
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-player-summary-fanout
+          description: Fan out player summary slice writes via SQS
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 6:15am UTC daily (after summarize at 6:00)
+          schedule: cron(15 6 * * ? *)
+
+  rating-change-notifications:
+    handler: src/functions/rating-change-notifications.handler
+    description: Batch ratingChange in-app notifications after summarize Glicko update
+    timeout: 300
+    memorySize: 1024
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-rating-change-notifications
+          description: Diff batch Glicko ratings and enqueue ratingChange notifications
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 6:20am UTC daily (after summarize at 6:00 and player-summary-fanout at 6:15)
+          schedule: cron(20 6 * * ? *)
+
+  player-summary-worker:
+    handler: src/functions/player-summary-worker.handler
+    description: Writes one player summary slice per SQS message
+    timeout: 30
+    memorySize: 256
+    reservedConcurrency: 25
+    logRetentionInDays: 30
+    events:
+      - sqs:
+          arn: !GetAtt PlayerSummaryQueue.Arn
+          batchSize: 5
+          maximumBatchingWindow: 5
+
+  tournament-data:
+    handler: src/functions/tournament-data.handler
+    description: Summarizes tournament data
+    timeout: 900
+    memorySize: 10240
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-tournament-data
+          description: Summarizes tournament data
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 3am UTC daily (uses latest completed dump by LastModified)
+          schedule: cron(0 3 * * ? *)
+
+  starttournaments:
+    handler: src/functions/starttournaments.handler
+    description: Checks if any tournaments are ready to start (and starts or cancels them)
+    timeout: 600
+    logRetentionInDays: 30
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-starttournaments
+          description: Checks if any tournaments are ready to start (and starts or cancels them)
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 10am and 10pm UTC every day
+          schedule: cron(0 10,22 * * ? *)
+
+  standingchallenges:
+    handler: src/functions/standingchallenges.handler
+    description: Manages preset standing challenge requests
+    timeout: 600
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-standingchallenges
+          description: Manages preset standing challenge requests
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # Midnight and noon UTC every day
+          schedule: cron(0 0,12 * * ? *)
+
+  yourturn:
+    handler: src/functions/yourturn.handler
+    description: Sends out "your turn" notification emails
+    logRetentionInDays: 30
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-yourturn
+          description: Send out "your turn" notifications
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(0 14,22 * * ? *)
+
+  feedback-archive:
+    handler: src/functions/feedback-archive.handler
+    description: Archive terminal feedback posts to S3 and HISTORY summaries
+    timeout: 900
+    memorySize: 1024
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-feedback-archive
+          description: Archive terminal feedback nightly
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(0 4 * * ? *)
+
+  feedback-attachment-cleanup:
+    handler: src/functions/feedback-attachment-cleanup.handler
+    description: Delete orphaned feedback attachment objects from S3
+    timeout: 900
+    memorySize: 1024
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-feedback-attachment-cleanup
+          description: Purge archived feedback attachments and stale staging uploads
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(30 4 * * ? *)
+
+  inactive-challenge-cleanup:
+    handler: src/functions/inactive-challenge-cleanup.handler
+    description: Revoke challenges from issuers inactive ≥14 days; pause REALSTANDING presets
+    timeout: 300
+    memorySize: 512
+    logRetentionInDays: 30
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
+    environment:
+      INACTIVE_CHALLENGE_MS: 1209600000
+      VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY, ''}
+      VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY, ''}
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-inactive-challenge-cleanup
+          description: Revoke challenges from inactive issuers nightly
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 3am UTC daily
+          schedule: cron(0 3 * * ? *)
+
+resources:
+  Conditions:
+    OpsAlertsEnabled:
+      Fn::Equals:
+        - ${self:provider.stage}
+        - prod
+
+  Resources:
+    RecordsErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: OpsAlertsEnabled
+      Properties:
+        AlarmName: abstractplay-crons-records-errors-${self:provider.stage}
+        AlarmDescription: records Lambda errors (including init failures)
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref RecordsLambdaFunction
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+        OKActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+
+    SummarizeErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: OpsAlertsEnabled
+      Properties:
+        AlarmName: abstractplay-crons-summarize-errors-${self:provider.stage}
+        AlarmDescription: summarize Lambda errors (including init failures)
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref SummarizeLambdaFunction
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+        OKActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+
+    SqsToRenderErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: OpsAlertsEnabled
+      Properties:
+        AlarmName: abstractplay-crons-sqs-to-render-errors-${self:provider.stage}
+        AlarmDescription: sqs-to-render Lambda errors (thumbnail SVG generation)
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref SqsDashtoDashrenderLambdaFunction
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+        OKActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+
+    ThumbnailsVerifyErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: OpsAlertsEnabled
+      Properties:
+        AlarmName: abstractplay-crons-thumbnails-verify-errors-${self:provider.stage}
+        AlarmDescription: thumbnails-verify Lambda errors (JSON/SVG Last-Modified mismatch)
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref ThumbnailsDashverifyLambdaFunction
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+        OKActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+
+    ThumbnailRenderFailureAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: OpsAlertsEnabled
+      Properties:
+        AlarmName: abstractplay-crons-thumbnail-render-failure-${self:provider.stage}
+        AlarmDescription: Custom RenderFailure metric from sqs-to-render
+        Namespace: AbstractPlay/Thumbnails
+        MetricName: RenderFailure
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+        OKActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+
+    PlayerSummaryDeadLetterQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        MessageRetentionPeriod: 1209600
+
+    PlayerSummaryQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        VisibilityTimeout: 60
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt PlayerSummaryDeadLetterQueue.Arn
+          maxReceiveCount: 3
+
+    RenderDeadLetterQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: abstractplay-render-dlq-${self:provider.stage}
+        MessageRetentionPeriod: 1209600
+
+    RenderQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: abstractplay-render-queue-${self:provider.stage}
+        VisibilityTimeout: 900
+        MessageRetentionPeriod: 86400
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt RenderDeadLetterQueue.Arn
+          maxReceiveCount: 3
+
+    RenderDlqAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: OpsAlertsEnabled
+      Properties:
+        AlarmName: abstractplay-crons-render-dlq-${self:provider.stage}
+        AlarmDescription: Messages in render queue dead-letter queue
+        Namespace: AWS/SQS
+        MetricName: ApproximateNumberOfMessagesVisible
+        Dimensions:
+          - Name: QueueName
+            Value: abstractplay-render-dlq-${self:provider.stage}
+        Statistic: Maximum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+        OKActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+
+  Outputs:
+    RenderQueueArn:
+      Value: !GetAtt RenderQueue.Arn
+      Export:
+        Name: RenderQueueArn-${self:provider.stage}
+    RenderQueueUrl:
+      Value: !Ref RenderQueue
+      Export:
+        Name: RenderQueueUrl-${self:provider.stage}
+
+layers:
+  abstractplayGameslib:
+    path: .serverless/layers/abstractplay-gameslib
+    name: abstractplay-gameslib-${sls:stage}
+    description: "Layer for @abstractplay/gameslib"
+    compatibleRuntimes:
+      - nodejs24.x
+    retain: false
+  abstractplayChromium:
+    path: .serverless/layers/abstractplay-chromium
+    name: abstractplay-chromium-${sls:stage}
+    description: "Layer for puppeteer-core and @sparticuz/chromium"
+    compatibleRuntimes:
+      - nodejs24.x
+    retain: false
+  abstractplayRenderer:
+    path: .serverless/layers/abstractplay-renderer
+    name: abstractplay-renderer-${sls:stage}
+    description: "Layer for @abstractplay/renderer and its runtime dependencies"
+    compatibleRuntimes:
+      - nodejs24.x
+    retain: false

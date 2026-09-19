@@ -1,0 +1,15 @@
+[
+  { "slug": "index", "title": "Overview" },
+  { "slug": "architecture" },
+  { "slug": "getting-started", "title": "Getting started" },
+  { "slug": "deployment" },
+  { "slug": "pipeline", "title": "Records pipeline" },
+  { "slug": "functions", "title": "Functions reference" },
+  { "slug": "s3-outputs", "title": "S3 outputs" },
+  { "slug": "recommendations-cooccur", "title": "Recommendation co-occurrence" },
+  { "slug": "recommendations-analytics", "title": "Recommendation analytics" },
+  { "slug": "summarize" },
+  { "slug": "dashboard-cruft-cleanup", "title": "Dashboard cruft cleanup" },
+  { "slug": "inactive-challenge-cleanup", "title": "Inactive challenge cleanup" },
+  { "slug": "live-crons", "title": "Live crons" }
+]

@@ -1,0 +1,2 @@
+# Keep target-branch lockfile on cross-branch merges; run sync-deps if strict check fails.
+package-lock.json merge=ours

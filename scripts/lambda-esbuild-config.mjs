@@ -19,7 +19,6 @@ export const LAMBDA_HANDLER_ENTRIES = [
   "api/authQuery.ts",
   "api/botQuery.ts",
   "api/testBot.ts",
-  "utils/yourturn.ts",
   "utils/bot-outbound.ts",
   "utils/game-projector.ts",
   "api/sockets/connectHandler.ts",

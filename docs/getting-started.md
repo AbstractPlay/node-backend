@@ -60,7 +60,8 @@ The `testBot` Lambda is enabled on the **dev** stage only. Full protocol documen
 ```
 api/           Lambda entries (query.ts, authQuery.ts, botQuery.ts, routes/, sockets/, testBot.ts)
 lib/           Shared libraries (bots, DDB, WebSocket broadcast)
-utils/         Scheduled jobs (yourturn, bot-outbound consumer)
+utils/         Shared handlers (yourturn, feedback jobs — deployed via crons/); bot-outbound SQS consumer
+crons/         Scheduled Lambda stack (Serverless app abstract-play-backend-crons)
 locales/       i18n strings for emails and push notifications
 serverless.yml Infrastructure and function definitions
 ```

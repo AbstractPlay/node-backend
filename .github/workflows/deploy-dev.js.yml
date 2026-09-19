@@ -64,7 +64,7 @@ jobs:
 
     - name: Reject merge conflict markers in dep files
       run: |
-        if grep -r '^<<<<<<<' package.json package-lock.json ci-deps.dev.json ci-deps.prod.json 2>/dev/null; then
+        if grep -r '^<<<<<<<' package.json package-lock.json ci-deps.dev.json ci-deps.prod.json crons/package.json 2>/dev/null; then
           echo "Conflict markers found in dependency files"
           exit 1
         fi
@@ -79,8 +79,9 @@ jobs:
       env:
         AP_GAMESLIB_VERSION: ${{ github.event.client_payload.gameslib_version }}
         AP_RENDERER_VERSION: ${{ github.event.client_payload.renderer_version }}
+        AP_RECRANKS_VERSION: ${{ github.event.client_payload.recranks_version }}
         AP_SOURCE: ${{ github.event.client_payload.source_run_id && format('gameslib-ci-{0}', github.event.client_payload.source_run_id) || '' }}
-      run: npx ap-install-deps --stage dev
+      run: npm run sync-deps
 
     - name: Verify lockfile matches ci-deps
       run: npx ap-check-ci-deps --stage dev --strict
@@ -94,6 +95,7 @@ jobs:
           ci-deps.dev.json
           package-lock.json
           package.json
+          crons/package.json
 
 # --- MACHINE TRANSLATION PIPELINE START ---
     - name: Prune stale managed locale keys
@@ -131,6 +133,12 @@ jobs:
     - name: Test (Lambda init smoke)
       run: npm test
 
+    - name: Test crons
+      run: npm run test:crons
+
+    - name: Test crons Lambda layers
+      run: npm run test:crons:layers
+
     - name: Configure AWS credentials
       uses: Fooji/create-aws-profile-action@v1
       with:
@@ -144,8 +152,11 @@ jobs:
     #     aws-secret-access-key: ${{ secrets.AWS_SECRET }}
     #     aws-region: us-east-1
 
-    - name: Deploy
+    - name: Deploy API stack
       run: bash bin/serverless-deploy.sh dev AbstractPlayDev
+
+    - name: Deploy crons stack
+      run: bash crons/scripts/serverless-deploy.sh dev
 
     - name: Trigger docs rebuild
       if: github.event_name == 'push'
@@ -162,7 +173,7 @@ jobs:
           git fetch --depth=1 origin "$BEFORE"
           CHANGED="$(git diff --name-only "$BEFORE" "$SHA")"
         fi
-        if echo "$CHANGED" | grep -q '^docs/'; then
+        if echo "$CHANGED" | grep -qE '^(docs/|crons/docs/)'; then
           curl -L \
             -X POST \
             -H "Accept: application/vnd.github+json" \

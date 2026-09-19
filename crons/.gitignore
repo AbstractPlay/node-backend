@@ -1,0 +1,14 @@
+# package directories
+node_modules
+jspm_packages
+
+# Serverless directories
+.serverless
+/api/*.js
+/utils/*.js
+.vscode/
+bin/*
+dist/
+
+# Do not vendor apback copies — use repo-root locales/ via @backend/lib/apbackI18n
+src/locales/**/apback.json
