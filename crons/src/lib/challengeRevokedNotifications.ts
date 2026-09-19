@@ -1,7 +1,7 @@
 import { GetCommand, PutCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { SendEmailCommand, SESClient } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
-import { localizedGameName } from './gameDisplayName.js';
+import { localizedGameName } from '@backend/lib/gameDisplayName.js';
 import { isBotId, isValidUserId } from './inactiveChallengeDiscovery.js';
 import {
   wantsInAppNotification,

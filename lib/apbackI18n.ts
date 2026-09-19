@@ -1,5 +1,3 @@
-import i18n from 'i18next';
-import { applyGameslibBundlesTo, GAMESLIB_APGAMES_LANGS } from './gameslibLocales.js';
 import en from '../locales/en/apback.json';
 import fr from '../locales/fr/apback.json';
 import de from '../locales/de/apback.json';
@@ -7,6 +5,8 @@ import it from '../locales/it/apback.json';
 import esUS from '../locales/es-US/apback.json';
 import pt from '../locales/pt/apback.json';
 import ta from '../locales/ta/apback.json';
+import { applyGameslibBundlesTo, GAMESLIB_APGAMES_LANGS } from './gameslibLocales.js';
+import i18n from './i18nInstance.js';
 
 const LOCALE_RESOURCES = { en, fr, de, it, 'es-US': esUS, pt, ta } as const;
 const REGISTERED_LANGUAGES = [
@@ -35,7 +35,7 @@ export async function changeLanguageForPlayer(player: {
   }
 }
 
-/** Init i18next with vendored apback + gameslib locale bundles (email/push copy). */
+/** Init i18next with root locales apback.json + gameslib bundles (email/push copy). */
 export async function initApbackI18n(language = 'en'): Promise<void> {
   await i18n.init({
     lng: language,
@@ -53,6 +53,3 @@ export async function initApbackI18n(language = 'en'): Promise<void> {
   });
   applyGameslibBundlesTo(i18n);
 }
-
-/** @deprecated Use initApbackI18n */
-export const initi18n = initApbackI18n;

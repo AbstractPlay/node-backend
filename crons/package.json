@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "clean": "rimraf dist .esbuild .serverless",
-    "pretest": "node scripts/ensure-apback-locales.mjs",
-    "prebuild:layers": "node scripts/ensure-apback-locales.mjs",
+    "pretest": "node scripts/assert-no-vendored-apback-locales.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "build-ts": "tsc",
@@ -15,8 +14,6 @@
     "build": "npm run lint",
     "build:layers": "node scripts/build-layers.mjs",
     "test:layers": "npm run build:layers && node scripts/smoke-layer-modules.mjs",
-    "sync-apback-locales": "node scripts/sync-apback-locales.mjs",
-    "check-apback-locales": "node scripts/check-apback-locales.mjs",
     "preview-inactive-challenges": "tsx scripts/preview-inactive-challenge-cleanup.ts",
     "run-records-pipeline": "node scripts/run-records-pipeline.mjs",
     "enable-records-cdn-compress": "node scripts/enable-records-cdn-compress.mjs",

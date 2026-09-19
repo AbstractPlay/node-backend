@@ -9,7 +9,7 @@ import {
   isBotId,
   issuerStillInactive,
 } from '../lib/inactiveChallengeDiscovery.js';
-import { initApbackI18n } from '../lib/apbackI18n.js';
+import { initApbackI18n } from '@backend/lib/apbackI18n.js';
 import {
   notifyChallengeRevokedAcceptors,
   toRevokeChallengeRecord,

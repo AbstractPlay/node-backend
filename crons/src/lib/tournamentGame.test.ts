@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { gameinfo } from '@abstractplay/gameslib';
-import { tournamentPlaySupported } from './tournamentGame.js';
+import { tournamentPlaySupported } from '@backend/lib/tournamentGame.js';
 
 describe('tournamentPlaySupported', () => {
   it('is false for unknown games', () => {

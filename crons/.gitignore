@@ -10,6 +10,5 @@ jspm_packages
 bin/*
 dist/
 
-# Generated from node-backend (see src/locales/README.md)
-src/locales/**
-!src/locales/README.md
+# Do not vendor apback copies — use repo-root locales/ via @backend/lib/apbackI18n
+src/locales/**/apback.json
