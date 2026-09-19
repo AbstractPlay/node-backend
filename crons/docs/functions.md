@@ -1,6 +1,6 @@
 # Functions reference
 
-All handlers live in [`src/functions/`](https://github.com/AbstractPlay/backend-crons/tree/develop/src/functions). Schedules and resource limits are in [`serverless.yml`](../serverless.yml).
+Handlers live in [`src/functions/`](../src/functions/) (thin entries may re-export logic from monorepo root `utils/` and `lib/`). Schedules and resource limits are in [`serverless.yml`](../serverless.yml).
 
 Batch dump consumers run **daily at 03:00 UTC** and read the latest completed ION export (see [Records pipeline](/crons/pipeline/)).
 
@@ -169,6 +169,42 @@ Batch dump consumers run **daily at 03:00 UTC** and read the latest completed IO
 | **Input** | `REALSTANDING` preset records |
 | **Output** | Issues standing challenge requests in DynamoDB |
 | **Notes** | See [Live crons](/crons/live-crons/) |
+
+### `yourturn`
+
+| | |
+|---|---|
+| **Handler** | `src/functions/yourturn.ts` → [`utils/yourturn.ts`](../../../utils/yourturn.ts) |
+| **Schedule** | Daily 14:00 and 22:00 UTC |
+| **Timeout / memory** | 1024 MB (default) |
+| **Layer** | gameslib |
+| **Input** | Live `GAME` / user records |
+| **Output** | SES batched "your turn" emails |
+| **Notes** | See [Notifications](/backend/subsystems/notifications/) |
+
+### `feedback-archive`
+
+| | |
+|---|---|
+| **Handler** | `src/functions/feedback-archive.ts` → [`utils/feedback-archive.ts`](../../../utils/feedback-archive.ts) |
+| **Schedule** | Daily 04:00 UTC |
+| **Timeout / memory** | 900 s / 1024 MB |
+| **Layer** | No |
+| **Input** | `abstract-play-feedback-{stage}` terminal posts |
+| **Output** | S3 archive JSON, `HISTORY#` rows, TTL on live items |
+| **Notes** | Local: `npm run feedback-archive` at repo root |
+
+### `feedback-attachment-cleanup`
+
+| | |
+|---|---|
+| **Handler** | `src/functions/feedback-attachment-cleanup.ts` → [`utils/feedback-attachment-cleanup.ts`](../../../utils/feedback-attachment-cleanup.ts) |
+| **Schedule** | Daily 04:30 UTC |
+| **Timeout / memory** | 900 s / 1024 MB |
+| **Layer** | No |
+| **Input** | Feedback table + `ap-feedback-attachments-{stage}` |
+| **Output** | Deletes purged post attachments and stale `staging/` uploads |
+| **Notes** | Local: `npm run feedback-attachment-cleanup` at repo root |
 
 ### `dashboard-cruft-cleanup`
 

@@ -26,9 +26,9 @@ When a push fails with HTTP 404 or 410 (stale endpoint), only that subscription 
 
 ## Your turn batching
 
-The `yourturn` Lambda runs on a schedule (14:00 and 22:00 UTC, prod only) via EventBridge. It scans active games and sends batched "your turn" emails — not on every move.
+The `yourturn` Lambda runs on a schedule (14:00 and 22:00 UTC, prod only) via EventBridge in the **crons** stack. It scans active games and sends batched "your turn" emails — not on every move.
 
-Implementation: [`utils/yourturn.ts`](../../utils/yourturn.ts).
+Implementation: [`utils/yourturn.ts`](../../utils/yourturn.ts) (deployed as `crons/src/functions/yourturn`).
 
 ## Push topics
 
@@ -47,10 +47,10 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `challenges` | `challengeIssued`, `challengeDeclined`, `challengeRevoked` |
 | `gameStart` | `gameStart` |
 | `gameEnd` | `gameEnd` |
-| `ratingChange` | `ratingChange` (backend-crons daily batch) |
+| `ratingChange` | `ratingChange` (crons daily batch) |
 | `eventInvitation` | `eventInvitation` |
 | `completedGameChat` | `completedGameChat` |
-| `tournamentStart` | `tournamentStart` (backend-crons `starttournaments`) |
+| `tournamentStart` | `tournamentStart` (crons `starttournaments`) |
 | `tournamentEnd` | `tournamentEnd` (node-backend `endTournament`) |
 
 | `body.type` | When created | Front display |
@@ -60,13 +60,13 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `gameStart` | Game begins | Game name links to `/move/{metaGame}/0/{gameId}` |
 | `gameEnd` | Game ends | **View** links to `/move/{metaGame}/0/{gameId}`; includes `opponentId` / `opponentName` when the game has a human opponent; `scores` (`(string \| number)[]`) when the game uses the `scores` flag |
 | `completedGameChat` | Post-game comment on completed game (`save_exploration` with `updateLastChat`) | **View** links to `/move/{metaGame}/1/{gameId}`; one active notification per game until dismissed; legacy backfill rows use generic message when `body.backfill` |
-| `ratingChange` | Daily batch Glicko diff after summarize (backend-crons) | Game name links to `/ratings/{metaGame}`; variant labels in message when applicable |
+| `ratingChange` | Daily batch Glicko diff after summarize (crons stack) | Game name links to `/ratings/{metaGame}`; variant labels in message when applicable |
 | `tournamentStart` | Tournament series starts (`starttournaments` cron) | Tournament name links to `/tournament/{tournamentId}`; variant labels when applicable; dismiss only |
 | `tournamentEnd` | All tournament divisions complete (`endTournament`) | Tournament name links to `/tournament/{tournamentId}`; includes division winner name when available; dismiss only |
 
-### Batch `ratingChange` issuer (backend-crons)
+### Batch `ratingChange` issuer (crons stack)
 
-Realtime Elo at game end was removed in Phase 4. `ratingChange` rows are now written by the `rating-change-notifications` Lambda in **backend-crons**, scheduled at **6:20 UTC** daily (after summarize at 6:00).
+Realtime Elo at game end was removed in Phase 4. `ratingChange` rows are now written by the `rating-change-notifications` Lambda in the **crons** stack, scheduled at **6:20 UTC** daily (after summarize at 6:00).
 
 **Source data:** `_summary-ratings.json` on `records.abstractplay.com` — diffs conservative Glicko (`ratingLow`) per variant pool (`batchRatingGameLabel` keys in `highest[]`).
 
@@ -86,7 +86,7 @@ Realtime Elo at game end was removed in Phase 4. `ratingChange` rows are now wri
 
 **DynamoDB item** (`NOTIFICATION#userId`): `body.type = ratingChange`, `metaGame`, `variants`, `gameId` empty (batch has no causal game), rounded `oldRating` / `newRating` on `ratingLow`, `oldRd` / `newRd`, `oldProvisional` / `newProvisional`, and `delta`.
 
-Implementation: backend-crons `rating-change-notifications` Lambda (`src/functions/rating-change-notifications.ts`) and `src/lib/ratingChangeNotifications.ts`.
+Implementation: crons `rating-change-notifications` Lambda ([`crons/src/functions/rating-change-notifications.ts`](../../crons/src/functions/rating-change-notifications.ts)) and [`crons/src/lib/ratingChangeNotifications.ts`](../../crons/src/lib/ratingChangeNotifications.ts).
 
 | `eventInvitation` | Organizer saves invite list on moderated event | `{organizerName} has invited you to the event` with event name linking to `/event/{eventId}` |
 
@@ -106,4 +106,5 @@ One-time prod backfill (Aug 2026) created `completedGameChat` notifications for 
 
 - [Getting started](/backend/getting-started/) — VAPID env vars
 - [Deployment](/backend/deployment/)
-- [Architecture](/backend/architecture/) — `yourturn` Lambda
+- [Live crons](/crons/live-crons/) — `yourturn` schedule
+- [Architecture](/backend/architecture/)

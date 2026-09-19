@@ -2,7 +2,7 @@
 
 ## Overview
 
-[backend-crons](https://github.com/AbstractPlay/backend-crons) is a Serverless Framework v3 service (`abstract-play-backend-crons`) deployed to AWS `us-east-1`. All functions are Node.js 20 Lambdas triggered by EventBridge cron rules (prod only).
+The **crons** workspace in [node-backend](https://github.com/AbstractPlay/node-backend) is a Serverless Framework service (`abstract-play-backend-crons`) deployed to AWS `us-east-1`. Functions are Node.js 24 Lambdas; EventBridge cron rules run on **prod** only (`scheduleEnabled.dev: false`).
 
 There is no API Gateway — these are batch and maintenance jobs only.
 
@@ -25,12 +25,15 @@ Defined in [`serverless.yml`](../serverless.yml). Schedules are **daily** unless
 | `player-summary-worker` | SQS-triggered | Writes one player summary slice per message |
 | `starttournaments` | Daily 10:00 and 22:00 | Start/cancel tournaments, create games |
 | `standingchallenges` | Daily 00:00 and 12:00 | Process preset standing challenges |
+| `yourturn` | Daily 14:00 and 22:00 | Batch "your turn" emails |
+| `feedback-archive` | Daily 04:00 | Archive terminal feedback to S3 + HISTORY rows |
+| `feedback-attachment-cleanup` | Daily 04:30 | Purge feedback attachment objects from S3 |
 
 See [Records pipeline](/crons/pipeline/) and [Functions reference](/crons/functions/) for details.
 
 ## Gameslib Lambda layer
 
-Functions that call `@abstractplay/gameslib` attach the `abstractplayGameslib` layer, built by [`scripts/build-layers.mjs`](https://github.com/AbstractPlay/backend-crons/blob/develop/scripts/build-layers.mjs) before packaging:
+Functions that call `@abstractplay/gameslib` attach the `abstractplayGameslib` layer, built by [`scripts/build-layers.mjs`](../../scripts/build-layers.mjs) before packaging:
 
 - Bundles `@abstractplay/gameslib` and `@abstractplay/recranks` into `.serverless/layers/abstractplay-gameslib`
 - Strips `@abstractplay/renderer` (transitive dep, not needed at runtime)

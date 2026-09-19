@@ -84,7 +84,7 @@ Requires `USER.admin === true`. Records live in the main `abstract-play` table (
 
 Public read: open `announcements_list` / `announcement_get` (published only).
 
-Nightly jobs: `utils/feedback-archive` Lambda (`npm run feedback-archive`) snapshots terminal posts to S3, writes `HISTORY#` rows, sets `archivedAt` and `expiresAt` TTL on live rows. `utils/feedback-attachment-cleanup` Lambda (`npm run feedback-attachment-cleanup`) deletes `{postId}/` screenshot objects after purge and sweeps stale `staging/` uploads; keeps `archive/{postId}.json` snapshots.
+Nightly jobs (crons stack): `feedback-archive` and `feedback-attachment-cleanup` Lambdas — same logic as `npm run feedback-archive` / `npm run feedback-attachment-cleanup` at repo root ([`utils/feedback-archive.ts`](../../utils/feedback-archive.ts), [`utils/feedback-attachment-cleanup.ts`](../../utils/feedback-attachment-cleanup.ts)). Archive snapshots terminal posts to S3, writes `HISTORY#` rows, sets `archivedAt` and `expiresAt` TTL on live rows; cleanup deletes `{postId}/` screenshot objects after purge and sweeps stale `staging/` uploads; keeps `archive/{postId}.json` snapshots.
 
 ## Push, tags, customizations
 
