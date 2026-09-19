@@ -11,7 +11,10 @@
             "revoked": "Defio nuligita",
             "yourturn": "Via vico",
             "tournament": "Turniro komenciĝis",
-            "tournamentOver": "Turniro finiĝis"
+            "tournamentOver": "Turniro finiĝis",
+            "slotOpened": "Sidloko en defio malfermiĝis",
+            "participantLeft": "Ludanto forlasis defion",
+            "announcement": "Reteja anonco"
         }
     },
     "ChallengeBody": "{{challenger}} defiis vin al ludo de {{- metaGame}}. Vizitu https://play.abstractplay.com/ por pliaj detaloj.",
@@ -51,5 +54,11 @@
     "TournamentEndSubject": "Via turniro pri {{- metaGame}} finiĝis",
     "TournamentRemoveBody": "Vi estis forigita el la turniro {{- metaGame}}, al kiu vi aliĝis, ĉar ne klaras, ĉu vi plu interesiĝas. Se vi tamen volas partopreni, aliĝu denove ĉe https://play.abstractplay.com/tournaments.",
     "TournamentRemoveBodyVariants": "Vi estis forigita el la turniro {{- metaGame}} kun variaĵoj {{variants}}, al kiu vi aliĝis, ĉar ne klaras, ĉu vi plu interesiĝas. Se vi tamen volas partopreni, aliĝu denove ĉe https://play.abstractplay.com/tournaments.",
-    "TournamentRemoveSubject": "Vi estis forigita el turniro"
+    "TournamentRemoveSubject": "Vi estis forigita el turniro",
+    "ChallengeSlotOpenedChallengerBody": "{{quitter}} forlasis vian defion pri {{- metaGame}}. {{count}} sidloko(j) nun estas malfermita(j) al iu ajn.",
+    "ChallengeSlotOpenedSubject": "AbstractPlay: sidloko en defio malfermiĝis",
+    "ChallengeParticipantLeftBody": "{{quitter}} forlasis la defion pri {{- metaGame}}. Ĝi ankoraŭ estas malfermita al aliaj ludantoj.",
+    "DirectChallengeOptOutNote": "Ĉi tiu uzanto elektis ne akcepti rektajn defiojn.",
+    "AnnouncementSubject": "AbstractPlay: reteja anonco",
+    "AnnouncementBody": "Nova anonco estis publikigita: {{- title}}\n\nLegu ĝin en la retejo: {{- link}}"
 }
