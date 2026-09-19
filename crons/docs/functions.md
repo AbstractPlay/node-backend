@@ -1,6 +1,6 @@
 # Functions reference
 
-Handlers live in [`src/functions/`](../src/functions/) (thin entries may re-export logic from monorepo root `utils/` and `lib/`). Schedules and resource limits are in [`serverless.yml`](../serverless.yml).
+Handlers live in [`crons/src/functions/`](https://github.com/AbstractPlay/node-backend/tree/develop/crons/src/functions) (thin entries may re-export logic from monorepo root `utils/` and `lib/`). Schedules and resource limits are in [`serverless.yml`](https://github.com/AbstractPlay/node-backend/blob/develop/crons/serverless.yml).
 
 Batch dump consumers run **daily at 03:00 UTC** and read the latest completed ION export (see [Records pipeline](/crons/pipeline/)).
 
