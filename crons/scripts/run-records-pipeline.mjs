@@ -1,8 +1,12 @@
-import { execSync } from "node:child_process";
+import { acquirePipelineLock, releasePipelineLock } from "./pipeline-lock.mjs";
+import { invokeLambdaSync, waitForLambdaIdle, cronsLambdaFunctionName } from "./lambda-invoke.mjs";
 
 /**
  * Invoke batch record pipeline Lambdas in dependency order (prod/dev).
  * Does not run dumpdb (async export) or SQS-driven workers.
+ *
+ * Uses AWS CLI invoke with a long read timeout so the client does not retry
+ * while Lambda is still running (which previously caused overlapping prod runs).
  *
  * Usage: npm run run-records-pipeline -- --stage prod
  */
@@ -29,12 +33,18 @@ const functions = [
     "records-manifest",
 ];
 
-for (const name of functions) {
-    console.log(`\n>>> serverless invoke -f ${name} --stage ${stage}`);
-    execSync(`npx serverless invoke -f ${name} --stage ${stage}`, {
-        stdio: "inherit",
-        env: process.env,
-    });
-}
+let lock;
+try {
+    lock = acquirePipelineLock(stage);
+    console.log(`Pipeline lock acquired (${lock.path})`);
 
-console.log("\nPipeline invoke sequence finished.");
+    for (const name of functions) {
+        const functionName = cronsLambdaFunctionName(stage, name);
+        await waitForLambdaIdle(functionName);
+        invokeLambdaSync(stage, name);
+    }
+
+    console.log("\nPipeline invoke sequence finished.");
+} finally {
+    releasePipelineLock(lock);
+}
