@@ -11,6 +11,7 @@ import i18next from "i18next";
 import type { i18n } from "i18next";
 import { enApgames, enApresults } from "../utils/gameslibEnLocaleBundles.js";
 import { findTournamentForGame } from "../utils/recordTournament.js";
+import { tournamentRecordRound } from "../utils/tournamentRecordRound.js";
 import { putRecordsJson } from "../utils/recordsJson.js";
 import { skipCompletedGameWithoutState } from "../utils/completedGameRec.js";
 import { buildGameRecordForDumpRow } from "../utils/archiveGameRecord.js";
@@ -164,7 +165,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             const trec = findTournamentForGame(tournaments, gdata.tournament, gdata.metaGame);
             if (trec !== undefined) {
                 event = `Automated Tournament #${trec.number} (${trec.sk})`
-                round = "1";
+                round = tournamentRecordRound(gdata, trec);
             } else {
                 console.log(`Could not find a matching tournament record for game record "${gdata.sk}".`);
             }
