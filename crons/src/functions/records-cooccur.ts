@@ -4,7 +4,7 @@ import { S3Client, GetObjectCommand, ListObjectsV2Command, type _Object } from "
 import { Handler } from "aws-lambda";
 import { gunzipSync, strFromU8 } from "fflate";
 import { load as loadIon } from "ion-js";
-import { type BasicRec, type GameRec } from "types/index.js";
+import { shouldPublishStats } from "@abstractplay/gameslib";
 import {
     buildCooccurArtifact,
     DEFAULT_MIN_COOCCURRENCE,
@@ -117,6 +117,9 @@ export const handler: Handler = async () => {
                                 );
                                 continue;
                             }
+                            if (!shouldPublishStats(metaGame)) {
+                                continue;
+                            }
                             for (const player of gdata.players) {
                                 pushToSetMap(playedByPlayer, player.id, metaGame);
                             }
@@ -125,6 +128,9 @@ export const handler: Handler = async () => {
                             if (Array.isArray(user.stars)) {
                                 for (const meta of user.stars) {
                                     if (typeof meta === "string" && meta.length > 0) {
+                                        if (!shouldPublishStats(meta)) {
+                                            continue;
+                                        }
                                         pushToSetMap(starredByPlayer, user.sk, meta);
                                     }
                                 }

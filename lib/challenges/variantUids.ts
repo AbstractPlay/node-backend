@@ -1,7 +1,15 @@
 import { gameinfo, validateVariantSelection } from '@abstractplay/gameslib';
 import { headers } from '../api/http.js';
+import { isMetaGamePlayableOnStage } from '../metaGameRetraction.js';
 
 export function validateChallengeVariantUids(metaGame: string, variants: string[] | undefined) {
+  if (!isMetaGamePlayableOnStage(metaGame)) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ message: `Meta game unavailable: ${metaGame}` }),
+      headers,
+    };
+  }
   const info = gameinfo.get(metaGame);
   if (!info) {
     return {

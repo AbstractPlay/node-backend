@@ -2,7 +2,7 @@
 
 import { S3Client, GetObjectCommand, ListObjectsV2Command, type _Object } from "@aws-sdk/client-s3";
 import { Handler } from "aws-lambda";
-import { GameFactory, addResource } from '@abstractplay/gameslib';
+import { addResource } from '@abstractplay/gameslib';
 import { type APGameRecord } from '@abstractplay/recranks';
 import { gunzipSync, strFromU8 } from "fflate";
 import { load as loadIon } from "ion-js";
@@ -10,13 +10,11 @@ import { type BasicRec, type GameRec, type Tournament, type OrgEvent, type OrgEv
 import i18next from "i18next";
 import type { i18n } from "i18next";
 import { enApgames, enApresults } from "../utils/gameslibEnLocaleBundles.js";
-import { decompressGameState } from "../utils/gameState.js";
-import { encodeRecordGameId } from "../utils/recordGameId.js";
-import { resolveGameVariantUids } from "../utils/resolveGameVariants.js";
 import { findTournamentForGame } from "../utils/recordTournament.js";
-import { gameRecordIsUnrated } from "../utils/recordUnrated.js";
 import { putRecordsJson } from "../utils/recordsJson.js";
 import { skipCompletedGameWithoutState } from "../utils/completedGameRec.js";
+import { buildGameRecordForDumpRow } from "../utils/archiveGameRecord.js";
+import { pruneOrphanMetaShards } from "../utils/pruneMetaShards.js";
 
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
@@ -158,11 +156,8 @@ export const handler: Handler = async (event: any, context?: any) => {
     const metaRecs = new Map<string, APGameRecord[]>();
     const userRecs = new Map<string, APGameRecord[]>();
     const eventRecs = new Map<string, APGameRecord[]>();
+    let recordsOmitted = 0;
     for (const gdata of justGames) {
-        const g = GameFactory(gdata.metaGame, decompressGameState(gdata.state));
-        if (g === undefined) {
-            throw new Error(`Unable to instantiate ${gdata.metaGame} game ${gdata.id} (sk=${gdata.sk}):\n${JSON.stringify(gdata.state)}`);
-        }
         let event: string|null = null;
         let round: string|null = null;
         if (gdata.tournament !== undefined) {
@@ -183,31 +178,14 @@ export const handler: Handler = async (event: any, context?: any) => {
                 console.log(`Could not find a matching event records for game record "${gdata.sk}".`)
             }
         }
-        const variantUids = resolveGameVariantUids(g.variants, gdata.variants, {
-            metaGame: gdata.metaGame,
-            gameId: gdata.id,
-        });
-        if (variantUids.length > 0 && (g.variants?.length ?? 0) === 0) {
-            g.variants = variantUids;
-        }
-        const unrated = gameRecordIsUnrated(gdata.metaGame, variantUids, gdata.rated);
-        const rec = g.genRecord({
-            uid: encodeRecordGameId(gdata.id, gdata.metaGame, variantUids),
-            players: gdata.players.map(p => ({
-                uid: p.id,
-                name: p.name,
-                isai: registeredBots.has(p.id) ? true : undefined,
-            })),
-            event: event !== null ? event : undefined,
-            round: round !== null ? round : undefined,
-            unrated: unrated ? true : undefined,
+        const rec = buildGameRecordForDumpRow(gdata, {
+            registeredBots,
+            event,
+            round,
         });
         if (rec === undefined) {
-            throw new Error(`Unable to create a game report for ${gdata.metaGame} game ${gdata.id}:\n${JSON.stringify(gdata.state)}`);
-        }
-        // check for pie
-        if ( (gdata.pieInvoked !== undefined) && (gdata.pieInvoked) ) {
-            rec.header.pied = true;
+            recordsOmitted++;
+            continue;
         }
         // Solo runs archive independently — multiple ALL.json rows per (userid, challenge-seed) are expected.
         allRecs.push(rec);
@@ -227,7 +205,7 @@ export const handler: Handler = async (event: any, context?: any) => {
             }
         }
     }
-    console.log(`allRecs: ${allRecs.length}, metaRecs: ${[...metaRecs.keys()].length}, userRecs: ${[...userRecs.keys()].length}, eventRecs: ${[...eventRecs.keys()].length}`);
+    console.log(`allRecs: ${allRecs.length}, metaRecs: ${[...metaRecs.keys()].length}, userRecs: ${[...userRecs.keys()].length}, eventRecs: ${[...eventRecs.keys()].length}, recordsOmitted: ${recordsOmitted}`);
 
     // // only print the last 10 LoA records to console then quit
     // const loa = metaRecs.get("loa")!.slice(-10);
@@ -250,6 +228,9 @@ export const handler: Handler = async (event: any, context?: any) => {
         await putRecordsJson(s3, `event/${eventid}.json`, recs);
     }
     console.log("Event recs done");
+
+    const pruned = await pruneOrphanMetaShards(s3, REC_BUCKET, new Set(metaRecs.keys()));
+    console.log(`Pruned ${pruned.length} orphan meta shard(s)`);
 
     console.log("ALL DONE");
   })

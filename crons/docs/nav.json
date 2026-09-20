@@ -6,6 +6,7 @@
   { "slug": "pipeline", "title": "Records pipeline" },
   { "slug": "functions", "title": "Functions reference" },
   { "slug": "s3-outputs", "title": "S3 outputs" },
+  { "slug": "retract-meta-game", "title": "Retract a meta game" },
   { "slug": "recommendations-cooccur", "title": "Recommendation co-occurrence" },
   { "slug": "recommendations-analytics", "title": "Recommendation analytics" },
   { "slug": "summarize" },
