@@ -168,6 +168,12 @@ type Comment = {
   userId: string;
   moveNumber: number;
   timeStamp: number;
+  system?: boolean;
+}
+
+/** Player-authored in-game chat only (not pie / system log lines). */
+function isUserChatComment(userId: string): boolean {
+  return userId.trim().length > 0;
 }
 
 type Exploration = {
@@ -1445,11 +1451,22 @@ export async function submitComment(userid: string, pars: { id: string; metaGame
   else
     comments = commentsData.comments;
 
-  // Check if there were any interesting comments before adding the new one
-  const hadInterestingCommentBefore = comments.some(c => isInterestingComment(c.comment));
+  const userComment = isUserChatComment(userid);
 
+  // Check if there were any interesting player comments before adding the new one
+  const hadInterestingCommentBefore = comments.some(
+    (c) => isUserChatComment(c.userId) && isInterestingComment(c.comment),
+  );
+
+  let commentSaved = false;
   if (comments.reduce((s: number, a: Comment) => s + 110 + Buffer.byteLength(a.comment, 'utf8'), 0) < 360000) {
-    const comment: Comment = { "comment": pars.comment.substring(0, 4000), "userId": userid, "moveNumber": pars.moveNumber, "timeStamp": Date.now() };
+    const comment: Comment = {
+      comment: pars.comment.substring(0, 4000),
+      userId: userid,
+      moveNumber: pars.moveNumber,
+      timeStamp: Date.now(),
+      ...(!userComment ? { system: true } : {}),
+    };
     comments.push(comment);
     await ddbDocClient.send(new PutCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -1459,9 +1476,10 @@ export async function submitComment(userid: string, pars: { id: string; metaGame
         "comments": comments
       }
     }));
+    commentSaved = true;
 
     // Check if the new comment is interesting
-    const newCommentIsInteresting = isInterestingComment(comment.comment);
+    const newCommentIsInteresting = userComment && isInterestingComment(comment.comment);
 
     // If we didn't have interesting comments before but the new one is interesting,
     // update the GAME record to set commented = 1
@@ -1485,9 +1503,9 @@ export async function submitComment(userid: string, pars: { id: string; metaGame
     }
   }
 
-  // Update lastChat for all players when a comment is added to an in-game chat
+  // Update lastChat for dashboard unread when a player comment was actually saved
   // Note: For completed games, comments go through the exploration system (saveExploration)
-  if (pars.players && pars.metaGame) {
+  if (commentSaved && userComment && pars.players && pars.metaGame) {
     await updateLastChatForPlayers(
       pars.id,
       pars.metaGame,
