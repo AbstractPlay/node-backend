@@ -100,17 +100,19 @@ Reads `ALL.json`, computes site-wide analytics, writes `_summary.json` and tier 
 
 ## Manual full pipeline (`run-records-pipeline`)
 
-From `crons/`:
+From `crons/` (implementation: `bin/run-records-pipeline.mjs`):
 
 ```bash
 npm run run-records-pipeline -- --stage prod
+npm run run-records-pipeline -- --stage prod --log   # live CloudWatch tail per step
+npm run run-records-pipeline -- --from summarize     # resume mid-pipeline
 ```
 
-The script invokes the same Lambdas as the daily batch (in order), **not** `dumpdb` or SQS workers.
+Default run order matches prod schedules (minus `dumpdb`): 03:00 batch (sequential), early `records-manifest`, `summarize`, `player-summary-fanout`, `rating-change-notifications`, wait for player-summary SQS workers, late `records-manifest`.
 
-**Do not** use `serverless invoke` for long jobs such as `records` or `summarize` on Node 24: the Serverless/AWS SDK can time out around two minutes and **retry**, which starts overlapping prod runs while the first invocation is still executing. The pipeline script uses `aws lambda invoke` with a **960s read timeout**, waits for any in-flight run to finish (CloudWatch concurrent executions), and holds a **local lock** so two pipeline processes on the same machine cannot run at once.
+**Do not** use `serverless invoke` for long jobs such as `records` or `summarize`: the default ~2 minute SDK read timeout **retries** and stacks duplicate Lambda executions while the first run is still going. The pipeline uses **`aws lambda invoke` with a 900s CLI read timeout** and stage profiles (`AbstractPlayProd` / `AbstractPlayDev`).
 
-After changing concurrency settings, deploy crons (`serverless deploy --stage prod`). Batch Lambdas use `reservedConcurrency: 1` so only one execution of each function can run at a time (manual invoke vs EventBridge schedule vs stray retries).
+Batch Lambdas use **`reservedConcurrency: 1`** in `serverless.yml` so only one execution of each function runs at a time (manual vs EventBridge vs retries). Deploy crons after changing that setting.
 
 ## Failure and timing
 

@@ -6,7 +6,7 @@
   "scripts": {
     "clean": "rimraf dist .esbuild .serverless",
     "pretest": "node scripts/assert-no-vendored-apback-locales.mjs",
-    "test": "vitest run && node --test scripts/lambda-invoke.test.mjs",
+    "test": "vitest run",
     "test:watch": "vitest",
     "build-ts": "tsc",
     "typecheck": "tsc --noEmit",
@@ -15,7 +15,7 @@
     "build:layers": "node scripts/build-layers.mjs",
     "test:layers": "npm run build:layers && node scripts/smoke-layer-modules.mjs",
     "preview-inactive-challenges": "tsx scripts/preview-inactive-challenge-cleanup.ts",
-    "run-records-pipeline": "node scripts/run-records-pipeline.mjs",
+    "run-records-pipeline": "node bin/run-records-pipeline.mjs",
     "enable-records-cdn-compress": "node scripts/enable-records-cdn-compress.mjs",
     "deploy-dev": "serverless deploy",
     "deploy-prod": "serverless --stage prod deploy",
