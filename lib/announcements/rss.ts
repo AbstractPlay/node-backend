@@ -1,4 +1,5 @@
 import type { AnnouncementPublicItem } from './types.js';
+import { removeDiscordExcerptMarker } from './discordExcerpt.js';
 
 function escapeXml(unsafe: string): string {
   return unsafe.replace(/[<>&'"]/g, (c) => {
@@ -30,7 +31,7 @@ export function buildAnnouncementsRss(
   for (const item of sorted) {
     const pubDate = new Date(item.publishedAt).toUTCString();
     const title = item.title || 'Announcement';
-    const description = escapeXml(item.body);
+    const description = escapeXml(removeDiscordExcerptMarker(item.body));
     rss += `
     <item>
       <title>${escapeXml(title)}</title>

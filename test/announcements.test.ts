@@ -20,6 +20,11 @@ import {
   titleFromBody,
 } from '../lib/announcements/discordImport.js';
 import { buildAnnouncementsRss } from '../lib/announcements/rss.js';
+import {
+  DISCORD_EXCERPT_END_MARKER,
+  plainTextDiscordExcerpt,
+  removeDiscordExcerptMarker,
+} from '../lib/announcements/discordExcerpt.js';
 import { ANNOUNCEMENT_PK, ANNOUNCEMENT_PUBLISHED_PK } from '../lib/announcements/keys.js';
 
 vi.mock('@aws-sdk/s3-request-presigner', () => ({
@@ -45,6 +50,21 @@ test('titleFromBody uses first line', () => {
 test('normalizeDiscordContent leaves unicode emoji text unchanged', () => {
   const body = 'Thanks 🙂';
   assert.equal(normalizeDiscordContent(body, [{ name: '🙂', id: '' }]), body);
+});
+
+test('plainTextDiscordExcerpt uses marker prefix with ellipsis', () => {
+  const body = `**Hi** there\n${DISCORD_EXCERPT_END_MARKER}\nSecret rest`;
+  assert.equal(plainTextDiscordExcerpt(body), 'Hi there…');
+});
+
+test('plainTextDiscordExcerpt defaults to 200 chars without marker', () => {
+  const body = 'a'.repeat(250);
+  assert.equal(plainTextDiscordExcerpt(body), `${'a'.repeat(199)}…`);
+});
+
+test('removeDiscordExcerptMarker strips marker only', () => {
+  const body = `Line one\n${DISCORD_EXCERPT_END_MARKER}\nLine two`;
+  assert.equal(removeDiscordExcerptMarker(body), 'Line one\n\nLine two');
 });
 
 test('announcementsList returns published index rows', async () => {

@@ -1,14 +1,15 @@
-function stripMarkdownForExcerpt(body: string, maxLen: number): string {
-  let text = body
-    .replace(/!\[[^\]]*]\([^)]+\)/g, '')
-    .replace(/\[([^\]]+)]\([^)]+\)/g, '$1')
-    .replace(/[*_~`>#]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (text.length > maxLen) {
-    return `${text.slice(0, maxLen - 1)}…`;
+import { plainTextDiscordExcerpt } from './discordExcerpt.js';
+
+const DISCORD_CONTENT_MAX = 2000;
+
+function clampExcerptForDiscord(title: string, excerpt: string, link: string): string {
+  const prefix = `**${title}**\n`;
+  const suffix = `\n${link}`;
+  const maxExcerptLen = DISCORD_CONTENT_MAX - prefix.length - suffix.length;
+  if (maxExcerptLen <= 0 || excerpt.length <= maxExcerptLen) {
+    return excerpt;
   }
-  return text;
+  return `${excerpt.slice(0, Math.max(0, maxExcerptLen - 1))}…`;
 }
 
 export type DiscordPostResult =
@@ -27,8 +28,8 @@ export async function postAnnouncementDiscordMirror(
     return { ok: true, posted: false, skipped: true };
   }
 
-  const excerpt = stripMarkdownForExcerpt(body, 200);
   const link = `${siteUrl}/news/${announcementId}`;
+  const excerpt = clampExcerptForDiscord(title, plainTextDiscordExcerpt(body), link);
   const content = `**${title}**\n${excerpt}\n${link}`;
 
   try {

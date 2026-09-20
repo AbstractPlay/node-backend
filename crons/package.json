@@ -6,7 +6,7 @@
   "scripts": {
     "clean": "rimraf dist .esbuild .serverless",
     "pretest": "node scripts/assert-no-vendored-apback-locales.mjs",
-    "test": "vitest run",
+    "test": "vitest run && node --test scripts/lambda-invoke.test.mjs",
     "test:watch": "vitest",
     "build-ts": "tsc",
     "typecheck": "tsc --noEmit",

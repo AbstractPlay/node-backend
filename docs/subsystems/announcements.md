@@ -98,7 +98,7 @@ Example payload:
 }
 ```
 
-Excerpt = plain-text first ~200 chars of body. Full markdown and images live on site only.
+Excerpt = plain-text first ~200 chars of body, unless the body contains an excerpt marker `<!--ap:discord-excerpt-end-->` (HTML comment in markdown). With the marker, Discord uses plain text **before** the marker and always appends `…`; text after the marker is site-only. The marker is stripped for `/news`, RSS, and preview. Full markdown and images live on site only.
 
 ## Attachments
 

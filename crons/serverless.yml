@@ -10,6 +10,8 @@ custom:
   scheduleEnabled:
     prod: true
     dev: false
+  # At most one concurrent run per batch Lambda (overlapping manual + schedule invokes queue/throttle).
+  batchJobReservedConcurrency: 1
   # node-backend exports abstract-play-${stage}-OpsAlertsTopicArn (abstractplay-ops-alerts-${stage})
   opsAlertsTopicImport: abstract-play-${self:provider.stage}-OpsAlertsTopicArn
   recbucket:
@@ -162,6 +164,7 @@ functions:
     handler: src/functions/records.handler
     description: Generates static lists of game records
     timeout: 900
+    reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
     memorySize: 10240
     logRetentionInDays: 30
     layers:
@@ -178,6 +181,7 @@ functions:
     handler: src/functions/records-ttm.handler
     description: Generates static time-to-move results of each game
     timeout: 900
+    reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
     memorySize: 10240
     logRetentionInDays: 30
     layers:
@@ -194,6 +198,7 @@ functions:
     handler: src/functions/records-move-times.handler
     description: Generates list of moves made in past 180 days
     timeout: 900
+    reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
     memorySize: 10240
     logRetentionInDays: 30
     layers:
@@ -210,6 +215,7 @@ functions:
     handler: src/functions/records-cooccur.handler
     description: Builds PMI game co-occurrence matrix for recommendations
     timeout: 900
+    reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
     memorySize: 10240
     logRetentionInDays: 30
     events:
@@ -241,6 +247,7 @@ functions:
     handler: src/functions/records-rec-analytics.handler
     description: Aggregates recommendation impression events to private ops S3
     timeout: 900
+    reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
     memorySize: 1024
     logRetentionInDays: 30
     events:
@@ -255,6 +262,7 @@ functions:
     handler: src/functions/records-manifest.handler
     description: Generates manifest file for records bucket
     timeout: 900
+    reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
     memorySize: 10240
     logRetentionInDays: 30
     layers:
@@ -277,6 +285,7 @@ functions:
     handler: src/functions/summarize.handler
     description: Summarize generated game reports
     timeout: 900
+    reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
     memorySize: 5120
     layers:
       - !Ref AbstractplayGameslibLambdaLayer
@@ -360,6 +369,7 @@ functions:
     handler: src/functions/player-summary-fanout.handler
     description: Enqueues per-player summary slice writes after summarize
     timeout: 300
+    reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
     memorySize: 1024
     layers:
       - !Ref AbstractplayGameslibLambdaLayer
@@ -407,6 +417,7 @@ functions:
     handler: src/functions/tournament-data.handler
     description: Summarizes tournament data
     timeout: 900
+    reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
     memorySize: 10240
     logRetentionInDays: 30
     events:
