@@ -1383,3 +1383,45 @@ test('feedbackComment with subscribe false does not add SUB# for commenter', asy
   });
   assert.ok(!store.has(`${postPk(id)}:SUB#${VOTER_ID}`));
 });
+
+test('feedbackGet exposes bugContext to admins only', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  process.env.ABSTRACT_PLAY_TABLE = 'abstract-play-test';
+  store.set(`USER:${ADMIN_ID}`, { pk: 'USER', sk: ADMIN_ID, admin: true });
+  const pageUrl = 'https://play.abstractplay.com/move/foo/bar/game-123?moveNumber=5';
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Bug with context',
+    body: 'Body',
+    context: {
+      pageUrl,
+      userAgent: 'TestAgent/1.0',
+      viewport: { width: 1280, height: 720 },
+    },
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const { id } = createResult.data;
+
+  const openGet = await feedbackGet(client, TABLE, mockS3, { id });
+  assert.equal(openGet.ok, true);
+  if (openGet.ok) {
+    assert.equal(openGet.data.bugContext, undefined);
+  }
+
+  const authorGet = await feedbackGet(client, TABLE, mockS3, { id }, USER_ID);
+  assert.equal(authorGet.ok, true);
+  if (authorGet.ok) {
+    assert.equal(authorGet.data.bugContext, undefined);
+  }
+
+  const adminGet = await feedbackGet(client, TABLE, mockS3, { id }, ADMIN_ID);
+  assert.equal(adminGet.ok, true);
+  if (adminGet.ok) {
+    assert.equal(adminGet.data.bugContext?.pageUrl, pageUrl);
+    assert.equal(adminGet.data.bugContext?.userAgent, 'TestAgent/1.0');
+  }
+});

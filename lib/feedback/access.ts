@@ -12,6 +12,7 @@ import { isBotIdOnTable } from '../participants.js';
 import type {
   FeedbackAdminListItem,
   FeedbackAdminListPars,
+  FeedbackBugContext,
   FeedbackGetResult,
   FeedbackKind,
   FeedbackListSort,
@@ -307,6 +308,14 @@ function buildListIndexItem(
     gsi1pk: kindGsi1Pk(meta.kind),
     gsi1sk: listGsi1SkForSort(sort, meta.effectiveVotes, meta.createdAt, meta.updatedAt, meta.id),
   };
+}
+
+function parseBugContext(item: Record<string, unknown>): FeedbackBugContext | undefined {
+  const raw = item.context;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined;
+  }
+  return raw as FeedbackBugContext;
 }
 
 function toPublicPost(item: Record<string, unknown>): FeedbackPublicPost {
@@ -655,6 +664,13 @@ export async function feedbackGet(
   }
 
   const archived = metaResult.Item.archivedAt !== undefined;
+  let bugContext: FeedbackBugContext | undefined;
+  if (viewerUserId && post.kind === 'bug') {
+    const isAdmin = await loadIsAdmin(client, viewerUserId);
+    if (isAdmin) {
+      bugContext = parseBugContext(metaResult.Item);
+    }
+  }
   return {
     ok: true,
     data: {
@@ -664,6 +680,7 @@ export async function feedbackGet(
       subscribed,
       userVoted,
       ...(archived ? { archived: true } : {}),
+      ...(bugContext ? { bugContext } : {}),
     },
   };
 }

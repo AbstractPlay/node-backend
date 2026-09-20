@@ -315,6 +315,8 @@ export type FeedbackGetResult = {
   archived?: boolean;
   purged?: boolean;
   summary?: FeedbackHistorySummary;
+  /** Bug triage metadata; included only when the viewer is an admin. */
+  bugContext?: FeedbackBugContext;
 };
 
 export type FeedbackHistoryListPars = {
