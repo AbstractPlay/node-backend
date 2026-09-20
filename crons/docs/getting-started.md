@@ -47,16 +47,12 @@ npm run build:layers
 With AWS credentials configured for the target stage:
 
 ```bash
-# Full records batch (preferred for prod)
 npm run run-records-pipeline -- --stage prod
-
-# Single function — avoid serverless invoke for long jobs (records, summarize):
-aws lambda invoke --function-name abstract-play-backend-crons-prod-summarize \
-  --invocation-type RequestResponse --cli-read-timeout 960 --log-type Tail \
-  --payload '{}' /tmp/out.json
 ```
 
-Most batch functions expect prod S3 buckets and a completed DB dump. For code changes, prefer unit tests (`src/functions/summarizeHelpers.test.ts`) or invoke against dev stacks with caution — schedules are disabled on dev. See [Records pipeline — manual run](/crons/pipeline/#manual-full-pipeline-run-records-pipeline).
+Uses `bin/run-records-pipeline.mjs` (`aws lambda invoke`, 900s read timeout). Avoid `serverless invoke` for `records` / `summarize` — see [Records pipeline — manual run](/crons/pipeline/#manual-full-pipeline-run-records-pipeline).
+
+Most batch functions expect prod S3 buckets and a completed DB dump. For code changes, prefer unit tests (`src/functions/summarizeHelpers.test.ts`) or invoke against dev stacks with caution — schedules are disabled on dev.
 
 ## Email strings (`apback`)
 

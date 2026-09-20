@@ -388,6 +388,7 @@ functions:
     handler: src/functions/rating-change-notifications.handler
     description: Batch ratingChange in-app notifications after summarize Glicko update
     timeout: 300
+    reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
     memorySize: 1024
     layers:
       - !Ref AbstractplayGameslibLambdaLayer
