@@ -14,7 +14,7 @@ Static artifacts are published to **`records.abstractplay.com`** (S3 + CloudFron
 | `player/{playerId}-summary.json` | `player-summary-worker` | Per-player summary slice (~few KB) |
 | `_summary-player-manifest.json` | `player-summary-fanout` | Fan-out manifest v2: `candidateCount`, `expectedCount` (enqueued this run), `skippedCount`, `inputFingerprint`, `contentHashes` |
 | `_manifest.json` | `records-manifest` | S3 object listing + `summaryFiles` (v2) |
-| `meta/{metaGame}.json` | `records` | Game records filtered by meta game name |
+| `meta/{metaGame}.json` | `records` | Game records filtered by meta game name; orphan keys deleted after each run when absent from current output |
 | `player/{playerId}.json` | `records` | Game records for one player |
 | `event/{eventId}.json` | `records` | Game records for a tournament or org event |
 | `ttm/{playerId}.json` | `records-ttm` | Array of inter-move durations (milliseconds) |
@@ -25,7 +25,7 @@ Static artifacts are published to **`records.abstractplay.com`** (S3 + CloudFron
 
 ## Game record format
 
-Each record in `ALL.json`, `meta/`, `player/`, and `event/` files conforms to the **APGameRecord** schema documented in [Recranks](/recranks/). Records are produced by calling `GameFactory(metaGame, state).genRecord(...)` in [`records.ts`](../src/functions/records.ts).
+Each record in `ALL.json`, `meta/`, `player/`, and `event/` files conforms to the **APGameRecord** schema documented in [Recranks](/recranks/). Records are produced in [`records.ts`](../src/functions/records.ts) via `GameFactory(...).genRecord(...)` or, for retracted games with `recordsGeneration: include` and no engine, [`archiveGameRecord.ts`](../src/utils/archiveGameRecord.ts). Rows for UIDs with `recordsGeneration: omit` in gameslib `retractedGames.json` are skipped (Dynamo unchanged). See [Retract a meta game](/crons/retract-meta-game/).
 
 Key header fields used downstream:
 

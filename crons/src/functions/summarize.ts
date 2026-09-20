@@ -8,7 +8,7 @@ import { isoToCountryCode } from "../utils/isoToCountryCode.js";
 import { streamJsonArrayFromS3 } from "../utils/streamJsonArray.js";
 import { alignWeeklyActiveMovers } from "../utils/moveSeasonality.js";
 import { putRecordsJson } from "../utils/recordsJson.js";
-import { gameinfo } from "@abstractplay/gameslib";
+import { gameinfo, shouldPublishStats, resolveRetractedMetaUidByName, archiveMetadataFor, retractedMetaUids } from "@abstractplay/gameslib";
 import { buildPlayerCountsByUid, compareBatchRatings } from "../lib/batchRatings.js";
 import type { UserRating, StatSummary, RivalriesFull } from "types/index.js";
 import type { UserGameRating } from "types/index.js";
@@ -35,7 +35,6 @@ import {
 import {
     buildMetaStatsForGame,
     buildHMetaForGame,
-    listMetaShardKeys,
     loadMetaShard,
     rateMetaGameVariants,
     type RatingListEntry,
@@ -128,6 +127,19 @@ function buildGameInfoByUid(): Map<string, GameInfoFlags> {
             playercounts: info.playercounts,
         });
     }
+    for (const uid of retractedMetaUids()) {
+        if (!shouldPublishStats(uid)) {
+            continue;
+        }
+        const archive = archiveMetadataFor(uid);
+        if (archive === undefined || map.has(uid)) {
+            continue;
+        }
+        map.set(uid, {
+            name: archive.name,
+            playercounts: archive.playercounts,
+        });
+    }
     return map;
 }
 
@@ -137,7 +149,10 @@ export const handler: Handler = async () => {
     const recordGameIdFallback: RecordGameIdFallback = {
         resolveMetaUidFromDisplayName: (displayName) => {
             const found = [...gameinfo.values()].find((i) => i.name === displayName);
-            return found?.uid;
+            if (found !== undefined) {
+                return found.uid;
+            }
+            return resolveRetractedMetaUidByName(displayName);
         },
         onLegacyGameId: () => {
             legacyRecordStats.legacyGameIds++;
@@ -200,10 +215,18 @@ export const handler: Handler = async () => {
     const rawList: UserGameRating[] = [];
     const rater = new ELOBasic();
 
-    const metaShardKeys = await listMetaShardKeys(s3, REC_BUCKET);
-    console.log(`Found ${metaShardKeys.length} meta shards`);
+    const metaShardKeys = [...scanState.metaPlayCount.keys()]
+        .filter((metaUid) => shouldPublishStats(metaUid))
+        .sort();
+    console.log(`Loading ${metaShardKeys.length} meta shards from ALL.json scan`);
     for (const metaUid of metaShardKeys) {
-        const recs = await loadMetaShard(s3, REC_BUCKET, metaUid);
+        let recs: APGameRecord[];
+        try {
+            recs = await loadMetaShard(s3, REC_BUCKET, metaUid);
+        } catch (err) {
+            console.log(`Skipping meta/${metaUid}.json: ${err}`);
+            continue;
+        }
         if (recs.length === 0) {
             continue;
         }

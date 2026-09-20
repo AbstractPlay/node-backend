@@ -1,6 +1,7 @@
 import { GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand, BatchGetCommand } from '@aws-sdk/lib-dynamodb';
 import { SendEmailCommand } from '@aws-sdk/client-ses';
 import { gameinfo, GameFactory } from '@abstractplay/gameslib';
+import { isMetaGamePlayableOnStage } from '../metaGameRetraction.js';
 import { validateToken } from '@sunknudsen/totp';
 import { ddbDocClient } from '../ddb.js';
 import { sesClient, s3Client } from '../api/clients.js';
@@ -209,7 +210,11 @@ export async function metaGamesDetails() {
     await ensureMissingMetaGameCounts();
     const tableName = process.env.ABSTRACT_PLAY_TABLE!;
     const metaGames: string[] = [];
-    gameinfo.forEach(g => metaGames.push(g.uid));
+    gameinfo.forEach(g => {
+      if (isMetaGamePlayableOnStage(g.uid)) {
+        metaGames.push(g.uid);
+      }
+    });
     const details: MetaGameCounts = {};
     let playerCountsByUid: Record<string, number> = {};
     try {
@@ -240,6 +245,9 @@ export async function metaGamesDetails() {
     }
 
     gameinfo.forEach(g => {
+      if (!isMetaGamePlayableOnStage(g.uid)) {
+        return;
+      }
       if (!details[g.uid]) {
         details[g.uid] = {
           ...DEFAULT_META_GAME_COUNTS,
