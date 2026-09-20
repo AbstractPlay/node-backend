@@ -1,4 +1,4 @@
-import { gameinfo, variantUidsForBatchRating } from "@abstractplay/gameslib";
+import { gameinfo, variantUidsForBatchRating, archiveVariantDefsForMetaUid } from "@abstractplay/gameslib";
 import type { GlickoStats } from "types/stats/GlickoStats.js";
 import type { UserGameRating } from "types/stats/UserGameRating.js";
 import {
@@ -54,7 +54,7 @@ export function lookupBatchRating(
     userId: string,
     playerCount = 2,
 ): UserGameRating {
-    const defs = gameinfo.get(metaUid)?.variants;
+    const defs = gameinfo.get(metaUid)?.variants ?? archiveVariantDefsForMetaUid(metaUid);
     const canonical =
         defs !== undefined && defs.length > 0
             ? variantUidsForBatchRating(metaUid, playerCount, variants)

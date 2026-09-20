@@ -1,5 +1,5 @@
 import i18n from './i18nInstance.js';
-import { gameinfo } from '@abstractplay/gameslib';
+import { gameinfo, archiveMetadataFor } from '@abstractplay/gameslib';
 
 /** Localized meta-game title for the active i18next language (email/push copy). */
 export function localizedGameName(metaUid: string): string {
@@ -7,5 +7,5 @@ export function localizedGameName(metaUid: string): string {
   if (i18n.exists(`apgames:${key}`)) {
     return i18n.t(`apgames:${key}`);
   }
-  return gameinfo.get(metaUid)?.name ?? metaUid;
+  return gameinfo.get(metaUid)?.name ?? archiveMetadataFor(metaUid)?.name ?? metaUid;
 }

@@ -1,4 +1,5 @@
 import type { APGameRecord } from "@abstractplay/recranks";
+import { shouldPublishStats } from "@abstractplay/gameslib";
 import type { GameNumber } from "types/stats/GameNumber.js";
 import type { GameNumList } from "types/stats/GameNumList.js";
 import type { MetaPieStats } from "types/stats/MetaPieStats.js";
@@ -139,8 +140,11 @@ export function scanRecord(
     gameInfoByUid: Map<string, GameInfoFlags>,
     fallback?: RecordGameIdFallback,
 ): void {
-    state.numGames++;
     const metaUid = metaGameFromRecord(rec, fallback);
+    if (!shouldPublishStats(metaUid)) {
+        return;
+    }
+    state.numGames++;
     const dateEnd = rec.header["date-end"];
     const completedMs = new Date(dateEnd).getTime();
 
