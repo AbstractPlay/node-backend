@@ -1,7 +1,7 @@
 /**
  * Workspaces hoist @abstractplay/* at the repo root. A stale package-lock entry for
  * crons/node_modules/@abstractplay/* makes `npm ci` install an old copy that Vitest
- * (cwd crons/) resolves before the hoisted tree. Run after ap-install-deps.
+ * (cwd crons/) resolves before the hoisted tree. Run after sync-crons-ap-deps.
  */
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -20,6 +20,21 @@ function nestedApLockfileKeys(lock) {
 
 function readLock() {
   return JSON.parse(fs.readFileSync(LOCK_PATH, "utf8"));
+}
+
+function writeLock(lock) {
+  fs.writeFileSync(LOCK_PATH, `${JSON.stringify(lock, null, 2)}\n`, "utf8");
+}
+
+function stripNestedApLockEntries(lock) {
+  const keys = nestedApLockfileKeys(lock);
+  if (keys.length === 0) {
+    return false;
+  }
+  for (const key of keys) {
+    delete lock.packages[key];
+  }
+  return true;
 }
 
 function removeNestedOnDisk() {
@@ -43,15 +58,30 @@ function assertHoisted() {
   }
 }
 
-const hadNestedLockEntries = nestedApLockfileKeys(readLock()).length > 0;
-const removedOnDisk = removeNestedOnDisk();
-
-if (hadNestedLockEntries || removedOnDisk) {
-  console.log("prune-crons-nested-ap-deps: reconciling workspace with npm install", {
-    hadNestedLockEntries,
-    removedOnDisk,
-  });
+function reconcile() {
+  let lock = readLock();
+  const stripped = stripNestedApLockEntries(lock);
+  if (stripped) {
+    writeLock(lock);
+    console.log("prune-crons-nested-ap-deps: removed nested @abstractplay entries from package-lock.json");
+  }
+  removeNestedOnDisk();
   execSync("npm install", { cwd: ROOT, stdio: "inherit" });
+}
+
+const needsReconcile =
+  nestedApLockfileKeys(readLock()).length > 0 || fs.existsSync(CRONS_NESTED_AP);
+
+if (needsReconcile) {
+  console.log("prune-crons-nested-ap-deps: reconciling workspace");
+  reconcile();
+  if (
+    nestedApLockfileKeys(readLock()).length > 0 ||
+    fs.existsSync(CRONS_NESTED_AP)
+  ) {
+    console.log("prune-crons-nested-ap-deps: second pass");
+    reconcile();
+  }
 }
 
 assertHoisted();

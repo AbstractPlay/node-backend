@@ -23,7 +23,7 @@ PR CI: [`.github/workflows/test.yml`](../../.github/workflows/test.yml) job **`t
 
 ## AP dependency pins
 
-AP pins live in the **repo-root** [`ci-deps.dev.json`](https://github.com/AbstractPlay/node-backend/blob/develop/ci-deps.dev.json) and [`ci-deps.prod.json`](https://github.com/AbstractPlay/node-backend/blob/develop/ci-deps.prod.json) (gameslib, renderer, recranks). Root `npm run sync-deps` runs `ap-install-deps`, `scripts/prune-crons-nested-ap-deps.mjs` (drops stale `crons/node_modules/@abstractplay` and reconciles the lockfile), then `scripts/sync-crons-ap-deps.mjs`, which copies resolved versions into `crons/package.json`.
+AP pins live in the **repo-root** [`ci-deps.dev.json`](https://github.com/AbstractPlay/node-backend/blob/develop/ci-deps.dev.json) and [`ci-deps.prod.json`](https://github.com/AbstractPlay/node-backend/blob/develop/ci-deps.prod.json) (gameslib, renderer, recranks). Root `npm run sync-deps` runs `ap-install-deps`, `scripts/sync-crons-ap-deps.mjs` (copies root AP pins into `crons/package.json`), then `scripts/prune-crons-nested-ap-deps.mjs` (drops stale `crons/node_modules/@abstractplay` and reconciles the lockfile).
 
 Do not run `ap-install-deps` or `npm install` for AP packages from `crons/` alone — use root `npm run sync-deps`.
 

@@ -44,11 +44,11 @@ jobs:
       - name: Install pinned AP dependencies
         run: npx ap-install-deps --stage dev
 
-      - name: Prune nested crons @abstractplay installs
-        run: node scripts/prune-crons-nested-ap-deps.mjs
-
       - name: Sync crons AP manifests from lockfile
         run: node scripts/sync-crons-ap-deps.mjs --stage dev
+
+      - name: Prune nested crons @abstractplay installs
+        run: node scripts/prune-crons-nested-ap-deps.mjs
 
       - name: Verify lockfile matches ci-deps
         run: npx ap-check-ci-deps --stage dev --strict
@@ -83,11 +83,11 @@ jobs:
       - name: Install pinned AP dependencies
         run: npx ap-install-deps --stage dev
 
-      - name: Prune nested crons @abstractplay installs
-        run: node scripts/prune-crons-nested-ap-deps.mjs
-
       - name: Sync crons AP manifests from lockfile
         run: node scripts/sync-crons-ap-deps.mjs --stage dev
+
+      - name: Prune nested crons @abstractplay installs
+        run: node scripts/prune-crons-nested-ap-deps.mjs
 
       - name: Lint crons
         run: npm run lint:crons

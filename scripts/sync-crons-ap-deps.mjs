@@ -35,6 +35,7 @@ function writeJson(filePath, data) {
 }
 
 const rootManifest = readJson(path.join(ROOT, `ci-deps.${stage}.json`));
+const rootPkg = readJson(path.join(ROOT, "package.json"));
 const lockVersions = getLockfileVersions(ROOT, Object.values(AP));
 
 const cronsPkgPath = path.join(CRONS_ROOT, "package.json");
@@ -43,7 +44,10 @@ cronsPkg.dependencies = cronsPkg.dependencies ?? {};
 
 for (const pkg of Object.values(AP)) {
   const key = pkg.split("/").pop();
-  const version = lockVersions[pkg] ?? rootManifest[key];
+  // Prefer root package.json (just written by ap-install-deps) over lockfile paths
+  // that may still reference a nested crons/node_modules/@abstractplay/* tree.
+  const version =
+    rootPkg.dependencies?.[pkg] ?? lockVersions[pkg] ?? rootManifest[key];
   if (version && pkg in cronsPkg.dependencies) {
     cronsPkg.dependencies[pkg] = version;
   }
