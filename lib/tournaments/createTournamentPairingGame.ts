@@ -39,7 +39,7 @@ export function buildTournamentGamePlayers(
     name: p.name,
     time: p.time,
   }));
-  if (info.flags !== undefined && info.flags.includes('perspective')) {
+  if (info?.flags?.includes('perspective')) {
     return base.map((p, ind) =>
       ind === 0 ? p : { ...p, settings: { rotate: 180 } });
   }
@@ -76,7 +76,7 @@ export async function createTournamentPairingGame(
 
   const gamePlayers = buildTournamentGamePlayers(metaGame, players);
   let whoseTurn: string | boolean[] = '0';
-  if (info.flags !== undefined && info.flags.includes('simultaneous')) {
+  if (info?.flags?.includes('simultaneous')) {
     whoseTurn = gamePlayers.map(() => true);
   }
 
