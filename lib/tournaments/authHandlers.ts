@@ -28,7 +28,11 @@ import { localizedGameName } from '../gameDisplayName.js';
 import type { User } from '../api/types.js';
 import { validateChallengeVariantUids } from '../challenges/variantUids.js';
 import { tournamentPlaySupported } from '../tournamentGame.js';
-import { parseMatchLegsParam, validateMatchLegsParam } from './matchLegs.js';
+import {
+  parseMatchLegsParam,
+  tournamentSeriesCounterSk,
+  validateMatchLegsParam,
+} from './matchLegs.js';
 import { getPlayers } from '../players/getPlayers.js';
 import { createNotification } from '../notifications.js';
 import { sendUserPush } from '../push/sendUserPush.js';
@@ -101,7 +105,7 @@ export async function newTournament(
     return formatReturnError(`Game ${pars.metaGame} does not support automated tournaments (requires playercount 2)`);
   }
   const variantsKey = pars.variants.sort().join("|");
-  const sk = pars.metaGame + "#" + variantsKey;
+  const sk = tournamentSeriesCounterSk(pars.metaGame, pars.variants, pars.matchLegs);
   let tournamentN = 0;
   let available = true;
   try {
@@ -250,7 +254,11 @@ async function cancelSignupTournament(tournament: Tournament) {
         "sk": tournament.id
       },
     }));
-  const sk = tournament.metaGame + "#" + tournament.variants.sort().join("|");
+  const sk = tournamentSeriesCounterSk(
+    tournament.metaGame,
+    tournament.variants,
+    tournament.matchLegs,
+  );
   await ddbDocClient.send(
     new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
