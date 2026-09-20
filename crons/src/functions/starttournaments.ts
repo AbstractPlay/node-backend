@@ -24,7 +24,10 @@ import {
   loadExistingTournamentGames,
   type ExistingTournamentGame,
 } from "../lib/tournamentPairing.js";
-import { normalizeMatchLegs } from "@backend/lib/tournaments/matchLegs.js";
+import {
+  normalizeMatchLegs,
+  tournamentSeriesCounterSk,
+} from "@backend/lib/tournaments/matchLegs.js";
 import { createTournamentPairingGame } from "@backend/lib/tournaments/createTournamentPairingGame.js";
 import { tournamentPlaySupported } from "@backend/lib/tournamentGame.js";
 import {
@@ -352,7 +355,11 @@ async function cancelSignupTournament(tournament: Tournament) {
         "sk": tournament.id
       },
     }));
-  const sk = tournament.metaGame + "#" + tournament.variants.sort().join("|");
+  const sk = tournamentSeriesCounterSk(
+    tournament.metaGame,
+    tournament.variants,
+    tournament.matchLegs,
+  );
   await sendCommandWithRetry(
     new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -632,7 +639,11 @@ async function startTournament(
     const newTournamentid = uuid();
     const tournamentBefore = await loadItem(ddbDocClient, tableName, 'TOURNAMENT', tournament.id);
     journal.trackReplace(tournamentBefore, 'TOURNAMENT', tournament.id);
-    const counterSk = tournament.metaGame + "#" + tournament.variants.sort().join("|");
+    const counterSk = tournamentSeriesCounterSk(
+      tournament.metaGame,
+      tournament.variants,
+      tournament.matchLegs,
+    );
     const counterBefore = await loadItem(ddbDocClient, tableName, 'TOURNAMENTSCOUNTER', counterSk);
     journal.trackReplace(counterBefore, 'TOURNAMENTSCOUNTER', counterSk);
 

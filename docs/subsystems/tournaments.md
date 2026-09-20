@@ -12,7 +12,7 @@
 | `TOURNAMENTPLAYER` | `<tournamentid>#<division>#<playerid>` | Player entry |
 | `TOURNAMENTGAME` | `<tournamentid>#<division>#<gameid>` | Linked game |
 | `COMPLETEDTOURNAMENT` | `<metaGame>#<tournamentid>` | Archived tournament |
-| `TOURNAMENTSCOUNTER` | `<metaGame>#<variants>` | Serial number counter |
+| `TOURNAMENTSCOUNTER` | `<metaGame>#<variants>` (single-leg) or `…#2` (two-leg) | Serial number counter per series |
 
 ## Lifecycle
 

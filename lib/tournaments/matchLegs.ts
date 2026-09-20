@@ -26,3 +26,17 @@ export function validateMatchLegsParam(value: unknown): string | undefined {
   }
   return 'matchLegs must be 1 or 2';
 }
+
+/** `TOURNAMENTSCOUNTER` sk: single-leg series keep the legacy key; two-leg appends `#2`. */
+export function tournamentSeriesCounterSk(
+  metaGame: string,
+  variants: string[],
+  matchLegs?: unknown,
+): string {
+  const variantsKey = [...variants].sort().join('|');
+  const base = `${metaGame}#${variantsKey}`;
+  if (normalizeMatchLegs(matchLegs) === 2) {
+    return `${base}#2`;
+  }
+  return base;
+}
