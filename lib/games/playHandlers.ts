@@ -233,6 +233,71 @@ async function getPlayersSlowly(playerIDs: string[]) {
   return players;
 }
 
+function gameRefLabel(metaGame: string, id: string): string {
+  return `${metaGame}, ${id}`;
+}
+
+function explorationPayloadBytes(exploration?: Exploration[]): number {
+  if (exploration === undefined) {
+    return 0;
+  }
+  try {
+    return JSON.stringify(exploration).length;
+  } catch {
+    return -1;
+  }
+}
+
+function logSubmitMoveFailure(
+  reason: string,
+  userid: string,
+  pars: { id: string; metaGame: string; moveNumber?: number; exploration?: Exploration[] },
+  error?: unknown,
+): void {
+  console.error(
+    `submit_move failed: reason=${reason} metaGame=${pars.metaGame} id=${pars.id} user=${userid} moveNumber=${pars.moveNumber ?? ''} explorationBytes=${explorationPayloadBytes(pars.exploration)}${error instanceof Error ? ` error=${error.message}` : ''}`,
+  );
+}
+
+async function loadInProgressGameRow(
+  metaGame: string,
+  id: string,
+): Promise<{ item: Record<string, unknown> | undefined; completedRowExists: boolean }> {
+  const table = process.env.ABSTRACT_PLAY_TABLE!;
+  const inProgress = await sendCommandWithRetry<GetCommandOutput>(
+    new GetCommand({
+      TableName: table,
+      Key: {
+        pk: 'GAME',
+        sk: `${metaGame}#0#${id}`,
+      },
+    }),
+  );
+  if (inProgress.Item) {
+    return { item: inProgress.Item as Record<string, unknown>, completedRowExists: false };
+  }
+  const completed = await sendCommandWithRetry<GetCommandOutput>(
+    new GetCommand({
+      TableName: table,
+      Key: {
+        pk: 'GAME',
+        sk: `${metaGame}#1#${id}`,
+      },
+    }),
+  );
+  return {
+    item: undefined,
+    completedRowExists: completed.Item !== undefined,
+  };
+}
+
+function isNonSimultaneousGameOver(game: FullGame): boolean {
+  if (game.gameEnded !== undefined) {
+    return true;
+  }
+  return game.toMove === '' || game.toMove === null;
+}
+
 export async function submitMove(userid: string, pars: {
   id: string, move: string, draw: string, metaGame: string, cbit: number, moveNumber?: number, opponentId?: string,
   exploration?: Exploration[]
@@ -275,17 +340,53 @@ export async function submitMove(userid: string, pars: {
   }
   catch (error) {
     logGetItemError(error);
-    return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    logSubmitMoveFailure('dynamo_read', userid, pars, error);
+    return formatReturnError(
+      `Unable to load game (${gameRefLabel(pars.metaGame, pars.id)}).`,
+      error,
+    );
   }
-  if (!data.Item)
-    throw new Error(`No game ${pars.id} in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  if (!data.Item) {
+    let completedRowExists = false;
+    try {
+      const resolved = await loadInProgressGameRow(pars.metaGame, pars.id);
+      completedRowExists = resolved.completedRowExists;
+    } catch (error) {
+      logGetItemError(error);
+      logSubmitMoveFailure('dynamo_read', userid, pars, error);
+      return formatReturnError(
+        `Unable to load game (${gameRefLabel(pars.metaGame, pars.id)}).`,
+        error,
+      );
+    }
+    if (completedRowExists) {
+      logSubmitMoveFailure('game_ended', userid, pars);
+      return formatReturnError(
+        `This game has ended (${gameRefLabel(pars.metaGame, pars.id)}). Refresh the page to view the result.`,
+      );
+    }
+    logSubmitMoveFailure('game_not_found', userid, pars);
+    return formatReturnError(
+      `Game not found (${gameRefLabel(pars.metaGame, pars.id)}).`,
+    );
+  }
   try {
     const game = hydrateGameState(data.Item as FullGame);
     console.log("got game in submitMove:");
     console.log(game);
+    const flagsEarly = structuralFlags(game.metaGame);
+    const simultaneousEarly = flagSetIncludes(flagsEarly, "simultaneous");
+    if (!simultaneousEarly && isNonSimultaneousGameOver(game)) {
+      logSubmitMoveFailure('game_ended', userid, pars);
+      return formatReturnError(
+        `This game has ended (${gameRefLabel(pars.metaGame, pars.id)}). Refresh the page to view the result.`,
+      );
+    }
     const engine = GameFactory(game.metaGame, game.state);
-    if (!engine)
-      throw new Error(`Unknown metaGame ${game.metaGame}`);
+    if (!engine) {
+      logSubmitMoveFailure('unknown_metagame', userid, pars);
+      return formatReturnError(`Unknown game type (${gameRefLabel(pars.metaGame, pars.id)}).`);
+    }
 
     // Validate moveNumber if provided (to catch stale browser submissions)
     const currentMoveNumber = engine.stack.length;
@@ -336,8 +437,12 @@ export async function submitMove(userid: string, pars: {
     }
 
     const player = game.players.find(p => p.id === userid);
-    if (!player)
-      throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
+    if (!player) {
+      logSubmitMoveFailure('not_a_player', userid, pars);
+      return formatReturnError(
+        `You are not a player in this game (${gameRefLabel(pars.metaGame, pars.id)}).`,
+      );
+    }
     // deal with draw offers
     if (pars.draw === "drawoffer" && autoMoves === 0) {
       player.draw = "offered";
@@ -501,7 +606,10 @@ export async function submitMove(userid: string, pars: {
     if (game.gameEnded === undefined) {
       const engine = GameFactory(game.metaGame, game.state);
       if (engine === undefined) {
-        throw new Error(`Could not rehydrate the state for id "${pars.id}", meta "${pars.metaGame}".`);
+        logSubmitMoveFailure('rehydrate_failed', userid, pars);
+        return formatReturnError(
+          `Unable to submit move (${gameRefLabel(pars.metaGame, pars.id)}).`,
+        );
       }
       if (!engine.gameover) {
         let player: number | undefined;
@@ -522,7 +630,11 @@ export async function submitMove(userid: string, pars: {
   }
   catch (error) {
     logGetItemError(error);
-    return formatReturnError('Unable to process submit move');
+    logSubmitMoveFailure('submit_move_error', userid, pars, error);
+    return formatReturnError(
+      `Unable to submit move (${gameRefLabel(pars.metaGame, pars.id)}).`,
+      error,
+    );
   }
 }
 
@@ -765,10 +877,32 @@ export async function invokePie(userid: string, pars: { id: string, metaGame: st
   }
   catch (error) {
     logGetItemError(error);
-    return formatReturnError(`Unable to get game ${pars.id} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
+    return formatReturnError(
+      `Unable to load game (${gameRefLabel(pars.metaGame, pars.id)}).`,
+      error,
+    );
   }
-  if (!data.Item)
-    throw new Error(`No game ${pars.id} in table ${process.env.ABSTRACT_PLAY_TABLE}`);
+  if (!data.Item) {
+    let completedRowExists = false;
+    try {
+      const resolved = await loadInProgressGameRow(pars.metaGame, pars.id);
+      completedRowExists = resolved.completedRowExists;
+    } catch (error) {
+      logGetItemError(error);
+      return formatReturnError(
+        `Unable to load game (${gameRefLabel(pars.metaGame, pars.id)}).`,
+        error,
+      );
+    }
+    if (completedRowExists) {
+      return formatReturnError(
+        `This game has ended (${gameRefLabel(pars.metaGame, pars.id)}). Refresh the page to view the result.`,
+      );
+    }
+    return formatReturnError(
+      `Game not found (${gameRefLabel(pars.metaGame, pars.id)}).`,
+    );
+  }
   try {
     const game = hydrateGameState(data.Item as FullGame);
     console.log("got game in invokePie:");
@@ -782,17 +916,23 @@ export async function invokePie(userid: string, pars: { id: string, metaGame: st
       };
     } else {
       const engine = GameFactory(game.metaGame, game.state);
-      if (!engine)
-        throw new Error(`Unknown metaGame ${game.metaGame}`);
+      if (!engine) {
+        return formatReturnError(`Unknown game type (${gameRefLabel(pars.metaGame, pars.id)}).`);
+      }
       const flags = effectiveFlags(engine, game.metaGame, game.variants);
       if (!flagSetIncludes(flags, "pie") && !flagSetIncludes(flags, "pie-even")) {
-        throw new Error(`Metagame ${pars.metaGame} does not have the "pie" flag. Aborting.`);
+        return formatReturnError(
+          `This game does not support switching seats (${gameRefLabel(pars.metaGame, pars.id)}).`,
+        );
       }
       const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
 
       const player = game.players.find(p => p.id === userid);
-      if (!player)
-        throw new Error(`Player ${userid} isn't playing in game ${pars.id}`)
+      if (!player) {
+        return formatReturnError(
+          `You are not a player in this game (${gameRefLabel(pars.metaGame, pars.id)}).`,
+        );
+      }
 
       const timestamp = Date.now();
       const timeUsed = timestamp - lastMoveTime;
@@ -877,7 +1017,10 @@ export async function invokePie(userid: string, pars: { id: string, metaGame: st
   }
   catch (error) {
     logGetItemError(error);
-    return formatReturnError('Unable to process invoke pie');
+    return formatReturnError(
+      `Unable to switch seats (${gameRefLabel(pars.metaGame, pars.id)}).`,
+      error,
+    );
   }
 }
 
