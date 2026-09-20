@@ -15,6 +15,7 @@ import { feedbackErrorResponse } from '../api/feedbackHttp.js';
 import type { User, UsersData } from '../api/types.js';
 
 import { hydrateGameState } from '../gameState.js';
+import { sanitizeInGameCommentedFlags } from '../gameComments.js';
 import { loadSummaryPlayerCountsByUid } from '../summaryRatings.js';
 import {
   queryRecentCompletedGames,
@@ -144,6 +145,8 @@ export async function games(pars: { metaGame: string, type: string; }) {
           "numMoves": state.stack.length - 1, "variants": state.variants, "commented": g.commented || 0
         }
       });
+      const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+      await sanitizeInGameCommentedFlags(ddbDocClient, tableName, returnlist);
       return {
         statusCode: 200,
         body: JSON.stringify(returnlist),
@@ -164,9 +167,12 @@ export async function games(pars: { metaGame: string, type: string; }) {
           ExpressionAttributeNames: { "#pk": "pk" }
         }));
 
+      const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+      const items = (gamesData.Items ?? []) as Array<{ id: string; commented?: number }>;
+      await sanitizeInGameCommentedFlags(ddbDocClient, tableName, items);
       return {
         statusCode: 200,
-        body: JSON.stringify(gamesData.Items),
+        body: JSON.stringify(items),
         headers
       };
     }
