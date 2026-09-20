@@ -34,8 +34,8 @@
     "backfill-feedback-user-engagement": "tsx bin/backfill-feedback-user-engagement-indexes.mjs",
     "backfill-wishlist-bgg-images": "tsx bin/backfill-wishlist-bgg-images.mjs",
     "backfill-blank-user-names": "tsx bin/backfill-blank-user-names.mjs",
-    "sync-deps": "ap-install-deps --stage dev && node scripts/sync-crons-ap-deps.mjs --stage dev",
-    "sync-deps:prod": "ap-install-deps --stage prod && node scripts/sync-crons-ap-deps.mjs --stage prod",
+    "sync-deps": "ap-install-deps --stage dev && node scripts/prune-crons-nested-ap-deps.mjs && node scripts/sync-crons-ap-deps.mjs --stage dev",
+    "sync-deps:prod": "ap-install-deps --stage prod && node scripts/prune-crons-nested-ap-deps.mjs && node scripts/sync-crons-ap-deps.mjs --stage prod",
     "lint:crons": "npm run lint -w abstractplay-backend-crons",
     "test:crons": "npm run test -w abstractplay-backend-crons",
     "test:crons:layers": "npm run test:layers -w abstractplay-backend-crons"
