@@ -5,7 +5,6 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 // import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
-import { gameinfo, GameFactory, GameBase, GameBaseSimultaneous, type APGamesInformation } from '@abstractplay/gameslib';
 import { localizedGameName } from '@backend/lib/gameDisplayName.js';
 import {
   changeLanguageForPlayer,
@@ -15,17 +14,18 @@ import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
 import { Handler } from "aws-lambda";
 import { assignTournamentPlayerRatings } from "../lib/batchRatings.js";
-import { enqueueGameStartNotifications } from "../lib/gameStartNotifications.js";
 import { enqueueTournamentStartNotifications } from "../lib/tournamentStartNotifications.js";
 import type { InAppNotificationUserSettings } from "../lib/inAppNotificationPrefs.js";
 import {
   canonicalPlayerPair,
   ensureTournamentGameLink,
-  existingPairKeys,
+  existingLeg1PairKeys,
   findExistingGameForPair,
   loadExistingTournamentGames,
   type ExistingTournamentGame,
 } from "../lib/tournamentPairing.js";
+import { normalizeMatchLegs } from "@backend/lib/tournaments/matchLegs.js";
+import { createTournamentPairingGame } from "@backend/lib/tournaments/createTournamentPairingGame.js";
 import { tournamentPlaySupported } from "@backend/lib/tournamentGame.js";
 import {
   acquireTournamentStartingLock,
@@ -33,7 +33,6 @@ import {
   releaseTournamentStartingLock,
   WriteJournal,
 } from "../lib/writeJournal.js";
-import { prepareGameStateForStorage } from "../utils/gameState.js";
 import { loadSummaryRatingsHighest } from "../utils/summaryRatings.js";
 import type { UserGameRating } from "types/stats/UserGameRating.js";
 
@@ -208,6 +207,7 @@ type Tournament = {
   };
   players?: TournamentPlayer[]; // only on archived tournaments
   waiting?: boolean; // tournament does not yet have 4 players
+  matchLegs?: 1 | 2;
 };
 
 type TournamentPlayer = {
@@ -523,7 +523,8 @@ async function startTournament(
       existingGames = await loadExistingTournamentGames(ddbDocClient, tableName, tournament.id);
       console.log(`Resume: found ${existingGames.length} existing game(s) for tournament ${tournament.id}`);
     }
-    const pairedKeys = existingPairKeys(existingGames);
+    const pairedKeys = existingLeg1PairKeys(existingGames);
+    const twoLeg = normalizeMatchLegs(tournament.matchLegs) === 2;
     const skipDivisionSetup = resume && players.every(p => p.division !== undefined);
     if (!skipDivisionSetup) {
       let division = 1;
@@ -566,7 +567,7 @@ async function startTournament(
       divisions[division] = {numGames: 0, numCompleted: 0, processed: false};
       for (let i = 0; i < (division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall); i++) {
         for (let j = i + 1; j < (division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall); j++) {
-          divisions[division].numGames += 1;
+          divisions[division].numGames += twoLeg ? 2 : 1;
           const player1 = player0 + i;
           const player2 = player0 + j;
           const gamePlayers: User[] = [];
@@ -579,7 +580,7 @@ async function startTournament(
           }
           const pairKey = canonicalPlayerPair(gamePlayers[0]!.id, gamePlayers[1]!.id);
           if (resume && pairedKeys.has(pairKey)) {
-            const existing = findExistingGameForPair(existingGames, pairKey);
+            const existing = findExistingGameForPair(existingGames, pairKey, 1);
             if (existing !== undefined) {
               console.log(`Resume: linking existing game ${existing.id} for tournament ${tournament.id}`);
               const tgSk = tournament.id + "#" + division.toString() + '#' + existing.id;
@@ -591,6 +592,7 @@ async function startTournament(
                 existing.id,
                 gamePlayers[0]!.id,
                 gamePlayers[1]!.id,
+                twoLeg ? { matchLeg: 1 } : undefined,
               );
               if (linked) {
                 journal.trackCreate('TOURNAMENTGAME', tgSk);
@@ -599,68 +601,30 @@ async function startTournament(
             }
           }
           const gameId = uuid();
-          let whoseTurn: string | boolean[] = "0";
-          const info = gameinfo.get(tournament.metaGame);
-          if (info.flags !== undefined && info.flags.includes('simultaneous')) {
-            whoseTurn = gamePlayers.map(() => true);
-          }
-          const variants = tournament.variants;
-          let engine;
-          if (info.playercounts.length > 1)
-            engine = GameFactory(tournament.metaGame, 2, variants);
-          else
-            engine = GameFactory(tournament.metaGame, undefined, variants);
-          if (!engine)
-            throw new Error(`Unknown metaGame ${tournament.metaGame}`);
-          const state = engine.serialize();
           const gameSk = tournament.metaGame + "#0#" + gameId;
           const tgSk = tournament.id + "#" + division.toString() + '#' + gameId;
           journal.trackCreate('GAME', gameSk);
           journal.trackCreate('TOURNAMENTGAME', tgSk);
           console.log(`Creating game ${gameId} for tournament ${tournament.id} with division ${division}`);
-          await sendCommandWithRetry(new PutCommand({
-            TableName: tableName,
-            Item: prepareGameStateForStorage({
-              "pk": "GAME",
-              "sk": gameSk,
-              "id": gameId,
-              "metaGame": tournament.metaGame,
-              "numPlayers": 2,
-              "rated": true,
-              "players": info.flags !== undefined && info.flags.includes('perspective') ?
-                gamePlayers.map((p, ind) => {return (ind === 0 ? p : {...p, settings: {"rotate": 180}})})
-                : gamePlayers,
-              "clockStart": clockStart,
-              "clockInc": clockInc,
-              "clockMax": clockMax,
-              "clockHard": true,
-              "state": state,
-              "toMove": whoseTurn,
-              "lastMoveTime": now,
-              "gameStarted": now,
-              "variants": engine.variants,
-              "tournament": tournament.id,
-              "division": division
-            })
-          }));
-          await enqueueGameStartNotifications(ddbDocClient, tableName, {
-            id: gameId,
+          await createTournamentPairingGame({
+            client: ddbDocClient,
+            tableName,
+            tournamentId: tournament.id,
             metaGame: tournament.metaGame,
-            variants: engine.variants,
-            players: gamePlayers.map(p => ({ id: p.id, name: p.name })),
+            variants: tournament.variants ?? [],
+            division,
+            players: [
+              { id: gamePlayers[0]!.id, name: gamePlayers[0]!.name, time: gamePlayers[0]!.time },
+              { id: gamePlayers[1]!.id, name: gamePlayers[1]!.name, time: gamePlayers[1]!.time },
+            ],
+            matchLeg: twoLeg ? 1 : undefined,
+            schedulingRound: twoLeg ? 1 : undefined,
+            gameId,
+            now,
+            clockStart,
+            clockInc,
+            clockMax,
           });
-          const tournamentGame = {
-            "pk": "TOURNAMENTGAME",
-            "sk": tgSk,
-            "id": gameId,
-            "player1": gamePlayers[0].id,
-            "player2": gamePlayers[1].id
-          };
-          console.log(`Adding game ${gameId} to TOURNAMENTGAME list`);
-          await sendCommandWithRetry(new PutCommand({
-            TableName: tableName,
-            Item: tournamentGame
-          }));
         }
       }
       player0 += division <= numBigDivisions ? divisionSizeSmall + 1 : divisionSizeSmall;
@@ -689,7 +653,7 @@ async function startTournament(
       UpdateExpression: "set #count = #count + :inc, #over = :f"
     }));
 
-    const data = {
+    const data: Tournament = {
       "pk": "TOURNAMENT",
       "sk": newTournamentid,
       "id": newTournamentid,
@@ -698,7 +662,8 @@ async function startTournament(
       "number": tournament.number + 1,
       "started": false,
       "dateCreated": now,
-      "datePreviousEnded": 3000000000000
+      "datePreviousEnded": 3000000000000,
+      ...(twoLeg ? { matchLegs: 2 as const } : {}),
     };
     journal.trackCreate('TOURNAMENT', newTournamentid);
     console.log(`Creating new tournament ${newTournamentid}`);

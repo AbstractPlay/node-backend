@@ -150,7 +150,7 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `new_tournament` | Create automated tournament (meta game must support `playercount: 2`) | tournament spec |
+| `new_tournament` | Create automated tournament (meta game must support `playercount: 2`) | `metaGame`, `variants`, optional `matchLegs` (`1` default, `2` = two games per pairing with alternating seats) |
 | `join_tournament` | Enter tournament (same 2-player requirement) | `id` |
 | `withdraw_tournament` | Leave tournament | `id` |
 | `end_tournament` | End tournament | `id` |
