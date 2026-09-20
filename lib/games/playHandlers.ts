@@ -43,6 +43,11 @@ import {
   shouldWriteGameOpenOverlay,
 } from '../dashboardGames.js';
 import { upsertUserGameOverlay } from '../userGameOverlay.js';
+import {
+  isInterestingComment,
+  isUserChatComment,
+  type GameComment,
+} from '../gameComments.js';
 import { checkInGameCommentAuth } from '../commentAuth.js';
 import {
   countGameWatchers,
@@ -163,18 +168,10 @@ type FullGame = {
   commented?: number; // 0 or missing: no comments or post game variations, 1: has in-game comments (note this does NOT get updated for post-game comments/variations)
 }
 
-type Comment = {
-  comment: string;
-  userId: string;
+type Comment = GameComment & {
   moveNumber: number;
   timeStamp: number;
-  system?: boolean;
-}
-
-/** Player-authored in-game chat only (not pie / system log lines). */
-function isUserChatComment(userId: string): boolean {
-  return userId.trim().length > 0;
-}
+};
 
 type Exploration = {
   version?: number;
@@ -1281,51 +1278,6 @@ function applyMove(
     game.toMove = `${engine.currplayer - 1}`;
   }
   return { autoMoves, autoMovesPerPlayer, work };
-}
-
-function isInterestingComment(comment: string): boolean {
-  if (!comment || comment.trim().length === 0) {
-    return false;
-  }
-  // Normalize the comment
-  const normalized = comment.toLowerCase().trim();
-
-  // Remove punctuation for comparison
-  const withoutPunctuation = normalized.replace(/[^\w\s]/g, '');
-
-  // Common boring phrases (exact matches)
-  const boringPhrases = new Set([
-    'gg', 'glhf', 'gl', 'hf', 'tagg', 'hi', 'hello', 'hey',
-    'thanks', 'thx', 'ty', 'yw', 'np', 'wp', 'well played',
-    'good game', 'good luck', 'have fun', 'thanks for the game',
-    'pie invoked', 'move', 'gg sir', 'gg!', 'tagg!', 'glhf!',
-    'to a good game', 'have a good game', 'good luck!', 'have fun!',
-    'thanks for playing', 'thanks for the game!', 'gg thanks',
-    'yoyo', 'yoyo gl', 'yoyo gl hf'
-  ]);
-
-  // Check for exact matches (with or without punctuation)
-  if (boringPhrases.has(normalized) || boringPhrases.has(withoutPunctuation)) {
-    return false;
-  }
-
-  // Split into words for further analysis
-  const words = withoutPunctuation.split(/\s+/).filter(w => w.length > 0);
-
-  // Very short comments with only common game words are boring
-  const commonWords = new Set([
-    'gg', 'gl', 'hf', 'tagg', 'hi', 'hello', 'yoyo',
-    'thanks', 'thx', 'ty', 'wp', 'move', 'pie', 'invoked',
-    'good', 'game', 'luck', 'fun', 'for', 'the', 'a', 'to',
-    'have', 'sir', 'well', 'played', 'you', 'too'
-  ]);
-
-  if (words.length <= 3 && words.every(w => commonWords.has(w))) {
-    return false;
-  }
-
-  // If we got here, the comment is interesting
-  return true;
 }
 
 // Helper function to update lastChat and seen for active dashboard games
