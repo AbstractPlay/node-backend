@@ -98,6 +98,20 @@ Reads `ALL.json`, computes site-wide analytics, writes `_summary.json` and tier 
 
 `player-summary-worker` Lambdas (SQS-triggered, concurrency 25) write `player/{userId}-summary.json`. The handler returns structured metrics (`candidateCount`, `enqueuedCount`, `skippedCount`, `inputUnchanged`, `tierBytesLoaded`, `manifestBytes`) and logs a one-line summary.
 
+## Manual full pipeline (`run-records-pipeline`)
+
+From `crons/`:
+
+```bash
+npm run run-records-pipeline -- --stage prod
+```
+
+The script invokes the same Lambdas as the daily batch (in order), **not** `dumpdb` or SQS workers.
+
+**Do not** use `serverless invoke` for long jobs such as `records` or `summarize` on Node 24: the Serverless/AWS SDK can time out around two minutes and **retry**, which starts overlapping prod runs while the first invocation is still executing. The pipeline script uses `aws lambda invoke` with a **960s read timeout**, waits for any in-flight run to finish (CloudWatch concurrent executions), and holds a **local lock** so two pipeline processes on the same machine cannot run at once.
+
+After changing concurrency settings, deploy crons (`serverless deploy --stage prod`). Batch Lambdas use `reservedConcurrency: 1` so only one execution of each function can run at a time (manual invoke vs EventBridge schedule vs stray retries).
+
 ## Failure and timing
 
 - `dumpdb` starts at 00:00; the 03:00 batch uses the latest **completed** export, which may be from the previous day if today's export is still running
