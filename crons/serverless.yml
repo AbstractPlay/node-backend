@@ -578,6 +578,28 @@ resources:
         OKActions:
           - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
 
+    ThumbnailsErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: OpsAlertsEnabled
+      Properties:
+        AlarmName: abstractplay-crons-thumbnails-errors-${self:provider.stage}
+        AlarmDescription: thumbnails Lambda errors (including init failures)
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref ThumbnailsLambdaFunction
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+        OKActions:
+          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
+
     ThumbnailsVerifyErrorsAlarm:
       Type: AWS::CloudWatch::Alarm
       Condition: OpsAlertsEnabled

@@ -1,8 +1,7 @@
 import { S3Client, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, type _Object } from "@aws-sdk/client-s3";
 import { Handler } from "aws-lambda";
 import { GameFactory, addResource, gameinfo, type APGamesInformation } from "@abstractplay/gameslib";
-import enApgames from "@abstractplay/gameslib/locales/en/apgames.json";
-import enApresults from "@abstractplay/gameslib/locales/en/apresults.json";
+import { enApgames, enApresults } from "../utils/gameslibEnLocaleBundles.js";
 import { gunzipSync, strFromU8 } from "fflate";
 import { load as loadIon } from "ion-js";
 import { ReservoirSampler } from "../utils/ReservoirSampler.js";
