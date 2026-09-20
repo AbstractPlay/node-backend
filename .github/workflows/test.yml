@@ -44,6 +44,9 @@ jobs:
       - name: Install pinned AP dependencies
         run: npx ap-install-deps --stage dev
 
+      - name: Prune nested crons @abstractplay installs
+        run: node scripts/prune-crons-nested-ap-deps.mjs
+
       - name: Sync crons AP manifests from lockfile
         run: node scripts/sync-crons-ap-deps.mjs --stage dev
 
@@ -79,6 +82,9 @@ jobs:
 
       - name: Install pinned AP dependencies
         run: npx ap-install-deps --stage dev
+
+      - name: Prune nested crons @abstractplay installs
+        run: node scripts/prune-crons-nested-ap-deps.mjs
 
       - name: Sync crons AP manifests from lockfile
         run: node scripts/sync-crons-ap-deps.mjs --stage dev

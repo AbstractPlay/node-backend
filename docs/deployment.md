@@ -28,7 +28,7 @@ Crons source lives in [`crons/`](https://github.com/AbstractPlay/node-backend/tr
 
 Canonical pins live in `ci-deps.dev.json` and `ci-deps.prod.json`. CI runs `npm ci` → manifest validation → `ap-install-deps --stage dev|prod` → strict lockfile check → build/test.
 
-After a merge that touches dependency files, run `npm run sync-deps` on `develop` (or `npm run sync-deps:prod` on `main`) and commit root `ci-deps.*.json`, root and `crons/package.json`, and the root `package-lock.json` together. `npm run sync-deps` runs `ap-install-deps` at the repo root (pins include `recranks` for the crons workspace) and updates `crons/package.json` from the lockfile. Do not hand-merge AP version strings in `package.json`.
+After a merge that touches dependency files, run `npm run sync-deps` on `develop` (or `npm run sync-deps:prod` on `main`) and commit root `ci-deps.*.json`, root and `crons/package.json`, and the root `package-lock.json` together. `npm run sync-deps` runs `ap-install-deps` at the repo root, prunes any stale `crons/node_modules/@abstractplay` tree (the crons workspace must use hoisted AP packages), then updates `crons/package.json` from the lockfile. Do not hand-merge AP version strings in `package.json` or run `ap-install-deps` from `crons/` alone.
 
 `ci-deps.prod.json` is protected on `main` via `.gitattributes` (`merge=ours`). `ci-deps.dev.json` is protected on `develop` the same way (e.g. when merging `l10n/weblate`). `package.json` and `package-lock.json` are regenerated via `sync-deps`, not merge=ours.
 
