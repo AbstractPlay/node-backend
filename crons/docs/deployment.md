@@ -56,6 +56,8 @@ EventBridge cron rules are **enabled only on prod** (`custom.scheduleEnabled.pro
 
 On **prod**, CloudWatch alarms in this stack publish to the SNS topic exported by the API stack (`abstract-play-prod-OpsAlertsTopicArn`). Confirm the ops-alerts email subscription via [node-backend deployment](/backend/deployment/#ops-alerts-email).
 
+Crons alarms include **`records`**, **`summarize`**, **`thumbnails`**, **`thumbnails-verify`**, thumbnail render (`sqs-to-render`, custom `RenderFailure`, render DLQ).
+
 ## Documentation site
 
 Cron docs live in `crons/docs/` and publish under `/crons/` on the [docs site](https://docs.abstractplay.com). The [AbstractPlay/docs](https://github.com/AbstractPlay/docs) prebuild syncs `vendor/node-backend/crons/docs` (no separate `backend-crons` submodule). Maintainer checklist: [`_docs-repo-integration.md`](https://github.com/AbstractPlay/node-backend/blob/develop/crons/docs/_docs-repo-integration.md).

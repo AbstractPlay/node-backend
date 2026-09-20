@@ -1,8 +1,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import { addResource } from "@abstractplay/gameslib";
 import type { APRenderRep } from "@abstractplay/renderer";
-import enApgames from "@abstractplay/gameslib/locales/en/apgames.json";
-import enApresults from "@abstractplay/gameslib/locales/en/apresults.json";
+import { enApgames, enApresults } from "./gameslibEnLocaleBundles.js";
 import { resolveRenderLabels } from "./resolveRenderLabels.js";
 
 describe("resolveRenderLabels", () => {
