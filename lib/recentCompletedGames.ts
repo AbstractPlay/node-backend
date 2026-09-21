@@ -5,10 +5,8 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 
 export const RECENT_COMPLETED_CACHE_TTL_MS = 30_000;
-export const RECENT_COMPLETED_DEFAULT_DAYS = 30;
-export const RECENT_COMPLETED_DEFAULT_LIMIT = 100;
-export const RECENT_COMPLETED_MAX_DAYS = 90;
-export const RECENT_COMPLETED_MAX_LIMIT = 500;
+export const RECENT_COMPLETED_DEFAULT_DAYS = 7;
+export const RECENT_COMPLETED_MAX_DAYS = 30;
 
 const MS_PER_DAY = 86_400_000;
 const GLOBAL_COMPLETED_PK = 'COMPLETEDGAMES';
@@ -44,35 +42,6 @@ function normalizeDays(days: unknown): number {
     throw new Error('days must be a positive number.');
   }
   return Math.min(Math.floor(parsed), RECENT_COMPLETED_MAX_DAYS);
-}
-
-function normalizeLimit(limit: unknown): number {
-  if (limit === undefined || limit === null || limit === '') {
-    return RECENT_COMPLETED_DEFAULT_LIMIT;
-  }
-  const parsed = Number(limit);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error('limit must be a positive number.');
-  }
-  return Math.min(Math.floor(parsed), RECENT_COMPLETED_MAX_LIMIT);
-}
-
-function decodeOffsetKey(exclusiveStartKey: unknown): number {
-  if (exclusiveStartKey === undefined || exclusiveStartKey === null || exclusiveStartKey === '') {
-    return 0;
-  }
-  if (typeof exclusiveStartKey !== 'string') {
-    throw new Error('exclusiveStartKey must be a string.');
-  }
-  const parsed = JSON.parse(exclusiveStartKey) as { offset?: unknown };
-  if (typeof parsed.offset !== 'number' || !Number.isFinite(parsed.offset) || parsed.offset < 0) {
-    throw new Error('exclusiveStartKey is invalid.');
-  }
-  return Math.floor(parsed.offset);
-}
-
-function encodeOffsetKey(offset: number): string {
-  return JSON.stringify({ offset });
 }
 
 async function loadRecentCompletedGames(
@@ -122,13 +91,10 @@ async function getCachedRecentCompletedGames(
 
 export type RecentCompletedGamesPars = {
   days?: unknown;
-  limit?: unknown;
-  exclusiveStartKey?: unknown;
 };
 
 export type RecentCompletedGamesResult = {
   items: CompletedGameSummary[];
-  lastEvaluatedKey?: string;
 };
 
 export async function queryRecentCompletedGames(
@@ -137,15 +103,8 @@ export async function queryRecentCompletedGames(
   pars: RecentCompletedGamesPars,
 ): Promise<RecentCompletedGamesResult> {
   const days = normalizeDays(pars.days);
-  const limit = normalizeLimit(pars.limit);
-  const offset = decodeOffsetKey(pars.exclusiveStartKey);
-  const allItems = await getCachedRecentCompletedGames(client, tableName, days);
-  const items = allItems.slice(offset, offset + limit);
-  const nextOffset = offset + items.length;
-  return {
-    items,
-    ...(nextOffset < allItems.length ? { lastEvaluatedKey: encodeOffsetKey(nextOffset) } : {}),
-  };
+  const items = await getCachedRecentCompletedGames(client, tableName, days);
+  return { items };
 }
 
 export async function updateCompletedGameCommentedFlag(

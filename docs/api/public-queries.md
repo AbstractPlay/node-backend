@@ -18,7 +18,7 @@ POST body: `{ "query": "<name>", "pars": { ... } }`
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `games` | Active games for a metaGame | `metaGame` |
-| `recent_completed_games` | Completed games site-wide in the last N days (default 30; global `COMPLETEDGAMES` index) | `days` (optional), `limit` (optional), `exclusiveStartKey` (optional) |
+| `recent_completed_games` | Completed games site-wide in the last N days (default 7, max 30; global `COMPLETEDGAMES` index) | `days` (optional) — returns `{ items }` for the full in-window list |
 | `representative_games` | Community-recommended completed games | `metaGame` |
 | `get_game` | Full game record with `watchCount` | `metaGame`, `id`, `cbit` |
 | `get_public_exploration` | Published exploration tree | `gameid`, `userid`, `movenumber` |
