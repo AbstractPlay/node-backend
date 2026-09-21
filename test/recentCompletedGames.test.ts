@@ -46,25 +46,20 @@ describe('queryRecentCompletedGames', () => {
     assert.equal('lastEvaluatedKey' in result, false);
   });
 
-  it('clamps days above max to the same window as 30 days', async () => {
-    const sinceValues: unknown[] = [];
+  it('clamps days above max to the same cached window as 30 days', async () => {
+    let sendCount = 0;
     const client = {
-      send: async (command: { input?: { ExpressionAttributeValues?: Record<string, unknown> } }) => {
-        sinceValues.push(command.input?.ExpressionAttributeValues?.[':since']);
+      send: async () => {
+        sendCount += 1;
         return { Items: [] };
       },
     } as unknown as DynamoDBDocumentClient;
 
     clearRecentCompletedGamesCacheForTests();
     await queryRecentCompletedGames(client, 'table', { days: 90 });
-    const sinceFrom90 = sinceValues[0];
-
-    clearRecentCompletedGamesCacheForTests();
-    sinceValues.length = 0;
     await queryRecentCompletedGames(client, 'table', { days: 30 });
-    const sinceFrom30 = sinceValues[0];
 
-    assert.equal(sinceFrom90, sinceFrom30);
+    assert.equal(sendCount, 1);
   });
 
   it('rejects invalid days', async () => {
