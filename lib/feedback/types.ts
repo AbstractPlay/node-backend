@@ -65,7 +65,8 @@ export type FeedbackMetaItem = {
   wishlistCategoryNote?: string;
   effort?: FeedbackEffort;
   priority?: string;
-  adminTags?: string[];
+  tags?: string[];
+  suggestedTags?: string[];
   reviewers?: FeedbackReviewer[];
   lastStaffCommentAt?: number;
   lastAuthorCommentAt?: number;
@@ -172,6 +173,8 @@ export type FeedbackCreatePars = {
   attachmentKeys?: string[];
   context?: FeedbackBugContext;
   legacyVoteCount?: number;
+  tags?: string[];
+  suggestedTags?: string[];
 };
 
 export type FeedbackListPars = {
@@ -224,16 +227,23 @@ export type FeedbackUpdatePars = {
   title?: string;
   body?: string;
   attachmentKeys?: string[];
+  tags?: string[];
+  suggestedTags?: string[];
 };
 
 export type FeedbackSetAdminFieldsPars = {
   id?: string;
   effort?: string;
   priority?: string;
-  adminTags?: string[];
+  tags?: string[];
+  clearSuggestedTags?: boolean;
   reviewerIds?: string[];
   wishlistCategory?: string;
   wishlistCategoryNote?: string;
+};
+
+export type FeedbackSetTagVocabPars = {
+  tags?: { id?: string; kinds?: string[] }[];
 };
 
 export type FeedbackMineScope = 'submitted' | 'voted' | 'watched';
@@ -285,7 +295,7 @@ export type FeedbackPublicPost = {
   wishlistCategoryNote?: string;
   effort?: FeedbackEffort;
   priority?: string;
-  adminTags?: string[];
+  tags?: string[];
   reviewers?: FeedbackReviewer[];
   archivedAt?: number;
   expiresAt?: number;
@@ -294,6 +304,7 @@ export type FeedbackPublicPost = {
 
 export type FeedbackAdminListItem = FeedbackPublicPost & {
   needsResponse: boolean;
+  suggestedTags?: string[];
 };
 
 export type FeedbackPublicComment = {
@@ -317,6 +328,8 @@ export type FeedbackGetResult = {
   summary?: FeedbackHistorySummary;
   /** Bug triage metadata; included only when the viewer is an admin. */
   bugContext?: FeedbackBugContext;
+  /** Tag suggestions from submitters; admin viewers only. */
+  suggestedTags?: string[];
 };
 
 export type FeedbackHistoryListPars = {

@@ -49,15 +49,17 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `feedback_presign_upload` | Presigned S3 PUT for bug screenshots | `filename`, `contentType`, `contentLength` (png/jpeg/webp, max 5 MB). Returns `{ uploadUrl, key, headers }`. |
-| `feedback_create` | Create a post | `kind`, `title`, optional `body`, `gameUrl`, `attachmentKeys`, `context` (bugs). Bug screenshots optional (≤3 when provided). Returns `{ id }`. |
+| `feedback_create` | Create a post | `kind`, `title`, optional `body`, `gameUrl`, `attachmentKeys`, `context` (bugs), optional `tags` (bug/feature, ≤3 slugs from vocab), optional `suggestedTags` (≤2 strings). Bug screenshots optional (≤3 when provided). Returns `{ id }`. |
 | `feedback_get` | Single post (auth adds `subscribed`, `userVoted`) | `id` |
 | `feedback_vote` | Toggle vote | `id`, `vote` (boolean). Returns `{ voteCount, effectiveVotes, voted }`. |
 | `feedback_comment` | Add comment | `id`, `body` and/or `attachmentKeys` (bugs/features only, ≤3 images), optional `subscribe` (default `true`). Allowed on terminal posts until archived. Returns `{ commentId }`. |
 | `feedback_set_status` | Admin status change | `id`, `status`. Sets `terminalAt` when moving to a terminal status; removes it when reopening to a non-terminal status. Notifies author and subscribers. |
 | `feedback_subscribe` | Watch/unwatch | `id`, `subscribe` (boolean). Returns `{ subscribed }`. |
 | `feedback_reclassify` | Admin reclassify bug → feature | `id`. Open → `open`; triaged → `under_review`; monitoring → `planned`. Terminal bugs rejected. Returns `{ id, kind, status }`. |
-| `feedback_update` | Edit title/body | `id`, optional `title`, `body` (at least one). Author or admin. Writes `EDIT#` audit rows. |
-| `feedback_set_admin_fields` | Admin triage fields | `id`, optional `effort`, `priority`, `adminTags`, `wishlistCategory`, `wishlistCategoryNote`. |
+| `feedback_update` | Edit title/body/tags | `id`, optional `title`, `body`, `tags`, `suggestedTags` (at least one field). Author or admin on non-terminal posts. Writes `EDIT#` audit rows for title/body. |
+| `feedback_set_admin_fields` | Admin triage fields | `id`, optional `effort`, `priority`, `tags` (bug/feature, works on terminal posts), `clearSuggestedTags`, `reviewerIds`, `wishlistCategory`, `wishlistCategoryNote`. |
+| `feedback_tag_vocab` | Tag vocabulary for boards | Returns `{ tags: [{ id, kinds }] }`. |
+| `feedback_set_tag_vocab` | Admin replace tag vocabulary | `tags`: non-empty array of `{ id, kinds }`. |
 | `feedback_mine` | List caller's feedback activity | optional `scope` (`submitted` default, `voted`, `watched`), `kind`, `limit`, `cursor`. Items include `userVoted` and `subscribed`. Returns `{ items, nextCursor? }`. |
 | `feedback_admin_list` | Admin dashboard list | `kind`, optional `status`, `effort`, `priority`, `needsResponse`, `limit`, `cursor`. Returns `{ items, nextCursor? }` with `needsResponse` per item. |
 | `feedback_delete` | Admin delete wishlist entry | `id`, `reason` (required). Permanently removes the post and notifies watchers. Wishlist only. Returns `{ id }`. |

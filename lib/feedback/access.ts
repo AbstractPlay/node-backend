@@ -27,6 +27,7 @@ import type {
   FeedbackSetStatusPars,
   FeedbackSubscribePars,
   FeedbackUpdatePars,
+  FeedbackSetTagVocabPars,
 } from './types.js';
 import { generateCommentId, generateEditId, generatePostId, normalizedGameUrlForDedup } from './ids.js';
 import {
@@ -99,8 +100,16 @@ import {
   validateFeedbackWishlistSearchPars,
   validateFeedbackHistoryListPars,
   validateFeedbackHoldRetentionPars,
+  validateFeedbackSetTagVocabPars,
+  assertTagsAllowedForKind,
   type ValidatedFeedbackCreate,
 } from './validate.js';
+import {
+  getFeedbackTagVocab,
+  publicTagVocabResponse,
+  setFeedbackTagVocab,
+  vocabIdsForKind,
+} from './tagVocab.js';
 import type {
   FeedbackCommentPars,
   FeedbackCreatePars,
@@ -164,7 +173,7 @@ function buildListFields(
     FeedbackMetaItem,
     'id' | 'kind' | 'title' | 'status' | 'authorId' | 'authorName' | 'createdAt' | 'updatedAt'
     | 'voteCount' | 'legacyVoteCount' | 'effectiveVotes' | 'commentCount' | 'attachmentKeys' | 'terminalAt' | 'archivedAt'
-    | 'effort' | 'priority' | 'adminTags' | 'reviewers' | 'lastStaffCommentAt' | 'lastAuthorCommentAt'
+    | 'effort' | 'priority' | 'tags' | 'reviewers' | 'lastStaffCommentAt' | 'lastAuthorCommentAt'
     | 'gameUrl' | 'bggGameId' | 'normalizedGameUrl' | 'wishlistCategory' | 'wishlistCategoryNote'
     | 'legacyBggItemId' | 'legacyBggSubmitter'
   >,
@@ -187,7 +196,7 @@ function buildListFields(
     archivedAt: meta.archivedAt,
     effort: meta.effort,
     priority: meta.priority,
-    adminTags: meta.adminTags,
+    tags: meta.tags,
     reviewers: meta.reviewers,
     lastStaffCommentAt: meta.lastStaffCommentAt,
     lastAuthorCommentAt: meta.lastAuthorCommentAt,
@@ -249,6 +258,8 @@ function buildMetaItem(
     wishlistCategory: data.wishlistCategory as FeedbackMetaItem['wishlistCategory'],
     legacyBggItemId: data.legacyBggItemId,
     legacyBggSubmitter: data.legacyBggSubmitter,
+    tags: data.tags,
+    suggestedTags: data.suggestedTags,
     gsi2pk: statusGsi2Pk(data.kind, data.status),
     gsi2sk: String(now),
   };
@@ -343,7 +354,7 @@ function toPublicPost(item: Record<string, unknown>): FeedbackPublicPost {
     wishlistCategoryNote: typeof item.wishlistCategoryNote === 'string' ? item.wishlistCategoryNote : undefined,
     effort: item.effort as FeedbackPublicPost['effort'],
     priority: typeof item.priority === 'string' ? item.priority : undefined,
-    adminTags: Array.isArray(item.adminTags) ? item.adminTags as string[] : undefined,
+    tags: Array.isArray(item.tags) ? item.tags as string[] : undefined,
     reviewers: Array.isArray(item.reviewers)
       ? item.reviewers.filter((reviewer): reviewer is { id: string; name: string } => (
         typeof reviewer === 'object'
@@ -362,7 +373,59 @@ function toAdminListItem(item: Record<string, unknown>): FeedbackAdminListItem {
   return {
     ...toPublicPost(item),
     needsResponse: needsResponseFromMeta(item),
+    suggestedTags: Array.isArray(item.suggestedTags) ? item.suggestedTags as string[] : undefined,
   };
+}
+
+async function allowedTagIdsForKind(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  kind: FeedbackKind,
+): Promise<Set<string>> {
+  const vocab = await getFeedbackTagVocab(client, getFeedbackTableName(tableName));
+  return vocabIdsForKind(vocab, kind);
+}
+
+function tagCheck(
+  tagIds: string[] | undefined,
+  allowedIds: Set<string>,
+): FeedbackResult<Record<string, never>> {
+  if (tagIds === undefined) {
+    return { ok: true, data: {} };
+  }
+  const check = assertTagsAllowedForKind(tagIds, allowedIds);
+  if (!check.ok) {
+    return { ok: false, message: check.message, statusCode: 400 };
+  }
+  return { ok: true, data: {} };
+}
+
+export async function feedbackTagVocabList(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+): Promise<FeedbackResult<{ tags: { id: string; kinds: ('bug' | 'feature')[] }[] }>> {
+  const vocab = await getFeedbackTagVocab(client, getFeedbackTableName(tableName));
+  return { ok: true, data: publicTagVocabResponse(vocab) };
+}
+
+export async function feedbackSetTagVocab(
+  client: DynamoDBDocumentClient,
+  tableName: string | undefined,
+  pars: FeedbackSetTagVocabPars,
+): Promise<FeedbackResult<{ tags: { id: string; kinds: ('bug' | 'feature')[] }[] }>> {
+  const validated = validateFeedbackSetTagVocabPars(pars);
+  if (!validated.ok) {
+    return { ok: false, message: validated.message, statusCode: 400 };
+  }
+  const setResult = await setFeedbackTagVocab(
+    client,
+    getFeedbackTableName(tableName),
+    validated.data.tags,
+  );
+  if (!setResult.ok) {
+    return { ok: false, message: setResult.message, statusCode: 400 };
+  }
+  return { ok: true, data: { tags: validated.data.tags } };
 }
 
 function toPublicComment(
@@ -397,6 +460,14 @@ export async function feedbackCreate(
   const id = generatePostId();
   const now = Date.now();
   const authorName = await loadAuthorName(client, userId);
+
+  if (data.kind === 'bug' || data.kind === 'feature') {
+    const allowed = await allowedTagIdsForKind(client, tableName, data.kind);
+    const tagValidation = tagCheck(data.tags, allowed);
+    if (!tagValidation.ok) {
+      return tagValidation;
+    }
+  }
 
   let attachmentKeys = data.attachmentKeys;
   if (attachmentKeys && attachmentKeys.length > 0) {
@@ -665,10 +736,14 @@ export async function feedbackGet(
 
   const archived = metaResult.Item.archivedAt !== undefined;
   let bugContext: FeedbackBugContext | undefined;
-  if (viewerUserId && post.kind === 'bug') {
+  let suggestedTags: string[] | undefined;
+  if (viewerUserId) {
     const isAdmin = await loadIsAdmin(client, viewerUserId);
-    if (isAdmin) {
+    if (isAdmin && post.kind === 'bug') {
       bugContext = parseBugContext(metaResult.Item);
+    }
+    if (isAdmin && Array.isArray(metaResult.Item.suggestedTags)) {
+      suggestedTags = metaResult.Item.suggestedTags as string[];
     }
   }
   return {
@@ -681,6 +756,7 @@ export async function feedbackGet(
       userVoted,
       ...(archived ? { archived: true } : {}),
       ...(bugContext ? { bugContext } : {}),
+      ...(suggestedTags ? { suggestedTags } : {}),
     },
   };
 }
@@ -1336,6 +1412,48 @@ function pushListProjectionFieldUpdates(
   }
 }
 
+function applyPostTagsToWriteParts(
+  tags: string[] | undefined,
+  parts: {
+    metaSetParts: string[];
+    metaValues: Record<string, unknown>;
+    metaRemoveParts: string[];
+    listSetParts: string[];
+    listValues: Record<string, unknown>;
+    listRemoveParts: string[];
+  },
+): void {
+  if (tags === undefined) {
+    return;
+  }
+  if (tags.length === 0) {
+    parts.metaRemoveParts.push('tags');
+    parts.listRemoveParts.push('tags');
+    return;
+  }
+  parts.metaSetParts.push('tags = :tags');
+  parts.metaValues[':tags'] = tags;
+  parts.listSetParts.push('tags = :tags');
+  parts.listValues[':tags'] = tags;
+}
+
+function applySuggestedTagsToMetaWriteParts(
+  suggestedTags: string[] | undefined,
+  metaSetParts: string[],
+  metaValues: Record<string, unknown>,
+  metaRemoveParts: string[],
+): void {
+  if (suggestedTags === undefined) {
+    return;
+  }
+  if (suggestedTags.length === 0) {
+    metaRemoveParts.push('suggestedTags');
+    return;
+  }
+  metaSetParts.push('suggestedTags = :suggestedTags');
+  metaValues[':suggestedTags'] = suggestedTags;
+}
+
 export async function feedbackUpdate(
   client: DynamoDBDocumentClient,
   tableName: string | undefined,
@@ -1350,7 +1468,7 @@ export async function feedbackUpdate(
   }
 
   const feedbackTable = getFeedbackTableName(tableName);
-  const { id, title, body, attachmentKeys } = validated.data;
+  const { id, title, body, attachmentKeys, tags, suggestedTags } = validated.data;
   const pk = postPk(id);
 
   const metaResult = await client.send(new GetCommand({
@@ -1367,14 +1485,28 @@ export async function feedbackUpdate(
     return { ok: false, message: 'only the author or an admin may edit this item.', statusCode: 403 };
   }
 
+  const kind = metaResult.Item.kind as FeedbackKind;
+  if (kind === 'wishlist' && (tags !== undefined || suggestedTags !== undefined)) {
+    return { ok: false, message: 'tags are only valid for bug and feature items.', statusCode: 400 };
+  }
+  if (kind === 'bug' || kind === 'feature') {
+    const allowed = await allowedTagIdsForKind(client, tableName, kind);
+    const tagValidation = tagCheck(tags, allowed);
+    if (!tagValidation.ok) {
+      return tagValidation;
+    }
+  }
+
   const now = Date.now();
   const editId = generateEditId();
   const createdAt = Number(metaResult.Item.createdAt);
   const effectiveVotes = Number(metaResult.Item.effectiveVotes ?? 0);
   const metaSetParts = ['updatedAt = :ua'];
   const metaValues: Record<string, unknown> = { ':ua': now };
-  const listSetParts = ['updatedAt = :ua'];
-  const listValues: Record<string, unknown> = { ':ua': now };
+  const metaRemoveParts: string[] = [];
+  const listSetParts: string[] = [];
+  const listValues: Record<string, unknown> = {};
+  const listRemoveParts: string[] = [];
   const transactItems: Record<string, unknown>[] = [];
 
   if (title !== undefined) {
@@ -1420,15 +1552,36 @@ export async function feedbackUpdate(
     });
   }
 
+  applyPostTagsToWriteParts(tags, {
+    metaSetParts,
+    metaValues,
+    metaRemoveParts,
+    listSetParts,
+    listValues,
+    listRemoveParts,
+  });
+  applySuggestedTagsToMetaWriteParts(suggestedTags, metaSetParts, metaValues, metaRemoveParts);
+
+  const metaUpdateParts = [`SET ${metaSetParts.join(', ')}`];
+  if (metaRemoveParts.length > 0) {
+    metaUpdateParts.push(`REMOVE ${metaRemoveParts.join(', ')}`);
+  }
+
   transactItems.push({
     Update: {
       TableName: feedbackTable,
       Key: { pk, sk: metaSk() },
-      UpdateExpression: `SET ${metaSetParts.join(', ')}`,
+      UpdateExpression: metaUpdateParts.join(' '),
       ExpressionAttributeValues: metaValues,
     },
   });
+
+  const listFieldSets = [...listSetParts];
   if (title !== undefined) {
+    listFieldSets.push('title = :title');
+    listValues[':title'] = title;
+  }
+  if (listFieldSets.length > 0 || listRemoveParts.length > 0 || title !== undefined || tags !== undefined) {
     pushListProjectionFieldUpdates(
       transactItems,
       feedbackTable,
@@ -1437,8 +1590,9 @@ export async function feedbackUpdate(
       now,
       createdAt,
       effectiveVotes,
-      listSetParts.filter((part) => part !== 'updatedAt = :ua'),
+      listFieldSets,
       listValues,
+      listRemoveParts,
     );
   } else {
     pushListProjectionFieldUpdates(
@@ -1538,11 +1692,19 @@ export async function feedbackSetAdminFields(
     id,
     effort,
     priority,
-    adminTags,
+    tags,
+    clearSuggestedTags,
     reviewerIds,
     wishlistCategory,
     wishlistCategoryNote,
   } = validated.data;
+  if (tags !== undefined && (kind === 'bug' || kind === 'feature')) {
+    const allowed = await allowedTagIdsForKind(client, tableName, kind);
+    const tagValidation = tagCheck(tags, allowed);
+    if (!tagValidation.ok) {
+      return tagValidation;
+    }
+  }
   const now = Date.now();
   const createdAt = Number(metaResult.Item.createdAt);
   const effectiveVotes = Number(metaResult.Item.effectiveVotes ?? 0);
@@ -1570,11 +1732,18 @@ export async function feedbackSetAdminFields(
       listValues[':priority'] = priority;
     }
   }
-  if (adminTags !== undefined) {
-    metaSetParts.push('adminTags = :adminTags');
-    metaValues[':adminTags'] = adminTags;
-    listSetParts.push('adminTags = :adminTags');
-    listValues[':adminTags'] = adminTags;
+  if (tags !== undefined) {
+    applyPostTagsToWriteParts(tags, {
+      metaSetParts,
+      metaValues,
+      metaRemoveParts,
+      listSetParts,
+      listValues,
+      listRemoveParts,
+    });
+  }
+  if (clearSuggestedTags) {
+    metaRemoveParts.push('suggestedTags');
   }
   if (wishlistCategory !== undefined) {
     metaSetParts.push('wishlistCategory = :wishlistCategory');

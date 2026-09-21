@@ -20,6 +20,8 @@ import {
   feedbackSubscribe,
   feedbackUpdate,
   feedbackVote,
+  feedbackTagVocabList,
+  feedbackSetTagVocab,
   type FeedbackAdminListPars,
   type FeedbackCommentPars,
   type FeedbackCreatePars,
@@ -34,8 +36,46 @@ import {
   type FeedbackSetStatusPars,
   type FeedbackSubscribePars,
   type FeedbackUpdatePars,
+  type FeedbackSetTagVocabPars,
   type FeedbackVotePars,
 } from './index.js';
+
+export async function feedbackTagVocabAuth(_userId: string) {
+  try {
+    const result = await feedbackTagVocabList(ddbDocClient, process.env.FEEDBACK_TABLE);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to load feedback tag vocabulary.');
+  }
+}
+
+export async function feedbackSetTagVocabAuth(userId: string, pars: FeedbackSetTagVocabPars) {
+  try {
+    if (!(await isFeedbackAdmin(userId))) {
+      return feedbackErrorResponse('admin access required.', 403);
+    }
+    const result = await feedbackSetTagVocab(ddbDocClient, process.env.FEEDBACK_TABLE, pars);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to update feedback tag vocabulary.');
+  }
+}
 
 export async function feedbackHoldRetentionAuth(userId: string, pars: FeedbackHoldRetentionPars) {
   try {

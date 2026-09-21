@@ -204,7 +204,7 @@ export function buildDiscordListRowsFromMeta(meta: FeedbackMetaItem): Record<str
     terminalAt: meta.terminalAt,
     effort: meta.effort,
     priority: meta.priority,
-    adminTags: meta.adminTags,
+    tags: meta.tags,
     lastStaffCommentAt: meta.lastStaffCommentAt,
     lastAuthorCommentAt: meta.lastAuthorCommentAt,
     legacyDiscordThreadId: meta.legacyDiscordThreadId,
