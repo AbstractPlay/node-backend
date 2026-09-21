@@ -23,7 +23,7 @@ describe('recentCompletedSinceMs', () => {
 });
 
 describe('queryRecentCompletedGames', () => {
-  it('paginates from cached results using offset keys', async () => {
+  it('returns all items in one response', async () => {
     clearRecentCompletedGamesCacheForTests();
     const sends: unknown[] = [];
     const client = {
@@ -39,20 +39,32 @@ describe('queryRecentCompletedGames', () => {
       },
     } as unknown as DynamoDBDocumentClient;
 
-    const first = await queryRecentCompletedGames(client, 'table', { days: 7, limit: 2 });
-    assert.equal(first.items.length, 2);
-    assert.equal(first.items[0]?.id, 'g3');
-    assert.equal(first.lastEvaluatedKey, JSON.stringify({ offset: 2 }));
-
-    const second = await queryRecentCompletedGames(client, 'table', {
-      days: 7,
-      limit: 2,
-      exclusiveStartKey: first.lastEvaluatedKey,
-    });
-    assert.equal(second.items.length, 1);
-    assert.equal(second.items[0]?.id, 'g1');
-    assert.equal(second.lastEvaluatedKey, undefined);
+    const result = await queryRecentCompletedGames(client, 'table', { days: 7 });
+    assert.equal(result.items.length, 3);
+    assert.equal(result.items[0]?.id, 'g3');
     assert.equal(sends.length, 1);
+    assert.equal('lastEvaluatedKey' in result, false);
+  });
+
+  it('clamps days above max to the same window as 30 days', async () => {
+    const sinceValues: unknown[] = [];
+    const client = {
+      send: async (command: { input?: { ExpressionAttributeValues?: Record<string, unknown> } }) => {
+        sinceValues.push(command.input?.ExpressionAttributeValues?.[':since']);
+        return { Items: [] };
+      },
+    } as unknown as DynamoDBDocumentClient;
+
+    clearRecentCompletedGamesCacheForTests();
+    await queryRecentCompletedGames(client, 'table', { days: 90 });
+    const sinceFrom90 = sinceValues[0];
+
+    clearRecentCompletedGamesCacheForTests();
+    sinceValues.length = 0;
+    await queryRecentCompletedGames(client, 'table', { days: 30 });
+    const sinceFrom30 = sinceValues[0];
+
+    assert.equal(sinceFrom90, sinceFrom30);
   });
 
   it('rejects invalid days', async () => {
