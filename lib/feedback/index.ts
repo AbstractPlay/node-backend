@@ -17,6 +17,8 @@ export {
   feedbackWishlistSearch,
   feedbackHistoryList,
   feedbackHoldRetention,
+  feedbackTagVocabList,
+  feedbackSetTagVocab,
   setFeedbackPostAttachmentKeys,
   seedFeedbackPostForTests,
 } from './access.js';
@@ -89,5 +91,6 @@ export type {
   FeedbackWishlistSearchPars,
   FeedbackHistoryListPars,
   FeedbackHoldRetentionPars,
+  FeedbackSetTagVocabPars,
   FeedbackHistorySummary,
 } from './types.js';

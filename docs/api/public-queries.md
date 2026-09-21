@@ -64,6 +64,7 @@ See [Game Move layout analytics](/backend/subsystems/game-move-layout-analytics/
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `feedback_list` | Public board listing | `kind` (`bug` \| `feature` \| `wishlist`), optional `sort` (`votes` \| `recent` \| `updated`, default `votes`), optional `closedOnly` (`true` lists terminal, not-yet-archived items only), `limit`, `cursor` |
+| `feedback_tag_vocab` | Tag slugs for bug/feature boards | Returns `{ tags: [{ id, kinds }] }` |
 | `feedback_get` | Single post with comments and presigned attachment URLs | `id` |
 | `feedback_history_list` | Archived summaries for a kind | `kind` (`bug` \| `feature` \| `wishlist`), optional `limit`, `cursor` |
 

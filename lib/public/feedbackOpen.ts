@@ -19,6 +19,7 @@ import {
   feedbackGet,
   feedbackHistoryList,
   feedbackWishlistSearch,
+  feedbackTagVocabList,
   type FeedbackListPars,
   type FeedbackGetPars,
   type FeedbackHistoryListPars,
@@ -94,5 +95,22 @@ export async function feedbackWishlistSearchOpen(pars: FeedbackWishlistSearchPar
   } catch (error) {
     logGetItemError(error);
     return feedbackErrorResponse('Unable to search wishlist.');
+  }
+}
+
+export async function feedbackTagVocabOpen() {
+  try {
+    const result = await feedbackTagVocabList(ddbDocClient, process.env.FEEDBACK_TABLE);
+    if (!result.ok) {
+      return feedbackErrorResponse(result.message, result.statusCode ?? 400);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result.data),
+      headers: feedbackListHeaders,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return feedbackErrorResponse('Unable to load feedback tag vocabulary.');
   }
 }

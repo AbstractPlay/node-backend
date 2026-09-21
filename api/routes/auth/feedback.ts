@@ -12,7 +12,9 @@ import {
   feedbackReclassifyAuth,
   feedbackSetAdminFieldsAuth,
   feedbackSetStatusAuth,
+  feedbackSetTagVocabAuth,
   feedbackSubscribeAuth,
+  feedbackTagVocabAuth,
   feedbackUpdateAuth,
   feedbackVoteAuth,
 } from '../../../lib/feedback/authHandlers.js';
@@ -34,4 +36,6 @@ export const feedbackAuthRoutes: Record<string, AuthRouteHandler> = {
   feedback_delete: bindAuth(feedbackDeleteAuth),
   feedback_hold_retention: bindAuth(feedbackHoldRetentionAuth),
   feedback_get: bindAuth(feedbackGetAuth),
+  feedback_tag_vocab: bindAuth(feedbackTagVocabAuth),
+  feedback_set_tag_vocab: bindAuth(feedbackSetTagVocabAuth),
 };

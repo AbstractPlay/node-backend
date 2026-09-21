@@ -267,6 +267,10 @@ In-app bugs, feature ideas, and game wishlist use table `abstract-play-feedback-
 
 - **User index** — pk: `USER#{userId}`, sk: `POST#{kind}#{createdAt}#{id}`
 
+- **Tag vocabulary** — pk: `CONFIG#FEEDBACK`, sk: `TAGVOCAB` — ordered `{ id, kinds }[]` for bug/feature topic tags
+
+Post `META` and `LIST#*` rows may include `tags` (string slugs). `META` may include `suggestedTags` (submitter suggestions; admin-only on get).
+
 Attachments: S3 bucket `ap-feedback-attachments-{stage}`, keys under `staging/{userId}/` (presign upload in Phase 2).
 
 ## Related docs
