@@ -215,6 +215,26 @@ async function trimApPackage(layerDir, pkgPath) {
 }
 
 /**
+ * Resolve a dependency as installed for a consumer package (nested node_modules first).
+ * @param {string} consumerPackageName
+ * @param {string} depName
+ * @returns {Promise<string | null>}
+ */
+async function resolveMonorepoDependencyPath(consumerPackageName, depName) {
+    const segments = depName.split("/");
+    const consumerDir = path.resolve(MONOREPO_ROOT, "node_modules", ...consumerPackageName.split("/"));
+    const nested = path.resolve(consumerDir, "node_modules", ...segments);
+    if (await fs.pathExists(nested)) {
+        return nested;
+    }
+    const hoisted = path.resolve(MONOREPO_ROOT, "node_modules", ...segments);
+    if (await fs.pathExists(hoisted)) {
+        return hoisted;
+    }
+    return null;
+}
+
+/**
  * Copy a package (and non-excluded deps) from project node_modules into the layer.
  * @param {string} layerDir
  * @param {string} packageName
@@ -244,10 +264,11 @@ async function syncPackageDeps(layerDir, nodeModulesDir, packageName, excludeDep
         if (excluded.has(dep)) {
             continue;
         }
-        const depSrc = path.resolve(MONOREPO_ROOT, "node_modules", dep);
-        const depDest = path.resolve(nodeModulesDir, dep);
-        if (await fs.pathExists(depSrc)) {
+        const depSrc = await resolveMonorepoDependencyPath(packageName, dep);
+        const depDest = path.resolve(nodeModulesDir, ...dep.split("/"));
+        if (depSrc) {
             await safeRemove(layerDir, depDest);
+            await fs.ensureDir(path.dirname(depDest));
             await fs.copy(depSrc, depDest, { overwrite: true });
         }
     }
