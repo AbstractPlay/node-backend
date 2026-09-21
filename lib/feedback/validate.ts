@@ -1,8 +1,10 @@
 import {
   DEFAULT_STATUS_BY_KIND,
   EFFORT_LEVELS,
-  FEEDBACK_ADMIN_TAG_MAX_COUNT,
-  FEEDBACK_ADMIN_TAG_MAX_LENGTH,
+  FEEDBACK_TAG_MAX_COUNT,
+  FEEDBACK_TAG_ID_MAX_LENGTH,
+  FEEDBACK_SUGGESTED_TAG_MAX_COUNT,
+  FEEDBACK_SUGGESTED_TAG_MAX_LENGTH,
   FEEDBACK_REVIEWER_MAX_COUNT,
   FEEDBACK_ALLOWED_ATTACHMENT_TYPES,
   FEEDBACK_ATTACHMENT_MAX_BYTES,
@@ -39,6 +41,7 @@ import type {
   FeedbackSetStatusPars,
   FeedbackSubscribePars,
   FeedbackUpdatePars,
+  FeedbackSetTagVocabPars,
   FeedbackVotePars,
   FeedbackDeletePars,
   FeedbackMergePars,
@@ -99,7 +102,105 @@ export type ValidatedFeedbackCreate = {
   attachmentKeys?: string[];
   context?: FeedbackCreatePars['context'];
   legacyVoteCount: number;
+  tags?: string[];
+  suggestedTags?: string[];
 };
+
+function isValidTagSlug(value: string): boolean {
+  return /^[a-z0-9_]+$/.test(value) && value.length <= FEEDBACK_TAG_ID_MAX_LENGTH;
+}
+
+export function parseFeedbackTagIdsInput(value: unknown): string[] | undefined | null {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const tags: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== 'string') {
+      return null;
+    }
+    const id = raw.trim();
+    if (!id || !isValidTagSlug(id)) {
+      return null;
+    }
+    if (!tags.includes(id)) {
+      tags.push(id);
+    }
+  }
+  if (tags.length > FEEDBACK_TAG_MAX_COUNT) {
+    return null;
+  }
+  return tags;
+}
+
+export function parseFeedbackSuggestedTagsInput(value: unknown): string[] | undefined | null {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const tags: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== 'string') {
+      return null;
+    }
+    const text = raw.trim();
+    if (!text || text.length > FEEDBACK_SUGGESTED_TAG_MAX_LENGTH) {
+      return null;
+    }
+    if (!tags.includes(text)) {
+      tags.push(text);
+    }
+  }
+  if (tags.length > FEEDBACK_SUGGESTED_TAG_MAX_COUNT) {
+    return null;
+  }
+  return tags;
+}
+
+export function assertTagsAllowedForKind(
+  tagIds: string[],
+  allowedIds: Set<string>,
+): { ok: true } | { ok: false; message: string } {
+  for (const id of tagIds) {
+    if (!allowedIds.has(id)) {
+      return { ok: false, message: `unknown or invalid tag for this kind: ${id}.` };
+    }
+  }
+  return { ok: true };
+}
+
+function parseTagFieldsFromPars(
+  pars: { tags?: unknown; suggestedTags?: unknown },
+  kind: FeedbackKind,
+): {
+  ok: true;
+  tags?: string[];
+  suggestedTags?: string[];
+} | { ok: false; message: string } {
+  if (kind === 'wishlist') {
+    if (pars.tags !== undefined || pars.suggestedTags !== undefined) {
+      return { ok: false, message: 'tags are only valid for bug and feature items.' };
+    }
+    return { ok: true };
+  }
+  const tags = parseFeedbackTagIdsInput(pars.tags);
+  if (tags === null) {
+    return { ok: false, message: `tags must be at most ${FEEDBACK_TAG_MAX_COUNT} valid slugs.` };
+  }
+  const suggestedTags = parseFeedbackSuggestedTagsInput(pars.suggestedTags);
+  if (suggestedTags === null) {
+    return {
+      ok: false,
+      message: `suggestedTags must be at most ${FEEDBACK_SUGGESTED_TAG_MAX_COUNT} short strings.`,
+    };
+  }
+  return { ok: true, tags, suggestedTags };
+}
 
 export function validateFeedbackCreatePars(
   userId: string,
@@ -178,6 +279,9 @@ export function validateFeedbackCreatePars(
     if (body && body.length > FEEDBACK_BODY_MAX_LENGTH) {
       return { ok: false, message: `body must be at most ${FEEDBACK_BODY_MAX_LENGTH} characters.` };
     }
+    if (pars.tags !== undefined || pars.suggestedTags !== undefined) {
+      return { ok: false, message: 'tags are only valid for bug and feature items.' };
+    }
     return {
       ok: true,
       data: {
@@ -202,6 +306,11 @@ export function validateFeedbackCreatePars(
     ? Math.floor(pars.legacyVoteCount)
     : 0;
 
+  const tagFields = parseTagFieldsFromPars(pars, kind);
+  if (!tagFields.ok) {
+    return tagFields;
+  }
+
   return {
     ok: true,
     data: {
@@ -214,6 +323,8 @@ export function validateFeedbackCreatePars(
       attachmentKeys,
       context,
       legacyVoteCount,
+      tags: tagFields.tags,
+      suggestedTags: tagFields.suggestedTags,
     },
   };
 }
@@ -372,7 +483,14 @@ export function validateFeedbackUpdatePars(
   pars: FeedbackUpdatePars,
 ): {
   ok: true;
-  data: { id: string; title?: string; body?: string; attachmentKeys?: string[] };
+  data: {
+    id: string;
+    title?: string;
+    body?: string;
+    attachmentKeys?: string[];
+    tags?: string[];
+    suggestedTags?: string[];
+  };
 } | { ok: false; message: string } {
   if (!isNonEmptyString(pars.id)) {
     return { ok: false, message: 'id is required.' };
@@ -386,8 +504,19 @@ export function validateFeedbackUpdatePars(
     }
     attachmentKeys = pars.attachmentKeys;
   }
-  if (!title && !body && attachmentKeys === undefined) {
-    return { ok: false, message: 'title, body, or attachmentKeys is required.' };
+  const tags = parseFeedbackTagIdsInput(pars.tags);
+  if (tags === null) {
+    return { ok: false, message: `tags must be at most ${FEEDBACK_TAG_MAX_COUNT} valid slugs.` };
+  }
+  const suggestedTags = parseFeedbackSuggestedTagsInput(pars.suggestedTags);
+  if (suggestedTags === null) {
+    return {
+      ok: false,
+      message: `suggestedTags must be at most ${FEEDBACK_SUGGESTED_TAG_MAX_COUNT} short strings.`,
+    };
+  }
+  if (!title && !body && attachmentKeys === undefined && tags === undefined && suggestedTags === undefined) {
+    return { ok: false, message: 'title, body, attachmentKeys, tags, or suggestedTags is required.' };
   }
   if (title && title.length > FEEDBACK_TITLE_MAX_LENGTH) {
     return { ok: false, message: `title must be at most ${FEEDBACK_TITLE_MAX_LENGTH} characters.` };
@@ -395,7 +524,17 @@ export function validateFeedbackUpdatePars(
   if (body && body.length > FEEDBACK_BODY_MAX_LENGTH) {
     return { ok: false, message: `body must be at most ${FEEDBACK_BODY_MAX_LENGTH} characters.` };
   }
-  return { ok: true, data: { id: pars.id.trim(), title, body, attachmentKeys } };
+  return {
+    ok: true,
+    data: {
+      id: pars.id.trim(),
+      title,
+      body,
+      attachmentKeys,
+      tags,
+      suggestedTags,
+    },
+  };
 }
 
 function parseReviewerIds(value: unknown): string[] | undefined {
@@ -412,18 +551,8 @@ function parseReviewerIds(value: unknown): string[] | undefined {
   return [...new Set(ids)];
 }
 
-function parseAdminTags(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-  const tags = value
-    .filter((tag): tag is string => typeof tag === 'string')
-    .map((tag) => tag.trim())
-    .filter((tag) => tag.length > 0 && tag.length <= FEEDBACK_ADMIN_TAG_MAX_LENGTH);
-  if (tags.length > FEEDBACK_ADMIN_TAG_MAX_COUNT) {
-    return undefined;
-  }
-  return tags;
+function parseAdminPostTags(value: unknown): string[] | undefined | null {
+  return parseFeedbackTagIdsInput(value);
 }
 
 export function validateFeedbackSetAdminFieldsPars(
@@ -435,7 +564,8 @@ export function validateFeedbackSetAdminFieldsPars(
     id: string;
     effort?: string;
     priority?: string | null;
-    adminTags?: string[];
+    tags?: string[];
+    clearSuggestedTags?: boolean;
     reviewerIds?: string[];
     wishlistCategory?: string;
     wishlistCategoryNote?: string;
@@ -448,7 +578,8 @@ export function validateFeedbackSetAdminFieldsPars(
     id: string;
     effort?: string;
     priority?: string | null;
-    adminTags?: string[];
+    tags?: string[];
+    clearSuggestedTags?: boolean;
     reviewerIds?: string[];
     wishlistCategory?: string;
     wishlistCategoryNote?: string;
@@ -469,12 +600,18 @@ export function validateFeedbackSetAdminFieldsPars(
       data.priority = pars.priority;
     }
   }
-  if (pars.adminTags !== undefined) {
-    const tags = parseAdminTags(pars.adminTags);
-    if (!tags) {
-      return { ok: false, message: 'adminTags must be a list of short strings.' };
+  if (pars.tags !== undefined) {
+    if (kind === 'wishlist') {
+      return { ok: false, message: 'tags are only valid for bug and feature items.' };
     }
-    data.adminTags = tags;
+    const tags = parseAdminPostTags(pars.tags);
+    if (tags === null) {
+      return { ok: false, message: `tags must be at most ${FEEDBACK_TAG_MAX_COUNT} valid slugs.` };
+    }
+    data.tags = tags;
+  }
+  if (pars.clearSuggestedTags === true) {
+    data.clearSuggestedTags = true;
   }
   if (pars.reviewerIds !== undefined) {
     if (kind === 'wishlist') {
@@ -514,7 +651,8 @@ export function validateFeedbackSetAdminFieldsPars(
   if (
     data.effort === undefined
     && data.priority === undefined
-    && data.adminTags === undefined
+    && data.tags === undefined
+    && !data.clearSuggestedTags
     && data.reviewerIds === undefined
     && data.wishlistCategory === undefined
     && data.wishlistCategoryNote === undefined
@@ -522,6 +660,40 @@ export function validateFeedbackSetAdminFieldsPars(
     return { ok: false, message: 'at least one admin field is required.' };
   }
   return { ok: true, data };
+}
+
+export function validateFeedbackSetTagVocabPars(
+  pars: FeedbackSetTagVocabPars,
+): { ok: true; data: { tags: { id: string; kinds: ('bug' | 'feature')[] }[] } } | { ok: false; message: string } {
+  if (!Array.isArray(pars.tags) || pars.tags.length === 0) {
+    return { ok: false, message: 'tags must be a non-empty array.' };
+  }
+  const out: { id: string; kinds: ('bug' | 'feature')[] }[] = [];
+  const seen = new Set<string>();
+  for (const entry of pars.tags) {
+    if (!entry || typeof entry !== 'object') {
+      return { ok: false, message: 'each tag entry must include id and kinds.' };
+    }
+    const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+    if (!id || !isValidTagSlug(id) || seen.has(id)) {
+      return { ok: false, message: 'each tag id must be a unique slug.' };
+    }
+    if (!Array.isArray(entry.kinds) || entry.kinds.length === 0) {
+      return { ok: false, message: 'each tag entry must include kinds.' };
+    }
+    const kinds: ('bug' | 'feature')[] = [];
+    for (const kind of entry.kinds) {
+      if (kind !== 'bug' && kind !== 'feature') {
+        return { ok: false, message: 'tag kinds must be bug and/or feature.' };
+      }
+      if (!kinds.includes(kind)) {
+        kinds.push(kind);
+      }
+    }
+    seen.add(id);
+    out.push({ id, kinds });
+  }
+  return { ok: true, data: { tags: out } };
 }
 
 const FEEDBACK_MINE_SCOPES = ['submitted', 'voted', 'watched'] as const;

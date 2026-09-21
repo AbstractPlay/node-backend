@@ -30,8 +30,11 @@ import {
   feedbackSubscribe,
   feedbackUpdate,
   feedbackVote,
+  feedbackTagVocabList,
+  feedbackSetTagVocab,
   seedFeedbackPostForTests,
 } from '../lib/feedback/access.js';
+import { FEEDBACK_TAG_VOCAB_PK, FEEDBACK_TAG_VOCAB_SK } from '../lib/feedback/tagVocab.js';
 import { buildMetaItem } from '../lib/feedback/access.js';
 import {
   listSkForSort,
@@ -1423,5 +1426,131 @@ test('feedbackGet exposes bugContext to admins only', async () => {
   if (adminGet.ok) {
     assert.equal(adminGet.data.bugContext?.pageUrl, pageUrl);
     assert.equal(adminGet.data.bugContext?.userAgent, 'TestAgent/1.0');
+  }
+});
+
+test('feedbackTagVocabList seeds default vocabulary', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const result = await feedbackTagVocabList(client, TABLE);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.ok(result.data.tags.some((tag) => tag.id === 'dashboard'));
+  }
+  assert.ok(store.get(`${FEEDBACK_TAG_VOCAB_PK}:${FEEDBACK_TAG_VOCAB_SK}`));
+});
+
+test('feedbackCreate stores validated tags on meta and list rows', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  await feedbackTagVocabList(client, TABLE);
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Dashboard widgets',
+    body: 'More widgets please.',
+    tags: ['dashboard', 'games'],
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.deepEqual(meta?.tags, ['dashboard', 'games']);
+  const listItem = store.get(`${postPk(id)}:${listSkForSort('votes')}`);
+  assert.deepEqual(listItem?.tags, ['dashboard', 'games']);
+});
+
+test('feedbackCreate rejects unknown tag', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  await feedbackTagVocabList(client, TABLE);
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Broken',
+    tags: ['not_a_real_tag'],
+  });
+  assert.equal(createResult.ok, false);
+});
+
+test('feedbackUpdate allows author to set tags on open post', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  await feedbackTagVocabList(client, TABLE);
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Tag me',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const updateResult = await feedbackUpdate(client, TABLE, mockS3, USER_ID, {
+    id,
+    tags: ['tournaments'],
+  }, false);
+  assert.equal(updateResult.ok, true);
+  assert.deepEqual(store.get(`${postPk(id)}:${metaSk()}`)?.tags, ['tournaments']);
+});
+
+test('feedbackUpdate rejects tag changes on closed post', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  await feedbackTagVocabList(client, TABLE);
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'bug',
+    title: 'Closed bug',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  await feedbackSetStatus(client, TABLE, ADMIN_ID, { id, status: 'closed' });
+  const updateResult = await feedbackUpdate(client, TABLE, mockS3, USER_ID, {
+    id,
+    tags: ['dashboard'],
+  }, false);
+  assert.equal(updateResult.ok, false);
+});
+
+test('feedbackSetAdminFields sets tags on closed post', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  await feedbackTagVocabList(client, TABLE);
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'feature',
+    title: 'Shipped idea',
+    body: 'Body',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  await feedbackSetStatus(client, TABLE, ADMIN_ID, { id, status: 'declined' });
+  const adminResult = await feedbackSetAdminFields(client, TABLE, ADMIN_ID, {
+    id,
+    tags: ['game_client'],
+  });
+  assert.equal(adminResult.ok, true);
+  assert.deepEqual(store.get(`${postPk(id)}:${metaSk()}`)?.tags, ['game_client']);
+});
+
+test('feedbackSetTagVocab replaces vocabulary', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  await feedbackTagVocabList(client, TABLE);
+  const setResult = await feedbackSetTagVocab(client, TABLE, {
+    tags: [{ id: 'custom_area', kinds: ['bug', 'feature'] }],
+  });
+  assert.equal(setResult.ok, true);
+  const listResult = await feedbackTagVocabList(client, TABLE);
+  assert.equal(listResult.ok, true);
+  if (listResult.ok) {
+    assert.deepEqual(listResult.data.tags.map((tag) => tag.id), ['custom_area']);
   }
 });
