@@ -92,6 +92,8 @@ import { getUsersLastSeen } from '../touchUserLastSeen.js';
 import { hasCurrentGameRow } from '../dashboardGames.js';
 import { setWatchedSeen } from '../playerGameMarks.js';
 import { callEventGameUpdater, callTournamentDivisionCompleter } from './moveIntegration.js';
+import type { Tournament as AuthTournament } from '../tournaments/authHandlers.js';
+import { spawnTournamentLeg2IfNeeded } from '../tournaments/spawnTournamentLeg2.js';
 
 
 type FullUser = {
@@ -103,9 +105,6 @@ type FullUser = {
   isBot?: boolean;
 };
 
-type Tournament = {
-  divisions?: Record<string, { numCompleted: number; numGames: number; processed: boolean }>;
-};
 
 type Note = {
   pk: string;
@@ -164,6 +163,9 @@ type FullGame = {
   tournament?: string;
   event?: string;
   division?: number;
+  matchLeg?: number;
+  schedulingRound?: number;
+  rematchOf?: string;
   noExplore?: boolean;
   commented?: number; // 0 or missing: no comments or post game variations, 1: has in-game comments (note this does NOT get updated for post-game comments/variations)
 }
@@ -673,7 +675,13 @@ async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: n
     UpdateExpression: "set #d.#n.numCompleted = if_not_exists(#d.#n.numCompleted, :zero) + :inc",
     ReturnValues: "ALL_NEW"
   }));
-  const tournament = tournamentData.Attributes as Tournament;
+  const tournament = tournamentData.Attributes as AuthTournament;
+  work.push(spawnTournamentLeg2IfNeeded(
+    ddbDocClient,
+    process.env.ABSTRACT_PLAY_TABLE!,
+    game,
+    tournament,
+  ));
   let divisionCompleted = false;
   for (const division of Object.values(tournament.divisions!)) {
     if (division.numCompleted === division.numGames && !division.processed) {

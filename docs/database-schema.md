@@ -212,7 +212,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 
 - **Tournament counter** — per metaGame + variants combination (`variants` is a sorted, pipe-delimited variant list)
   - pk: `TOURNAMENTSCOUNTER`
-  - sk: `<metaGame>#<variants>`
+  - sk: `<metaGame>#<variants>` (single-leg) or `…#2` (two-leg `matchLegs`)
   - fields: `counter`, `over`
 
 ## Organized events

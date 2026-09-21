@@ -28,6 +28,11 @@ import { localizedGameName } from '../gameDisplayName.js';
 import type { User } from '../api/types.js';
 import { validateChallengeVariantUids } from '../challenges/variantUids.js';
 import { tournamentPlaySupported } from '../tournamentGame.js';
+import {
+  parseMatchLegsParam,
+  tournamentSeriesCounterSk,
+  validateMatchLegsParam,
+} from './matchLegs.js';
 import { getPlayers } from '../players/getPlayers.js';
 import { createNotification } from '../notifications.js';
 import { sendUserPush } from '../push/sendUserPush.js';
@@ -58,6 +63,8 @@ export type Tournament = {
   };
   players?: TournamentPlayer[]; // only on archived tournaments
   waiting?: boolean; // tournament does not yet have 4 players
+  /** 1 = single game per pairing (default); 2 = second leg after each leg-1 game ends */
+  matchLegs?: 1 | 2;
 };
 
 type TournamentPlayer = {
@@ -82,7 +89,14 @@ type TournamentGame = {
   winner?: string[];
 };
 
-export async function newTournament(userid: string, pars: { metaGame: string, variants: string[] }) {
+export async function newTournament(
+  userid: string,
+  pars: { metaGame: string, variants: string[], matchLegs?: 1 | 2 },
+) {
+  const matchLegsErr = validateMatchLegsParam(pars.matchLegs);
+  if (matchLegsErr !== undefined) {
+    return formatReturnError(matchLegsErr);
+  }
   const variantErr = validateChallengeVariantUids(pars.metaGame, pars.variants);
   if (variantErr) {
     return variantErr;
@@ -91,7 +105,7 @@ export async function newTournament(userid: string, pars: { metaGame: string, va
     return formatReturnError(`Game ${pars.metaGame} does not support automated tournaments (requires playercount 2)`);
   }
   const variantsKey = pars.variants.sort().join("|");
-  const sk = pars.metaGame + "#" + variantsKey;
+  const sk = tournamentSeriesCounterSk(pars.metaGame, pars.variants, pars.matchLegs);
   let tournamentN = 0;
   let available = true;
   try {
@@ -138,6 +152,7 @@ export async function newTournament(userid: string, pars: { metaGame: string, va
   }
   // Insert tournament
   const tournamentid = uuid();
+  const matchLegs = parseMatchLegsParam(pars.matchLegs);
   const data: Tournament = {
     "pk": "TOURNAMENT",
     "sk": tournamentid,
@@ -147,7 +162,8 @@ export async function newTournament(userid: string, pars: { metaGame: string, va
     "number": tournamentN + 1,
     "started": false,
     "dateCreated": Date.now(),
-    "datePreviousEnded": 0
+    "datePreviousEnded": 0,
+    ...(matchLegs === 2 ? { matchLegs: 2 as const } : {}),
   };
   try {
     await ddbDocClient.send(new PutCommand({
@@ -238,7 +254,11 @@ async function cancelSignupTournament(tournament: Tournament) {
         "sk": tournament.id
       },
     }));
-  const sk = tournament.metaGame + "#" + tournament.variants.sort().join("|");
+  const sk = tournamentSeriesCounterSk(
+    tournament.metaGame,
+    tournament.variants,
+    tournament.matchLegs,
+  );
   await ddbDocClient.send(
     new UpdateCommand({
       TableName: process.env.ABSTRACT_PLAY_TABLE,

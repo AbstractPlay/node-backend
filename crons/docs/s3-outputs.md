@@ -34,6 +34,7 @@ Key header fields used downstream:
 - `header.game.variants` — localized variant labels at record-generation time
 - `header.players[].userid` — player ID
 - `header["date-start"]`, `header["date-end"]` — ISO timestamps
+- `header.round` — organizer events: scheduling round number; single-leg automated tournaments: `"1"`; two-leg automated tournaments (`matchLegs: 2`): `"1:1"` / `"1:2"` (`{schedulingRound}:{matchLeg}`)
 - `moves` — move history (timeout/abandoned detection in summarize)
 
 ### Game record `gameid`

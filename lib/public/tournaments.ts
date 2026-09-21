@@ -1,11 +1,13 @@
 import { GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { ddbDocClient } from '../ddb.js';
 import { headers, formatReturnError, logGetItemError } from '../api/http.js';
+import { tournamentSeriesCounterSk } from '../tournaments/matchLegs.js';
 
 type Tournament = {
   id: string;
   metaGame: string;
   variants: string[];
+  matchLegs?: 1 | 2;
   dateEnded?: number;
   pk?: string;
   sk?: string;
@@ -28,7 +30,11 @@ export async function archiveTournaments() {
     const latestCompleted: Map<string, number> = new Map();
     for (const tournament of tournamentsData.Items as Tournament[]) {
       if (tournament.dateEnded !== undefined) {
-        const key = tournament.metaGame + "#" + tournament.variants.sort().join("|");
+        const key = tournamentSeriesCounterSk(
+          tournament.metaGame,
+          tournament.variants,
+          tournament.matchLegs,
+        );
         const latest = latestCompleted.get(key);
         if (latest === undefined || tournament.dateEnded > latest) {
           latestCompleted.set(key, tournament.dateEnded);
@@ -40,7 +46,11 @@ export async function archiveTournaments() {
     const list: string[] = [];
     for (const tournament of tournamentsData.Items as Tournament[]) {
       if (tournament.dateEnded !== undefined) {
-        const key = tournament.metaGame + "#" + tournament.variants.sort().join("|");
+        const key = tournamentSeriesCounterSk(
+          tournament.metaGame,
+          tournament.variants,
+          tournament.matchLegs,
+        );
         if (tournament.dateEnded < latestCompleted.get(key)! || tournament.dateEnded < now - 1000 * 60 * 60 * 24 * 30 * 60) {
           work.push(archiveTournament(tournament));
           list.push(tournament.id);
