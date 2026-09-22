@@ -52,6 +52,7 @@ import {
 import {
   validateFeedbackCreatePars,
   validateFeedbackDeletePars,
+  validateFeedbackPresignUploadPars,
   validateFeedbackReclassifyPars,
   validateFeedbackSetAdminFieldsPars,
 } from '../lib/feedback/validate.js';
@@ -262,6 +263,19 @@ test('validateFeedbackCreatePars accepts bug without attachments', () => {
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.data.attachmentKeys, undefined);
+  }
+});
+
+test('validateFeedbackPresignUploadPars accepts text and JSON attachments', () => {
+  for (const contentType of ['text/plain', 'application/json']) {
+    const result = validateFeedbackPresignUploadPars({
+      contentType,
+      contentLength: 128,
+    });
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.data.contentType, contentType);
+    }
   }
 });
 

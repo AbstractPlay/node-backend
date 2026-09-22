@@ -57,6 +57,8 @@ export const FEEDBACK_ALLOWED_ATTACHMENT_TYPES = [
   'image/png',
   'image/jpeg',
   'image/webp',
+  'text/plain',
+  'application/json',
 ] as const;
 
 export const DEFAULT_STATUS_BY_KIND: Record<typeof FEEDBACK_KINDS[number], string> = {

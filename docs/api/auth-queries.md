@@ -48,7 +48,7 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `feedback_presign_upload` | Presigned S3 PUT for bug screenshots | `filename`, `contentType`, `contentLength` (png/jpeg/webp, max 5 MB). Returns `{ uploadUrl, key, headers }`. |
+| `feedback_presign_upload` | Presigned S3 PUT for feedback attachments | `filename`, `contentType`, `contentLength` (png/jpeg/webp, text/plain, application/json; max 5 MB). Returns `{ uploadUrl, key, headers }`. |
 | `feedback_create` | Create a post | `kind`, `title`, optional `body`, `gameUrl`, `attachmentKeys`, `context` (bugs), optional `tags` (bug/feature, ≤3 slugs from vocab), optional `suggestedTags` (≤2 strings). Bug screenshots optional (≤3 when provided). Returns `{ id }`. |
 | `feedback_get` | Single post (auth adds `subscribed`, `userVoted`) | `id` |
 | `feedback_vote` | Toggle vote | `id`, `vote` (boolean). Returns `{ voteCount, effectiveVotes, voted }`. |
