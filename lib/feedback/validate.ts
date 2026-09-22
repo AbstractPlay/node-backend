@@ -429,7 +429,10 @@ export function validateFeedbackPresignUploadPars(
     return { ok: false, message: 'contentType is required.' };
   }
   if (!(FEEDBACK_ALLOWED_ATTACHMENT_TYPES as readonly string[]).includes(pars.contentType)) {
-    return { ok: false, message: 'contentType must be image/png, image/jpeg, or image/webp.' };
+    return {
+      ok: false,
+      message: 'contentType must be image/png, image/jpeg, image/webp, text/plain, or application/json.',
+    };
   }
   const contentLength = Number(pars.contentLength);
   if (!Number.isFinite(contentLength) || contentLength < 1) {
