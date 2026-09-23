@@ -301,8 +301,9 @@ functions:
   thumbnails:
     handler: src/functions/thumbnails.handler
     description: Generates random thumbnails daily from latest DB dump
-    timeout: 300
+    timeout: 900
     memorySize: 5120
+    reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
     logRetentionInDays: 7
     environment:
       RENDER_BUCKET: ${self:custom.renderBucketName}
