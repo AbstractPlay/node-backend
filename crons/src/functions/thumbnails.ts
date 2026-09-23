@@ -20,11 +20,55 @@ const DUMP_BUCKET = "abstractplay-db-dump";
 const RENDER_BUCKET = process.env.RENDER_BUCKET;
 const THUMBNAIL_CACHE_CONTROL = "public, max-age=86400";
 const MIN_MOVES = 5;
+/** Parallel S3 puts per batch (CDN + prerender JSON are small). */
+const THUMBNAIL_UPLOAD_CONCURRENCY = 32;
 
 type SamplerEntry = {
     active: ReservoirSampler<GameRec>;
     completed: ReservoirSampler<GameRec>;
 };
+
+async function runInBatches<T>(items: T[], batchSize: number, fn: (item: T) => Promise<void>): Promise<void> {
+    for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        await Promise.all(batch.map(fn));
+    }
+}
+
+async function putThumbnailJson(meta: string, body: string): Promise<void> {
+    const objectInput = {
+        Body: body,
+        CacheControl: THUMBNAIL_CACHE_CONTROL,
+        ContentType: "application/json",
+    };
+
+    if (!THUMBNAIL_BROKEN_METAS.includes(meta)) {
+        if (RENDER_BUCKET === undefined || RENDER_BUCKET === "") {
+            throw new Error("Missing RENDER_BUCKET environment variable");
+        }
+        const prerenderResponse = await s3.send(
+            new PutObjectCommand({
+                Bucket: RENDER_BUCKET,
+                Key: `${meta}.json`,
+                ...objectInput,
+            }),
+        );
+        if (prerenderResponse["$metadata"].httpStatusCode !== 200) {
+            console.log(prerenderResponse);
+        }
+    }
+
+    const cdnResponse = await s3.send(
+        new PutObjectCommand({
+            Bucket: THUMB_BUCKET,
+            Key: `${meta}.json`,
+            ...objectInput,
+        }),
+    );
+    if (cdnResponse["$metadata"].httpStatusCode !== 200) {
+        console.log(cdnResponse);
+    }
+}
 
 export const handler: Handler = async () => {
     const i18nInstance = i18next as unknown as i18n;
@@ -212,33 +256,13 @@ export const handler: Handler = async () => {
                 );
             }
 
-            for (const [meta, rep] of allRecs.entries()) {
-                const body = JSON.stringify(rep);
-                let cmd = new PutObjectCommand({
-                    Bucket: THUMB_BUCKET,
-                    Key: `${meta}.json`,
-                    Body: body,
-                    CacheControl: THUMBNAIL_CACHE_CONTROL,
-                    ContentType: "application/json",
-                });
-                let response = await s3.send(cmd);
-                if (response["$metadata"].httpStatusCode !== 200) {
-                    console.log(response);
-                }
-                if (!THUMBNAIL_BROKEN_METAS.includes(meta)) {
-                    cmd = new PutObjectCommand({
-                        Bucket: RENDER_BUCKET,
-                        Key: `${meta}.json`,
-                        Body: body,
-                        CacheControl: THUMBNAIL_CACHE_CONTROL,
-                        ContentType: "application/json",
-                    });
-                    response = await s3.send(cmd);
-                    if (response["$metadata"].httpStatusCode !== 200) {
-                        console.log(response);
-                    }
-                }
-            }
+            const uploadEntries = [...allRecs.entries()].map(([meta, rep]) => ({
+                meta,
+                body: JSON.stringify(rep),
+            }));
+            await runInBatches(uploadEntries, THUMBNAIL_UPLOAD_CONCURRENCY, ({ meta, body }) =>
+                putThumbnailJson(meta, body),
+            );
             console.log("Thumbnails stored");
             console.log("ALL DONE");
         })
