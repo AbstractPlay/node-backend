@@ -17,6 +17,8 @@
     "preview-inactive-challenges": "tsx scripts/preview-inactive-challenge-cleanup.ts",
     "run-records-pipeline": "node bin/run-records-pipeline.mjs",
     "enable-records-cdn-compress": "node scripts/enable-records-cdn-compress.mjs",
+    "enable-records-x-robots-noindex": "node scripts/enable-records-x-robots-noindex.mjs",
+    "publish-records-robots": "node scripts/publish-records-robots.mjs",
     "deploy-dev": "serverless deploy",
     "deploy-prod": "serverless --stage prod deploy",
     "full-dev": "npm run clean && npm run build && serverless deploy",
