@@ -7,6 +7,13 @@ export const RECORDS_JSON_CACHE_CONTROL = "public, max-age=0, must-revalidate";
 /** Manifest index — always revalidate before use. */
 export const RECORDS_MANIFEST_CACHE_CONTROL = "no-cache";
 
+/** Crawlers should not index the records JSON API (see static/records-robots.txt). */
+export const RECORDS_ROBOTS_CACHE_CONTROL = "public, max-age=86400";
+
+export const RECORDS_ROBOTS_TXT = `User-agent: *
+Disallow: /
+`;
+
 export type PutRecordsJsonOptions = {
     cacheControl?: string;
 };
@@ -28,6 +35,24 @@ export function buildRecordsJsonPutInput(
         ContentType: "application/json",
         CacheControl: options?.cacheControl ?? RECORDS_JSON_CACHE_CONTROL,
     };
+}
+
+export function buildRecordsRobotsPutInput(): PutObjectCommandInput {
+    return {
+        Bucket: REC_BUCKET,
+        Key: "robots.txt",
+        Body: RECORDS_ROBOTS_TXT,
+        ContentType: "text/plain; charset=utf-8",
+        CacheControl: RECORDS_ROBOTS_CACHE_CONTROL,
+    };
+}
+
+export async function putRecordsRobotsTxt(s3: S3Client): Promise<void> {
+    const response = await s3.send(new PutObjectCommand(buildRecordsRobotsPutInput()));
+    const status = response.$metadata.httpStatusCode;
+    if (status !== 200) {
+        throw new Error(`PutObject failed for robots.txt: HTTP ${status}`);
+    }
 }
 
 export async function getRecordsJson<T>(

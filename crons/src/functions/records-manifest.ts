@@ -4,7 +4,11 @@ import { S3Client, ListObjectsV2Command, type _Object } from "@aws-sdk/client-s3
 import { Handler } from "aws-lambda";
 import { REC_BUCKET } from "../constants/recordsBucket.js";
 import { buildRecordsManifest } from "../utils/recordsManifest.js";
-import { putRecordsJson, RECORDS_MANIFEST_CACHE_CONTROL } from "../utils/recordsJson.js";
+import {
+    putRecordsJson,
+    putRecordsRobotsTxt,
+    RECORDS_MANIFEST_CACHE_CONTROL,
+} from "../utils/recordsJson.js";
 
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
@@ -39,6 +43,9 @@ export const handler: Handler = async (event: any, context?: any) => {
         cacheControl: RECORDS_MANIFEST_CACHE_CONTROL,
     });
     console.log(`Manifest v${manifest.version} generated (${recList.length} objects)`);
+
+    await putRecordsRobotsTxt(s3);
+    console.log("Published robots.txt (Disallow: /)");
 
     console.log("ALL DONE");
 };
