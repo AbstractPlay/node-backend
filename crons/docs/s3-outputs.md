@@ -197,10 +197,40 @@ CloudFront **does not** run blanket `/*` invalidations (removed to avoid quota/c
 |-------------|-----------------|----------------|
 | Daily batch JSON (`ALL.json`, `meta/*`, `player/*`, `_summary*.json`, etc.) | `public, max-age=0, must-revalidate` | `application/json` |
 | `_manifest.json` | `no-cache` | `application/json` |
+| `robots.txt` | `public, max-age=86400` | `text/plain; charset=utf-8` |
 
 After each daily cron overwrite, the next CDN/browser request revalidates with S3 (`If-None-Match`); changed objects return a new body without invalidation.
 
-Implemented in [`src/utils/recordsJson.ts`](../src/utils/recordsJson.ts) (`putRecordsJson`).
+Implemented in [`src/utils/recordsJson.ts`](../src/utils/recordsJson.ts) (`putRecordsJson`, `putRecordsRobotsTxt`).
+
+### Search indexing (records host)
+
+The records bucket is a **machine-readable JSON API**, not a public website. To reduce Google Search Console noise on `/event/*.json` and similar URLs:
+
+1. **`robots.txt`** — `records-manifest` uploads `Disallow: /` on every run (source: [`static/records-robots.txt`](../static/records-robots.txt)). After merging crons changes, either wait for the next manifest schedule (**04:00** and **07:30 UTC**) or run once with prod credentials:
+
+   ```bash
+   npm run publish-records-robots
+   # preview: npm run publish-records-robots -- --dry-run
+   ```
+
+2. **`X-Robots-Tag: noindex`** — one-time CloudFront response headers policy on distribution `EM4FVU08T5188`:
+
+   ```bash
+   npm run enable-records-x-robots-noindex
+   # preview: npm run enable-records-x-robots-noindex -- --dry-run
+   ```
+
+Verify:
+
+```bash
+curl.exe -s https://records.abstractplay.com/robots.txt
+curl.exe -sI https://records.abstractplay.com/_manifest.json
+```
+
+Expect `Disallow: /` in the robots body and `X-Robots-Tag: noindex` on responses after CloudFront propagation.
+
+Play UI links to records JSON use `rel="nofollow"` in the front repo; robots + CDN headers are the primary fix.
 
 ### Gzip compression
 
