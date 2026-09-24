@@ -207,7 +207,7 @@ Implemented in [`src/utils/recordsJson.ts`](../src/utils/recordsJson.ts) (`putRe
 
 The records bucket is a **machine-readable JSON API**, not a public website. To reduce Google Search Console noise on `/event/*.json` and similar URLs:
 
-1. **`robots.txt`** — `records-manifest` uploads `Disallow: /` on every run (source: [`static/records-robots.txt`](../static/records-robots.txt)). After merging crons changes, either wait for the next manifest schedule (**04:00** and **07:30 UTC**) or run once with prod credentials:
+1. **`robots.txt`** — `records-manifest` uploads `Disallow: /` on every run (source file: `crons/static/records-robots.txt` in the node-backend repo). After merging crons changes, either wait for the next manifest schedule (**04:00** and **07:30 UTC**) or run once with prod credentials:
 
    ```bash
    npm run publish-records-robots
