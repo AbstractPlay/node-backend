@@ -1703,6 +1703,11 @@ export async function saveExploration(userid: string, pars: { public: boolean, g
         "tree": JSON.stringify(treeToSave)
       }
     }));
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ success: true }),
+      headers,
+    };
   } else {
     try {
       console.log("Trying to update public exploration at key " + JSON.stringify({ "pk": "PUBLICEXPLORATION#" + pars.game, "sk": `${pars.move}` }));
@@ -1714,6 +1719,11 @@ export async function saveExploration(userid: string, pars: { public: boolean, g
         ConditionExpression: "#v = :v",
         UpdateExpression: "set #v = :v + :inc, #t = :t"
       }));
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ success: true }),
+        headers,
+      };
     } catch (err: any) {
       if (err.name === 'ConditionalCheckFailedException') {
         // Either nothing here yet, or somebody else has updated the tree. Send back to the front end to merge and try to save again.
@@ -1763,7 +1773,11 @@ export async function saveExploration(userid: string, pars: { public: boolean, g
           }
           if (exploration === undefined) {
             console.log("Successfully inserted public exploration, returning to client.");
-            return;
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ success: true }),
+              headers,
+            };
           }
         } else {
           exploration = explorationData.Item as Exploration;
