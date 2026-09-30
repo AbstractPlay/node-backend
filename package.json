@@ -32,6 +32,7 @@
     "feedback-archive": "tsx bin/feedback-archive.mjs",
     "feedback-attachment-cleanup": "tsx bin/feedback-attachment-cleanup.mjs",
     "backfill-feedback-user-engagement": "tsx bin/backfill-feedback-user-engagement-indexes.mjs",
+    "backfill-feedback-discord-user-index": "tsx bin/backfill-feedback-discord-user-index.mjs",
     "backfill-wishlist-bgg-images": "tsx bin/backfill-wishlist-bgg-images.mjs",
     "backfill-blank-user-names": "tsx bin/backfill-blank-user-names.mjs",
     "sync-deps": "ap-install-deps --stage dev && node scripts/sync-crons-ap-deps.mjs --stage dev && node scripts/prune-crons-nested-ap-deps.mjs",

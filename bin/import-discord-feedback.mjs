@@ -22,6 +22,7 @@ import {
   loadUserMap,
 } from './discord-feedback-import-lib.mjs';
 import {
+  buildDiscordSubmittedUserIndexRow,
   isUnmappedDiscordAuthor,
   planDiscordThreadImport,
   resolveDiscordAuthor,
@@ -193,6 +194,10 @@ async function main() {
           { Put: { TableName: tableName, Item: planned.meta } },
           ...planned.listRows.map((row) => ({ Put: { TableName: tableName, Item: row } })),
         ];
+        const submittedIndex = buildDiscordSubmittedUserIndexRow(planned.meta);
+        if (submittedIndex) {
+          writes.push({ Put: { TableName: tableName, Item: submittedIndex } });
+        }
         await client.send(new TransactWriteCommand({ TransactItems: writes }));
         for (const comment of planned.comments) {
           await client.send(new PutCommand({ TableName: tableName, Item: comment }));

@@ -1568,3 +1568,53 @@ test('feedbackSetTagVocab replaces vocabulary', async () => {
     assert.deepEqual(listResult.data.tags.map((tag) => tag.id), ['custom_area']);
   }
 });
+
+test('buildDiscordSubmittedUserIndexRow omits unmapped authors', async () => {
+  const { buildDiscordSubmittedUserIndexRow, DISCORD_IMPORT_AUTHOR_ID } = await import('../lib/feedback/discordImport.js');
+  const mapped = buildDiscordSubmittedUserIndexRow({
+    pk: postPk('post-1'),
+    sk: metaSk(),
+    entityType: 'meta',
+    id: 'post-1',
+    kind: 'feature',
+    title: 't',
+    body: 'b',
+    status: 'open',
+    authorId: '6b518a3f-7f63-47b8-b92b-a04792fba8e7',
+    authorName: 'Gatsby',
+    createdAt: 1777119790322,
+    updatedAt: 1777119790322,
+    voteCount: 0,
+    legacyVoteCount: 0,
+    effectiveVotes: 0,
+    commentCount: 0,
+    gsi2pk: 'STATUS#feature#open',
+    gsi2sk: '1777119790322',
+    legacyDiscordThreadId: '1497573686025130154',
+  });
+  assert.ok(mapped);
+  assert.equal(mapped!.sk, userIndexSk('feature', 1777119790322, 'post-1'));
+
+  const unmapped = buildDiscordSubmittedUserIndexRow({
+    pk: postPk('post-2'),
+    sk: metaSk(),
+    entityType: 'meta',
+    id: 'post-2',
+    kind: 'bug',
+    title: 't',
+    body: 'b',
+    status: 'open',
+    authorId: DISCORD_IMPORT_AUTHOR_ID,
+    authorName: 'unknown',
+    createdAt: 1,
+    updatedAt: 1,
+    voteCount: 0,
+    legacyVoteCount: 0,
+    effectiveVotes: 0,
+    commentCount: 0,
+    gsi2pk: 'STATUS#bug#open',
+    gsi2sk: '1',
+    legacyDiscordThreadId: 'thread',
+  });
+  assert.equal(unmapped, undefined);
+});
