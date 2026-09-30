@@ -1,6 +1,16 @@
 import type { ApUsernameIndex } from './bggImport.js';
 import { generateCommentId, generatePostId } from './ids.js';
-import { commentSk, kindGsi1Pk, listGsi1SkForSort, listSkForSort, metaSk, postPk, statusGsi2Pk } from './keys.js';
+import {
+  commentSk,
+  kindGsi1Pk,
+  listGsi1SkForSort,
+  listSkForSort,
+  metaSk,
+  postPk,
+  statusGsi2Pk,
+  USER_PK_PREFIX,
+  userIndexSk,
+} from './keys.js';
 import type { FeedbackKind, FeedbackMetaItem } from './types.js';
 
 export const DISCORD_IMPORT_AUTHOR_ID = '00000000-0000-4000-8000-000000000002';
@@ -146,6 +156,25 @@ export function buildDiscordUsernameToUserId(index: ApUsernameIndex): Record<str
 
 export function isUnmappedDiscordAuthor(author: ResolvedDiscordAuthor): boolean {
   return author.authorId === DISCORD_IMPORT_AUTHOR_ID;
+}
+
+export function isMappedDiscordImportAuthorId(authorId: string): boolean {
+  return authorId !== DISCORD_IMPORT_AUTHOR_ID;
+}
+
+/** USER# POST# row for feedback_mine submitted scope; omitted when import author was unmapped. */
+export function buildDiscordSubmittedUserIndexRow(meta: FeedbackMetaItem): Record<string, unknown> | undefined {
+  if (!isMappedDiscordImportAuthorId(meta.authorId)) {
+    return undefined;
+  }
+  return {
+    pk: `${USER_PK_PREFIX}${meta.authorId}`,
+    sk: userIndexSk(meta.kind, meta.createdAt, meta.id),
+    entityType: 'userIndex',
+    id: meta.id,
+    kind: meta.kind,
+    createdAt: meta.createdAt,
+  };
 }
 
 export function resolveDiscordAuthor(
