@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   applySeatLeave,
   assertCanJoinChallenge,
+  legacyChallengeSeatsNeedRepair,
+  repairLegacyChallengeSeats,
   validateChallengeParticipantUniqueness,
   validateDirectChallengeSeats,
   seatInvariantHolds,
@@ -145,6 +147,34 @@ describe('challenge seat accounting', () => {
       }) ?? '',
       /invited and seated/i,
     );
+  });
+
+  it('repairs legacy standing challengees (challenger + seated invitees)', () => {
+    const corrupt = {
+      numPlayers: 3,
+      standing: true,
+      challenger: alice,
+      players: [alice, bob],
+      challengees: [alice, bob],
+    };
+    assert.equal(legacyChallengeSeatsNeedRepair(corrupt, { storageStanding: true }), true);
+    const repaired = repairLegacyChallengeSeats(corrupt, { storageStanding: true });
+    assert.deepEqual(repaired.challengees, []);
+    assert.equal(assertCanJoinChallenge(repaired, charlie.id), undefined);
+  });
+
+  it('strips invalid challengees on direct challenges', () => {
+    const corrupt = {
+      numPlayers: 3,
+      standing: false,
+      challenger: alice,
+      players: [alice, bob],
+      challengees: [alice, bob, charlie],
+      openSlots: 0,
+    };
+    const repaired = repairLegacyChallengeSeats(corrupt, { storageStanding: false });
+    assert.deepEqual(repaired.challengees?.map(u => u.id), ['c']);
+    assert.equal(assertCanJoinChallenge(repaired, charlie.id), undefined);
   });
 
   it('3p standing withdraw is partial without openSlots', () => {
