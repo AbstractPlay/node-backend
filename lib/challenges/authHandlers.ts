@@ -29,6 +29,7 @@ import { declinesDirectChallenges } from '../challenges.js';
 import { validateChallengeVariantUids } from './variantUids.js';
 import { shuffle } from './shuffle.js';
 import {
+  applyLegacyChallengeSeatRepair,
   applySeatLeave,
   assertCanJoinChallenge,
   effectiveOpenSlots,
@@ -749,6 +750,7 @@ async function removeChallenge(
   }
   const challenge = loaded.item as Challenge & FullChallenge;
   const storageStanding = loaded.isStanding;
+  applyLegacyChallengeSeatRepair(challenge, { storageStanding });
   if (revoked && challenge.challenger.id !== quitter) {
     throw new Error(`${quitter} tried to revoke a challenge that they did not create.`);
   }
@@ -1001,6 +1003,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
 
   const challenge = loaded.item as FullChallenge;
   const storageStanding = loaded.isStanding;
+  applyLegacyChallengeSeatRepair(challenge, { storageStanding });
   const namedChallengee = challenge.challengees?.find(c => c.id === userid);
   const openSlotAccept =
     !storageStanding
@@ -1013,7 +1016,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     throw new Error("Can't accept a challenge if you weren't challenged");
   }
 
-  let challengees = standing || !challenge.challengees ? [] : challenge.challengees.filter(c => c.id !== userid);
+  let challengees = storageStanding || !challenge.challengees ? [] : challenge.challengees.filter(c => c.id !== userid);
   if (!storageStanding && namedChallengee && challengees.length !== (challenge.challengees?.length ?? 0) - 1) {
     logGetItemError(`userid ${userid} wasn't a challengee, challenge ${challengeId}`);
     throw new Error("Can't accept a challenge if you weren't challenged");
@@ -1042,10 +1045,27 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       shuffle(playerIDs);
     } else if (challenge.seating === 's1') {
       playerIDs.push(challenge.challenger.id);
-      playerIDs.push(userid);
+      for (const player of players!) {
+        if (player.id !== challenge.challenger.id) {
+          playerIDs.push(player.id);
+        }
+      }
+      if (!playerIDs.includes(userid)) {
+        playerIDs.push(userid);
+      }
     } else if (challenge.seating === 's2') {
       playerIDs.push(userid);
+      for (const player of players!) {
+        if (player.id !== challenge.challenger.id) {
+          playerIDs.push(player.id);
+        }
+      }
       playerIDs.push(challenge.challenger.id);
+    } else {
+      throw new Error(`Unknown seating ${challenge.seating}`);
+    }
+    if (playerIDs.length !== challenge.numPlayers) {
+      throw new Error(`Expected ${challenge.numPlayers} players for game start, got ${playerIDs.length}`);
     }
     const playersFull = await getParticipants(playerIDs);
     let whoseTurn: string | boolean[] = "0";

@@ -13,6 +13,67 @@ export function effectiveOpenSlots(challenge: { openSlots?: number }): number {
   return challenge.openSlots ?? 0;
 }
 
+export type RepairLegacyChallengeSeatsOptions = {
+  /** True for canonical `STANDINGCHALLENGE#` rows (open challenges). */
+  storageStanding: boolean;
+};
+
+function challengeeIdKey(challenge: SeatChallenge): string {
+  return (challenge.challengees ?? []).map(c => c.id).sort((a, b) => a.localeCompare(b)).join('\0');
+}
+
+/**
+ * Clears legacy `challengees` corruption on standing challenges (pre-2026-09 accept bug)
+ * and strips invalid invitees on direct challenges.
+ */
+export function repairLegacyChallengeSeats<T extends SeatChallenge>(
+  challenge: T,
+  options: RepairLegacyChallengeSeatsOptions,
+): T {
+  const challengerId = challenge.challenger?.id;
+  if (!challengerId) {
+    return challenge;
+  }
+
+  if (options.storageStanding) {
+    if ((challenge.challengees?.length ?? 0) === 0) {
+      return challenge;
+    }
+    return { ...challenge, challengees: [] };
+  }
+
+  const seated = new Set((challenge.players ?? []).map(p => p.id));
+  const filtered = (challenge.challengees ?? []).filter(
+    c => c.id !== challengerId && !seated.has(c.id),
+  );
+  if (filtered.length === (challenge.challengees?.length ?? 0)) {
+    return challenge;
+  }
+  return { ...challenge, challengees: filtered };
+}
+
+export function legacyChallengeSeatsNeedRepair(
+  challenge: SeatChallenge,
+  options: RepairLegacyChallengeSeatsOptions,
+): boolean {
+  const before = challengeeIdKey(challenge);
+  const after = challengeeIdKey(repairLegacyChallengeSeats(challenge, options));
+  return before !== after;
+}
+
+/** Mutates `challenge` when repair is needed; returns whether a change was applied. */
+export function applyLegacyChallengeSeatRepair(
+  challenge: SeatChallenge,
+  options: RepairLegacyChallengeSeatsOptions,
+): boolean {
+  const repaired = repairLegacyChallengeSeats(challenge, options);
+  if (challengeeIdKey(challenge) === challengeeIdKey(repaired)) {
+    return false;
+  }
+  challenge.challengees = repaired.challengees;
+  return true;
+}
+
 /** Each user id may appear at most once across players and challengees (challenger may appear once in players). */
 export function validateChallengeParticipantUniqueness(
   challenge: SeatChallenge,
