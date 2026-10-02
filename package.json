@@ -27,6 +27,7 @@
     "import-discord-feedback": "tsx bin/import-discord-feedback.mjs",
     "import-discord-announcements": "tsx bin/import-discord-announcements.mjs",
     "generate-announcements-rss": "tsx bin/generate-announcements-rss.mjs",
+    "verify-division-standings": "tsx bin/verify-division-standings.mjs",
     "report-bgg-wishlist-users": "tsx bin/report-bgg-wishlist-users.mjs",
     "report-discord-feedback-users": "tsx bin/report-discord-feedback-users.mjs",
     "feedback-archive": "tsx bin/feedback-archive.mjs",
@@ -60,9 +61,9 @@
     "crons"
   ],
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-37037826275.0",
-    "@abstractplay/recranks": "1.0.0-ci-35278464897.0",
-    "@abstractplay/renderer": "1.0.0-ci-36750293534.0",
+    "@abstractplay/gameslib": "1.0.0-ci-37038721121.0",
+    "@abstractplay/recranks": "1.0.0-ci-35280155165.0",
+    "@abstractplay/renderer": "1.0.0-ci-36750275980.0",
     "@aws-sdk/client-apigatewaymanagementapi": "3.1090.0",
     "@aws-sdk/client-cognito-identity-provider": "3.1090.0",
     "@aws-sdk/client-dynamodb": "3.1090.0",

@@ -1,0 +1,321 @@
+{
+  "tournamentId": "eb149f77-071a-459e-b063-1a749f11d7fe",
+  "metaGame": "twinflames",
+  "division": 1,
+  "games": [
+    {
+      "player1": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "player2": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "winner": [
+        "4223967c-d922-47c6-8f57-69b6025f5a9b"
+      ]
+    },
+    {
+      "player1": "52077877-93bb-4fff-9e5f-f1c41ac8e866",
+      "player2": "029f7403-23eb-4283-b9d3-68e46ca52f45",
+      "winner": [
+        "029f7403-23eb-4283-b9d3-68e46ca52f45"
+      ]
+    },
+    {
+      "player1": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "player2": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "winner": [
+        "4223967c-d922-47c6-8f57-69b6025f5a9b"
+      ]
+    },
+    {
+      "player1": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "player2": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "winner": [
+        "defa701a-3e07-48a3-8dd8-3b4a6cad0de5"
+      ]
+    },
+    {
+      "player1": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "player2": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "player2": "d50ca450-f9a5-4c6f-b260-6a840265c20f",
+      "winner": [
+        "d50ca450-f9a5-4c6f-b260-6a840265c20f"
+      ]
+    },
+    {
+      "player1": "029f7403-23eb-4283-b9d3-68e46ca52f45",
+      "player2": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "player2": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "winner": [
+        "4223967c-d922-47c6-8f57-69b6025f5a9b"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "player2": "52077877-93bb-4fff-9e5f-f1c41ac8e866",
+      "winner": [
+        "52077877-93bb-4fff-9e5f-f1c41ac8e866"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "player2": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "winner": [
+        "485f15a4-1129-4623-9e28-425e7d65106b"
+      ]
+    },
+    {
+      "player1": "d50ca450-f9a5-4c6f-b260-6a840265c20f",
+      "player2": "029f7403-23eb-4283-b9d3-68e46ca52f45",
+      "winner": [
+        "d50ca450-f9a5-4c6f-b260-6a840265c20f"
+      ]
+    },
+    {
+      "player1": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "player2": "52077877-93bb-4fff-9e5f-f1c41ac8e866",
+      "winner": [
+        "52077877-93bb-4fff-9e5f-f1c41ac8e866"
+      ]
+    },
+    {
+      "player1": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "player2": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "winner": [
+        "017373d1-0e8e-482d-a950-b8616c355b2c"
+      ]
+    },
+    {
+      "player1": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "player2": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "winner": [
+        "defa701a-3e07-48a3-8dd8-3b4a6cad0de5"
+      ]
+    },
+    {
+      "player1": "029f7403-23eb-4283-b9d3-68e46ca52f45",
+      "player2": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "winner": [
+        "defa701a-3e07-48a3-8dd8-3b4a6cad0de5"
+      ]
+    },
+    {
+      "player1": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "player2": "029f7403-23eb-4283-b9d3-68e46ca52f45",
+      "winner": [
+        "029f7403-23eb-4283-b9d3-68e46ca52f45"
+      ]
+    },
+    {
+      "player1": "029f7403-23eb-4283-b9d3-68e46ca52f45",
+      "player2": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "winner": [
+        "4223967c-d922-47c6-8f57-69b6025f5a9b"
+      ]
+    },
+    {
+      "player1": "52077877-93bb-4fff-9e5f-f1c41ac8e866",
+      "player2": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "winner": [
+        "52077877-93bb-4fff-9e5f-f1c41ac8e866"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "029f7403-23eb-4283-b9d3-68e46ca52f45",
+      "player2": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "winner": [
+        "485f15a4-1129-4623-9e28-425e7d65106b"
+      ]
+    },
+    {
+      "player1": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "player2": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "winner": [
+        "defa701a-3e07-48a3-8dd8-3b4a6cad0de5"
+      ]
+    },
+    {
+      "player1": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "player2": "52077877-93bb-4fff-9e5f-f1c41ac8e866",
+      "winner": [
+        "52077877-93bb-4fff-9e5f-f1c41ac8e866"
+      ]
+    },
+    {
+      "player1": "d50ca450-f9a5-4c6f-b260-6a840265c20f",
+      "player2": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "52077877-93bb-4fff-9e5f-f1c41ac8e866",
+      "player2": "d50ca450-f9a5-4c6f-b260-6a840265c20f",
+      "winner": [
+        "d50ca450-f9a5-4c6f-b260-6a840265c20f"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "winner": [
+        "4223967c-d922-47c6-8f57-69b6025f5a9b"
+      ]
+    },
+    {
+      "player1": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "player2": "52077877-93bb-4fff-9e5f-f1c41ac8e866",
+      "winner": [
+        "4223967c-d922-47c6-8f57-69b6025f5a9b"
+      ]
+    },
+    {
+      "player1": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "player2": "029f7403-23eb-4283-b9d3-68e46ca52f45",
+      "winner": [
+        "017373d1-0e8e-482d-a950-b8616c355b2c"
+      ]
+    },
+    {
+      "player1": "d50ca450-f9a5-4c6f-b260-6a840265c20f",
+      "player2": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "winner": [
+        "4223967c-d922-47c6-8f57-69b6025f5a9b"
+      ]
+    },
+    {
+      "player1": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "player2": "d50ca450-f9a5-4c6f-b260-6a840265c20f",
+      "winner": [
+        "defa701a-3e07-48a3-8dd8-3b4a6cad0de5"
+      ]
+    },
+    {
+      "player1": "d50ca450-f9a5-4c6f-b260-6a840265c20f",
+      "player2": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "winner": [
+        "485f15a4-1129-4623-9e28-425e7d65106b"
+      ]
+    },
+    {
+      "player1": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "player2": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "winner": [
+        "485f15a4-1129-4623-9e28-425e7d65106b"
+      ]
+    },
+    {
+      "player1": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "player2": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "winner": [
+        "4223967c-d922-47c6-8f57-69b6025f5a9b"
+      ]
+    },
+    {
+      "player1": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "player2": "d50ca450-f9a5-4c6f-b260-6a840265c20f",
+      "winner": [
+        "d50ca450-f9a5-4c6f-b260-6a840265c20f"
+      ]
+    },
+    {
+      "player1": "52077877-93bb-4fff-9e5f-f1c41ac8e866",
+      "player2": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "winner": [
+        "52077877-93bb-4fff-9e5f-f1c41ac8e866"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "playername": "lucacerrato",
+      "rating": 0
+    },
+    {
+      "playerid": "029f7403-23eb-4283-b9d3-68e46ca52f45",
+      "playername": "metzgerism",
+      "rating": 1154.6813021527114
+    },
+    {
+      "playerid": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "playername": "Russ",
+      "rating": 1306.8372552359253
+    },
+    {
+      "playerid": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "playername": "ccoleman",
+      "rating": 0
+    },
+    {
+      "playerid": "52077877-93bb-4fff-9e5f-f1c41ac8e866",
+      "playername": "Nick Bentley",
+      "rating": 1419.8034252617672
+    },
+    {
+      "playerid": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "playername": "Troll_King_69",
+      "rating": 0
+    },
+    {
+      "playerid": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "playername": "mandrel",
+      "rating": 0
+    },
+    {
+      "playerid": "d50ca450-f9a5-4c6f-b260-6a840265c20f",
+      "playername": "stonewall",
+      "rating": 1166.2776493210504
+    },
+    {
+      "playerid": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "playername": "Martin M. S. Pedersen",
+      "rating": 1156.8517567562571
+    }
+  ],
+  "expected": {
+    "winnerId": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+    "winnerName": "Russ",
+    "tiebreakByPlayerId": {
+      "4223967c-d922-47c6-8f57-69b6025f5a9b": 28,
+      "960f07a3-43d9-48d4-a3dc-cff3094a85e3": 17,
+      "52077877-93bb-4fff-9e5f-f1c41ac8e866": 17,
+      "defa701a-3e07-48a3-8dd8-3b4a6cad0de5": 12,
+      "d50ca450-f9a5-4c6f-b260-6a840265c20f": 9,
+      "485f15a4-1129-4623-9e28-425e7d65106b": 8,
+      "029f7403-23eb-4283-b9d3-68e46ca52f45": 5,
+      "017373d1-0e8e-482d-a950-b8616c355b2c": 2,
+      "8408c428-40b1-701b-a541-ac9827858ce6": 0
+    }
+  }
+}

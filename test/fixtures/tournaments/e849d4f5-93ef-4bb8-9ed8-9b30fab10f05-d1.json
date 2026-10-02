@@ -1,0 +1,156 @@
+{
+  "tournamentId": "e849d4f5-93ef-4bb8-9ed8-9b30fab10f05",
+  "metaGame": "catchup",
+  "division": 1,
+  "games": [
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "90673fe1-e56e-4b14-9d13-75dd3fa323a8",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "player2": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "winner": [
+        "485f15a4-1129-4623-9e28-425e7d65106b"
+      ]
+    },
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "winner": [
+        "73709b1d-c703-4d9d-a2a3-8a6247e252f2"
+      ]
+    },
+    {
+      "player1": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "player2": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "winner": [
+        "73709b1d-c703-4d9d-a2a3-8a6247e252f2"
+      ]
+    },
+    {
+      "player1": "90673fe1-e56e-4b14-9d13-75dd3fa323a8",
+      "player2": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "winner": [
+        "90673fe1-e56e-4b14-9d13-75dd3fa323a8"
+      ]
+    },
+    {
+      "player1": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "player2": "90673fe1-e56e-4b14-9d13-75dd3fa323a8",
+      "winner": [
+        "90673fe1-e56e-4b14-9d13-75dd3fa323a8"
+      ]
+    },
+    {
+      "player1": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "player2": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "player2": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "winner": [
+        "73709b1d-c703-4d9d-a2a3-8a6247e252f2"
+      ]
+    },
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "winner": [
+        "73709b1d-c703-4d9d-a2a3-8a6247e252f2"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "winner": [
+        "485f15a4-1129-4623-9e28-425e7d65106b"
+      ]
+    },
+    {
+      "player1": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "player2": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "winner": [
+        "dd7f1f49-3bfa-469f-a74b-001a17130e70"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "90673fe1-e56e-4b14-9d13-75dd3fa323a8",
+      "player2": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "winner": [
+        "485f15a4-1129-4623-9e28-425e7d65106b"
+      ]
+    },
+    {
+      "player1": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "player2": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "winner": [
+        "485f15a4-1129-4623-9e28-425e7d65106b"
+      ]
+    },
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "90673fe1-e56e-4b14-9d13-75dd3fa323a8",
+      "winner": [
+        "73709b1d-c703-4d9d-a2a3-8a6247e252f2"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "playername": "MisterZNatural",
+      "rating": 933.5754575836254
+    },
+    {
+      "playerid": "485f15a4-1129-4623-9e28-425e7d65106b",
+      "playername": "ccoleman",
+      "rating": 1307.4389070729353
+    },
+    {
+      "playerid": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "playername": "Eykca",
+      "rating": 1230.076590044065
+    },
+    {
+      "playerid": "90673fe1-e56e-4b14-9d13-75dd3fa323a8",
+      "playername": "fjan2ej57w",
+      "rating": 719.8678290385124
+    },
+    {
+      "playerid": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "playername": "mandrel",
+      "rating": 1313.7139318469713
+    },
+    {
+      "playerid": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "playername": "megamau",
+      "rating": 1128.2275544025163
+    }
+  ],
+  "expected": {
+    "winnerId": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+    "winnerName": "Eykca",
+    "tiebreakByPlayerId": {
+      "73709b1d-c703-4d9d-a2a3-8a6247e252f2": 10,
+      "485f15a4-1129-4623-9e28-425e7d65106b": 6,
+      "960f07a3-43d9-48d4-a3dc-cff3094a85e3": 3,
+      "90673fe1-e56e-4b14-9d13-75dd3fa323a8": 1,
+      "dd7f1f49-3bfa-469f-a74b-001a17130e70": 0,
+      "433fae69-ba13-4915-96b6-0c9181b3647d": 0
+    }
+  }
+}

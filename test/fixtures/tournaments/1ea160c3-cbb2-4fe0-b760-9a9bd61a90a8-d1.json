@@ -1,0 +1,81 @@
+{
+  "tournamentId": "1ea160c3-cbb2-4fe0-b760-9a9bd61a90a8",
+  "metaGame": "arimaa",
+  "division": 1,
+  "games": [
+    {
+      "player1": "6ea91933-1262-41a5-b5f3-a6af70692296",
+      "player2": "9eef11ba-550e-496a-ac0f-df3879d564db",
+      "winner": [
+        "9eef11ba-550e-496a-ac0f-df3879d564db"
+      ]
+    },
+    {
+      "player1": "9eef11ba-550e-496a-ac0f-df3879d564db",
+      "player2": "30e092c1-f0bb-4701-8fa9-931b7938de1a",
+      "winner": [
+        "9eef11ba-550e-496a-ac0f-df3879d564db"
+      ]
+    },
+    {
+      "player1": "6ea91933-1262-41a5-b5f3-a6af70692296",
+      "player2": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "winner": [
+        "6ea91933-1262-41a5-b5f3-a6af70692296"
+      ]
+    },
+    {
+      "player1": "30e092c1-f0bb-4701-8fa9-931b7938de1a",
+      "player2": "6ea91933-1262-41a5-b5f3-a6af70692296",
+      "winner": [
+        "6ea91933-1262-41a5-b5f3-a6af70692296"
+      ]
+    },
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "9eef11ba-550e-496a-ac0f-df3879d564db",
+      "winner": [
+        "9eef11ba-550e-496a-ac0f-df3879d564db"
+      ]
+    },
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "30e092c1-f0bb-4701-8fa9-931b7938de1a",
+      "winner": [
+        "30e092c1-f0bb-4701-8fa9-931b7938de1a"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "30e092c1-f0bb-4701-8fa9-931b7938de1a",
+      "playername": "Unspeakablegamer",
+      "rating": 1177.1283304649094
+    },
+    {
+      "playerid": "6ea91933-1262-41a5-b5f3-a6af70692296",
+      "playername": "Samraku",
+      "rating": 1443.618908298332
+    },
+    {
+      "playerid": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "playername": "Eykca",
+      "rating": 1102.2067253091482
+    },
+    {
+      "playerid": "9eef11ba-550e-496a-ac0f-df3879d564db",
+      "playername": "clyring",
+      "rating": 1577.9919553794912
+    }
+  ],
+  "expected": {
+    "winnerId": "9eef11ba-550e-496a-ac0f-df3879d564db",
+    "winnerName": "clyring",
+    "tiebreakByPlayerId": {
+      "9eef11ba-550e-496a-ac0f-df3879d564db": 3,
+      "6ea91933-1262-41a5-b5f3-a6af70692296": 1,
+      "30e092c1-f0bb-4701-8fa9-931b7938de1a": 0,
+      "73709b1d-c703-4d9d-a2a3-8a6247e252f2": 0
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "tournamentId": "769b8615-10a2-45a1-835b-3021e957af32",
+  "metaGame": "btt",
+  "division": 1,
+  "games": [
+    {
+      "player1": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "player2": "4bd8317d-fb04-435f-89e0-2557c3f2e66c",
+      "winner": [
+        "4223967c-d922-47c6-8f57-69b6025f5a9b"
+      ]
+    },
+    {
+      "player1": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "player2": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "winner": [
+        "4223967c-d922-47c6-8f57-69b6025f5a9b"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "4bd8317d-fb04-435f-89e0-2557c3f2e66c",
+      "winner": [
+        "4bd8317d-fb04-435f-89e0-2557c3f2e66c"
+      ]
+    },
+    {
+      "player1": "4bd8317d-fb04-435f-89e0-2557c3f2e66c",
+      "player2": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "winner": [
+        "4bd8317d-fb04-435f-89e0-2557c3f2e66c"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+        "4223967c-d922-47c6-8f57-69b6025f5a9b"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+      "playername": "Russ",
+      "rating": 1260.784686615529
+    },
+    {
+      "playerid": "4bd8317d-fb04-435f-89e0-2557c3f2e66c",
+      "playername": "mcd",
+      "rating": 1156.2823742725773
+    },
+    {
+      "playerid": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "playername": "Eykca",
+      "rating": 784.4388333992433
+    },
+    {
+      "playerid": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "playername": "mandrel",
+      "rating": 785.8833777359953
+    }
+  ],
+  "expected": {
+    "winnerId": "4223967c-d922-47c6-8f57-69b6025f5a9b",
+    "winnerName": "Russ",
+    "tiebreakByPlayerId": {
+      "4223967c-d922-47c6-8f57-69b6025f5a9b": 2.75,
+      "4bd8317d-fb04-435f-89e0-2557c3f2e66c": 1.5,
+      "960f07a3-43d9-48d4-a3dc-cff3094a85e3": 1.25,
+      "73709b1d-c703-4d9d-a2a3-8a6247e252f2": 0
+    }
+  }
+}

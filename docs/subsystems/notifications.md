@@ -64,6 +64,8 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `tournamentStart` | Tournament series starts (`starttournaments` cron) | Tournament name links to `/tournament/{tournamentId}`; variant labels when applicable; dismiss only |
 | `tournamentEnd` | All tournament divisions complete (`endTournament`) | Tournament name links to `/tournament/{tournamentId}`; includes division winner name when available; dismiss only |
 
+Tournament-end **email** includes division winner, plain-text standings for the recipient’s division, a link to the finished tournament, and a signup nudge for the next series (earliest start window and current signup count). **Push** uses winner + nudge only (no standings table); tap opens `/tournament/{tournamentId}`.
+
 ### Batch `ratingChange` issuer (crons stack)
 
 Realtime Elo at game end was removed in Phase 4. `ratingChange` rows are now written by the `rating-change-notifications` Lambda in the **crons** stack, scheduled at **6:20 UTC** daily (after summarize at 6:00).

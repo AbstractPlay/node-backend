@@ -1,0 +1,81 @@
+{
+  "tournamentId": "d6134ae3-232c-488a-8145-a781904a94b0",
+  "metaGame": "trax",
+  "division": 1,
+  "games": [
+    {
+      "player1": "151518d9-dcec-4900-8277-f86830befb64",
+      "player2": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "winner": [
+        "defa701a-3e07-48a3-8dd8-3b4a6cad0de5"
+      ]
+    },
+    {
+      "player1": "30e092c1-f0bb-4701-8fa9-931b7938de1a",
+      "player2": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "winner": [
+        "defa701a-3e07-48a3-8dd8-3b4a6cad0de5"
+      ]
+    },
+    {
+      "player1": "0e2ce44c-c3c2-4470-80c3-eca33725e5ed",
+      "player2": "151518d9-dcec-4900-8277-f86830befb64",
+      "winner": [
+        "151518d9-dcec-4900-8277-f86830befb64"
+      ]
+    },
+    {
+      "player1": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "player2": "0e2ce44c-c3c2-4470-80c3-eca33725e5ed",
+      "winner": [
+        "defa701a-3e07-48a3-8dd8-3b4a6cad0de5"
+      ]
+    },
+    {
+      "player1": "30e092c1-f0bb-4701-8fa9-931b7938de1a",
+      "player2": "0e2ce44c-c3c2-4470-80c3-eca33725e5ed",
+      "winner": [
+        "0e2ce44c-c3c2-4470-80c3-eca33725e5ed"
+      ]
+    },
+    {
+      "player1": "151518d9-dcec-4900-8277-f86830befb64",
+      "player2": "30e092c1-f0bb-4701-8fa9-931b7938de1a",
+      "winner": [
+        "151518d9-dcec-4900-8277-f86830befb64"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "0e2ce44c-c3c2-4470-80c3-eca33725e5ed",
+      "playername": "Rolle",
+      "rating": 1128.1728373677506
+    },
+    {
+      "playerid": "151518d9-dcec-4900-8277-f86830befb64",
+      "playername": "mrraow",
+      "rating": 1289.1007004309893
+    },
+    {
+      "playerid": "30e092c1-f0bb-4701-8fa9-931b7938de1a",
+      "playername": "Unspeakablegamer",
+      "rating": 664.916145963009
+    },
+    {
+      "playerid": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+      "playername": "Martin M. S. Pedersen",
+      "rating": 1525.0684614144893
+    }
+  ],
+  "expected": {
+    "winnerId": "defa701a-3e07-48a3-8dd8-3b4a6cad0de5",
+    "winnerName": "Martin M. S. Pedersen",
+    "tiebreakByPlayerId": {
+      "defa701a-3e07-48a3-8dd8-3b4a6cad0de5": 3,
+      "151518d9-dcec-4900-8277-f86830befb64": 1,
+      "0e2ce44c-c3c2-4470-80c3-eca33725e5ed": 0,
+      "30e092c1-f0bb-4701-8fa9-931b7938de1a": 0
+    }
+  }
+}
