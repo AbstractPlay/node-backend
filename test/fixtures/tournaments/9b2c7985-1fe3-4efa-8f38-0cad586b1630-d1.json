@@ -1,0 +1,81 @@
+{
+  "tournamentId": "9b2c7985-1fe3-4efa-8f38-0cad586b1630",
+  "metaGame": "complica",
+  "division": 1,
+  "games": [
+    {
+      "player1": "a7a8bd93-6b98-47b3-aa5a-60e668a9baf5",
+      "player2": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "a7a8bd93-6b98-47b3-aa5a-60e668a9baf5",
+      "player2": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "winner": [
+        "a7a8bd93-6b98-47b3-aa5a-60e668a9baf5"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "player2": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "winner": [
+        "433fae69-ba13-4915-96b6-0c9181b3647d"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "winner": [
+        "73709b1d-c703-4d9d-a2a3-8a6247e252f2"
+      ]
+    },
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "a7a8bd93-6b98-47b3-aa5a-60e668a9baf5",
+      "winner": [
+        "73709b1d-c703-4d9d-a2a3-8a6247e252f2"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "playername": "MisterZNatural",
+      "rating": 841.6620172476872
+    },
+    {
+      "playerid": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "playername": "Eykca",
+      "rating": 1307.3229518741327
+    },
+    {
+      "playerid": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "playername": "mandrel",
+      "rating": 1348.259075134351
+    },
+    {
+      "playerid": "a7a8bd93-6b98-47b3-aa5a-60e668a9baf5",
+      "playername": "Cowboycookie",
+      "rating": 1090.2740459173342
+    }
+  ],
+  "expected": {
+    "winnerId": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+    "winnerName": "Eykca",
+    "tiebreakByPlayerId": {
+      "73709b1d-c703-4d9d-a2a3-8a6247e252f2": 3,
+      "960f07a3-43d9-48d4-a3dc-cff3094a85e3": 2,
+      "433fae69-ba13-4915-96b6-0c9181b3647d": 2,
+      "a7a8bd93-6b98-47b3-aa5a-60e668a9baf5": 1
+    }
+  }
+}

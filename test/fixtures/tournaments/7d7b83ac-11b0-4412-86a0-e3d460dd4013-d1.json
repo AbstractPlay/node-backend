@@ -1,0 +1,156 @@
+{
+  "tournamentId": "7d7b83ac-11b0-4412-86a0-e3d460dd4013",
+  "metaGame": "cannon",
+  "division": 1,
+  "games": [
+    {
+      "player1": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "player2": "e067697e-2847-4e80-bdc9-3a5a2742cb49",
+      "winner": [
+        "08161c65-0ff1-4b37-9d24-0cdad830cbf0"
+      ]
+    },
+    {
+      "player1": "e427e0ac-f56b-4378-bba3-69afa600df14",
+      "player2": "a573f93c-6129-4cc5-b576-7aa1129cf81f",
+      "winner": [
+        "a573f93c-6129-4cc5-b576-7aa1129cf81f"
+      ]
+    },
+    {
+      "player1": "e427e0ac-f56b-4378-bba3-69afa600df14",
+      "player2": "e067697e-2847-4e80-bdc9-3a5a2742cb49",
+      "winner": [
+        "e067697e-2847-4e80-bdc9-3a5a2742cb49"
+      ]
+    },
+    {
+      "player1": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "player2": "e067697e-2847-4e80-bdc9-3a5a2742cb49",
+      "winner": [
+        "e067697e-2847-4e80-bdc9-3a5a2742cb49"
+      ]
+    },
+    {
+      "player1": "e067697e-2847-4e80-bdc9-3a5a2742cb49",
+      "player2": "34e82458-8061-70da-51fa-839a54e7f0dc",
+      "winner": [
+        "34e82458-8061-70da-51fa-839a54e7f0dc"
+      ]
+    },
+    {
+      "player1": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "player2": "e427e0ac-f56b-4378-bba3-69afa600df14",
+      "winner": [
+        "08161c65-0ff1-4b37-9d24-0cdad830cbf0"
+      ]
+    },
+    {
+      "player1": "e067697e-2847-4e80-bdc9-3a5a2742cb49",
+      "player2": "a573f93c-6129-4cc5-b576-7aa1129cf81f",
+      "winner": [
+        "e067697e-2847-4e80-bdc9-3a5a2742cb49"
+      ]
+    },
+    {
+      "player1": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "player2": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "winner": [
+        "08161c65-0ff1-4b37-9d24-0cdad830cbf0"
+      ]
+    },
+    {
+      "player1": "34e82458-8061-70da-51fa-839a54e7f0dc",
+      "player2": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "winner": [
+        "34e82458-8061-70da-51fa-839a54e7f0dc"
+      ]
+    },
+    {
+      "player1": "a573f93c-6129-4cc5-b576-7aa1129cf81f",
+      "player2": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "winner": [
+        "08161c65-0ff1-4b37-9d24-0cdad830cbf0"
+      ]
+    },
+    {
+      "player1": "34e82458-8061-70da-51fa-839a54e7f0dc",
+      "player2": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "winner": [
+        "08161c65-0ff1-4b37-9d24-0cdad830cbf0"
+      ]
+    },
+    {
+      "player1": "34e82458-8061-70da-51fa-839a54e7f0dc",
+      "player2": "e427e0ac-f56b-4378-bba3-69afa600df14",
+      "winner": [
+        "34e82458-8061-70da-51fa-839a54e7f0dc"
+      ]
+    },
+    {
+      "player1": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "player2": "e427e0ac-f56b-4378-bba3-69afa600df14",
+      "winner": [
+        "e427e0ac-f56b-4378-bba3-69afa600df14"
+      ]
+    },
+    {
+      "player1": "a573f93c-6129-4cc5-b576-7aa1129cf81f",
+      "player2": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "winner": [
+        "a573f93c-6129-4cc5-b576-7aa1129cf81f"
+      ]
+    },
+    {
+      "player1": "a573f93c-6129-4cc5-b576-7aa1129cf81f",
+      "player2": "34e82458-8061-70da-51fa-839a54e7f0dc",
+      "winner": [
+        "a573f93c-6129-4cc5-b576-7aa1129cf81f"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "playername": "JackS888",
+      "rating": 1591.3237830322387
+    },
+    {
+      "playerid": "34e82458-8061-70da-51fa-839a54e7f0dc",
+      "playername": "JonSnow",
+      "rating": 1354.594573740093
+    },
+    {
+      "playerid": "8408c428-40b1-701b-a541-ac9827858ce6",
+      "playername": "Troll_King_69",
+      "rating": 0
+    },
+    {
+      "playerid": "a573f93c-6129-4cc5-b576-7aa1129cf81f",
+      "playername": "barkardes",
+      "rating": 1191.0050926149609
+    },
+    {
+      "playerid": "e067697e-2847-4e80-bdc9-3a5a2742cb49",
+      "playername": "LXIVC",
+      "rating": 1377.3779638569133
+    },
+    {
+      "playerid": "e427e0ac-f56b-4378-bba3-69afa600df14",
+      "playername": "gamehunger",
+      "rating": 1191.412609673629
+    }
+  ],
+  "expected": {
+    "winnerId": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+    "winnerName": "JackS888",
+    "tiebreakByPlayerId": {
+      "08161c65-0ff1-4b37-9d24-0cdad830cbf0": 10,
+      "e067697e-2847-4e80-bdc9-3a5a2742cb49": 4,
+      "34e82458-8061-70da-51fa-839a54e7f0dc": 4,
+      "a573f93c-6129-4cc5-b576-7aa1129cf81f": 4,
+      "e427e0ac-f56b-4378-bba3-69afa600df14": 0,
+      "8408c428-40b1-701b-a541-ac9827858ce6": 0
+    }
+  }
+}

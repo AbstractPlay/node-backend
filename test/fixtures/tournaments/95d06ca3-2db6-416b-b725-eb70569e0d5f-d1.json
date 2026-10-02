@@ -1,0 +1,81 @@
+{
+  "tournamentId": "95d06ca3-2db6-416b-b725-eb70569e0d5f",
+  "metaGame": "akimbo",
+  "division": 1,
+  "games": [
+    {
+      "player1": "6b518a3f-7f63-47b8-b92b-a04792fba8e7",
+      "player2": "9228bccd-a1bd-452b-b94f-d05380e6638f",
+      "winner": [
+        "6b518a3f-7f63-47b8-b92b-a04792fba8e7"
+      ]
+    },
+    {
+      "player1": "9228bccd-a1bd-452b-b94f-d05380e6638f",
+      "player2": "658f7cfc-6a62-433d-8420-4e0aa154c975",
+      "winner": [
+        "9228bccd-a1bd-452b-b94f-d05380e6638f"
+      ]
+    },
+    {
+      "player1": "6b518a3f-7f63-47b8-b92b-a04792fba8e7",
+      "player2": "1ca9eb45-a2e7-450a-9e6f-3e870414ecc0",
+      "winner": [
+        "6b518a3f-7f63-47b8-b92b-a04792fba8e7"
+      ]
+    },
+    {
+      "player1": "658f7cfc-6a62-433d-8420-4e0aa154c975",
+      "player2": "6b518a3f-7f63-47b8-b92b-a04792fba8e7",
+      "winner": [
+        "6b518a3f-7f63-47b8-b92b-a04792fba8e7"
+      ]
+    },
+    {
+      "player1": "1ca9eb45-a2e7-450a-9e6f-3e870414ecc0",
+      "player2": "9228bccd-a1bd-452b-b94f-d05380e6638f",
+      "winner": [
+        "9228bccd-a1bd-452b-b94f-d05380e6638f"
+      ]
+    },
+    {
+      "player1": "658f7cfc-6a62-433d-8420-4e0aa154c975",
+      "player2": "1ca9eb45-a2e7-450a-9e6f-3e870414ecc0",
+      "winner": [
+        "658f7cfc-6a62-433d-8420-4e0aa154c975"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "1ca9eb45-a2e7-450a-9e6f-3e870414ecc0",
+      "playername": "ganelon",
+      "rating": 457.0511786577414
+    },
+    {
+      "playerid": "658f7cfc-6a62-433d-8420-4e0aa154c975",
+      "playername": "JamieR ",
+      "rating": 500
+    },
+    {
+      "playerid": "6b518a3f-7f63-47b8-b92b-a04792fba8e7",
+      "playername": "Gatsby",
+      "rating": 781.6729664703367
+    },
+    {
+      "playerid": "9228bccd-a1bd-452b-b94f-d05380e6638f",
+      "playername": "João Pedro Neto",
+      "rating": 781.6729664703367
+    }
+  ],
+  "expected": {
+    "winnerId": "6b518a3f-7f63-47b8-b92b-a04792fba8e7",
+    "winnerName": "Gatsby",
+    "tiebreakByPlayerId": {
+      "6b518a3f-7f63-47b8-b92b-a04792fba8e7": 3,
+      "9228bccd-a1bd-452b-b94f-d05380e6638f": 1,
+      "658f7cfc-6a62-433d-8420-4e0aa154c975": 0,
+      "1ca9eb45-a2e7-450a-9e6f-3e870414ecc0": 0
+    }
+  }
+}

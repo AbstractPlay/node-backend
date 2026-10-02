@@ -1,0 +1,81 @@
+{
+  "tournamentId": "b3b24d0e-0858-45ad-a31b-a8b90743c97b",
+  "metaGame": "pontedd",
+  "division": 1,
+  "games": [
+    {
+      "player1": "6bcf4c27-36bb-4713-8eab-ff16099ef306",
+      "player2": "123170c1-6e0d-493f-9915-acf07c215e54",
+      "winner": [
+        "6bcf4c27-36bb-4713-8eab-ff16099ef306"
+      ]
+    },
+    {
+      "player1": "123170c1-6e0d-493f-9915-acf07c215e54",
+      "player2": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "winner": [
+        "433fae69-ba13-4915-96b6-0c9181b3647d"
+      ]
+    },
+    {
+      "player1": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "player2": "6bcf4c27-36bb-4713-8eab-ff16099ef306",
+      "winner": [
+        "6bcf4c27-36bb-4713-8eab-ff16099ef306"
+      ]
+    },
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "6bcf4c27-36bb-4713-8eab-ff16099ef306",
+      "winner": [
+        "6bcf4c27-36bb-4713-8eab-ff16099ef306"
+      ]
+    },
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "123170c1-6e0d-493f-9915-acf07c215e54",
+      "winner": [
+        "73709b1d-c703-4d9d-a2a3-8a6247e252f2"
+      ]
+    },
+    {
+      "player1": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "player2": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "winner": [
+        "73709b1d-c703-4d9d-a2a3-8a6247e252f2"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "123170c1-6e0d-493f-9915-acf07c215e54",
+      "playername": "Lucas",
+      "rating": 617.0500136931028
+    },
+    {
+      "playerid": "433fae69-ba13-4915-96b6-0c9181b3647d",
+      "playername": "MisterZNatural",
+      "rating": 923.4707825515088
+    },
+    {
+      "playerid": "6bcf4c27-36bb-4713-8eab-ff16099ef306",
+      "playername": "headKace",
+      "rating": 1253.8363805916047
+    },
+    {
+      "playerid": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "playername": "Eykca",
+      "rating": 500
+    }
+  ],
+  "expected": {
+    "winnerId": "6bcf4c27-36bb-4713-8eab-ff16099ef306",
+    "winnerName": "headKace",
+    "tiebreakByPlayerId": {
+      "6bcf4c27-36bb-4713-8eab-ff16099ef306": 3,
+      "73709b1d-c703-4d9d-a2a3-8a6247e252f2": 1,
+      "433fae69-ba13-4915-96b6-0c9181b3647d": 0,
+      "123170c1-6e0d-493f-9915-acf07c215e54": 0
+    }
+  }
+}

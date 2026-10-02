@@ -36,6 +36,17 @@ import {
 import { getPlayers } from '../players/getPlayers.js';
 import { createNotification } from '../notifications.js';
 import { sendUserPush } from '../push/sendUserPush.js';
+import {
+  applyDivisionTiebreaks,
+  computeDivisionStandings,
+  type DivisionStandingsResult,
+} from './divisionStandings.js';
+import {
+  buildTournamentEndEmailBody,
+  buildTournamentEndPushBody,
+  computeEarliestNextTournamentStartMs,
+  daysUntilFromNow,
+} from './tournamentEndMessage.js';
 
 type Division = {
   numGames: number;
@@ -374,12 +385,61 @@ function tournamentDivisionWinnerName(
   return tournament.divisions[divisionNumber]?.winner;
 }
 
+async function loadDivisionStandingsIntoCache(
+  tournament: Tournament,
+  divisionStandingsByNumber: Map<string, DivisionStandingsResult>,
+): Promise<void> {
+  if (tournament.divisions === undefined) {
+    return;
+  }
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+  for (const [divisionNumber, division] of Object.entries(tournament.divisions)) {
+    if (!division.processed || divisionStandingsByNumber.has(divisionNumber)) {
+      continue;
+    }
+    const [gamesData, playersData] = await Promise.all([
+      sendCommandWithRetry<QueryCommandOutput>(
+        new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+          ExpressionAttributeValues: { ":pk": "TOURNAMENTGAME", ":sk": tournament.id + '#' + divisionNumber + '#' },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        })),
+      sendCommandWithRetry<QueryCommandOutput>(
+        new QueryCommand({
+          TableName: tableName,
+          ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournament.id + '#' + divisionNumber + '#' },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+          KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        })),
+    ]);
+    const gamelist = gamesData.Items as TournamentGame[];
+    const players = playersData.Items as TournamentPlayer[];
+    divisionStandingsByNumber.set(
+      divisionNumber,
+      computeDivisionStandings(
+        gamelist.map((game) => ({
+          player1: game.player1,
+          player2: game.player2,
+          winner: game.winner,
+        })),
+        players.map((player) => ({
+          playerid: player.playerid,
+          playername: player.playername,
+          rating: player.rating,
+        })),
+      ),
+    );
+  }
+}
+
 export async function endTournament(tournament: Tournament) {
   try {
     if (tournament.divisions) {
       const work: Promise<any>[] = [];
       let alldone = true;
       let tournamentUpdated = false;
+      const divisionStandingsByNumber = new Map<string, DivisionStandingsResult>();
       for (const [divisionNumber, division] of Object.entries(tournament.divisions)) {
         if (division.numCompleted < division.numGames) {
           alldone = false;
@@ -405,61 +465,23 @@ export async function endTournament(tournament: Tournament) {
           const [gamesData, playersData] = await Promise.all(work2);
           const gamelist = gamesData.Items as TournamentGame[];
           const players = playersData.Items as TournamentPlayer[];
-          const tournamentPlayers: Map<string, TournamentPlayer> = new Map();
-          for (let i = 0; i < players.length; i++) {
-            players[i].tiebreak = 0;
-            players[i].score = 0;
-            tournamentPlayers.set(players[i].playerid, players[i]);
-          }
-          for (const game of gamelist) {
-            if (game.winner?.length === 2) {
-              tournamentPlayers.get(game.player1)!.score! += 0.5;
-              tournamentPlayers.get(game.player2)!.score! += 0.5;
-            } else {
-              tournamentPlayers.get(game.winner![0])!.score! += 1;
-            }
-          }
-          for (const game of gamelist) {
-            if (game.winner?.length === 2) {
-              tournamentPlayers.get(game.player1)!.tiebreak! += tournamentPlayers.get(game.player2)!.score! / 2;
-              tournamentPlayers.get(game.player2)!.tiebreak! += tournamentPlayers.get(game.player1)!.score! / 2;
-            } else if (game.winner![0] === game.player1) {
-              tournamentPlayers.get(game.player1)!.tiebreak! += tournamentPlayers.get(game.player2)!.score!;
-            } else {
-              tournamentPlayers.get(game.player2)!.tiebreak! += tournamentPlayers.get(game.player1)!.score!;
-            }
-          }
-          // Find winner
-          let bestScore = 0;
-          let bestTiebreak = 0;
-          let bestRating = 0;
-          let bestPlayer = '';
-          let bestPlayerName = '';
-          for (const player of players) {
-            if (player.score! > bestScore) {
-              bestScore = player.score!;
-              bestTiebreak = player.tiebreak!;
-              bestRating = player.rating!;
-              bestPlayer = player.playerid;
-              bestPlayerName = player.playername;
-            } else if (player.score! === bestScore) {
-              if (player.tiebreak! > bestTiebreak) {
-                bestTiebreak = player.tiebreak!;
-                bestRating = player.rating!;
-                bestPlayer = player.playerid;
-                bestPlayerName = player.playername;
-              } else if (player.tiebreak! === bestTiebreak) {
-                if (player.rating! > bestRating) {
-                  bestRating = player.rating!;
-                  bestPlayer = player.playerid;
-                  bestPlayerName = player.playername;
-                }
-              }
-            }
-          }
+          const standingsResult = computeDivisionStandings(
+            gamelist.map((game) => ({
+              player1: game.player1,
+              player2: game.player2,
+              winner: game.winner,
+            })),
+            players.map((player) => ({
+              playerid: player.playerid,
+              playername: player.playername,
+              rating: player.rating,
+            })),
+          );
+          applyDivisionTiebreaks(players, standingsResult);
+          divisionStandingsByNumber.set(divisionNumber, standingsResult);
           division.processed = true;
-          division.winnerid = bestPlayer;
-          division.winner = bestPlayerName;
+          division.winnerid = standingsResult.winnerId;
+          division.winner = standingsResult.winnerName;
           // Update tournament players
           for (const player of players) {
             work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
@@ -500,6 +522,7 @@ export async function endTournament(tournament: Tournament) {
           })));
         } else {
           const now = Date.now();
+          await loadDivisionStandingsIntoCache(tournament, divisionStandingsByNumber);
           work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
             TableName: process.env.ABSTRACT_PLAY_TABLE,
             Key: { "pk": "TOURNAMENT", "sk": tournament.id },
@@ -524,22 +547,61 @@ export async function endTournament(tournament: Tournament) {
             }));
           const players = playersData.Items as TournamentPlayer[];
           const playersById = new Map(players.map(p => [p.playerid, p]));
+          let nextSignupByPlayerId: Map<string, { daysUntilEarliestStart: number; signupCount: number; registeredForNext: boolean }> | undefined;
+          if (tournament.nextid !== undefined) {
+            const nextSignupPlayersData = await sendCommandWithRetry<QueryCommandOutput>(
+              new QueryCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournament.nextid },
+                ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+                KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+              }));
+            const nextSignupPlayers = (nextSignupPlayersData.Items ?? []) as TournamentPlayer[];
+            const registeredIds = new Set(nextSignupPlayers.map((p) => p.playerid));
+            const signupCount = nextSignupPlayers.length;
+            const nextTournamentData = await sendCommandWithRetry(
+              new GetCommand({
+                TableName: process.env.ABSTRACT_PLAY_TABLE,
+                Key: { pk: "TOURNAMENT", sk: tournament.nextid },
+              }),
+            );
+            const nextTournament = nextTournamentData.Item as Tournament | undefined;
+            if (nextTournament !== undefined) {
+              const earliestStart = computeEarliestNextTournamentStartMs(
+                nextTournament.dateCreated,
+                now,
+              );
+              const daysUntilEarliestStart = daysUntilFromNow(earliestStart, now);
+              nextSignupByPlayerId = new Map();
+              for (const playerId of players.map((p) => p.playerid)) {
+                nextSignupByPlayerId.set(playerId, {
+                  daysUntilEarliestStart,
+                  signupCount,
+                  registeredForNext: registeredIds.has(playerId),
+                });
+              }
+            }
+          }
           // And, in fact, full players (just for e-mail!? and language... Don't want to put these in the tournament player because then those will have to be maintained if e-mail or language changes)
           const playersFull = await getPlayers(players.map(p => p.playerid));
           await initi18n('en');
           const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+          const variants = tournament.variants ?? [];
           for (const player of playersFull) {
             const tournamentPlayer = playersById.get(player.id);
             const divisionNumber = tournamentPlayer
               ? tournamentDivisionNumber(tournamentPlayer)
               : undefined;
             const winnerName = tournamentDivisionWinnerName(tournament, divisionNumber);
+            const standings = divisionNumber !== undefined
+              ? divisionStandingsByNumber.get(String(divisionNumber))
+              : undefined;
             work.push(createNotification(ddbDocClient, tableName, player.id, {
               type: 'tournamentEnd',
               tournamentId: tournament.id,
               metaGame: tournament.metaGame,
               number: tournament.number,
-              variants: tournament.variants ?? [],
+              variants,
               ...(winnerName ? { winnerName } : {}),
             }, {
               userSettings: player.settings,
@@ -550,25 +612,34 @@ export async function endTournament(tournament: Tournament) {
               console.log("Sending email");
               await changeLanguageForPlayer(player);
               const metaGameName = localizedGameName(tournament.metaGame);
-              let body = '';
-              if (tournament.variants.length === 0)
-                body = i18n.t("TournamentEndBody", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id });
-              else
-                body = i18n.t("TournamentEndBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "tournamentId": tournament.id, "variants": tournament.variants.join(", ") });
+              const messageCtx = {
+                metaGameName,
+                number: tournament.number,
+                tournamentId: tournament.id,
+                variants,
+                recipientUserId: player.id,
+                standings,
+                nextSignup: nextSignupByPlayerId?.get(player.id),
+              };
+              const emailBody = buildTournamentEndEmailBody(messageCtx);
+              const pushBody = buildTournamentEndPushBody(messageCtx);
               if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName, }), body);
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName, }), emailBody);
                 work.push(sesClient.send(comm));
               }
               work.push(sendUserPush({
                 userId: player.id,
                 topic: "tournament",
                 title: i18n.t("PUSH.titles.tournamentOver"),
-                body,
+                body: pushBody,
                 url: `/tournament/${tournament.id}`,
               }));
             }
           }
         }
+      }
+      if (work.length > 0) {
+        await Promise.all(work);
       }
     }
   }

@@ -1,0 +1,81 @@
+{
+  "tournamentId": "8df18139-877d-49b1-b1db-ef3eec524ad0",
+  "metaGame": "hex",
+  "division": 1,
+  "games": [
+    {
+      "player1": "e98f96b2-5dbb-492c-bf46-85207bd29242",
+      "player2": "a5d7d6d4-ed01-4d3e-bea7-e775ea7cf462",
+      "winner": [
+        "a5d7d6d4-ed01-4d3e-bea7-e775ea7cf462"
+      ]
+    },
+    {
+      "player1": "a5d7d6d4-ed01-4d3e-bea7-e775ea7cf462",
+      "player2": "62e80ba5-af61-465b-aee1-a28618c51370",
+      "winner": [
+        "a5d7d6d4-ed01-4d3e-bea7-e775ea7cf462"
+      ]
+    },
+    {
+      "player1": "62e80ba5-af61-465b-aee1-a28618c51370",
+      "player2": "e98f96b2-5dbb-492c-bf46-85207bd29242",
+      "winner": [
+        "62e80ba5-af61-465b-aee1-a28618c51370"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "a5d7d6d4-ed01-4d3e-bea7-e775ea7cf462",
+      "winner": [
+        "a5d7d6d4-ed01-4d3e-bea7-e775ea7cf462"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "e98f96b2-5dbb-492c-bf46-85207bd29242",
+      "winner": [
+        "e98f96b2-5dbb-492c-bf46-85207bd29242"
+      ]
+    },
+    {
+      "player1": "62e80ba5-af61-465b-aee1-a28618c51370",
+      "player2": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "62e80ba5-af61-465b-aee1-a28618c51370",
+      "playername": "mzmzmz",
+      "rating": 1179.3579363319463
+    },
+    {
+      "playerid": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "playername": "mandrel",
+      "rating": 1168.0569061797576
+    },
+    {
+      "playerid": "a5d7d6d4-ed01-4d3e-bea7-e775ea7cf462",
+      "playername": "T0afer",
+      "rating": 1173.738831988165
+    },
+    {
+      "playerid": "e98f96b2-5dbb-492c-bf46-85207bd29242",
+      "playername": "bael",
+      "rating": 1286.1648701069953
+    }
+  ],
+  "expected": {
+    "winnerId": "a5d7d6d4-ed01-4d3e-bea7-e775ea7cf462",
+    "winnerName": "T0afer",
+    "tiebreakByPlayerId": {
+      "a5d7d6d4-ed01-4d3e-bea7-e775ea7cf462": 3,
+      "e98f96b2-5dbb-492c-bf46-85207bd29242": 1,
+      "62e80ba5-af61-465b-aee1-a28618c51370": 1,
+      "960f07a3-43d9-48d4-a3dc-cff3094a85e3": 1
+    }
+  }
+}

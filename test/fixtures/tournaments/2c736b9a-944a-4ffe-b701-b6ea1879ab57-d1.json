@@ -1,0 +1,81 @@
+{
+  "tournamentId": "2c736b9a-944a-4ffe-b701-b6ea1879ab57",
+  "metaGame": "boxes",
+  "division": 1,
+  "games": [
+    {
+      "player1": "fc12dfe6-927a-467e-bd93-4b02211a14a4",
+      "player2": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "winner": [
+        "fc12dfe6-927a-467e-bd93-4b02211a14a4"
+      ]
+    },
+    {
+      "player1": "c090f288-2605-417c-8099-6016289ae00e",
+      "player2": "fc12dfe6-927a-467e-bd93-4b02211a14a4",
+      "winner": [
+        "fc12dfe6-927a-467e-bd93-4b02211a14a4"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "fc12dfe6-927a-467e-bd93-4b02211a14a4",
+      "winner": [
+        "fc12dfe6-927a-467e-bd93-4b02211a14a4"
+      ]
+    },
+    {
+      "player1": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "player2": "c090f288-2605-417c-8099-6016289ae00e",
+      "winner": [
+        "c090f288-2605-417c-8099-6016289ae00e"
+      ]
+    },
+    {
+      "player1": "c090f288-2605-417c-8099-6016289ae00e",
+      "player2": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "winner": [
+        "c090f288-2605-417c-8099-6016289ae00e"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "playername": "mandrel",
+      "rating": 0
+    },
+    {
+      "playerid": "c090f288-2605-417c-8099-6016289ae00e",
+      "playername": "Oakmoss 🌲🐀🦝",
+      "rating": 1255.8289319334378
+    },
+    {
+      "playerid": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "playername": "megamau",
+      "rating": 1070.6768217906235
+    },
+    {
+      "playerid": "fc12dfe6-927a-467e-bd93-4b02211a14a4",
+      "playername": "taral",
+      "rating": 1386.4929225983583
+    }
+  ],
+  "expected": {
+    "winnerId": "fc12dfe6-927a-467e-bd93-4b02211a14a4",
+    "winnerName": "taral",
+    "tiebreakByPlayerId": {
+      "fc12dfe6-927a-467e-bd93-4b02211a14a4": 3,
+      "c090f288-2605-417c-8099-6016289ae00e": 1,
+      "960f07a3-43d9-48d4-a3dc-cff3094a85e3": 0,
+      "dd7f1f49-3bfa-469f-a74b-001a17130e70": 0
+    }
+  }
+}

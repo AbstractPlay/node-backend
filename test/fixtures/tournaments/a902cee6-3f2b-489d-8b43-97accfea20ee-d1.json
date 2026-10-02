@@ -1,0 +1,115 @@
+{
+  "tournamentId": "a902cee6-3f2b-489d-8b43-97accfea20ee",
+  "metaGame": "cubeo",
+  "division": 1,
+  "games": [
+    {
+      "player1": "d958c65e-6a62-4f22-836d-d473e07336f2",
+      "player2": "dc123d9a-9ba5-4b3f-80fb-ec7f8405a559",
+      "winner": [
+        "dc123d9a-9ba5-4b3f-80fb-ec7f8405a559"
+      ]
+    },
+    {
+      "player1": "e5bfea1a-4671-4ac9-9f0c-bdac0586d9b3",
+      "player2": "c555a440-4a13-4ae4-9b50-b8d339efa59a",
+      "winner": [
+        "c555a440-4a13-4ae4-9b50-b8d339efa59a"
+      ]
+    },
+    {
+      "player1": "c555a440-4a13-4ae4-9b50-b8d339efa59a",
+      "player2": "b15e5b8c-7dac-41d8-bae8-8431be537b79",
+      "winner": [
+        "c555a440-4a13-4ae4-9b50-b8d339efa59a"
+      ]
+    },
+    {
+      "player1": "b15e5b8c-7dac-41d8-bae8-8431be537b79",
+      "player2": "dc123d9a-9ba5-4b3f-80fb-ec7f8405a559",
+      "winner": [
+        "dc123d9a-9ba5-4b3f-80fb-ec7f8405a559"
+      ]
+    },
+    {
+      "player1": "b15e5b8c-7dac-41d8-bae8-8431be537b79",
+      "player2": "e5bfea1a-4671-4ac9-9f0c-bdac0586d9b3",
+      "winner": [
+        "e5bfea1a-4671-4ac9-9f0c-bdac0586d9b3"
+      ]
+    },
+    {
+      "player1": "e5bfea1a-4671-4ac9-9f0c-bdac0586d9b3",
+      "player2": "d958c65e-6a62-4f22-836d-d473e07336f2",
+      "winner": [
+        "d958c65e-6a62-4f22-836d-d473e07336f2"
+      ]
+    },
+    {
+      "player1": "dc123d9a-9ba5-4b3f-80fb-ec7f8405a559",
+      "player2": "c555a440-4a13-4ae4-9b50-b8d339efa59a",
+      "winner": [
+        "c555a440-4a13-4ae4-9b50-b8d339efa59a"
+      ]
+    },
+    {
+      "player1": "dc123d9a-9ba5-4b3f-80fb-ec7f8405a559",
+      "player2": "e5bfea1a-4671-4ac9-9f0c-bdac0586d9b3",
+      "winner": [
+        "dc123d9a-9ba5-4b3f-80fb-ec7f8405a559"
+      ]
+    },
+    {
+      "player1": "d958c65e-6a62-4f22-836d-d473e07336f2",
+      "player2": "b15e5b8c-7dac-41d8-bae8-8431be537b79",
+      "winner": [
+        "d958c65e-6a62-4f22-836d-d473e07336f2"
+      ]
+    },
+    {
+      "player1": "c555a440-4a13-4ae4-9b50-b8d339efa59a",
+      "player2": "d958c65e-6a62-4f22-836d-d473e07336f2",
+      "winner": [
+        "c555a440-4a13-4ae4-9b50-b8d339efa59a"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "b15e5b8c-7dac-41d8-bae8-8431be537b79",
+      "playername": "Zachopper",
+      "rating": 809.7253435754432
+    },
+    {
+      "playerid": "c555a440-4a13-4ae4-9b50-b8d339efa59a",
+      "playername": "Random Order ",
+      "rating": 1393.6404683464834
+    },
+    {
+      "playerid": "d958c65e-6a62-4f22-836d-d473e07336f2",
+      "playername": "DuckOfDeath",
+      "rating": 1136.6421116749088
+    },
+    {
+      "playerid": "dc123d9a-9ba5-4b3f-80fb-ec7f8405a559",
+      "playername": "Valdotain",
+      "rating": 1337.9289795787543
+    },
+    {
+      "playerid": "e5bfea1a-4671-4ac9-9f0c-bdac0586d9b3",
+      "playername": "VTKuga",
+      "rating": 932.0493098828379
+    }
+  ],
+  "expected": {
+    "winnerId": "c555a440-4a13-4ae4-9b50-b8d339efa59a",
+    "winnerName": "Random Order ",
+    "tiebreakByPlayerId": {
+      "c555a440-4a13-4ae4-9b50-b8d339efa59a": 6,
+      "dc123d9a-9ba5-4b3f-80fb-ec7f8405a559": 3,
+      "d958c65e-6a62-4f22-836d-d473e07336f2": 1,
+      "e5bfea1a-4671-4ac9-9f0c-bdac0586d9b3": 0,
+      "b15e5b8c-7dac-41d8-bae8-8431be537b79": 0
+    }
+  }
+}

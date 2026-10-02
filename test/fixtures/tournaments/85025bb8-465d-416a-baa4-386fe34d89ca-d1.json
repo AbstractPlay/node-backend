@@ -1,0 +1,81 @@
+{
+  "tournamentId": "85025bb8-465d-416a-baa4-386fe34d89ca",
+  "metaGame": "yonmoque",
+  "division": 1,
+  "games": [
+    {
+      "player1": "14dcbd2c-e6f7-421b-a051-025461c38158",
+      "player2": "4618a279-be60-45c1-b48c-775dd5e4c704",
+      "winner": [
+        "4618a279-be60-45c1-b48c-775dd5e4c704"
+      ]
+    },
+    {
+      "player1": "a7a8bd93-6b98-47b3-aa5a-60e668a9baf5",
+      "player2": "69c22302-97d6-4162-926b-aaac50b556cf",
+      "winner": [
+        "69c22302-97d6-4162-926b-aaac50b556cf"
+      ]
+    },
+    {
+      "player1": "a7a8bd93-6b98-47b3-aa5a-60e668a9baf5",
+      "player2": "4618a279-be60-45c1-b48c-775dd5e4c704",
+      "winner": [
+        "4618a279-be60-45c1-b48c-775dd5e4c704"
+      ]
+    },
+    {
+      "player1": "14dcbd2c-e6f7-421b-a051-025461c38158",
+      "player2": "a7a8bd93-6b98-47b3-aa5a-60e668a9baf5",
+      "winner": [
+        "a7a8bd93-6b98-47b3-aa5a-60e668a9baf5"
+      ]
+    },
+    {
+      "player1": "69c22302-97d6-4162-926b-aaac50b556cf",
+      "player2": "14dcbd2c-e6f7-421b-a051-025461c38158",
+      "winner": [
+        "14dcbd2c-e6f7-421b-a051-025461c38158"
+      ]
+    },
+    {
+      "player1": "4618a279-be60-45c1-b48c-775dd5e4c704",
+      "player2": "69c22302-97d6-4162-926b-aaac50b556cf",
+      "winner": [
+        "4618a279-be60-45c1-b48c-775dd5e4c704"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "14dcbd2c-e6f7-421b-a051-025461c38158",
+      "playername": "logygames",
+      "rating": 1339.7347753003248
+    },
+    {
+      "playerid": "4618a279-be60-45c1-b48c-775dd5e4c704",
+      "playername": "Юрий",
+      "rating": 1358.5331756459914
+    },
+    {
+      "playerid": "69c22302-97d6-4162-926b-aaac50b556cf",
+      "playername": "Falveryn",
+      "rating": 1060.384181139117
+    },
+    {
+      "playerid": "a7a8bd93-6b98-47b3-aa5a-60e668a9baf5",
+      "playername": "Cowboycookie",
+      "rating": 948.3020448801655
+    }
+  ],
+  "expected": {
+    "winnerId": "4618a279-be60-45c1-b48c-775dd5e4c704",
+    "winnerName": "Юрий",
+    "tiebreakByPlayerId": {
+      "4618a279-be60-45c1-b48c-775dd5e4c704": 3,
+      "14dcbd2c-e6f7-421b-a051-025461c38158": 1,
+      "69c22302-97d6-4162-926b-aaac50b556cf": 1,
+      "a7a8bd93-6b98-47b3-aa5a-60e668a9baf5": 1
+    }
+  }
+}

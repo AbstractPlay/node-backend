@@ -1,0 +1,81 @@
+{
+  "tournamentId": "ecc5645c-b108-4da7-975e-a06018c77bd8",
+  "metaGame": "gomoku",
+  "division": 1,
+  "games": [
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "091df2d1-4e19-4916-8101-627a792b7c06",
+      "winner": [
+        "091df2d1-4e19-4916-8101-627a792b7c06"
+      ]
+    },
+    {
+      "player1": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "player2": "260b004e-46a8-4cc3-9132-1754aac2cb1e",
+      "winner": [
+        "08161c65-0ff1-4b37-9d24-0cdad830cbf0"
+      ]
+    },
+    {
+      "player1": "260b004e-46a8-4cc3-9132-1754aac2cb1e",
+      "player2": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "winner": [
+        "960f07a3-43d9-48d4-a3dc-cff3094a85e3"
+      ]
+    },
+    {
+      "player1": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "player2": "091df2d1-4e19-4916-8101-627a792b7c06",
+      "winner": [
+        "08161c65-0ff1-4b37-9d24-0cdad830cbf0"
+      ]
+    },
+    {
+      "player1": "091df2d1-4e19-4916-8101-627a792b7c06",
+      "player2": "260b004e-46a8-4cc3-9132-1754aac2cb1e",
+      "winner": [
+        "091df2d1-4e19-4916-8101-627a792b7c06"
+      ]
+    },
+    {
+      "player1": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "player2": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "winner": [
+        "08161c65-0ff1-4b37-9d24-0cdad830cbf0"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "playername": "JackS888",
+      "rating": 1433.7457030327694
+    },
+    {
+      "playerid": "091df2d1-4e19-4916-8101-627a792b7c06",
+      "playername": "pergioco",
+      "rating": 1113.4854802708253
+    },
+    {
+      "playerid": "260b004e-46a8-4cc3-9132-1754aac2cb1e",
+      "playername": "boneslash",
+      "rating": 1390.0291185336523
+    },
+    {
+      "playerid": "960f07a3-43d9-48d4-a3dc-cff3094a85e3",
+      "playername": "mandrel",
+      "rating": 1209.7456887665878
+    }
+  ],
+  "expected": {
+    "winnerId": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+    "winnerName": "JackS888",
+    "tiebreakByPlayerId": {
+      "08161c65-0ff1-4b37-9d24-0cdad830cbf0": 3,
+      "091df2d1-4e19-4916-8101-627a792b7c06": 1,
+      "960f07a3-43d9-48d4-a3dc-cff3094a85e3": 0,
+      "260b004e-46a8-4cc3-9132-1754aac2cb1e": 0
+    }
+  }
+}
