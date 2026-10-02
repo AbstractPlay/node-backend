@@ -1,0 +1,81 @@
+{
+  "tournamentId": "112cf43c-d413-41e0-8d2d-5f8092868ab0",
+  "metaGame": "conhex",
+  "division": 1,
+  "games": [
+    {
+      "player1": "f9d3b576-391a-46f4-ba75-779eb6f78265",
+      "player2": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "winner": [
+        "f9d3b576-391a-46f4-ba75-779eb6f78265"
+      ]
+    },
+    {
+      "player1": "091df2d1-4e19-4916-8101-627a792b7c06",
+      "player2": "f9d3b576-391a-46f4-ba75-779eb6f78265",
+      "winner": [
+        "091df2d1-4e19-4916-8101-627a792b7c06"
+      ]
+    },
+    {
+      "player1": "091df2d1-4e19-4916-8101-627a792b7c06",
+      "player2": "c090f288-2605-417c-8099-6016289ae00e",
+      "winner": [
+        "c090f288-2605-417c-8099-6016289ae00e"
+      ]
+    },
+    {
+      "player1": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "player2": "091df2d1-4e19-4916-8101-627a792b7c06",
+      "winner": [
+        "091df2d1-4e19-4916-8101-627a792b7c06"
+      ]
+    },
+    {
+      "player1": "c090f288-2605-417c-8099-6016289ae00e",
+      "player2": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "winner": [
+        "c090f288-2605-417c-8099-6016289ae00e"
+      ]
+    },
+    {
+      "player1": "c090f288-2605-417c-8099-6016289ae00e",
+      "player2": "f9d3b576-391a-46f4-ba75-779eb6f78265",
+      "winner": [
+        "c090f288-2605-417c-8099-6016289ae00e"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "091df2d1-4e19-4916-8101-627a792b7c06",
+      "playername": "pergioco",
+      "rating": 1065.9883015627618
+    },
+    {
+      "playerid": "c090f288-2605-417c-8099-6016289ae00e",
+      "playername": "Oakmoss 🌲🐀🦝",
+      "rating": 1246.78999898488
+    },
+    {
+      "playerid": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "playername": "megamau",
+      "rating": 1167.0144580956621
+    },
+    {
+      "playerid": "f9d3b576-391a-46f4-ba75-779eb6f78265",
+      "playername": "Antimon",
+      "rating": 1059.3819287024446
+    }
+  ],
+  "expected": {
+    "winnerId": "c090f288-2605-417c-8099-6016289ae00e",
+    "winnerName": "Oakmoss 🌲🐀🦝",
+    "tiebreakByPlayerId": {
+      "c090f288-2605-417c-8099-6016289ae00e": 3,
+      "091df2d1-4e19-4916-8101-627a792b7c06": 1,
+      "f9d3b576-391a-46f4-ba75-779eb6f78265": 0,
+      "dd7f1f49-3bfa-469f-a74b-001a17130e70": 0
+    }
+  }
+}

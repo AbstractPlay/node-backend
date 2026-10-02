@@ -1,0 +1,81 @@
+{
+  "tournamentId": "2c070d56-8214-4e74-91cf-a70d6a0c0f2c",
+  "metaGame": "pente",
+  "division": 1,
+  "games": [
+    {
+      "player1": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "player2": "dfa96433-0984-4c06-8350-5851a4966298",
+      "winner": [
+        "08161c65-0ff1-4b37-9d24-0cdad830cbf0"
+      ]
+    },
+    {
+      "player1": "1ca9eb45-a2e7-450a-9e6f-3e870414ecc0",
+      "player2": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "winner": [
+        "08161c65-0ff1-4b37-9d24-0cdad830cbf0"
+      ]
+    },
+    {
+      "player1": "dfa96433-0984-4c06-8350-5851a4966298",
+      "player2": "1ca9eb45-a2e7-450a-9e6f-3e870414ecc0",
+      "winner": [
+        "1ca9eb45-a2e7-450a-9e6f-3e870414ecc0"
+      ]
+    },
+    {
+      "player1": "a7342733-73ff-4923-80a4-c70b1c7ba820",
+      "player2": "1ca9eb45-a2e7-450a-9e6f-3e870414ecc0",
+      "winner": [
+        "a7342733-73ff-4923-80a4-c70b1c7ba820"
+      ]
+    },
+    {
+      "player1": "a7342733-73ff-4923-80a4-c70b1c7ba820",
+      "player2": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "winner": [
+        "08161c65-0ff1-4b37-9d24-0cdad830cbf0"
+      ]
+    },
+    {
+      "player1": "dfa96433-0984-4c06-8350-5851a4966298",
+      "player2": "a7342733-73ff-4923-80a4-c70b1c7ba820",
+      "winner": [
+        "a7342733-73ff-4923-80a4-c70b1c7ba820"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+      "playername": "Jack888",
+      "rating": 1382.6038412085752
+    },
+    {
+      "playerid": "1ca9eb45-a2e7-450a-9e6f-3e870414ecc0",
+      "playername": "ganelon",
+      "rating": 1238.4441232024828
+    },
+    {
+      "playerid": "a7342733-73ff-4923-80a4-c70b1c7ba820",
+      "playername": "Ned Hall",
+      "rating": 1532.7825778187412
+    },
+    {
+      "playerid": "dfa96433-0984-4c06-8350-5851a4966298",
+      "playername": "MadMike",
+      "rating": 1316.8596504618824
+    }
+  ],
+  "expected": {
+    "winnerId": "08161c65-0ff1-4b37-9d24-0cdad830cbf0",
+    "winnerName": "Jack888",
+    "tiebreakByPlayerId": {
+      "08161c65-0ff1-4b37-9d24-0cdad830cbf0": 3,
+      "a7342733-73ff-4923-80a4-c70b1c7ba820": 1,
+      "1ca9eb45-a2e7-450a-9e6f-3e870414ecc0": 0,
+      "dfa96433-0984-4c06-8350-5851a4966298": 0
+    }
+  }
+}

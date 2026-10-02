@@ -1,0 +1,81 @@
+{
+  "tournamentId": "c0b3d6c3-673b-4850-b31c-e6eef2cb3ccd",
+  "metaGame": "streetcar",
+  "division": 1,
+  "games": [
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "123170c1-6e0d-493f-9915-acf07c215e54",
+      "winner": [
+        "123170c1-6e0d-493f-9915-acf07c215e54"
+      ]
+    },
+    {
+      "player1": "1fa67dee-e3c6-4610-9663-543c6bf6201f",
+      "player2": "123170c1-6e0d-493f-9915-acf07c215e54",
+      "winner": [
+        "1fa67dee-e3c6-4610-9663-543c6bf6201f"
+      ]
+    },
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "1fa67dee-e3c6-4610-9663-543c6bf6201f",
+      "winner": [
+        "73709b1d-c703-4d9d-a2a3-8a6247e252f2"
+      ]
+    },
+    {
+      "player1": "123170c1-6e0d-493f-9915-acf07c215e54",
+      "player2": "1805ca3c-3f04-47ad-8f95-2c7b121bd679",
+      "winner": [
+        "123170c1-6e0d-493f-9915-acf07c215e54"
+      ]
+    },
+    {
+      "player1": "1805ca3c-3f04-47ad-8f95-2c7b121bd679",
+      "player2": "1fa67dee-e3c6-4610-9663-543c6bf6201f",
+      "winner": [
+        "1fa67dee-e3c6-4610-9663-543c6bf6201f"
+      ]
+    },
+    {
+      "player1": "1805ca3c-3f04-47ad-8f95-2c7b121bd679",
+      "player2": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "winner": [
+        "1805ca3c-3f04-47ad-8f95-2c7b121bd679"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "123170c1-6e0d-493f-9915-acf07c215e54",
+      "playername": "Lucas",
+      "rating": 1062.240509815283
+    },
+    {
+      "playerid": "1805ca3c-3f04-47ad-8f95-2c7b121bd679",
+      "playername": "juggernautilus",
+      "rating": 1065.0688556989485
+    },
+    {
+      "playerid": "1fa67dee-e3c6-4610-9663-543c6bf6201f",
+      "playername": "Adrian",
+      "rating": 1161.1020460279337
+    },
+    {
+      "playerid": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "playername": "Eykca",
+      "rating": 1003.1200452515452
+    }
+  ],
+  "expected": {
+    "winnerId": "1fa67dee-e3c6-4610-9663-543c6bf6201f",
+    "winnerName": "Adrian",
+    "tiebreakByPlayerId": {
+      "1fa67dee-e3c6-4610-9663-543c6bf6201f": 3,
+      "123170c1-6e0d-493f-9915-acf07c215e54": 2,
+      "73709b1d-c703-4d9d-a2a3-8a6247e252f2": 2,
+      "1805ca3c-3f04-47ad-8f95-2c7b121bd679": 1
+    }
+  }
+}

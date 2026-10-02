@@ -171,9 +171,45 @@
     "src": "Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series has ended. See https://play.abstractplay.com/tournament/{{tournamentId}}. The next tournament in the series will start in one week.",
     "out": "Le tournoi {{number}} de la série {{- metaGame}}, variantes : {{variants}} série est terminé. Voir https://play.abstractplay.com/tournament/{{tournamentId}}. Le prochain tournoi de cette série va démarrer dans une semaine."
   },
+  "TournamentEndIntro": {
+    "src": "Tournament {{number}} of the {{- metaGame}} series has ended.",
+    "out": "Le tournoi {{number}} de la série {{- metaGame}} est terminé."
+  },
+  "TournamentEndIntroVariants": {
+    "src": "Tournament {{number}} of the {{- metaGame}}, variants: {{variants}} series has ended.",
+    "out": "Le tournoi {{number}} de la série {{- metaGame}}, variantes : {{variants}} est terminé."
+  },
+  "TournamentEndLink": {
+    "src": "View games and results: https://play.abstractplay.com/tournament/{{tournamentId}}",
+    "out": "Voir les parties et les résultats : https://play.abstractplay.com/tournament/{{tournamentId}}"
+  },
+  "TournamentEndNextSignupRegistered": {
+    "src": "You are already registered for the next tournament in this series.",
+    "out": "Vous êtes déjà inscrit au prochain tournoi de cette série."
+  },
+  "TournamentEndNextSignup_one": {
+    "src": "The next tournament in this series may start in {{count}} day if at least {{minSignups}} players are registered ({{signupCount}} now). Visit https://play.abstractplay.com/tournaments to sign up or adjust your registration.",
+    "out": "Le prochain tournoi de cette série peut commencer dans {{count}} jour si au moins {{minSignups}} joueurs sont inscrits ({{signupCount}} actuellement). Visitez https://play.abstractplay.com/tournaments pour vous inscrire ou modifier votre inscription."
+  },
+  "TournamentEndNextSignup_other": {
+    "src": "The next tournament in this series may start in {{count}} days if at least {{minSignups}} players are registered ({{signupCount}} now). Visit https://play.abstractplay.com/tournaments to sign up or adjust your registration.",
+    "out": "Le prochain tournoi de cette série peut commencer dans {{count}} jours si au moins {{minSignups}} joueurs sont inscrits ({{signupCount}} actuellement). Visitez https://play.abstractplay.com/tournaments pour vous inscrire ou modifier votre inscription."
+  },
+  "TournamentEndStandingsHeader": {
+    "src": "Final standings in your division:",
+    "out": "Classement final dans votre division :"
+  },
   "TournamentEndSubject": {
     "src": "Your {{- metaGame}} tournament has ended",
     "out": "Votre tournoi de {{- metaGame}} est terminé"
+  },
+  "TournamentEndWinner_other": {
+    "src": "{{winnerName}} won the tournament.",
+    "out": "{{winnerName}} a remporté le tournoi."
+  },
+  "TournamentEndWinner_you": {
+    "src": "You won the tournament!",
+    "out": "Vous avez remporté le tournoi !"
   },
   "TournamentRemoveBody": {
     "src": "You were removed from the {{- metaGame}} tournament you were signed up for, because it is unclear whether you are still interested. If you would still like to participate, please sign up again at https://play.abstractplay.com/tournaments.",

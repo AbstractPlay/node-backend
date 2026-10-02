@@ -1,0 +1,81 @@
+{
+  "tournamentId": "7dc9c1bd-9ac6-4d0e-b66b-abb1546b7f83",
+  "metaGame": "conhex",
+  "division": 1,
+  "games": [
+    {
+      "player1": "091df2d1-4e19-4916-8101-627a792b7c06",
+      "player2": "f9d3b576-391a-46f4-ba75-779eb6f78265",
+      "winner": [
+        "091df2d1-4e19-4916-8101-627a792b7c06"
+      ]
+    },
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "69c22302-97d6-4162-926b-aaac50b556cf",
+      "winner": [
+        "69c22302-97d6-4162-926b-aaac50b556cf"
+      ]
+    },
+    {
+      "player1": "69c22302-97d6-4162-926b-aaac50b556cf",
+      "player2": "091df2d1-4e19-4916-8101-627a792b7c06",
+      "winner": [
+        "69c22302-97d6-4162-926b-aaac50b556cf"
+      ]
+    },
+    {
+      "player1": "f9d3b576-391a-46f4-ba75-779eb6f78265",
+      "player2": "69c22302-97d6-4162-926b-aaac50b556cf",
+      "winner": [
+        "f9d3b576-391a-46f4-ba75-779eb6f78265"
+      ]
+    },
+    {
+      "player1": "091df2d1-4e19-4916-8101-627a792b7c06",
+      "player2": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "winner": [
+        "73709b1d-c703-4d9d-a2a3-8a6247e252f2"
+      ]
+    },
+    {
+      "player1": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "player2": "f9d3b576-391a-46f4-ba75-779eb6f78265",
+      "winner": [
+        "73709b1d-c703-4d9d-a2a3-8a6247e252f2"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "091df2d1-4e19-4916-8101-627a792b7c06",
+      "playername": "pergioco",
+      "rating": 891.6417762373311
+    },
+    {
+      "playerid": "69c22302-97d6-4162-926b-aaac50b556cf",
+      "playername": "Falveryn",
+      "rating": 982.6669671926194
+    },
+    {
+      "playerid": "73709b1d-c703-4d9d-a2a3-8a6247e252f2",
+      "playername": "Eykca",
+      "rating": 1031.486414016912
+    },
+    {
+      "playerid": "f9d3b576-391a-46f4-ba75-779eb6f78265",
+      "playername": "Antimon",
+      "rating": 853.1624899347165
+    }
+  ],
+  "expected": {
+    "winnerId": "69c22302-97d6-4162-926b-aaac50b556cf",
+    "winnerName": "Falveryn",
+    "tiebreakByPlayerId": {
+      "69c22302-97d6-4162-926b-aaac50b556cf": 3,
+      "73709b1d-c703-4d9d-a2a3-8a6247e252f2": 2,
+      "f9d3b576-391a-46f4-ba75-779eb6f78265": 2,
+      "091df2d1-4e19-4916-8101-627a792b7c06": 1
+    }
+  }
+}

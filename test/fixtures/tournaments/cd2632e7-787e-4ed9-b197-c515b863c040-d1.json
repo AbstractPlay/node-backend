@@ -1,0 +1,81 @@
+{
+  "tournamentId": "cd2632e7-787e-4ed9-b197-c515b863c040",
+  "metaGame": "gyges",
+  "division": 1,
+  "games": [
+    {
+      "player1": "90673fe1-e56e-4b14-9d13-75dd3fa323a8",
+      "player2": "4e406f7b-37f8-42bb-85fd-e775eac04c56",
+      "winner": [
+        "4e406f7b-37f8-42bb-85fd-e775eac04c56"
+      ]
+    },
+    {
+      "player1": "39349de0-61bc-495a-b8b8-6a638afba7f8",
+      "player2": "4e406f7b-37f8-42bb-85fd-e775eac04c56",
+      "winner": [
+        "39349de0-61bc-495a-b8b8-6a638afba7f8"
+      ]
+    },
+    {
+      "player1": "151518d9-dcec-4900-8277-f86830befb64",
+      "player2": "39349de0-61bc-495a-b8b8-6a638afba7f8",
+      "winner": [
+        "39349de0-61bc-495a-b8b8-6a638afba7f8"
+      ]
+    },
+    {
+      "player1": "90673fe1-e56e-4b14-9d13-75dd3fa323a8",
+      "player2": "39349de0-61bc-495a-b8b8-6a638afba7f8",
+      "winner": [
+        "39349de0-61bc-495a-b8b8-6a638afba7f8"
+      ]
+    },
+    {
+      "player1": "4e406f7b-37f8-42bb-85fd-e775eac04c56",
+      "player2": "151518d9-dcec-4900-8277-f86830befb64",
+      "winner": [
+        "151518d9-dcec-4900-8277-f86830befb64"
+      ]
+    },
+    {
+      "player1": "151518d9-dcec-4900-8277-f86830befb64",
+      "player2": "90673fe1-e56e-4b14-9d13-75dd3fa323a8",
+      "winner": [
+        "151518d9-dcec-4900-8277-f86830befb64"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "151518d9-dcec-4900-8277-f86830befb64",
+      "playername": "mrraow",
+      "rating": 1149.730490811107
+    },
+    {
+      "playerid": "39349de0-61bc-495a-b8b8-6a638afba7f8",
+      "playername": "Fuzz",
+      "rating": 1580.1932070599473
+    },
+    {
+      "playerid": "4e406f7b-37f8-42bb-85fd-e775eac04c56",
+      "playername": "oruro",
+      "rating": 765.2244919539799
+    },
+    {
+      "playerid": "90673fe1-e56e-4b14-9d13-75dd3fa323a8",
+      "playername": "fjan2ej57w",
+      "rating": 499.7060778826861
+    }
+  ],
+  "expected": {
+    "winnerId": "39349de0-61bc-495a-b8b8-6a638afba7f8",
+    "winnerName": "Fuzz",
+    "tiebreakByPlayerId": {
+      "39349de0-61bc-495a-b8b8-6a638afba7f8": 3,
+      "151518d9-dcec-4900-8277-f86830befb64": 1,
+      "4e406f7b-37f8-42bb-85fd-e775eac04c56": 0,
+      "90673fe1-e56e-4b14-9d13-75dd3fa323a8": 0
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "tournamentId": "5ffa3f01-9416-4270-89b8-6c8809660e72",
+  "metaGame": "garden",
+  "division": 1,
+  "games": [
+    {
+      "player1": "7ed2da58-9dec-4cf9-8225-d47a62d07521",
+      "player2": "0e2ce44c-c3c2-4470-80c3-eca33725e5ed",
+      "winner": [
+        "0e2ce44c-c3c2-4470-80c3-eca33725e5ed"
+      ]
+    },
+    {
+      "player1": "0e2ce44c-c3c2-4470-80c3-eca33725e5ed",
+      "player2": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "winner": [
+        "0e2ce44c-c3c2-4470-80c3-eca33725e5ed"
+      ]
+    },
+    {
+      "player1": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "player2": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "winner": [
+        "dd7f1f49-3bfa-469f-a74b-001a17130e70"
+      ]
+    },
+    {
+      "player1": "7ed2da58-9dec-4cf9-8225-d47a62d07521",
+      "player2": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "winner": [
+        "7ed2da58-9dec-4cf9-8225-d47a62d07521"
+      ]
+    },
+    {
+      "player1": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "player2": "7ed2da58-9dec-4cf9-8225-d47a62d07521",
+      "winner": [
+        "dd7f1f49-3bfa-469f-a74b-001a17130e70"
+      ]
+    },
+    {
+      "player1": "0e2ce44c-c3c2-4470-80c3-eca33725e5ed",
+      "player2": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "winner": [
+        "dd7f1f49-3bfa-469f-a74b-001a17130e70"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "playerid": "017373d1-0e8e-482d-a950-b8616c355b2c",
+      "playername": "lucacerrato",
+      "rating": 802.7744748965156
+    },
+    {
+      "playerid": "0e2ce44c-c3c2-4470-80c3-eca33725e5ed",
+      "playername": "Rolle",
+      "rating": 1150.1156828638962
+    },
+    {
+      "playerid": "7ed2da58-9dec-4cf9-8225-d47a62d07521",
+      "playername": "Magic John",
+      "rating": 899.7662282424145
+    },
+    {
+      "playerid": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+      "playername": "megamau",
+      "rating": 932.5297185232928
+    }
+  ],
+  "expected": {
+    "winnerId": "dd7f1f49-3bfa-469f-a74b-001a17130e70",
+    "winnerName": "megamau",
+    "tiebreakByPlayerId": {
+      "dd7f1f49-3bfa-469f-a74b-001a17130e70": 3,
+      "0e2ce44c-c3c2-4470-80c3-eca33725e5ed": 1,
+      "7ed2da58-9dec-4cf9-8225-d47a62d07521": 0,
+      "017373d1-0e8e-482d-a950-b8616c355b2c": 0
+    }
+  }
+}
