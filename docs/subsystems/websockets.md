@@ -22,6 +22,16 @@ Clients that support targeted game delivery send `watchVersion: 1` on subscribe.
 - Sends only if `watchingGames` contains `${meta}#${id}`
 - **Legacy fallback:** connections without `watchVersion: 1` and without `watchingGames` still receive all game events (remove after frontend rollout)
 
+## In-app notification hint
+
+When an in-app notification is created ([`createNotification`](../../lib/notifications.ts)), the backend broadcasts:
+
+```json
+{ "verb": "notification", "payload": { "userId": "<sub>" } }
+```
+
+Delivery uses [`shouldDeliverWsMessage`](../../lib/wsMessageDelivery.ts): all open connections for that `userId`. Clients debounce and call `list_notifications`; the payload is intentionally minimal.
+
 ## Presence
 
 Join/leave events from subscribe/disconnect go to `PresenceCoalesceQueue` (2s batching window). [`presenceBroadcaster`](../../api/sockets/presenceBroadcaster.ts) merges the batch, increments `wsMeta` / `presenceSeq`, and broadcasts a **delta** to connections with `wantsPresence !== false`.

@@ -86,29 +86,17 @@ describe('buildMeDashboardPayload', () => {
     assert.equal(payload.games.length, 1);
     assert.equal('activeGames' in payload, false);
     assert.equal(payload.challengesIssued.length, 1);
-    assert.deepEqual(payload.notifications, []);
+    assert.equal('notifications' in payload, false);
   });
 
-  it('includes notifications when provided', () => {
+  it('does not include notifications on dashboard payload', () => {
     const payload = buildMeDashboardPayload(user, ancillary, [], {
       challengesIssued: [],
       challengesReceived: [],
       challengesAccepted: [],
       standingChallenges: [],
-    }, [{
-      sk: '1700000000000#abc',
-      createdAt: 1700000000000,
-      status: 'new',
-      body: {
-        type: 'challengeIssued',
-        challengeId: 'c1',
-        metaGame: 'go',
-        challengerId: 'u2',
-        challengerName: 'Bob',
-      },
-    }]);
-    assert.equal(payload.notifications.length, 1);
-    assert.equal(payload.notifications[0].body.type, 'challengeIssued');
+    });
+    assert.equal('notifications' in payload, false);
   });
 
   it('does not include notifications on profile payload', () => {
