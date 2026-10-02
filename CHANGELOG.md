@@ -12,6 +12,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 ### Fixed
 
 - **Challenges:** repair legacy standing-challenge `challengees` corruption on accept/leave; correct 3+ player fixed seating on game start; `bin/backfill-standing-challenge-challengees.mjs` for one-time DynamoDB cleanup.
+- **CI deps sync:** develop/prod deploy auto-commit now stages `package-lock.json`, `package.json`, and `crons/package.json` with `ci-deps` (multiline `file_pattern` only committed the first file).
 
 ## [1.0.0-ci] - 2026-09-30
 
