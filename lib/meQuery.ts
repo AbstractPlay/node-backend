@@ -3,7 +3,6 @@ import type { GameMarkSummary, HighlightEntry, RepresentativeEntry } from './pla
 import type { ActiveGameKey } from './dashboardGames.js';
 import type { DashboardGame } from './dashboardGames.js';
 
-import type { ClientNotification } from './notifications.js';
 import { stripColorFromSettings } from './stripLegacyColorSettings.js';
 
 export type MeAncillaryData = {
@@ -50,7 +49,6 @@ export type MeProfilePayload = {
 
 export type MeDashboardPayload = Omit<MeProfilePayload, 'activeGames'> & MeChallengeData & {
   games: DashboardGame[];
-  notifications: ClientNotification[];
 };
 
 type MeUserFields = {
@@ -105,14 +103,12 @@ export function buildMeDashboardPayload(
   ancillary: MeAncillaryData,
   games: DashboardGame[],
   challenges: MeChallengeData,
-  notifications: ClientNotification[] = [],
 ): MeDashboardPayload {
   const profile = buildMeProfilePayload(user, ancillary, []);
   const { activeGames: _activeGames, ...profileWithoutActive } = profile;
   return {
     ...profileWithoutActive,
     games,
-    notifications,
     ...challenges,
   };
 }

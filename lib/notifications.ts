@@ -7,6 +7,7 @@ import {
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
 import { isBotId, isBotIdOnTable, filterHumanIds } from './participants.js';
+import { wsBroadcast } from './wsBroadcast.js';
 
 export const NOTIFICATION_PK_PREFIX = 'NOTIFICATION#';
 export const NOTIFICATION_INITIAL_TTL_DAYS = 180;
@@ -421,6 +422,11 @@ export async function createNotification(
     }
   }
   await putNotificationItem(client, tableName, userId, body);
+  try {
+    await wsBroadcast('notification', { userId });
+  } catch (err) {
+    console.error('WS notification broadcast failed', { userId, err });
+  }
 }
 
 /** Write in-app notification item (no bot filter; for admin backfill scripts). */
