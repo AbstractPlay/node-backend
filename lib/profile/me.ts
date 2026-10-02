@@ -13,7 +13,6 @@ import {
 } from '../meQuery.js';
 import { listActiveGameKeys, loadDashboardGames, type DashboardGame } from '../dashboardGames.js';
 import { runDashboardMaintenance } from '../dashboardMaintenance.js';
-import { loadNotificationsForDashboard } from '../notifications.js';
 import {
   deleteAllPushSubscriptions,
   deletePushSubscriptionByEndpoint,
@@ -289,15 +288,14 @@ export async function meDashboard(claim: PartialClaims, pars: { size: string, va
       console.log(`me_dashboard evicted games for ${user.name}:`, maintenance.evictedIds);
     }
     console.log('Fetching challenges');
-    const [ancillary, challenges, notifications] = await Promise.all([
+    const [ancillary, challenges] = await Promise.all([
       resolveMeAncillary(userId, user),
       resolveMeChallenges(user),
-      loadNotificationsForDashboard(ddbDocClient, tableName, userId, { refreshExpiry: false }),
     ]);
     console.log(`me_dashboard returning for ${user.name}, id ${user.id} with games`, games);
     return {
       statusCode: 200,
-      body: JSON.stringify(buildMeDashboardPayload(user as Parameters<typeof buildMeDashboardPayload>[0], ancillary, games, challenges, notifications), Set_toJSON),
+      body: JSON.stringify(buildMeDashboardPayload(user as Parameters<typeof buildMeDashboardPayload>[0], ancillary, games, challenges), Set_toJSON),
       headers,
     };
   } catch (err) {

@@ -1,21 +1,21 @@
 import type { SQSEvent, SQSRecord } from "aws-lambda";
 import {
   deleteConnection,
-  gameWatchKey,
-  isLegacyGameFanout,
   listAllConnections,
-  usesStrictGameWatch,
-  watchingGamesHas,
-  wantsPresenceUpdates,
-  type WsConnectionItem,
 } from "../../lib/wsConnectionStore.js";
+import {
+  shouldDeliverWsMessage,
+  type WsBroadcastPayload,
+} from "../../lib/wsMessageDelivery.js";
 import { postToMany } from "../../lib/wsPost.js";
+
+const SUPPORTED_VERBS = ["chat", "game", "test", "connections", "notification"];
 
 type MsgBody = {
   domainName: string;
   stage: string;
   verb: string;
-  payload?: { meta?: string; id?: string; type?: string };
+  payload?: WsBroadcastPayload;
   exclude?: string[];
 };
 
@@ -37,7 +37,7 @@ async function processRecord(record: SQSRecord) {
 
   const { verb, payload, exclude } = body;
 
-  if (!["chat", "game", "test", "connections"].includes(verb)) {
+  if (!SUPPORTED_VERBS.includes(verb)) {
     console.warn("Unsupported verb:", verb);
     return;
   }
@@ -56,7 +56,7 @@ async function processRecord(record: SQSRecord) {
       continue;
     }
 
-    if (!shouldDeliver(verb, conn, payload)) {
+    if (!shouldDeliverWsMessage(verb, conn, payload)) {
       continue;
     }
 
@@ -64,36 +64,4 @@ async function processRecord(record: SQSRecord) {
   }
 
   await postToMany(targets, { verb, payload });
-}
-
-function shouldDeliver(
-  verb: string,
-  conn: WsConnectionItem,
-  payload?: MsgBody["payload"]
-): boolean {
-  if (verb === "game" || verb === "chat") {
-    const meta = payload?.meta;
-    const id = payload?.id;
-    if (!meta || !id) {
-      return false;
-    }
-    const key = gameWatchKey(meta, id);
-
-    if (isLegacyGameFanout(conn)) {
-      return true;
-    }
-    if (usesStrictGameWatch(conn)) {
-      return watchingGamesHas(conn, key);
-    }
-    return watchingGamesHas(conn, key);
-  }
-
-  if (verb === "connections") {
-    if (payload?.type === "delta" || payload?.type === "snapshot") {
-      return wantsPresenceUpdates(conn);
-    }
-    return wantsPresenceUpdates(conn);
-  }
-
-  return true;
 }

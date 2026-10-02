@@ -91,7 +91,7 @@ jobs:
       with:
         commit_message: "deps: sync AP versions [skip ci]"
         # git-auto-commit `read -a` only uses the first line of multiline inputs — space-separate patterns.
-        file_pattern: "ci-deps.prod.json package-lock.json package.json crons/package.json"
+        file_pattern: "ci-deps.prod.json package-lock.json package.json"
         disable_globbing: true
 
     - name: Set CI version
