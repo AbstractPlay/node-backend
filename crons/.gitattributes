@@ -1,2 +1,2 @@
-# Keep target-branch lockfile on cross-branch merges; run sync-deps if strict check fails.
-package-lock.json merge=ours
+# See repo-root .gitattributes (crons/package.json is synced from root via postinstall / sync-deps).
+package.json merge=ours

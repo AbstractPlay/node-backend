@@ -17,9 +17,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const CRONS_ROOT = path.join(ROOT, "crons");
 
-const stage = process.argv.includes("--stage")
+const stageArg = process.argv.includes("--stage")
   ? process.argv[process.argv.indexOf("--stage") + 1]
-  : "dev";
+  : undefined;
+const stageFromEnv = process.env.AP_DEPS_STAGE;
+const stage =
+  stageArg ??
+  (stageFromEnv === "prod" ? "prod" : stageFromEnv === "dev" ? "dev" : "dev");
 
 if (stage !== "dev" && stage !== "prod") {
   console.error("usage: node scripts/sync-crons-ap-deps.mjs [--stage dev|prod]");

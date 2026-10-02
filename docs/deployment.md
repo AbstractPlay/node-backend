@@ -28,9 +28,11 @@ Crons source lives in [`crons/`](https://github.com/AbstractPlay/node-backend/tr
 
 Canonical pins live in `ci-deps.dev.json` and `ci-deps.prod.json`. CI runs `npm ci` → manifest validation → `ap-install-deps --stage dev|prod` → strict lockfile check → build/test.
 
-After a merge that touches dependency files, run `npm run sync-deps` on `develop` (or `npm run sync-deps:prod` on `main`) and commit root `ci-deps.*.json`, root and `crons/package.json`, and the root `package-lock.json` together. `npm run sync-deps` runs `ap-install-deps` at the repo root, copies AP pins into `crons/package.json` from the root manifest, then prunes any stale `crons/node_modules/@abstractplay` tree (the crons workspace must use hoisted AP packages). Do not hand-merge AP version strings in `package.json` or run `ap-install-deps` from `crons/` alone.
+After merging `develop` into `main` (or another branch that changes dependency files), run `npm run sync-deps:prod` on `main` or `npm run sync-deps` on `develop`, then commit if anything changed. Do not hand-merge AP version strings in `package.json`.
 
-`ci-deps.prod.json` is protected on `main` via `.gitattributes` (`merge=ours`). `ci-deps.dev.json` is protected on `develop` the same way (e.g. when merging `l10n/weblate`). `package.json` and `package-lock.json` are regenerated via `sync-deps`, not merge=ours.
+`npm run sync-deps` runs `ap-install-deps` at the repo root, copies AP pins into `crons/package.json` from the root manifest, then prunes any stale `crons/node_modules/@abstractplay` tree. `postinstall` also runs `sync-crons-ap-deps` after `npm ci` so the crons workspace stays aligned with root `package.json` without committing `crons/package.json` on every dep bump (same pattern as front: auto-commit `ci-deps.*.json`, `package-lock.json`, and root `package.json` only).
+
+`.gitattributes` uses `merge=ours` for `ci-deps.prod.json` on `main`, `ci-deps.dev.json` on `develop`, and for `package.json`, `package-lock.json`, and `crons/package.json` on any cross-branch merge — the branch you merge **into** keeps its pins until you run `sync-deps`. Do not resolve AP version conflicts by picking lines from the other branch.
 
 Prod deploys may fail at build when code on `main` uses a gameslib API not yet in the prod pin — wait for `dep_update_prod` or bump `ci-deps.prod.json` when releasing.
 

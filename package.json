@@ -38,6 +38,7 @@
     "backfill-blank-user-names": "tsx bin/backfill-blank-user-names.mjs",
     "sync-deps": "ap-install-deps --stage dev && node scripts/sync-crons-ap-deps.mjs --stage dev && node scripts/prune-crons-nested-ap-deps.mjs",
     "sync-deps:prod": "ap-install-deps --stage prod && node scripts/sync-crons-ap-deps.mjs --stage prod && node scripts/prune-crons-nested-ap-deps.mjs",
+    "postinstall": "node scripts/sync-crons-ap-deps.mjs --stage dev",
     "lint:crons": "npm run lint -w abstractplay-backend-crons",
     "test:crons": "npm run test -w abstractplay-backend-crons",
     "test:crons:layers": "npm run test:layers -w abstractplay-backend-crons"
@@ -61,9 +62,9 @@
     "crons"
   ],
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-37063237102.0",
-    "@abstractplay/recranks": "1.0.0-ci-35280155165.0",
-    "@abstractplay/renderer": "1.0.0-ci-36750275980.0",
+    "@abstractplay/gameslib": "1.0.0-ci-37063256431.0",
+    "@abstractplay/recranks": "1.0.0-ci-35278464897.0",
+    "@abstractplay/renderer": "1.0.0-ci-36750293534.0",
     "@aws-sdk/client-apigatewaymanagementapi": "3.1090.0",
     "@aws-sdk/client-cognito-identity-provider": "3.1090.0",
     "@aws-sdk/client-dynamodb": "3.1090.0",

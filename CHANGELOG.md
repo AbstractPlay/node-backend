@@ -16,13 +16,14 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Changed
 
+- **CI deps:** cross-branch merges keep target-branch `package.json` / lockfile via `.gitattributes` (`merge=ours`); dep auto-commit matches front (`ci-deps.*.json`, `package-lock.json`, root `package.json` only); `postinstall` syncs `crons/package.json` AP pins from root.
 - **Dashboard:** `me_dashboard` no longer queries or returns in-app notifications (use `list_notifications` only).
 
 ### Fixed
 
 - **Tournaments:** `endTournament` now awaits pending DynamoDB, email, and notification work.
 - **Challenges:** repair legacy standing-challenge `challengees` corruption on accept/leave; correct 3+ player fixed seating on game start; `bin/backfill-standing-challenge-challengees.mjs` for one-time DynamoDB cleanup.
-- **CI deps sync:** develop/prod deploy auto-commit now stages `package-lock.json`, `package.json`, and `crons/package.json` with `ci-deps` (multiline `file_pattern` only committed the first file).
+- **CI deps sync:** develop/prod deploy auto-commit stages `ci-deps.*.json`, `package-lock.json`, and root `package.json` together (space-separated `file_pattern`; no separate `crons/package.json` commit).
 
 ## [1.0.0-ci] - 2026-09-30
 
