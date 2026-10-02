@@ -60,7 +60,7 @@
     "crons"
   ],
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-37035771623.0",
+    "@abstractplay/gameslib": "1.0.0-ci-37038721121.0",
     "@abstractplay/recranks": "1.0.0-ci-35280155165.0",
     "@abstractplay/renderer": "1.0.0-ci-36750275980.0",
     "@aws-sdk/client-apigatewaymanagementapi": "3.1090.0",
