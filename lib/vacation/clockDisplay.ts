@@ -46,9 +46,13 @@ function playerDisplayFields(
   }
   const bank = player.time ?? 0;
   const window = getVacationWindow(player.id);
-  const effectiveRemainingMs = Math.max(
-    0,
-    remainingBankMs(bank, game.lastMoveTime, now, player.id, game, window),
+  const effectiveRemainingMs = remainingBankMs(
+    bank,
+    game.lastMoveTime,
+    now,
+    player.id,
+    game,
+    window,
   );
   return {
     effectiveRemainingMs,

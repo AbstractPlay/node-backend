@@ -36,6 +36,16 @@ describe('vacation clockDisplay', () => {
     assert.equal(enriched.players[0]!.clockPaused, false);
   });
 
+  it('allows negative effective remaining for soft-clock overtime display', () => {
+    const game = {
+      players: [{ id: 'p0', name: 'A', time: 60_000 }],
+      toMove: '0',
+      lastMoveTime: T0,
+    };
+    const enriched = enrichClockGameSlice(game, T0 + 90_000, () => null);
+    assert.equal(enriched.players[0]!.effectiveRemainingMs, -30_000);
+  });
+
   it('sets onVacation for off-clock player from flags', () => {
     const game = {
       players: [

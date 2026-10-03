@@ -5,7 +5,7 @@ Correspondence **vacation** pauses a player’s turn clock across **all** active
 ## Single path for clock state
 
 - **Server authority:** Live remaining time, timeout eligibility, and move `timeUsed` go through [`lib/clockElapsed.ts`](../../lib/clockElapsed.ts) and [`lib/vacation/`](../../lib/vacation/) on all Must-wire paths (Phase 2 complete). No ad hoc `bank - (now - lastMoveTime)` in production paths.
-- **Clients:** Display only. Use server fields (`effectiveRemainingMs`, `clockDisplayServerTime`, `clockPaused`) and a single helper such as `tickDisplayRemaining` — no parallel elapsed math for timeloss or countdown correctness.
+- **Clients:** Display only. Use server fields (`effectiveRemainingMs`, `clockDisplayServerTime`, `clockPaused`) and a single helper such as `tickDisplayRemaining` — no parallel elapsed math for timeloss or countdown correctness. **`effectiveRemainingMs` may be negative** on soft-clock games so the UI can show how far over time a player is (same as legacy client math); hard-clock timeout still uses server `wouldTimeOut` / timeloss paths.
 
 See [Games and moves](/backend/subsystems/games-and-moves/) for lazy timeout collapse (`me_dashboard`, `get_game`, timeout move).
 
