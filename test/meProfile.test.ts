@@ -5,6 +5,9 @@ import {
   buildMeProfilePayload,
   type MeAncillaryData,
 } from '../lib/meQuery.js';
+import { buildVacationSnapshot } from '../lib/vacation/resolve.js';
+
+const vacation = buildVacationSnapshot({}, Date.parse('2026-06-15T12:00:00.000Z'));
 
 const user = {
   id: 'u1',
@@ -34,7 +37,7 @@ describe('buildMeProfilePayload', () => {
   it('includes activeGames and omits games and challenges', () => {
     const payload = buildMeProfilePayload(user, ancillary, [
       { metaGame: 'saltire', id: 'g1' },
-    ]);
+    ], vacation);
 
     assert.equal(payload.id, 'u1');
     assert.deepEqual(payload.activeGames, [{ metaGame: 'saltire', id: 'g1' }]);
@@ -53,6 +56,7 @@ describe('buildMeProfilePayload', () => {
       },
       ancillary,
       [],
+      vacation,
     );
     assert.deepEqual(payload.settings, {
       all: { annotate: true },
@@ -81,6 +85,7 @@ describe('buildMeDashboardPayload', () => {
         challengesAccepted: [],
         standingChallenges: [],
       },
+      vacation,
     );
 
     assert.equal(payload.games.length, 1);
@@ -95,12 +100,12 @@ describe('buildMeDashboardPayload', () => {
       challengesReceived: [],
       challengesAccepted: [],
       standingChallenges: [],
-    });
+    }, vacation);
     assert.equal('notifications' in payload, false);
   });
 
   it('does not include notifications on profile payload', () => {
-    const payload = buildMeProfilePayload(user, ancillary, []);
+    const payload = buildMeProfilePayload(user, ancillary, [], vacation);
     assert.equal('notifications' in payload, false);
   });
 });

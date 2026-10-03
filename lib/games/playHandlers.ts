@@ -38,10 +38,18 @@ import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } 
 import { adminDeleteGame } from '../adminDeleteGame.js';
 import { filterExplorationTreeForSave, type ExplorationTreeNode } from '../explorationMoves.js';
 import { tournamentPlaySupported } from '../tournamentGame.js';
-import { checkAndProcessGameTimeout } from '../dashboardMaintenance.js';
 import {
   shouldWriteGameOpenOverlay,
 } from '../dashboardGames.js';
+import { effectiveElapsedMs, remainingBankMs, wouldTimeOut, type ClockGameSlice } from '../clockElapsed.js';
+import {
+  collectOnClockPlayerIds,
+} from '../vacation/load.js';
+import {
+  getVacationWindowFromMap,
+  prepareVacationWindowsForPlayerIds,
+  type GetVacationWindowFn,
+} from '../vacation/persist.js';
 import { upsertUserGameOverlay } from '../userGameOverlay.js';
 import {
   isInterestingComment,
@@ -411,6 +419,18 @@ export async function submitMove(userid: string, pars: {
     const simultaneous = flagSetIncludes(flags, "simultaneous");
     const sessionFlags = effectiveFlags(engine, game.metaGame, game.variants);
     const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+    const moveNow = Date.now();
+    const onClockIds = collectOnClockPlayerIds({
+      players: game.players,
+      toMove: game.toMove,
+    });
+    const vacationWindows = await prepareVacationWindowsForPlayerIds(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      onClockIds,
+      moveNow,
+    );
+    const getVacationWindow = getVacationWindowFromMap(vacationWindows);
     let autoMoves = 0;
     let autoMovesPerPlayer: number[] = [];
     const list: Promise<any>[] = [];
@@ -419,7 +439,7 @@ export async function submitMove(userid: string, pars: {
       if (pars.move === "resign") {
         resign(userid, engine, game);
       } else if (pars.move === "timeout") {
-        timeout(userid, engine, game);
+        timeout(userid, engine, game, moveNow, getVacationWindow);
       } else if (pars.move === "" && pars.draw === "drawaccepted") {
         drawaccepted(userid, engine, game, simultaneous);
       } else if (simultaneous) {
@@ -453,7 +473,18 @@ export async function submitMove(userid: string, pars: {
       game.players.forEach(p => delete p.draw);
     }
     const timestamp = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
-    const timeUsed = timestamp - lastMoveTime;
+    const clockSlice: ClockGameSlice = {
+      players: game.players,
+      toMove: game.toMove,
+      lastMoveTime,
+    };
+    const timeUsed = effectiveElapsedMs({
+      lastMoveTime,
+      endTime: timestamp,
+      playerId: userid,
+      game: clockSlice,
+      vacationWindow: getVacationWindow(userid),
+    });
     // console.log("timeUsed", timeUsed);
     // console.log("player", player);
     if (player.time! - timeUsed < 0)
@@ -806,18 +837,40 @@ function resign(userid: any, engine: GameBase, game: FullGame) {
   }
 }
 
-function timeout(userid: string, engine: GameBase | GameBaseSimultaneous, game: FullGame) {
+function timeout(
+  userid: string,
+  engine: GameBase | GameBaseSimultaneous,
+  game: FullGame,
+  now: number,
+  getVacationWindow: GetVacationWindowFn,
+) {
   if (game.toMove === '')
     throw new Error("Can't timeout a game that has already ended");
+  const slice: ClockGameSlice = {
+    players: game.players,
+    toMove: game.toMove,
+    lastMoveTime: game.lastMoveTime,
+  };
   // Find player that timed out
   let loser: number;
   if (Array.isArray(game.toMove)) {
-    let minTime = 0;
+    let minRemaining = 0;
     let minIndex = -1;
-    const elapsed = Date.now() - game.lastMoveTime;
-    game.toMove.forEach((p: any, i: number) => {
-      if (p && game.players[i].time! - elapsed < minTime) {
-        minTime = game.players[i].time! - elapsed;
+    game.toMove.forEach((p: boolean, i: number) => {
+      if (!p) {
+        return;
+      }
+      const player = game.players[i];
+      const remaining = remainingBankMs(
+        player.time ?? 0,
+        game.lastMoveTime,
+        now,
+        player.id,
+        slice,
+        getVacationWindow(player.id),
+      );
+      if (remaining < minRemaining) {
+        minRemaining = remaining;
         minIndex = i;
       }
     });
@@ -827,8 +880,17 @@ function timeout(userid: string, engine: GameBase | GameBaseSimultaneous, game: 
       throw new Error("Nobody's time is up!");
     }
   } else {
-    if (game.players[parseInt(game.toMove)].time! - (Date.now() - game.lastMoveTime) < 0) {
-      loser = parseInt(game.toMove);
+    const toMoveIdx = parseInt(String(game.toMove), 10);
+    const onClock = game.players[toMoveIdx];
+    if (wouldTimeOut({
+      bank: onClock.time ?? 0,
+      lastMoveTime: game.lastMoveTime,
+      now,
+      playerId: onClock.id,
+      game: slice,
+      vacationWindow: getVacationWindow(onClock.id),
+    })) {
+      loser = toMoveIdx;
     } else {
       throw new Error("Opponent's time isn't up!");
     }
@@ -942,8 +1004,29 @@ export async function invokePie(userid: string, pars: { id: string, metaGame: st
         );
       }
 
-      const timestamp = Date.now();
-      const timeUsed = timestamp - lastMoveTime;
+      const pieNow = Date.now();
+      const pieWindows = await prepareVacationWindowsForPlayerIds(
+        ddbDocClient,
+        process.env.ABSTRACT_PLAY_TABLE!,
+        collectOnClockPlayerIds({
+          players: game.players,
+          toMove: game.toMove,
+        }),
+        pieNow,
+      );
+      const getPieVacation = getVacationWindowFromMap(pieWindows);
+      const timestamp = pieNow;
+      const timeUsed = effectiveElapsedMs({
+        lastMoveTime,
+        endTime: timestamp,
+        playerId: userid,
+        game: {
+          players: game.players,
+          toMove: game.toMove,
+          lastMoveTime,
+        },
+        vacationWindow: getPieVacation(userid),
+      });
       // console.log("timeUsed", timeUsed);
       // console.log("player", player);
       if (player.time! - timeUsed < 0)

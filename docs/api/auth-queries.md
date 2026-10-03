@@ -10,8 +10,8 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `me_profile` | Site-wide profile for navbar, settings, and game renderer: settings, bots, tags, `activeGames` (`CURRENTGAMES#` keys only). No dashboard maintenance, challenges, or `lastSeen` writes. | — |
-| `me_dashboard` | Dashboard tables: active `games`, `notifications`, challenges, timeout sweep. Clears `USER.cleaned` when set by abandoned-account cron. Does not refresh notification seen state. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
+| `me_profile` | Site-wide profile for navbar, settings, and game renderer: settings, bots, tags, `activeGames` (`CURRENTGAMES#` keys only), `vacation` quota/stint snapshot. No dashboard maintenance, challenges, or `lastSeen` writes. | — |
+| `me_dashboard` | Dashboard tables: active `games` (with `clockDisplayServerTime` and per on-clock player `effectiveRemainingMs` / `clockPaused`), `notifications`, challenges, timeout sweep. Includes `vacation` snapshot. Clears `USER.cleaned` when set by abandoned-account cron. Does not refresh notification seen state. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
 | `next_game` | Next game id in user's list | — |
 | `my_settings` | **Deprecated** — minimal id/name/email/language; use `me_profile` instead | — |
 | `new_setting` | Update name, language, country, bggid, about | `attribute`, `value`. For `name`, value must be unique among current human and bot display names (trim + case-insensitive). |
@@ -24,6 +24,16 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 | `toggle_star` | Favorite a metaGame | `metaGame` |
 
 **`me_dashboard.notifications`:** array of `{ sk, createdAt, body, status }` items where `status` is `new` or `read` (see [Notifications — In-app dashboard feed](/backend/subsystems/notifications/)). Omitted from `me_profile`. Use `list_notifications` for navbar bootstrap and `mark_notifications_seen` when the user opens the bell panel.
+
+## Vacation (correspondence clock pause)
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `schedule_vacation` | Start now or schedule a pause stint | `startsAt` (ms or ISO-8601), `openEnded` (boolean), optional `endsAt` when not open-ended |
+| `update_vacation` | Change a future scheduled stint or adjust fixed end before it passes | optional `startsAt`, `openEnded`, `endsAt` (`null` when switching to open-ended) |
+| `stop_vacation` | Cancel before start (no charge) or end active stint (charges exact pause ms to UTC-year quota) | — |
+
+Success body: `{ vacation: VacationSnapshot }` — quota remaining, active/scheduled flags, stint times. Validation failures return **400** with `{ message: "<code>" }` (`vacation_stint_active`, `vacation_no_quota`, `vacation_invalid_range`, etc.). See [Vacation mode](/backend/subsystems/vacation/).
 
 ## Watch, highlight, and representative games
 
@@ -127,7 +137,7 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `timeloss` | Report time loss | game ids |
 | `abandoned` | Mark game abandoned | game ids |
 | `invoke_pie` | Pie rule: reverse player order | game ids |
-| `get_game` | Game with user context and `watchCount` | `metaGame`, `id`, `cbit` |
+| `get_game` | Game with user context and `watchCount`; active games include `clockDisplayServerTime` and per on-clock player `effectiveRemainingMs` / `clockPaused` | `metaGame`, `id`, `cbit` |
 | `update_game_settings` | Per-game settings | game + settings |
 | `update_note` | User note on a game | `gameId`, note text |
 | `update_commented` | Mark comments seen | game ids |

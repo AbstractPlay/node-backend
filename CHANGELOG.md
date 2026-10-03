@@ -11,6 +11,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Added
 
+- **Vacation mode:** correspondence clock pause (14×24h UTC quota per year) with `schedule_vacation`, `update_vacation`, and `stop_vacation` auth queries; server-side elapsed time via `lib/clockElapsed.ts` / `lib/vacation/` on timeout, moves, timeloss, and dashboard urgency; `vacation` snapshot on `me_profile` / `me_dashboard` and display seeds (`clockDisplayServerTime`, `effectiveRemainingMs`, `clockPaused`) on dashboard games and `get_game`. See [Vacation mode](/backend/subsystems/vacation/).
 - **Notifications:** WebSocket `notification` verb after in-app items are created (`createNotification`); user-targeted delivery via `lib/wsMessageDelivery.ts`.
 - **Tournaments:** richer tournament-end email (division winner, standings, tournament link, next-series signup nudge); shorter tournament-end push (winner + nudge). Division standings logic extracted to `lib/tournaments/divisionStandings.ts` with prod-sampled regression fixtures and `npm run verify-division-standings`.
 

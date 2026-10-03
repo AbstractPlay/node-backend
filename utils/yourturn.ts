@@ -8,6 +8,12 @@ import { createSendEmailCommand, initi18n, changeLanguageForPlayer } from '../li
 import { logGetItemError, formatReturnError } from '../lib/api/http.js';
 import type { UserSettings } from '../lib/api/types.js';
 import { gameinfo } from '@abstractplay/gameslib';
+import { remainingBankMs, type ClockGameSlice } from '../lib/clockElapsed.js';
+import {
+  vacationFieldsFromUserItem,
+  VACATION_USER_PROJECTION,
+} from '../lib/vacation/load.js';
+import { resolveVacationWindow } from '../lib/vacation/resolve.js';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -127,7 +133,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                       "pk": "USER", "sk": pid
                     },
                     ExpressionAttributeNames: { "#id": "id", "#name": "name", "#language": "language", "#settings": "settings" },
-                    ProjectionExpression: "#id, #name, email, #language, #settings",
+                    ProjectionExpression: `#id, #name, email, #language, #settings, ${VACATION_USER_PROJECTION}`,
                     ReturnConsumedCapacity: "INDEXES",
                 })
             );
@@ -154,10 +160,29 @@ export const handler: Handler = async (event: any, context?: any) => {
                     if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
                         if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.yourturn) ) {
                             let urgent = 0;
+                            const vacationWindow = resolveVacationWindow(
+                                vacationFieldsFromUserItem(player as Record<string, unknown>),
+                                Date.now(),
+                            );
                             for (const game of gs) {
                                 const playerEntry = game.players.find(x => x.id === p);
                                 if (playerEntry !== undefined) {
-                                    const remaining = (playerEntry.time || 0) - (Date.now() - game.lastMoveTime);
+                                    const playerIdx = game.players.findIndex(x => x.id === p);
+                                    const slice: ClockGameSlice = {
+                                        players: game.players,
+                                        toMove: typeof game.toMove === 'number'
+                                            ? String(game.toMove)
+                                            : game.toMove,
+                                        lastMoveTime: game.lastMoveTime,
+                                    };
+                                    const remaining = remainingBankMs(
+                                        playerEntry.time || 0,
+                                        game.lastMoveTime,
+                                        Date.now(),
+                                        p,
+                                        slice,
+                                        vacationWindow,
+                                    );
                                     if (remaining < 24 * 60 * 60 * 1000) {
                                         urgent++;
                                     }

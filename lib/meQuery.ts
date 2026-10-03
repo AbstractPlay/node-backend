@@ -2,6 +2,7 @@ import type { ClientBot } from './participants.js';
 import type { GameMarkSummary, HighlightEntry, RepresentativeEntry } from './playerGameMarks.js';
 import type { ActiveGameKey } from './dashboardGames.js';
 import type { DashboardGame } from './dashboardGames.js';
+import type { VacationSnapshot } from './vacation/types.js';
 
 import { stripColorFromSettings } from './stripLegacyColorSettings.js';
 
@@ -45,6 +46,7 @@ export type MeProfilePayload = {
   watchedGames: GameMarkSummary[];
   highlights: HighlightEntry[];
   representatives: RepresentativeEntry[];
+  vacation: VacationSnapshot;
 };
 
 export type MeDashboardPayload = Omit<MeProfilePayload, 'activeGames'> & MeChallengeData & {
@@ -70,6 +72,7 @@ export function buildMeProfilePayload(
   user: MeUserFields,
   ancillary: MeAncillaryData,
   activeGames: ActiveGameKey[],
+  vacation: VacationSnapshot,
 ): MeProfilePayload {
   return {
     id: user.id,
@@ -95,6 +98,7 @@ export function buildMeProfilePayload(
     watchedGames: ancillary.watchedGames,
     highlights: ancillary.highlights,
     representatives: ancillary.representatives,
+    vacation,
   };
 }
 
@@ -103,8 +107,9 @@ export function buildMeDashboardPayload(
   ancillary: MeAncillaryData,
   games: DashboardGame[],
   challenges: MeChallengeData,
+  vacation: VacationSnapshot,
 ): MeDashboardPayload {
-  const profile = buildMeProfilePayload(user, ancillary, []);
+  const profile = buildMeProfilePayload(user, ancillary, [], vacation);
   const { activeGames: _activeGames, ...profileWithoutActive } = profile;
   return {
     ...profileWithoutActive,

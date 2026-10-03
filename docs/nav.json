@@ -24,5 +24,6 @@
   { "slug": "subsystems/announcements" },
   { "slug": "subsystems/player-blocking", "title": "Player blocking" },
   { "slug": "subsystems/recommendations", "title": "Recommendations" },
-  { "slug": "subsystems/game-move-layout-analytics", "title": "Game Move layout analytics" }
+  { "slug": "subsystems/game-move-layout-analytics", "title": "Game Move layout analytics" },
+  { "slug": "subsystems/vacation", "title": "Vacation mode" }
 ]
