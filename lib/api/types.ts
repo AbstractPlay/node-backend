@@ -53,6 +53,7 @@ export type UsersData = {
   avatarSeed?: string;
   bot: boolean;
   admin?: boolean;
+  onVacation?: boolean;
 };
 
 export type PartialClaims = {

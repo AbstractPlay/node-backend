@@ -5,6 +5,7 @@ import { buildVacationSnapshot } from './resolve.js';
 import type { VacationSnapshot, VacationUserFields, VacationValidationError } from './types.js';
 import { vacationFieldsFromUserItem, VACATION_USER_PROJECTION } from './load.js';
 import { vacationSchedulePolicyError } from './policy.js';
+import { syncUsersDirectoryOnVacation } from './publicMirror.js';
 import {
   validateSchedule,
   validateStop,
@@ -50,7 +51,14 @@ async function readFieldsAfterFinalize(
   return loadVacationFields(client, tableName, userId);
 }
 
-function success(fields: VacationUserFields, now: number): VacationMutationResult {
+async function success(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  fields: VacationUserFields,
+  now: number,
+): Promise<VacationMutationResult> {
+  await syncUsersDirectoryOnVacation(client, tableName, userId, fields, now);
   return { ok: true, vacation: buildVacationSnapshot(fields, now) };
 }
 
@@ -142,7 +150,7 @@ export async function scheduleVacation(
   }
 
   const after = await loadVacationFields(client, tableName, userId);
-  return success(after ?? fields, now);
+  return success(client, tableName, userId, after ?? fields, now);
 }
 
 export type UpdateVacationPars = {
@@ -223,7 +231,7 @@ export async function updateVacation(
   }
 
   const after = await loadVacationFields(client, tableName, userId);
-  return success(after ?? fields, now);
+  return success(client, tableName, userId, after ?? fields, now);
 }
 
 export async function stopVacation(
@@ -263,7 +271,7 @@ export async function stopVacation(
       throw e;
     }
     const after = await loadVacationFields(client, tableName, userId);
-    return success(after ?? {}, now);
+    return success(client, tableName, userId, after ?? {}, now);
   }
 
   const stop = planStopVacation(fields, now);
@@ -295,5 +303,5 @@ export async function stopVacation(
   }
 
   const after = await loadVacationFields(client, tableName, userId);
-  return success(after ?? {}, now);
+  return success(client, tableName, userId, after ?? {}, now);
 }
