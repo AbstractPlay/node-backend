@@ -18,6 +18,8 @@ export type DashboardGame = {
     time?: number;
     effectiveRemainingMs?: number;
     clockPaused?: boolean;
+    onVacation?: boolean;
+    vacationScheduled?: boolean;
   }[];
   clockHard: boolean;
   noExplore?: boolean;

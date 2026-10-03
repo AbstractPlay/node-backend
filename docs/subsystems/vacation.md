@@ -77,19 +77,16 @@ See [Auth queries — Vacation](/backend/api/auth-queries/#vacation-corresponden
 
 ### front — Display-only (Phase 6)
 
-Canonical elapsed math today lives in **`moveEntryUtils.js`**; several callers duplicate timeout checks.
+Server seeds: `clockDisplayServerTime`, per-player `effectiveRemainingMs` / `clockPaused` (on-clock only), and **`onVacation` / `vacationScheduled`** on every player (stint visibility even when off the clock). Front helper: `front/src/lib/gameClockDisplay.js`; chips via `moveEntryUtils.js`.
 
-| File | Lines / symbol | Phase | Status | Notes |
-|------|----------------|-------|--------|-------|
-| `front/src/components/GameMove/preview/moveEntryUtils.js` | 74–78 — `getPlayerClockChips` | 6 | open | **Central front helper** — replace with server-seeded remaining |
-| `front/src/components/GameMove/preview/CardTurnBar.js` | 25 — `getLivePlayerClockChips` | 6 | open | |
-| `front/src/components/GameMove/preview/StripContextStrip.js` | 34 | 6 | open | |
-| `front/src/components/GameMove/MoveEntry.js` | 316, 324, 394 | 6 | open | Timeout UI + display |
-| `front/src/components/GameMove/preview/useDockMoveEntry.js` | 211, 219 | 6 | open | |
-| `front/src/components/GameMove/useGameMoveSession.js` | 875–891 | 6 | open | **Spectator timeloss trigger** — must align with server |
-| `front/src/components/Me/MyTurnTable.js` | 81 — `timeRemaining` | 6 | open | Dashboard column |
-| `front/src/components/Me/TheirTurnTable.js` | 89–92 | 6 | open | Opponent clock column |
-| `front/src/components/Me.js` | 396–397 | 6 | open | Sort key `time + lastMoveTime` — replace with server sort or effective remaining |
+| File | Status | Notes |
+|------|--------|-------|
+| `front/src/lib/gameClockDisplay.js` | done | Tick + timeout from seeds; legacy fallback |
+| `front/src/components/GameMove/preview/moveEntryUtils.js` | done | Chips include vacation + pause |
+| `front/src/components/GameMove/preview/CardTurnBar.js` | done | On vacation / clock paused labels |
+| `front/src/components/GameMove/MoveEntry.js`, `useDockMoveEntry.js` | done | Timeloss via `isPlayerTimedOut` |
+| `front/src/components/GameMove/useGameMoveSession.js` | done | Spectator timeloss + opponent-on-vacation parenthetical |
+| `front/src/components/Me/MyTurnTable.js`, `TheirTurnTable.js`, `Me.js` | done | Dashboard clocks + opponent vacation tag + sort |
 
 ### front — N/A
 
@@ -127,3 +124,4 @@ npm run check:clock-derivation -- --strict
 - **2026-10-02 — Phase 3:** `schedule_vacation`, `update_vacation`, `stop_vacation` authQuery handlers; USER writes in [`lib/vacation/mutations.ts`](../../lib/vacation/mutations.ts); tests `test/vacationMutations.test.ts`.
 - **2026-10-02 — Phase 4:** `vacation` on `me_profile` / `me_dashboard`; dashboard + `get_game` clock display seeds (`clockDisplay.ts`, `dashboardClock.ts`).
 - **2026-10-02 — Phase 5:** Universal vacation policy module + docs; schedule path calls `vacationSchedulePolicyError` (extensible, no game-type blocks).
+- **2026-10-03 — Phase 6 (front):** Display-only UI in `apfront` uses server clock seeds; opponent **`onVacation`** on dashboard/`get_game` players (backend `isVacationStintLive` + `enrichClockGameSlice`).

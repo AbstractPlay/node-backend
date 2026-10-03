@@ -36,6 +36,8 @@ export type User = {
   time?: number;
   effectiveRemainingMs?: number;
   clockPaused?: boolean;
+  onVacation?: boolean;
+  vacationScheduled?: boolean;
   settings?: UserSettings;
   draw?: string;
 };

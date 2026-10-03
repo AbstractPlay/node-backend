@@ -9,14 +9,14 @@ import { checkAndProcessGameTimeout } from '../dashboardMaintenance.js';
 import { setSeenTime } from './setSeenTime.js';
 import { timeloss } from './timeloss.js';
 import {
-  collectOnClockPlayerIds,
+  collectPlayerIdsFromGame,
 } from '../vacation/load.js';
-import {
-  getVacationWindowFromMap,
-  prepareVacationWindowsForPlayerIds,
-} from '../vacation/persist.js';
-import type { VacationWindow } from '../vacation/types.js';
 import { enrichLiveGameClockDisplay } from '../vacation/clockDisplay.js';
+import {
+  getPlayerVacationFlagsFromMap,
+  getVacationWindowFromMap,
+  prepareVacationPlayerStateForPlayerIds,
+} from '../vacation/persist.js';
 
 type FullGame = {
   id: string;
@@ -95,8 +95,8 @@ export async function game(
     if (loaded === undefined) {
       throw new Error(`Game ${pars.id}, metaGame ${pars.metaGame}, completed bit ${pars.cbit} not found`);
     }
-    let vacationWindows: Map<string, VacationWindow | null> | undefined;
     let activeGameNow: number | undefined;
+    let vacationState: Awaited<ReturnType<typeof prepareVacationPlayerStateForPlayerIds>> | undefined;
     if ((pars.cbit === 0 || pars.cbit === '0') && loaded.toMove && loaded.toMove !== '') {
       const tableName = process.env.ABSTRACT_PLAY_TABLE!;
       activeGameNow = Date.now();
@@ -114,11 +114,11 @@ export async function game(
         lastMoveTime: loaded.lastMoveTime!,
         variants: loaded.variants,
       };
-      const onClockIds = collectOnClockPlayerIds(timeoutGame);
-      vacationWindows = await prepareVacationWindowsForPlayerIds(
+      const allPlayerIds = collectPlayerIdsFromGame(loaded);
+      vacationState = await prepareVacationPlayerStateForPlayerIds(
         ddbDocClient,
         tableName,
-        onClockIds,
+        allPlayerIds,
         now,
       );
       const timeoutResult = await checkAndProcessGameTimeout(timeoutGame, {
@@ -126,7 +126,7 @@ export async function game(
         tableName,
         timeloss,
         now: () => now,
-        getVacationWindow: getVacationWindowFromMap(vacationWindows),
+        getVacationWindow: getVacationWindowFromMap(vacationState.windows),
       });
       if (timeoutResult.processed) {
         const refreshed = await ddbDocClient.send(
@@ -162,16 +162,12 @@ export async function game(
       && loaded.toMove !== ''
     ) {
       const displayNow = activeGameNow ?? Date.now();
-      if (vacationWindows === undefined) {
+      if (vacationState === undefined) {
         const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-        const onClockIds = collectOnClockPlayerIds({
-          players: loaded.players,
-          toMove: loaded.toMove,
-        });
-        vacationWindows = await prepareVacationWindowsForPlayerIds(
+        vacationState = await prepareVacationPlayerStateForPlayerIds(
           ddbDocClient,
           tableName,
-          onClockIds,
+          collectPlayerIdsFromGame(loaded),
           displayNow,
         );
       }
@@ -182,7 +178,8 @@ export async function game(
           lastMoveTime: loaded.lastMoveTime,
         },
         displayNow,
-        getVacationWindowFromMap(vacationWindows),
+        getVacationWindowFromMap(vacationState.windows),
+        getPlayerVacationFlagsFromMap(vacationState.flags),
       );
       loaded.players = withClock.players;
       loaded.clockDisplayServerTime = withClock.clockDisplayServerTime;

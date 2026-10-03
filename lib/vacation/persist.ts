@@ -1,6 +1,7 @@
 import { GetCommand, UpdateCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { planFinalizeStint } from './finalize.js';
-import { batchGetVacationWindows, vacationFieldsFromUserItem, VACATION_USER_PROJECTION } from './load.js';
+import { batchGetVacationPlayerState, vacationFieldsFromUserItem, VACATION_USER_PROJECTION } from './load.js';
+import type { PlayerVacationDisplayFlags } from './load.js';
 import { buildVacationSnapshot } from './resolve.js';
 import type { VacationSnapshot, VacationWindow } from './types.js';
 
@@ -77,15 +78,35 @@ export async function readVacationSnapshot(
   return buildVacationSnapshot(fields, now);
 }
 
+export async function prepareVacationPlayerStateForPlayerIds(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  playerIds: string[],
+  now: number,
+): Promise<{
+  windows: Map<string, VacationWindow | null>;
+  flags: Map<string, PlayerVacationDisplayFlags>;
+}> {
+  const unique = [...new Set(playerIds)];
+  await Promise.all(unique.map(id => finalizeVacationIfNeeded(client, tableName, id, now)));
+  return batchGetVacationPlayerState(client, tableName, unique, now);
+}
+
+export function getPlayerVacationFlagsFromMap(
+  map: Map<string, PlayerVacationDisplayFlags>,
+): (playerId: string) => PlayerVacationDisplayFlags {
+  const empty: PlayerVacationDisplayFlags = { onVacation: false, vacationScheduled: false };
+  return (playerId: string) => map.get(playerId) ?? empty;
+}
+
 export async function prepareVacationWindowsForPlayerIds(
   client: DynamoDBDocumentClient,
   tableName: string,
   playerIds: string[],
   now: number,
 ): Promise<Map<string, VacationWindow | null>> {
-  const unique = [...new Set(playerIds)];
-  await Promise.all(unique.map(id => finalizeVacationIfNeeded(client, tableName, id, now)));
-  return batchGetVacationWindows(client, tableName, unique, now);
+  const { windows } = await prepareVacationPlayerStateForPlayerIds(client, tableName, playerIds, now);
+  return windows;
 }
 
 export type GetVacationWindowFn = (playerId: string) => VacationWindow | null;

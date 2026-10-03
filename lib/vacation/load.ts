@@ -1,8 +1,78 @@
 import { GetCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { DashboardGame } from '../dashboardGames.js';
 import type { ClockGameSlice } from '../clockElapsed.js';
-import { resolveVacationWindow } from './resolve.js';
+import { resolveVacationWindow, isVacationScheduled, isVacationStintLive } from './resolve.js';
 import type { VacationUserFields, VacationWindow } from './types.js';
+
+export type PlayerVacationDisplayFlags = {
+  onVacation: boolean;
+  vacationScheduled: boolean;
+};
+
+export function playerVacationDisplayFlags(
+  fields: VacationUserFields,
+  now: number,
+): PlayerVacationDisplayFlags {
+  return {
+    onVacation: isVacationStintLive(fields, now),
+    vacationScheduled: isVacationScheduled(fields, now),
+  };
+}
+
+export function collectPlayerIdsFromGame(game: { players: { id: string }[] }): string[] {
+  return game.players.map(p => p.id);
+}
+
+export function collectPlayerIdsFromGames(games: DashboardGame[]): string[] {
+  const set = new Set<string>();
+  for (const game of games) {
+    for (const id of collectPlayerIdsFromGame(game)) {
+      set.add(id);
+    }
+  }
+  return [...set];
+}
+
+export type VacationPlayerState = {
+  windows: Map<string, VacationWindow | null>;
+  flags: Map<string, PlayerVacationDisplayFlags>;
+};
+
+export async function batchGetVacationPlayerState(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  playerIds: string[],
+  now: number,
+): Promise<VacationPlayerState> {
+  const windows = new Map<string, VacationWindow | null>();
+  const flags = new Map<string, PlayerVacationDisplayFlags>();
+  const unique = [...new Set(playerIds)];
+  await Promise.all(unique.map(async (id) => {
+    const data = await client.send(
+      new GetCommand({
+        TableName: tableName,
+        Key: { pk: 'USER', sk: id },
+        ProjectionExpression: VACATION_USER_PROJECTION,
+      }),
+    );
+    const fields = data.Item
+      ? vacationFieldsFromUserItem(data.Item as Record<string, unknown>)
+      : {};
+    windows.set(id, resolveVacationWindow(fields, now));
+    flags.set(id, playerVacationDisplayFlags(fields, now));
+  }));
+  return { windows, flags };
+}
+
+export async function batchGetVacationWindows(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  playerIds: string[],
+  now: number,
+): Promise<Map<string, VacationWindow | null>> {
+  const { windows } = await batchGetVacationPlayerState(client, tableName, playerIds, now);
+  return windows;
+}
 
 export const VACATION_USER_PROJECTION = [
   'vacationQuotaYear',
@@ -55,28 +125,4 @@ export function collectOnClockPlayerIdsFromGames(games: DashboardGame[]): string
     }
   }
   return [...set];
-}
-
-export async function batchGetVacationWindows(
-  client: DynamoDBDocumentClient,
-  tableName: string,
-  playerIds: string[],
-  now: number,
-): Promise<Map<string, VacationWindow | null>> {
-  const map = new Map<string, VacationWindow | null>();
-  const unique = [...new Set(playerIds)];
-  await Promise.all(unique.map(async (id) => {
-    const data = await client.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: { pk: 'USER', sk: id },
-        ProjectionExpression: VACATION_USER_PROJECTION,
-      }),
-    );
-    const fields = data.Item
-      ? vacationFieldsFromUserItem(data.Item as Record<string, unknown>)
-      : {};
-    map.set(id, resolveVacationWindow(fields, now));
-  }));
-  return map;
 }

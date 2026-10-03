@@ -9,6 +9,7 @@ import {
 import {
   buildVacationSnapshot,
   computeStintPauseMs,
+  isVacationStintLive,
   remainingQuotaMs,
   resolveVacationWindow,
   shouldAutoFinalizeStint,
@@ -100,6 +101,15 @@ describe('vacation resolve', () => {
 
   it('computeStintPauseMs is exact wall ms', () => {
     assert.equal(computeStintPauseMs(T0, T0 + 90 * 60 * 1000), 90 * 60 * 1000);
+  });
+
+  it('stint live when started (independent of on-clock pause window)', () => {
+    const f = fields({
+      vacationStartsAt: T0,
+      vacationStintStartedAt: T0,
+      vacationOpenEnded: true,
+    });
+    assert.equal(isVacationStintLive(f, T0 + HOUR), true);
   });
 });
 
