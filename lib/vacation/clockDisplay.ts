@@ -4,16 +4,24 @@ import {
   type ClockGameSlice,
 } from '../clockElapsed.js';
 import type { DashboardGame } from '../dashboardGames.js';
+import type { PlayerVacationDisplayFlags } from './load.js';
 import type { GetVacationWindowFn } from './persist.js';
 import type { VacationWindow } from './types.js';
 
 export type PlayerClockDisplayFields = {
   effectiveRemainingMs?: number;
   clockPaused?: boolean;
+  onVacation?: boolean;
+  vacationScheduled?: boolean;
 };
 
 export type GameClockDisplayFields = {
   clockDisplayServerTime?: number;
+};
+
+const EMPTY_VACATION_FLAGS: PlayerVacationDisplayFlags = {
+  onVacation: false,
+  vacationScheduled: false,
 };
 
 function isClockPaused(now: number, window: VacationWindow | null): boolean {
@@ -28,7 +36,7 @@ function playerDisplayFields(
   playerIndex: number,
   now: number,
   getVacationWindow: GetVacationWindowFn,
-): PlayerClockDisplayFields | undefined {
+): Pick<PlayerClockDisplayFields, 'effectiveRemainingMs' | 'clockPaused'> | undefined {
   if (!isPlayerOnClock(game, playerIndex)) {
     return undefined;
   }
@@ -48,10 +56,13 @@ function playerDisplayFields(
   };
 }
 
+export type GetPlayerVacationFlagsFn = (playerId: string) => PlayerVacationDisplayFlags;
+
 export function enrichClockGameSlice<T extends ClockGameSlice>(
   game: T,
   now: number,
   getVacationWindow: GetVacationWindowFn,
+  getPlayerVacationFlags: GetPlayerVacationFlagsFn = () => EMPTY_VACATION_FLAGS,
 ): T & GameClockDisplayFields & {
   players: (T['players'][number] & PlayerClockDisplayFields)[];
 } {
@@ -61,11 +72,14 @@ export function enrichClockGameSlice<T extends ClockGameSlice>(
     lastMoveTime: game.lastMoveTime,
   };
   const players = game.players.map((p, i) => {
+    const vacation = getPlayerVacationFlags(p.id);
     const display = playerDisplayFields(slice, i, now, getVacationWindow);
-    if (!display) {
-      return { ...p };
-    }
-    return { ...p, ...display };
+    return {
+      ...p,
+      onVacation: vacation.onVacation,
+      vacationScheduled: vacation.vacationScheduled,
+      ...display,
+    };
   });
   return {
     ...game,
@@ -78,12 +92,13 @@ export function enrichDashboardGamesClockDisplay(
   games: DashboardGame[],
   now: number,
   getVacationWindow: GetVacationWindowFn,
+  getPlayerVacationFlags: GetPlayerVacationFlagsFn = () => EMPTY_VACATION_FLAGS,
 ): DashboardGame[] {
   return games.map((game) => {
     if (!game.lastMoveTime || game.toMove === '' || game.toMove === undefined) {
       return game;
     }
-    return enrichClockGameSlice(game, now, getVacationWindow);
+    return enrichClockGameSlice(game, now, getVacationWindow, getPlayerVacationFlags);
   });
 }
 
@@ -96,6 +111,7 @@ export function enrichLiveGameClockDisplay<G extends GameWithPlayersAndClock>(
   game: G,
   now: number,
   getVacationWindow: GetVacationWindowFn,
+  getPlayerVacationFlags: GetPlayerVacationFlagsFn = () => EMPTY_VACATION_FLAGS,
 ): G & GameClockDisplayFields & {
   players: (G['players'][number] & PlayerClockDisplayFields)[];
 } {
@@ -115,6 +131,7 @@ export function enrichLiveGameClockDisplay<G extends GameWithPlayersAndClock>(
     },
     now,
     getVacationWindow,
+    getPlayerVacationFlags,
   ) as G & GameClockDisplayFields & {
     players: (G['players'][number] & PlayerClockDisplayFields)[];
   };

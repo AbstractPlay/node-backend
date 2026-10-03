@@ -72,6 +72,17 @@ export function isVacationActive(fields: VacationUserFields, now: number): boole
   return resolveVacationWindow(fields, now) !== null;
 }
 
+/** Stint has started and is not auto-finalized (player is "on vacation" even when off the clock). */
+export function isVacationStintLive(fields: VacationUserFields, now: number): boolean {
+  if (!hasVacationStint(fields)) {
+    return false;
+  }
+  if (isVacationScheduled(fields, now)) {
+    return false;
+  }
+  return !shouldAutoFinalizeStint(fields, now);
+}
+
 export function isVacationScheduled(fields: VacationUserFields, now: number): boolean {
   if (!hasVacationStint(fields)) {
     return false;

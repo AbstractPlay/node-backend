@@ -35,4 +35,27 @@ describe('vacation clockDisplay', () => {
     assert.equal(enriched.players[0]!.effectiveRemainingMs, 30_000);
     assert.equal(enriched.players[0]!.clockPaused, false);
   });
+
+  it('sets onVacation for off-clock player from flags', () => {
+    const game = {
+      players: [
+        { id: 'p0', name: 'A', time: 60_000 },
+        { id: 'p1', name: 'B', time: 60_000 },
+      ],
+      toMove: '0',
+      lastMoveTime: T0,
+    };
+    const enriched = enrichClockGameSlice(
+      game,
+      T0 + 10_000,
+      () => null,
+      (id) =>
+        id === 'p1'
+          ? { onVacation: true, vacationScheduled: false }
+          : { onVacation: false, vacationScheduled: false },
+    );
+    assert.equal(enriched.players[1]!.onVacation, true);
+    assert.equal(enriched.players[1]!.effectiveRemainingMs, undefined);
+    assert.equal(enriched.players[0]!.onVacation, false);
+  });
 });
