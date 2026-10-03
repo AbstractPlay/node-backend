@@ -52,7 +52,7 @@ export async function userNames() {
           KeyConditionExpression: "#pk = :pk",
           ExpressionAttributeValues: { ":pk": "USERS" },
           ExpressionAttributeNames: { "#pk": "pk", "#name": "name" },
-          ProjectionExpression: "sk, #name, lastSeen, country, stars, bggid, avatarStyle, avatarSeed",
+          ProjectionExpression: "sk, #name, lastSeen, country, stars, bggid, avatarStyle, avatarSeed, onVacation",
           ReturnConsumedCapacity: "INDEXES"
         })),
       ddbDocClient.send(
@@ -96,6 +96,7 @@ export async function userNames() {
       ...(u.avatarStyle && u.avatarSeed
         ? { avatarStyle: u.avatarStyle as string, avatarSeed: u.avatarSeed as string }
         : {}),
+      ...(u.onVacation === true ? { onVacation: true } : {}),
       ...(adminIds.has(u.sk) ? { admin: true } : {}),
       bot: false,
     } as UsersData));

@@ -3,6 +3,7 @@ import { planFinalizeStint } from './finalize.js';
 import { batchGetVacationPlayerState, vacationFieldsFromUserItem, VACATION_USER_PROJECTION } from './load.js';
 import type { PlayerVacationDisplayFlags } from './load.js';
 import { buildVacationSnapshot } from './resolve.js';
+import { syncUsersDirectoryOnVacation } from './publicMirror.js';
 import type { VacationSnapshot, VacationWindow } from './types.js';
 
 function isConditionalFailure(err: unknown): boolean {
@@ -55,6 +56,17 @@ export async function finalizeVacationIfNeeded(
     }
     throw err;
   }
+  const reloaded = await client.send(
+    new GetCommand({
+      TableName: tableName,
+      Key: { pk: 'USER', sk: userId },
+      ProjectionExpression: VACATION_USER_PROJECTION,
+    }),
+  );
+  const fieldsAfter = reloaded.Item
+    ? vacationFieldsFromUserItem(reloaded.Item as Record<string, unknown>)
+    : fields;
+  await syncUsersDirectoryOnVacation(client, tableName, userId, fieldsAfter, now);
   return true;
 }
 

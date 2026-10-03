@@ -67,7 +67,9 @@ function createMockDocClient(store: Map<string, StoreItem>) {
                     ? 'vacationPauseMsUsed'
                     : k === ':year'
                       ? 'vacationQuotaYear'
-                      : null;
+                      : k === ':true'
+                        ? 'onVacation'
+                        : null;
             if (field) {
               item[field] = v;
             }
@@ -98,6 +100,7 @@ function seedUser(store: Map<string, StoreItem>, vacation: Record<string, unknow
     vacationPauseMsUsed: 0,
     ...vacation,
   });
+  store.set(`${USER}:USERS`, { pk: 'USERS', sk: USER });
 }
 
 describe('vacation mutations', () => {
