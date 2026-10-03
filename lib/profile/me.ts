@@ -14,6 +14,10 @@ import {
 import { listActiveGameKeys, loadDashboardGames, type DashboardGame } from '../dashboardGames.js';
 import { runDashboardMaintenance } from '../dashboardMaintenance.js';
 import {
+  readVacationSnapshot,
+} from '../vacation/persist.js';
+import { attachDashboardGamesClockDisplay } from '../vacation/dashboardClock.js';
+import {
   deleteAllPushSubscriptions,
   deletePushSubscriptionByEndpoint,
   queryPushSubscriptions,
@@ -242,13 +246,23 @@ export async function meProfile(claim: PartialClaims) {
       };
     }
     const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-    const [activeGames, ancillary] = await Promise.all([
+    const now = Date.now();
+    const [activeGames, ancillary, vacation] = await Promise.all([
       listActiveGameKeys(ddbDocClient, tableName, userId),
       resolveMeAncillary(userId, user),
+      readVacationSnapshot(ddbDocClient, tableName, userId, now),
     ]);
     return {
       statusCode: 200,
-      body: JSON.stringify(buildMeProfilePayload(user as Parameters<typeof buildMeProfilePayload>[0], ancillary, activeGames), Set_toJSON),
+      body: JSON.stringify(
+        buildMeProfilePayload(
+          user as Parameters<typeof buildMeProfilePayload>[0],
+          ancillary,
+          activeGames,
+          vacation,
+        ),
+        Set_toJSON,
+      ),
       headers,
     };
   } catch (err) {
@@ -270,6 +284,7 @@ export async function meDashboard(claim: PartialClaims, pars: { size: string, va
       };
     }
     const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+    const now = Date.now();
     await clearUserCleanedFlag(userId, user);
     let games = await loadDashboardGames(ddbDocClient, tableName, userId);
     const maintenance = await runDashboardMaintenance(
@@ -281,21 +296,35 @@ export async function meDashboard(claim: PartialClaims, pars: { size: string, va
         client: ddbDocClient,
         tableName,
         timeloss,
+        now: () => now,
       },
     );
     games = maintenance.games;
+    if (!maintenance.maintenanceRan) {
+      games = await attachDashboardGamesClockDisplay(ddbDocClient, tableName, games, now);
+    }
     if (maintenance.evictedIds.length > 0) {
       console.log(`me_dashboard evicted games for ${user.name}:`, maintenance.evictedIds);
     }
     console.log('Fetching challenges');
-    const [ancillary, challenges] = await Promise.all([
+    const [ancillary, challenges, vacation] = await Promise.all([
       resolveMeAncillary(userId, user),
       resolveMeChallenges(user),
+      readVacationSnapshot(ddbDocClient, tableName, userId, now),
     ]);
     console.log(`me_dashboard returning for ${user.name}, id ${user.id} with games`, games);
     return {
       statusCode: 200,
-      body: JSON.stringify(buildMeDashboardPayload(user as Parameters<typeof buildMeDashboardPayload>[0], ancillary, games, challenges), Set_toJSON),
+      body: JSON.stringify(
+        buildMeDashboardPayload(
+          user as Parameters<typeof buildMeDashboardPayload>[0],
+          ancillary,
+          games,
+          challenges,
+          vacation,
+        ),
+        Set_toJSON,
+      ),
       headers,
     };
   } catch (err) {
@@ -321,11 +350,16 @@ export async function nextGame(userid: string) {
         headers
       };
     }
-    const userRec = userData.Item as FullUser;
-    const games = await loadDashboardGames(
+    const now = Date.now();
+    const games = await attachDashboardGamesClockDisplay(
       ddbDocClient,
       process.env.ABSTRACT_PLAY_TABLE!,
-      userid,
+      await loadDashboardGames(
+        ddbDocClient,
+        process.env.ABSTRACT_PLAY_TABLE!,
+        userid,
+      ),
+      now,
     );
 
     // get list of all games where it is your turn
@@ -338,7 +372,8 @@ export async function nextGame(userid: string) {
       const thisPlayerIdx = game.players.findIndex(p => p.id === userid);
       // explicitly this player's turn
       if ((Array.isArray(game.toMove) && game.toMove.length > thisPlayerIdx + 1 && game.toMove[thisPlayerIdx]) || (game.toMove === thisPlayerIdx.toString())) {
-        const remaining = (game.players[thisPlayerIdx].time || 0) - (Date.now() - game.lastMoveTime);
+        const player = game.players[thisPlayerIdx]!;
+        const remaining = player.effectiveRemainingMs ?? player.time ?? 0;
         yourturn.push({ game, remaining });
       }
     }

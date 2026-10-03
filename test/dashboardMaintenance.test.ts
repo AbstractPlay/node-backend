@@ -21,6 +21,11 @@ function makeClient(store: Store) {
   return {
     send: async (command: { constructor: { name: string }; input: Record<string, unknown> }) => {
       const input = command.input;
+      if (command.constructor.name === 'GetCommand') {
+        const itemKey = input.Key as { pk: string; sk: string };
+        const item = store.get(key(itemKey.pk, itemKey.sk));
+        return { Item: item ? { ...item } : undefined };
+      }
       if (command.constructor.name === 'UpdateCommand') {
         const itemKey = input.Key as { pk: string; sk: string };
         const item = store.get(key(itemKey.pk, itemKey.sk)) ?? { pk: itemKey.pk, sk: itemKey.sk };
@@ -113,6 +118,7 @@ describe('runDashboardMaintenance', () => {
   it('runs timeout sweep without evicting completed games', async () => {
     const store: Store = new Map([
       [key('USER', USER_ID), { pk: 'USER', sk: USER_ID }],
+      [key('USER', 'p0'), { pk: 'USER', sk: 'p0' }],
     ]);
     const games = [activeGame()];
 

@@ -12,11 +12,20 @@ import {
 export type DashboardGame = {
   id: string;
   metaGame: string;
-  players: { id: string; name: string; time?: number }[];
+  players: {
+    id: string;
+    name: string;
+    time?: number;
+    effectiveRemainingMs?: number;
+    clockPaused?: boolean;
+    onVacation?: boolean;
+    vacationScheduled?: boolean;
+  }[];
   clockHard: boolean;
   noExplore?: boolean;
   toMove?: string | boolean[];
   lastMoveTime: number;
+  clockDisplayServerTime?: number;
   variants?: string[];
   gameStarted?: number;
   gameEnded?: number;

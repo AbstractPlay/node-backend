@@ -21,6 +21,7 @@
     "translate": "node bin/translate.mjs locales/en/apback.json",
     "prune-locales": "node bin/locale-prune.mjs locales/en/apback.json",
     "check-weblate-branch": "node bin/check-weblate-branch.mjs",
+    "check:clock-derivation": "node bin/check-clock-derivation.mjs",
     "merge-weblate-branch": "node bin/merge-weblate-branch.mjs",
     "dump-dashboard": "tsx bin/dump-dashboard.mjs",
     "import-bgg-wishlist": "tsx bin/import-bgg-wishlist.mjs",

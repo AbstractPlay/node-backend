@@ -1,5 +1,11 @@
 import { UpdateCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { DashboardGame } from './dashboardGames.js';
+import {
+  remainingBankMs,
+  wouldTimeOut,
+  type ClockGameSlice,
+} from './clockElapsed.js';
+import type { VacationWindow } from './vacation/types.js';
 
 export type TimelossFn = (
   check: boolean,
@@ -9,12 +15,15 @@ export type TimelossFn = (
   timestamp: number,
 ) => Promise<unknown>;
 
+export type GetVacationWindowFn = (playerId: string) => VacationWindow | null;
+
 export type GameTimeoutDeps = {
   client: DynamoDBDocumentClient;
   tableName: string;
   timeloss: TimelossFn;
   now?: () => number;
   log?: (message: string) => void;
+  getVacationWindow?: GetVacationWindowFn;
 };
 
 export type GameTimeoutResult = {
@@ -29,6 +38,18 @@ function isConditionalFailure(err: unknown): boolean {
     && (err as { name: string }).name === 'ConditionalCheckFailedException';
 }
 
+function clockSlice(game: DashboardGame): ClockGameSlice {
+  return {
+    players: game.players,
+    toMove: game.toMove,
+    lastMoveTime: game.lastMoveTime,
+  };
+}
+
+function vacationFor(deps: GameTimeoutDeps, playerId: string): VacationWindow | null {
+  return deps.getVacationWindow?.(playerId) ?? null;
+}
+
 /**
  * Detect and process a clock timeout for a single dashboard game.
  * Mutates the passed game object on success or when another request already processed.
@@ -39,18 +60,30 @@ export async function checkAndProcessGameTimeout(
 ): Promise<GameTimeoutResult> {
   const now = deps.now?.() ?? Date.now();
   const log = deps.log ?? (() => {});
+  const slice = clockSlice(game);
 
   if (!game.clockHard || !game.toMove || game.toMove === '') {
     return { processed: false, game };
   }
 
   if (Array.isArray(game.toMove)) {
-    let minTime = 0;
+    let minRemaining = 0;
     let minIndex = -1;
-    const elapsed = now - game.lastMoveTime;
     game.toMove.forEach((p, i) => {
-      if (p && game.players[i].time! - elapsed < minTime) {
-        minTime = game.players[i].time! - elapsed;
+      if (!p) {
+        return;
+      }
+      const player = game.players[i];
+      const remaining = remainingBankMs(
+        player.time ?? 0,
+        game.lastMoveTime,
+        now,
+        player.id,
+        slice,
+        vacationFor(deps, player.id),
+      );
+      if (remaining < minRemaining) {
+        minRemaining = remaining;
         minIndex = i;
       }
     });
@@ -94,7 +127,15 @@ export async function checkAndProcessGameTimeout(
   }
 
   const toMove = parseInt(String(game.toMove), 10);
-  if (game.players[toMove].time! - (now - game.lastMoveTime) >= 0) {
+  const onClock = game.players[toMove];
+  if (!wouldTimeOut({
+    bank: onClock.time ?? 0,
+    lastMoveTime: game.lastMoveTime,
+    now,
+    playerId: onClock.id,
+    game: slice,
+    vacationWindow: vacationFor(deps, onClock.id),
+  })) {
     return { processed: false, game };
   }
 

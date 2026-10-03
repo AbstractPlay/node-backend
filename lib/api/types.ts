@@ -34,6 +34,10 @@ export type User = {
   id: string;
   name: string;
   time?: number;
+  effectiveRemainingMs?: number;
+  clockPaused?: boolean;
+  onVacation?: boolean;
+  vacationScheduled?: boolean;
   settings?: UserSettings;
   draw?: string;
 };
@@ -49,6 +53,7 @@ export type UsersData = {
   avatarSeed?: string;
   bot: boolean;
   admin?: boolean;
+  onVacation?: boolean;
 };
 
 export type PartialClaims = {

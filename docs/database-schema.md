@@ -27,6 +27,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - `cleaned` (boolean, optional) — set by [dashboard cruft cleanup](/crons/dashboard-cruft-cleanup/) for inactive users; cleared on `me_dashboard` login
   - `dashboardMaintAt` (number, optional) — lease timestamp for per-user dashboard maintenance lock (`me_dashboard` prune/timeout sweep)
   - **Retired (Phase 5):** `games[]`, `gamesUpdate` — removed from all USER records in prod (Aug 2025)
+  - **Vacation (correspondence):** optional `vacationQuotaYear`, `vacationPauseMsUsed` (ms charged in current UTC quota year), `vacationStartsAt`, `vacationEndsAt`, `vacationOpenEnded`, `vacationStintStartedAt` — at most one stint; see [Vacation mode](/backend/subsystems/vacation/)
 
 - **Push subscriptions** — web push endpoints (one record per browser/device)
   - pk: `PUSH`
@@ -34,10 +35,11 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - fields: `payload`, `endpoint`, `updatedAt`
   - legacy: `sk: <userid>` (migrated on next `save_push` or removed on 404/410)
 
-- **User list** — public directory (name, country, lastSeen, stars, bggid; `about` fetched per profile via `player_about`)
+- **User list** — public directory (name, country, lastSeen, stars, bggid, optional `onVacation`; `about` fetched per profile via `player_about`)
   - pk: `USERS`
   - sk: `<userid>`
   - `about` — optional markdown bio (max 100KB UTF-8; no HTML or images; max 20 links). Not included in `user_names`; use public query `player_about`.
+  - `onVacation` (boolean, optional) — mirrored from `USER` when a **live** vacation stint is active (`user_names` only); cleared when stint ends.
   - `USER` record also stores `aboutSaveDay` / `aboutSaveCount` for rate limiting (10 saves per user per UTC day across human `about` and bot `description` edits)
   - **Display name:** `USER.name` and `USERS.name` are kept in sync when a user changes name (`new_setting` with `attribute: name`). Names must be unique among current human `USERS` and `BOT` display names (trim + case-insensitive check on `new_profile` and `new_setting`). The play UI resolves **current** names by userid via open query `user_names`.
   - **Snapshot names:** Fields such as `GAME.players[].name`, challenge `challenger` / `challengees`, feedback `authorName`, and representative-game `userName` store the name at write time and are **not** updated on rename (used for archives and for deriving past names in summarize).

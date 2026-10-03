@@ -8,6 +8,15 @@ import { countGameWatchers } from '../playerGameMarks.js';
 import { checkAndProcessGameTimeout } from '../dashboardMaintenance.js';
 import { setSeenTime } from './setSeenTime.js';
 import { timeloss } from './timeloss.js';
+import {
+  collectPlayerIdsFromGame,
+} from '../vacation/load.js';
+import { enrichLiveGameClockDisplay } from '../vacation/clockDisplay.js';
+import {
+  getPlayerVacationFlagsFromMap,
+  getVacationWindowFromMap,
+  prepareVacationPlayerStateForPlayerIds,
+} from '../vacation/persist.js';
 
 type FullGame = {
   id: string;
@@ -20,6 +29,7 @@ type FullGame = {
   gameEnded?: number;
   clockHard?: boolean;
   lastMoveTime?: number;
+  clockDisplayServerTime?: number;
   variants?: string[];
   note?: string;
 };
@@ -85,23 +95,38 @@ export async function game(
     if (loaded === undefined) {
       throw new Error(`Game ${pars.id}, metaGame ${pars.metaGame}, completed bit ${pars.cbit} not found`);
     }
+    let activeGameNow: number | undefined;
+    let vacationState: Awaited<ReturnType<typeof prepareVacationPlayerStateForPlayerIds>> | undefined;
     if ((pars.cbit === 0 || pars.cbit === '0') && loaded.toMove && loaded.toMove !== '') {
-      const timeoutResult = await checkAndProcessGameTimeout({
+      const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+      activeGameNow = Date.now();
+      const now = activeGameNow;
+      const timeoutGame = {
         id: loaded.id,
         metaGame: loaded.metaGame,
+        clockHard: loaded.clockHard ?? false,
         players: loaded.players.map(p => ({
           id: p.id,
           name: p.name,
           time: p.time,
         })),
-        clockHard: loaded.clockHard!,
-        toMove: loaded.toMove as string,
+        toMove: loaded.toMove as string | boolean[],
         lastMoveTime: loaded.lastMoveTime!,
         variants: loaded.variants,
-      }, {
+      };
+      const allPlayerIds = collectPlayerIdsFromGame(loaded);
+      vacationState = await prepareVacationPlayerStateForPlayerIds(
+        ddbDocClient,
+        tableName,
+        allPlayerIds,
+        now,
+      );
+      const timeoutResult = await checkAndProcessGameTimeout(timeoutGame, {
         client: ddbDocClient,
-        tableName: process.env.ABSTRACT_PLAY_TABLE!,
+        tableName,
         timeloss,
+        now: () => now,
+        getVacationWindow: getVacationWindowFromMap(vacationState.windows),
       });
       if (timeoutResult.processed) {
         const refreshed = await ddbDocClient.send(
@@ -130,6 +155,34 @@ export async function game(
           }
         }
       }
+    }
+    if (
+      loaded.lastMoveTime !== undefined
+      && loaded.toMove
+      && loaded.toMove !== ''
+    ) {
+      const displayNow = activeGameNow ?? Date.now();
+      if (vacationState === undefined) {
+        const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+        vacationState = await prepareVacationPlayerStateForPlayerIds(
+          ddbDocClient,
+          tableName,
+          collectPlayerIdsFromGame(loaded),
+          displayNow,
+        );
+      }
+      const withClock = enrichLiveGameClockDisplay(
+        {
+          players: loaded.players,
+          toMove: loaded.toMove,
+          lastMoveTime: loaded.lastMoveTime,
+        },
+        displayNow,
+        getVacationWindowFromMap(vacationState.windows),
+        getPlayerVacationFlagsFromMap(vacationState.flags),
+      );
+      loaded.players = withClock.players;
+      loaded.clockDisplayServerTime = withClock.clockDisplayServerTime;
     }
     if (userid !== undefined && userid !== null && userid !== '') {
       await setSeenTime(userid, pars.id);
