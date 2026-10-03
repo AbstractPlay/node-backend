@@ -35,6 +35,14 @@ jobs:
             exit 1
           fi
 
+      - name: Align crons AP pins with root manifest
+        run: |
+          STAGE=dev
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.base_ref }}" = "main" ]; then
+            STAGE=prod
+          fi
+          node scripts/sync-crons-ap-deps.mjs --stage "$STAGE"
+
       - name: Install NPM dependencies
         run: npm ci
 
@@ -76,6 +84,9 @@ jobs:
       - name: Create .npmrc
         run: echo "@abstractplay:registry=https://npm.pkg.github.com/" > .npmrc
       - run: echo "//npm.pkg.github.com/:_authToken=${{secrets.PAT_READ_PACKAGES}}" >> .npmrc
+
+      - name: Align crons AP pins with root manifest
+        run: node scripts/sync-crons-ap-deps.mjs --stage dev
 
       - name: Install NPM dependencies
         run: npm ci

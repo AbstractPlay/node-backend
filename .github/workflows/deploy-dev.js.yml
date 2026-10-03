@@ -69,6 +69,9 @@ jobs:
           exit 1
         fi
 
+    - name: Align crons AP pins with root manifest
+      run: node scripts/sync-crons-ap-deps.mjs --stage dev
+
     - name: Install NPM dependencies
       run: npm ci
 
@@ -92,7 +95,7 @@ jobs:
       with:
         commit_message: "deps: sync AP versions [skip ci]"
         # git-auto-commit `read -a` only uses the first line of multiline inputs — space-separate patterns.
-        file_pattern: "ci-deps.dev.json package-lock.json package.json"
+        file_pattern: "ci-deps.dev.json package-lock.json package.json crons/package.json"
         disable_globbing: true
 
 # --- MACHINE TRANSLATION PIPELINE START ---
