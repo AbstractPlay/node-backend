@@ -117,6 +117,23 @@ describe('checkAndProcessGameTimeout', () => {
     assert.equal(result.processed, true);
     assert.equal(timedOutPlayer, 1);
   });
+
+  it('does not process timeout when player is on vacation despite wall overtime', async () => {
+    const game = activeGame({ lastMoveTime: NOW - 120000 });
+    let timelossCalls = 0;
+    const pauseStart = NOW - 200000;
+    const result = await checkAndProcessGameTimeout(game, {
+      client: makeClient() as never,
+      tableName: TABLE,
+      timeloss: async () => { timelossCalls += 1; },
+      now: () => NOW,
+      getVacationWindow: () => ({ pauseStart, pauseEnd: NOW + 3_600_000 }),
+    });
+
+    assert.equal(result.processed, false);
+    assert.equal(timelossCalls, 0);
+    assert.equal(result.game.toMove, '0');
+  });
 });
 
 describe('sweepUserGameTimeouts', () => {

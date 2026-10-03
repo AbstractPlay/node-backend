@@ -34,6 +34,8 @@ export type User = {
   id: string;
   name: string;
   time?: number;
+  effectiveRemainingMs?: number;
+  clockPaused?: boolean;
   settings?: UserSettings;
   draw?: string;
 };

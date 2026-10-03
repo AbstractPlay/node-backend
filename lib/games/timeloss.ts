@@ -20,6 +20,16 @@ import {
   inAppSettingsMapFromUsers,
 } from '../notifications.js';
 import type { User } from '../api/types.js';
+import {
+  remainingBankMs,
+  wouldTimeOut,
+  type ClockGameSlice,
+} from '../clockElapsed.js';
+import { collectOnClockPlayerIds } from '../vacation/load.js';
+import {
+  getVacationWindowFromMap,
+  prepareVacationWindowsForPlayerIds,
+} from '../vacation/persist.js';
 
 type FullGame = {
   pk: string;
@@ -134,13 +144,38 @@ export async function timeloss(
   const game = hydrateGameState(data.Item as FullGame);
   if (check) {
     console.log('game.toMove', game.toMove);
+    const now = Date.now();
+    const slice: ClockGameSlice = {
+      players: game.players,
+      toMove: game.toMove,
+      lastMoveTime: game.lastMoveTime,
+    };
+    const onClockIds = collectOnClockPlayerIds(slice);
+    const vacationWindows = await prepareVacationWindowsForPlayerIds(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      onClockIds,
+      now,
+    );
+    const getVacationWindow = getVacationWindowFromMap(vacationWindows);
     if (Array.isArray(game.toMove)) {
-      let minTime = 0;
+      let minRemaining = 0;
       let minIndex = -1;
-      const elapsed = Date.now() - game.lastMoveTime;
       game.toMove.forEach((p: boolean, i: number) => {
-        if (p && game.players[i].time! - elapsed < minTime) {
-          minTime = game.players[i].time! - elapsed;
+        if (!p) {
+          return;
+        }
+        const onClockPlayer = game.players[i];
+        const remaining = remainingBankMs(
+          onClockPlayer.time ?? 0,
+          game.lastMoveTime,
+          now,
+          onClockPlayer.id,
+          slice,
+          getVacationWindow(onClockPlayer.id),
+        );
+        if (remaining < minRemaining) {
+          minRemaining = remaining;
           minIndex = i;
         }
       });
@@ -154,7 +189,15 @@ export async function timeloss(
         throw 'Game is already over!';
       }
       const toMove = parseInt(game.toMove as string, 10);
-      if (game.players[toMove].time! - (Date.now() - game.lastMoveTime) < 0) {
+      const onClockPlayer = game.players[toMove];
+      if (wouldTimeOut({
+        bank: onClockPlayer.time ?? 0,
+        lastMoveTime: game.lastMoveTime,
+        now,
+        playerId: onClockPlayer.id,
+        game: slice,
+        vacationWindow: getVacationWindow(onClockPlayer.id),
+      })) {
         player = toMove;
       } else {
         throw "Opponent's time isn't up!";

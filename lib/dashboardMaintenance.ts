@@ -5,6 +5,16 @@ import {
   sweepUserGameTimeouts,
   type TimelossFn,
 } from './gameTimeout.js';
+import {
+  collectOnClockPlayerIdsFromGames,
+} from './vacation/load.js';
+import {
+  enrichDashboardGamesClockDisplay,
+} from './vacation/clockDisplay.js';
+import {
+  getVacationWindowFromMap,
+  prepareVacationWindowsForPlayerIds,
+} from './vacation/persist.js';
 
 export const DASHBOARD_MAINTENANCE_LEASE_MS = 30_000;
 
@@ -73,16 +83,31 @@ export async function runDashboardMaintenance(
     return { games, evictedIds: [], maintenanceRan: false };
   }
 
+  const onClockIds = collectOnClockPlayerIdsFromGames(games);
+  const vacationWindows = await prepareVacationWindowsForPlayerIds(
+    client,
+    tableName,
+    onClockIds,
+    now,
+  );
+
   const maintainedGames = await sweepUserGameTimeouts(games, {
     client: deps.client,
     tableName: deps.tableName,
     timeloss: deps.timeloss,
     now: () => now,
     log: deps.log,
+    getVacationWindow: getVacationWindowFromMap(vacationWindows),
   });
 
+  const gamesWithClockDisplay = enrichDashboardGamesClockDisplay(
+    maintainedGames,
+    now,
+    getVacationWindowFromMap(vacationWindows),
+  );
+
   return {
-    games: maintainedGames,
+    games: gamesWithClockDisplay,
     evictedIds: [],
     maintenanceRan: true,
   };

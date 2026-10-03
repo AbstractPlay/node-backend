@@ -3,6 +3,7 @@ import type { ApiHandlerResult } from '../../../lib/api/routeTypes.js';
 import type { PartialClaims } from '../../../lib/api/types.js';
 import { analyticsAuthRoutes } from './analytics.js';
 import { announcementsAuthRoutes } from './announcements.js';
+import { vacationAuthRoutes } from './vacation.js';
 import { botsAuthRoutes } from './bots.js';
 import { challengesAuthRoutes } from './challenges.js';
 import { coreAuthRoutes } from './core.js';
@@ -33,6 +34,7 @@ export const authRoutes: Record<string, import('../../../lib/api/routeTypes.js')
   ...analyticsAuthRoutes,
   ...feedbackAuthRoutes,
   ...announcementsAuthRoutes,
+  ...vacationAuthRoutes,
 };
 
 export async function runAuthQuery(
