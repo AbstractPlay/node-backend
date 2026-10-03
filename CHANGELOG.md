@@ -17,6 +17,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Changed
 
+- **Vacation / clock display:** `effectiveRemainingMs` on dashboard and `get_game` is no longer clamped at zero, so soft-clock clients can show overtime (e.g. `-7d`) while server timeout logic stays unchanged.
 - **CI deps:** cross-branch merges keep target-branch `package.json` / lockfile via `.gitattributes` (`merge=ours`); dep relay auto-commit stages root manifests and `crons/package.json`; `postinstall` syncs crons AP pins from root.
 - **Dashboard:** `me_dashboard` no longer queries or returns in-app notifications (use `list_notifications` only).
 
