@@ -2,66 +2,21 @@
  * Keep crons/package.json AP pins aligned with the root lockfile and ci-deps.*.json.
  * ap-install-deps must run from repo root (workspace hoists node_modules there).
  */
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getLockfileVersions } from "@abstractplay/ap-deps-tools/lockfile-versions";
-
-const AP = {
-  gameslib: "@abstractplay/gameslib",
-  renderer: "@abstractplay/renderer",
-  recranks: "@abstractplay/recranks",
-};
+import { resolveStage, syncCronsApPins } from "./lib/crons-ap-pins.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const CRONS_ROOT = path.join(ROOT, "crons");
 
-const stageArg = process.argv.includes("--stage")
-  ? process.argv[process.argv.indexOf("--stage") + 1]
-  : undefined;
-const stageFromEnv = process.env.AP_DEPS_STAGE;
-const stage =
-  stageArg ??
-  (stageFromEnv === "prod" ? "prod" : stageFromEnv === "dev" ? "dev" : "dev");
-
-if (stage !== "dev" && stage !== "prod") {
+let stage;
+try {
+  stage = resolveStage();
+} catch (err) {
   console.error("usage: node scripts/sync-crons-ap-deps.mjs [--stage dev|prod]");
+  console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 }
 
-function readJson(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, "utf8"));
-}
-
-function writeJson(filePath, data) {
-  fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
-}
-
-const rootManifest = readJson(path.join(ROOT, `ci-deps.${stage}.json`));
-const rootPkg = readJson(path.join(ROOT, "package.json"));
-const lockVersions = getLockfileVersions(ROOT, Object.values(AP));
-
-const cronsPkgPath = path.join(CRONS_ROOT, "package.json");
-const cronsPkg = readJson(cronsPkgPath);
-cronsPkg.dependencies = cronsPkg.dependencies ?? {};
-
-for (const pkg of Object.values(AP)) {
-  const key = pkg.split("/").pop();
-  // Prefer root package.json (just written by ap-install-deps) over lockfile paths
-  // that may still reference a nested crons/node_modules/@abstractplay/* tree.
-  const version =
-    rootPkg.dependencies?.[pkg] ?? lockVersions[pkg] ?? rootManifest[key];
-  if (version && pkg in cronsPkg.dependencies) {
-    cronsPkg.dependencies[pkg] = version;
-  }
-}
-writeJson(cronsPkgPath, cronsPkg);
-
-const summary = {
-  stage,
-  gameslib: cronsPkg.dependencies[AP.gameslib],
-  renderer: cronsPkg.dependencies[AP.renderer],
-  recranks: cronsPkg.dependencies[AP.recranks],
-};
+const summary = syncCronsApPins(ROOT, stage);
 console.log("sync-crons-ap-deps: updated crons/package.json from root lockfile", summary);
