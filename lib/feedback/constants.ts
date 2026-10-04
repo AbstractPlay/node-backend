@@ -57,7 +57,9 @@ export const FEEDBACK_ALLOWED_ATTACHMENT_TYPES = [
   'image/png',
   'image/jpeg',
   'image/webp',
+  'image/svg+xml',
   'text/plain',
+  'text/markdown',
   'application/json',
 ] as const;
 
