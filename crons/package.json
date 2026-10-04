@@ -43,9 +43,9 @@
   },
   "packageManager": "npm@11.6.2",
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-37169840321.0",
+    "@abstractplay/gameslib": "1.0.0-ci-37171643488.0",
     "@abstractplay/recranks": "1.0.0-ci-35280155165.0",
-    "@abstractplay/renderer": "1.0.0-ci-37169432670.0",
+    "@abstractplay/renderer": "1.0.0-ci-37171215225.0",
     "@aws-sdk/client-cloudwatch": "^3.1128.0",
     "@aws-sdk/client-dynamodb": "^3.321.1",
     "@aws-sdk/client-s3": "^3.374.0",
