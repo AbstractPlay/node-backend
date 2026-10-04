@@ -7,10 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Entries below are grouped by theme and approximate ship window; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-10-03
+## [1.0.0-ci] - 2026-10-04
 
 ### Added
 
+- **Feedback:** `feedback_presign_upload` accepts SVG (`image/svg+xml`) and Markdown (`text/markdown`) attachments.
 - **Vacation mode:** correspondence clock pause (14×24h UTC quota per year) with `schedule_vacation`, `update_vacation`, and `stop_vacation` auth queries; server-side elapsed time via `lib/clockElapsed.ts` / `lib/vacation/` on timeout, moves, timeloss, and dashboard urgency; `vacation` snapshot on `me_profile` / `me_dashboard` and display seeds (`clockDisplayServerTime`, `effectiveRemainingMs`, `clockPaused`, per-player `onVacation` / `vacationScheduled`) on dashboard games and `get_game`; public `user_names` **`onVacation`** mirror and **`player_about.vacation`** detail; front **User Settings → Vacation** tab and **On vacation** badges on players list, challenge pickers, and profiles. See [Vacation mode](/backend/subsystems/vacation/).
 - **Notifications:** WebSocket `notification` verb after in-app items are created (`createNotification`); user-targeted delivery via `lib/wsMessageDelivery.ts`.
 - **Tournaments:** richer tournament-end email (division winner, standings, tournament link, next-series signup nudge); shorter tournament-end push (winner + nudge). Division standings logic extracted to `lib/tournaments/divisionStandings.ts` with prod-sampled regression fixtures and `npm run verify-division-standings`.

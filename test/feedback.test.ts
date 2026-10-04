@@ -266,8 +266,8 @@ test('validateFeedbackCreatePars accepts bug without attachments', () => {
   }
 });
 
-test('validateFeedbackPresignUploadPars accepts text and JSON attachments', () => {
-  for (const contentType of ['text/plain', 'application/json']) {
+test('validateFeedbackPresignUploadPars accepts non-raster attachment types', () => {
+  for (const contentType of ['text/plain', 'text/markdown', 'application/json', 'image/svg+xml']) {
     const result = validateFeedbackPresignUploadPars({
       contentType,
       contentLength: 128,

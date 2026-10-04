@@ -431,7 +431,7 @@ export function validateFeedbackPresignUploadPars(
   if (!(FEEDBACK_ALLOWED_ATTACHMENT_TYPES as readonly string[]).includes(pars.contentType)) {
     return {
       ok: false,
-      message: 'contentType must be image/png, image/jpeg, image/webp, text/plain, or application/json.',
+      message: `contentType must be one of: ${FEEDBACK_ALLOWED_ATTACHMENT_TYPES.join(', ')}.`,
     };
   }
   const contentLength = Number(pars.contentLength);

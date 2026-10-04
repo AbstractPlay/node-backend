@@ -66,8 +66,14 @@ function extensionForContentType(contentType: string): string {
   if (contentType === 'image/webp') {
     return 'webp';
   }
+  if (contentType === 'image/svg+xml') {
+    return 'svg';
+  }
   if (contentType === 'text/plain') {
     return 'txt';
+  }
+  if (contentType === 'text/markdown') {
+    return 'md';
   }
   if (contentType === 'application/json') {
     return 'json';
