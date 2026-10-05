@@ -5,8 +5,14 @@ import { enApgames, enApresults } from "../utils/gameslibEnLocaleBundles.js";
 import { gunzipSync, strFromU8 } from "fflate";
 import { load as loadIon } from "ion-js";
 import { ReservoirSampler } from "../utils/ReservoirSampler.js";
-import { resolveRenderLabels } from "../utils/resolveRenderLabels.js";
 import type { ThumbnailRenderOutput } from "../utils/thumbnailRenderRep.js";
+import {
+    buildThumbnailForMeta,
+    errorMessage,
+    logThumbnailProblemReport,
+    type ThumbnailUploadFailure,
+    type ThumbnailGenerationFailure,
+} from "../utils/thumbnailGeneration.js";
 import { THUMB_BUCKET, THUMBNAIL_BROKEN_METAS } from "../utils/thumbnailConfig.js";
 import { decompressGameState } from "../utils/gameState.js";
 import { skipCompletedGameWithoutState } from "../utils/completedGameRec.js";
@@ -215,36 +221,22 @@ export const handler: Handler = async () => {
             }
             console.log("GAME records processed");
 
+            const renderFailures: ThumbnailGenerationFailure[] = [];
             const allRecs = new Map<string, ThumbnailRenderOutput>();
             for (const [meta, entry] of samplerMap.entries()) {
-                const active = entry.active.getSample();
-                let rec: GameRec;
-                if (active.length > 0) {
-                    rec = active[0];
-                } else {
-                    const completed = entry.completed.getSample();
-                    if (completed.length === 0) {
-                        console.log(`No active or completed games found for meta "${meta}"! Failsafe needed.`);
-                        continue;
-                    }
-                    rec = completed[0];
-                }
-                let g = GameFactory(meta, decompressGameState(rec.state));
-                if (g === undefined) {
-                    throw new Error(`Error instantiating the following game record:\n${rec}`);
-                }
-                const stripped = g.serialize({ strip: true });
-                g = GameFactory(meta, stripped);
-                if (g === undefined) {
-                    throw new Error(
-                        `Error instantiating the following game record AFTER STRIPPING:\n${rec}`,
-                    );
-                }
-                const rep = g.render({}) as ThumbnailRenderOutput;
-                const resolved = resolveRenderLabels(rep, rec.players, (key, params) =>
+                const built = buildThumbnailForMeta(meta, entry, (key, params) =>
                     String(gamesI18n.t(key, params ?? {})),
                 );
-                allRecs.set(meta, resolved);
+                if (built.ok) {
+                    allRecs.set(meta, built.output);
+                } else {
+                    renderFailures.push(built.failure);
+                    if (built.failure.phase === "sample") {
+                        console.log(
+                            `No thumbnail for meta "${meta}": ${built.failure.message}`,
+                        );
+                    }
+                }
             }
             console.log(`Generated ${allRecs.size} thumbnails`);
 
@@ -260,9 +252,22 @@ export const handler: Handler = async () => {
                 meta,
                 body: JSON.stringify(rep),
             }));
-            await runInBatches(uploadEntries, THUMBNAIL_UPLOAD_CONCURRENCY, ({ meta, body }) =>
-                putThumbnailJson(meta, body),
-            );
+            const uploadFailures: ThumbnailUploadFailure[] = [];
+            await runInBatches(uploadEntries, THUMBNAIL_UPLOAD_CONCURRENCY, async ({ meta, body }) => {
+                try {
+                    await putThumbnailJson(meta, body);
+                } catch (err) {
+                    uploadFailures.push({ meta, message: errorMessage(err) });
+                }
+            });
+
+            logThumbnailProblemReport({
+                renderFailures,
+                uploadFailures,
+                generatedCount: allRecs.size,
+                samplerMetaCount: samplerMap.size,
+            });
+
             console.log("Thumbnails stored");
             console.log("ALL DONE");
         })
