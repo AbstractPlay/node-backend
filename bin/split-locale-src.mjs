@@ -3,6 +3,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { writeLocaleJson } from "./locale-json-format.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -72,8 +73,8 @@ function splitFile(lang) {
   }
 
   fs.mkdirSync(path.dirname(srcPath), { recursive: true });
-  fs.writeFileSync(srcPath, JSON.stringify(sortObjectKeys(src), null, 2) + "\n");
-  fs.writeFileSync(localePath, JSON.stringify(translations, null, 2) + "\n");
+  writeLocaleJson(srcPath, sortObjectKeys(src));
+  writeLocaleJson(localePath, translations);
 
   const srcKeys = Object.keys(src);
   const leafKeys = Object.keys(collectLeaves(translations));
