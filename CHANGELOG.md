@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Entries below are grouped by theme and approximate ship window; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-10-04
+## [1.0.0-ci] - 2026-10-05
 
 ### Added
 
@@ -23,6 +23,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Fixed
 
+- **Thumbnails:** daily cron skips per-meta render/upload failures and logs a structured `THUMBNAIL_GENERATION_REPORT` (meta, game id/sk, phase) so one bad sample does not fail the whole batch.
 - **Tournaments:** `endTournament` now awaits pending DynamoDB, email, and notification work.
 - **Challenges:** repair legacy standing-challenge `challengees` corruption on accept/leave; correct 3+ player fixed seating on game start; `bin/backfill-standing-challenge-challengees.mjs` for one-time DynamoDB cleanup.
 - **CI deps sync:** develop/prod deploy auto-commit stages `ci-deps.*.json`, `package-lock.json`, and root `package.json` together (space-separated `file_pattern`; no separate `crons/package.json` commit).
