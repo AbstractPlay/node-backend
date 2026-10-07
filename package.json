@@ -67,9 +67,9 @@
     "crons"
   ],
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-37522427924.0",
+    "@abstractplay/gameslib": "1.0.0-ci-37552171097.0",
     "@abstractplay/recranks": "1.0.0-ci-35280155165.0",
-    "@abstractplay/renderer": "1.0.0-ci-37229578007.0",
+    "@abstractplay/renderer": "1.0.0-ci-37551638648.0",
     "@aws-sdk/client-apigatewaymanagementapi": "3.1090.0",
     "@aws-sdk/client-cognito-identity-provider": "3.1090.0",
     "@aws-sdk/client-dynamodb": "3.1090.0",
