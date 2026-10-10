@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Entries below are grouped by theme and approximate ship window; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-10-05
+## [1.0.0-ci] - 2026-10-10
 
 ### Added
 
@@ -18,6 +18,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Changed
 
+- **Tournaments:** automated tournament games now start each player at the full `clockMax` bank (leg 2 uses the same cap); shared constants in `lib/tournaments/clock.ts`.
 - **CI deps:** cross-branch merges keep target-branch `package.json` / lockfile via `.gitattributes` (`merge=ours`); dep relay auto-commit stages root manifests and `crons/package.json`; `postinstall` syncs crons AP pins from root.
 - **Dashboard:** `me_dashboard` no longer queries or returns in-app notifications (use `list_notifications` only).
 
