@@ -22,6 +22,10 @@
 4. **Play** — games are normal `GAME` records linked via `TOURNAMENTGAME`.
 5. **End** — auth `end_tournament`; public `archive_tournaments` moves completed tournaments.
 
+### Time control
+
+Automated tournament games use a **hard** Fischer clock set when [`starttournaments`](../../crons/src/functions/starttournaments.ts) creates pairings (constants in [`lib/tournaments/clock.ts`](../../lib/tournaments/clock.ts)): players begin with the full **`clockMax`** bank (120 hours today), gain **`clockInc`** hours per move (36 hours today), and remain capped at **`clockMax`**. Leg-2 games reset both players to **`clockMax`** when spawned from a finished leg-1 game.
+
 ### Two-leg format (`matchLegs: 2`)
 
 - At start, only **leg 1** games are created (same round-robin pairings as single-leg).

@@ -29,6 +29,12 @@ import {
   tournamentSeriesCounterSk,
 } from "@backend/lib/tournaments/matchLegs.js";
 import { createTournamentPairingGame } from "@backend/lib/tournaments/createTournamentPairingGame.js";
+import {
+  AUTOMATED_TOURNAMENT_CLOCK_INC,
+  AUTOMATED_TOURNAMENT_CLOCK_MAX,
+  AUTOMATED_TOURNAMENT_CLOCK_START,
+  tournamentInitialBankMs,
+} from "@backend/lib/tournaments/clock.js";
 import { tournamentPlaySupported } from "@backend/lib/tournamentGame.js";
 import {
   acquireTournamentStartingLock,
@@ -494,9 +500,10 @@ async function startTournament(
     const journal = new WriteJournal();
     try {
     // enough players, start the tournament!
-    const clockStart = 72;
-    const clockInc = 36;
-    const clockMax = 120;
+    const clockStart = AUTOMATED_TOURNAMENT_CLOCK_START;
+    const clockInc = AUTOMATED_TOURNAMENT_CLOCK_INC;
+    const clockMax = AUTOMATED_TOURNAMENT_CLOCK_MAX;
+    const initialBankMs = tournamentInitialBankMs(clockMax);
     assignTournamentPlayerRatings(
       players,
       ratingsHighest,
@@ -505,7 +512,7 @@ async function startTournament(
     );
     players.sort((a, b) => b.rating! - a.rating!);
     const playersFull = await getPlayersSlowly(players.map(p => p.playerid));
-    const allGamePlayers = players.map(p => {return {id: p.playerid, name: p.playername, time: clockStart * 3600000} as User});
+    const allGamePlayers = players.map(p => {return {id: p.playerid, name: p.playername, time: initialBankMs} as User});
     const playersFull2: FullUser[] = [];
     for (const player of players)
       playersFull2.push(playersFull.find(p => p.id === player.playerid)!);
