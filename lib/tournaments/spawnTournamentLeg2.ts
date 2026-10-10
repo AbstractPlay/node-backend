@@ -8,6 +8,7 @@ import {
   type TournamentPairingPlayer,
 } from './createTournamentPairingGame.js';
 import { tournamentLeg2ExistsForPair } from './tournamentPairing.js';
+import { tournamentBankMsFromHours } from './clock.js';
 
 type FinishedTournamentGame = {
   id: string;
@@ -22,8 +23,10 @@ type FinishedTournamentGame = {
   clockMax: number;
 };
 
-function pairingPlayersFromGame(game: FinishedTournamentGame): [TournamentPairingPlayer, TournamentPairingPlayer] {
-  const clockMs = game.clockStart * 3_600_000;
+export function pairingPlayersFromGame(
+  game: FinishedTournamentGame,
+): [TournamentPairingPlayer, TournamentPairingPlayer] {
+  const clockMs = tournamentBankMsFromHours(game.clockMax);
   return [
     { id: game.players[0]!.id, name: game.players[0]!.name, time: clockMs },
     { id: game.players[1]!.id, name: game.players[1]!.name, time: clockMs },
