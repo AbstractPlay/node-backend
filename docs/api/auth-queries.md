@@ -127,7 +127,7 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `new_challenge` | Issue direct or standing challenge | `FullChallenge` fields |
+| `new_challenge` | Issue direct or standing challenge | `FullChallenge` fields; optional `teachingMode` (2P, non-simultaneous, no bots — forces `rated: false`) |
 | `challenge_revoke` | Cancel a challenge | `id`, `metaGame`, `standing`, `comment` |
 | `challenge_response` | Accept or decline | `response`, `id`, `standing`, `metaGame`, `comment` |
 | `start_solo_game` | Start a 1-player solo run (`rated: false`; optional `challengeSeed`, server assigns if omitted) | `metaGame`, optional `variants`, `challengeSeed`, clock fields |
@@ -137,6 +137,9 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `timeloss` | Report time loss | game ids |
 | `abandoned` | Mark game abandoned | game ids |
 | `invoke_pie` | Pie rule: reverse player order | game ids |
+| `teaching_grant_undo` | Teaching mode: grantor offers opponent review of last ply | `metaGame`, `id`, `cbit` (`0`) |
+| `teaching_keep_move` | Teaching mode: reviewer keeps the move | `metaGame`, `id`, `cbit` (`0`) |
+| `teaching_undo_move` | Teaching mode: reviewer undoes to ply-start snapshot | `metaGame`, `id`, `cbit` (`0`) |
 | `get_game` | Game with user context and `watchCount`; active games include `clockDisplayServerTime` and per on-clock player `effectiveRemainingMs` / `clockPaused` | `metaGame`, `id`, `cbit` |
 | `update_game_settings` | Per-game settings | game + settings |
 | `update_note` | User note on a game | `gameId`, note text |

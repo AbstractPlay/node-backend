@@ -13,6 +13,7 @@ type StandingChallenge = {
   clockHard: boolean;
   rated: boolean;
   noExplore?: boolean;
+  teachingMode?: boolean;
   limit: number;
   sensitivity: 'meta' | 'variants';
   suspended: boolean;

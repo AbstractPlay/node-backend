@@ -51,6 +51,20 @@ Users may set `settings.all.noDirectChallenges` to `true` (dashboard checkbox; s
 
 Open/standing challenges and the player block list are **not** affected.
 
+## Teaching mode
+
+Optional **`teachingMode: true`** on **`new_challenge`** (direct and standing). Teaching games are cooperative review sessions: either player can offer the opponent a chance to **keep** or **undo** the last completed ply batch during play (see [Games and moves](/backend/subsystems/games-and-moves/) — teaching RPCs).
+
+| Rule | Server behaviour |
+|------|------------------|
+| **Two players only** | Rejected when `numPlayers !== 2`. |
+| **Non-simultaneous** | Rejected when the meta-game has the `simultaneous` flag or a simultaneous `turnModel()`. Allowed turn models: `sequential`, `sequenced`, `skip-turn`. |
+| **Unrated** | `rated` is forced to **`false`** on issue even if the client sends `rated: true`. |
+| **No bots** | Rejected when the challenger or any challengee is a bot id. |
+| **Persistence** | Stored on `CHALLENGE` / `STANDINGCHALLENGE#*` rows (and fillable direct projections). Copied to the `GAME` at start as `teachingMode: true` with `rated: false`. |
+
+Validation lives in [`lib/challenges/teachingModeEligible.ts`](../../lib/challenges/teachingModeEligible.ts). Tournaments, events, and solo games do not use this flag.
+
 ## Bots
 
 Bot challengees are notified via the `bot-outbound` queue (HTTPS webhook), not email. Bots respond via their endpoint; moves go through `botQuery`.

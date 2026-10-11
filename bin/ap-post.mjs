@@ -59,6 +59,8 @@ Options:
 
 Environment:
   AP_API_BASE_URL_DEV / AP_API_BASE_URL_PROD   Per-stage API root override
+  AP_TEST_PASSWORD / AP_POST_PASSWORD          Non-interactive Cognito password (automation only)
+  AP_TEST_USER                                 Default userid when request JSON omits "userid"
 `);
   process.exit(1);
 }
@@ -130,7 +132,10 @@ function parsePostParams(raw) {
       + 'It is prompted on the command line when "userid" is set.',
     );
   }
-  const userid = o.userid === undefined ? undefined : String(o.userid);
+  let userid = o.userid === undefined ? undefined : String(o.userid);
+  if (userid === undefined && process.env.AP_TEST_USER?.trim()) {
+    userid = process.env.AP_TEST_USER.trim();
+  }
   return {
     query: o.query,
     pars: /** @type {Record<string, unknown>} */ (o.pars ?? {}),
@@ -142,6 +147,14 @@ function parsePostParams(raw) {
  * @param {string} prompt
  * @returns {Promise<string>}
  */
+/** @returns {string | undefined} */
+function resolveAuthPassword() {
+  const fromEnv =
+    process.env.AP_TEST_PASSWORD ?? process.env.AP_POST_PASSWORD ?? "";
+  const trimmed = fromEnv.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function promptPassword(prompt) {
   if (!process.stdin.isTTY) {
     throw new Error(
@@ -307,7 +320,9 @@ async function main() {
   }
 
   if (params.userid) {
-    const password = await promptPassword(`Password for ${params.userid}: `);
+    const password =
+      resolveAuthPassword() ??
+      (await promptPassword(`Password for ${params.userid}: `));
     console.error(`Authenticating as ${params.userid}…`);
     const idToken = await fetchIdToken(
       stageConfig,

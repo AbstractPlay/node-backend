@@ -18,6 +18,11 @@ import {
   submitMove,
 } from '../../../lib/games/playHandlers.js';
 import {
+  teachingGrantUndo,
+  teachingKeepMove,
+  teachingUndoMove,
+} from '../../../lib/games/teachingMode.js';
+import {
   setLastSeen,
   updateCommented,
   updateNote,
@@ -30,6 +35,9 @@ export const gamesAuthRoutes: Record<string, AuthRouteHandler> = {
   timeloss: bindAuth(checkForTimeloss),
   abandoned: bindAuth(checkForAbandonedGame),
   invoke_pie: bindAuth(invokePie),
+  teaching_grant_undo: bindAuth(teachingGrantUndo),
+  teaching_keep_move: bindAuth(teachingKeepMove),
+  teaching_undo_move: bindAuth(teachingUndoMove),
   update_note: bindAuth(updateNote),
   update_commented: bindAuth(updateCommented),
   set_lastSeen: bindAuth(setLastSeen),
