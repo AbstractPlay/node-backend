@@ -132,6 +132,7 @@ type FullChallenge = {
     clockHard: boolean;
     rated: boolean;
     noExplore?: boolean;
+    teachingMode?: boolean;
     comment?: string;
     dateIssued?: number;
 }
@@ -146,7 +147,8 @@ type StandingChallenge = {
     clockMax: number;
     clockHard: boolean;
     rated: boolean;
-    noExplore?: boolean
+    noExplore?: boolean;
+    teachingMode?: boolean;
     limit: number;
     sensitivity: "meta"|"variants";
     suspended: boolean;
@@ -295,6 +297,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                 clockHard: entry.clockHard,
                 rated: entry.rated,
                 noExplore: entry.noExplore || false,
+                teachingMode: entry.teachingMode === true,
                 comment: "Standing Challenge",
                 dateIssued: Date.now(),
             };
@@ -410,6 +413,7 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
           "clockHard": challenge.clockHard,
           "rated": challenge.rated,
           "noExplore": challenge.noExplore || false,
+          "teachingMode": challenge.teachingMode === true,
           "comment": challenge.comment || "",
           "dateIssued": challenge.dateIssued,
         }

@@ -94,6 +94,10 @@ import {
 } from '../recentCompletedGames.js';
 import { setSeenTime } from './setSeenTime.js';
 import { wsBroadcast } from '../wsBroadcast.js';
+import {
+  captureTeachingPlyStart,
+  shouldRefreshPlyStartForEngine,
+} from './teachingMode.js';
 import type { PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput } from '@aws-sdk/lib-dynamodb';
 import { validateToken } from '@sunknudsen/totp';
 import { getUsersLastSeen } from '../touchUserLastSeen.js';
@@ -175,6 +179,9 @@ type FullGame = {
   schedulingRound?: number;
   rematchOf?: string;
   noExplore?: boolean;
+  teachingMode?: boolean;
+  teachingUndo?: import('./teachingMode.js').TeachingUndo;
+  teachingPlyStart?: import('./teachingMode.js').TeachingPlyStart;
   commented?: number; // 0 or missing: no comments or post game variations, 1: has in-game comments (note this does NOT get updated for post-game comments/variations)
 }
 
@@ -396,6 +403,13 @@ export async function submitMove(userid: string, pars: {
     if (!engine) {
       logSubmitMoveFailure('unknown_metagame', userid, pars);
       return formatReturnError(`Unknown game type (${gameRefLabel(pars.metaGame, pars.id)}).`);
+    }
+
+    if (game.teachingUndo) {
+      logSubmitMoveFailure('teaching_review', userid, pars);
+      return formatReturnError(
+        `Finish teaching review (keep or undo) before playing (${gameRefLabel(pars.metaGame, pars.id)}).`,
+      );
     }
 
     // Validate moveNumber if provided (to catch stale browser submissions)
@@ -1430,6 +1444,13 @@ function applyMove(
   console.log(`My explorations: ${JSON.stringify(explorations[myPlayerIndex])}, Opponent explorations: ${JSON.stringify(explorations[opponentPlayerIndex])}`);
   let autoMoves = 0;
   const autoMovesPerPlayer: number[] = new Array(game.players.length).fill(0);
+
+  if (game.teachingMode === true) {
+    const seat0 = myPlayerIndex;
+    if (shouldRefreshPlyStartForEngine(engine, seat0)) {
+      game.teachingPlyStart = captureTeachingPlyStart(game, engine);
+    }
+  }
 
   // Apply the initial submitted move
   console.log(`Applying submitted move: ${move}`);
