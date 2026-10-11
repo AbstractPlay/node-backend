@@ -98,6 +98,7 @@ import {
   captureTeachingPlyStart,
   shouldRefreshPlyStartForEngine,
   teachingReviewBlocksPlay,
+  teachingModeBlocksPie,
 } from './teachingMode.js';
 import type { PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput } from '@aws-sdk/lib-dynamodb';
 import { validateToken } from '@sunknudsen/totp';
@@ -997,6 +998,12 @@ export async function invokePie(userid: string, pars: { id: string, metaGame: st
     if (teachingReviewErr) {
       return formatReturnError(
         `${teachingReviewErr} (${gameRefLabel(pars.metaGame, pars.id)}).`,
+      );
+    }
+    const teachingPieErr = teachingModeBlocksPie(game);
+    if (teachingPieErr) {
+      return formatReturnError(
+        `${teachingPieErr} (${gameRefLabel(pars.metaGame, pars.id)}).`,
       );
     }
     if (("pieInvoked" in game) && (game.pieInvoked === true)) {

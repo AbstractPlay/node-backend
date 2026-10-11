@@ -301,12 +301,24 @@ export function playerSeat0(
 export const TEACHING_REVIEW_PLAY_BLOCKED_MESSAGE =
   'Finish teaching review (keep or undo) before playing.';
 
+export const TEACHING_PIE_BLOCKED_MESSAGE =
+  'Seat swapping is not available in teaching mode games.';
+
 /** While `teachingUndo` is set, only `teaching_keep_move` / `teaching_undo_move` apply. */
 export function teachingReviewBlocksPlay(
   game: Pick<TeachingPlayGame, 'teachingUndo'>,
 ): string | null {
   if (game.teachingUndo) {
     return TEACHING_REVIEW_PLAY_BLOCKED_MESSAGE;
+  }
+  return null;
+}
+
+export function teachingModeBlocksPie(
+  game: Pick<TeachingPlayGame, 'teachingMode'>,
+): string | null {
+  if (game.teachingMode === true) {
+    return TEACHING_PIE_BLOCKED_MESSAGE;
   }
   return null;
 }
