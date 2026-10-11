@@ -21,7 +21,9 @@ import {
   keepTeachingMoveInPlace,
   undoTeachingMoveInPlace,
   teachingReviewBlocksPlay,
+  teachingModeBlocksPie,
   TEACHING_REVIEW_PLAY_BLOCKED_MESSAGE,
+  TEACHING_PIE_BLOCKED_MESSAGE,
   type TeachingPlayGame,
 } from '../lib/games/teachingMode.js';
 
@@ -97,6 +99,17 @@ describe('teaching mode challenge eligibility', () => {
       challengees: [{ id: 'human-2' }],
     });
     assert.equal(err, null);
+  });
+});
+
+describe('teaching mode pie gate', () => {
+  it('blocks seat swap in teaching games', () => {
+    assert.equal(teachingModeBlocksPie({}), null);
+    assert.equal(teachingModeBlocksPie({ teachingMode: false }), null);
+    assert.equal(
+      teachingModeBlocksPie({ teachingMode: true }),
+      TEACHING_PIE_BLOCKED_MESSAGE,
+    );
   });
 });
 

@@ -136,7 +136,7 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `submit_move` | Play a move | `metaGame`, `id`, `move`, … |
 | `timeloss` | Report time loss | game ids |
 | `abandoned` | Mark game abandoned | game ids |
-| `invoke_pie` | Pie rule: reverse player order | game ids |
+| `invoke_pie` | Pie rule: reverse player order (not available when `teachingMode` on game) | game ids |
 | `teaching_grant_undo` | Teaching mode: grantor offers opponent review of last ply | `metaGame`, `id`, `cbit` (`0`) |
 | `teaching_keep_move` | Teaching mode: reviewer keeps the move | `metaGame`, `id`, `cbit` (`0`) |
 | `teaching_undo_move` | Teaching mode: reviewer undoes to ply-start snapshot | `metaGame`, `id`, `cbit` (`0`) |
