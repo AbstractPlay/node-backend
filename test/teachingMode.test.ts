@@ -20,6 +20,8 @@ import {
   grantTeachingUndoInPlace,
   keepTeachingMoveInPlace,
   undoTeachingMoveInPlace,
+  teachingReviewBlocksPlay,
+  TEACHING_REVIEW_PLAY_BLOCKED_MESSAGE,
   type TeachingPlayGame,
 } from '../lib/games/teachingMode.js';
 
@@ -95,6 +97,23 @@ describe('teaching mode challenge eligibility', () => {
       challengees: [{ id: 'human-2' }],
     });
     assert.equal(err, null);
+  });
+});
+
+describe('teaching review play gate', () => {
+  it('blocks normal play while teachingUndo is set', () => {
+    assert.equal(teachingReviewBlocksPlay({}), null);
+    assert.equal(
+      teachingReviewBlocksPlay({
+        teachingUndo: {
+          grantorSeat: 1,
+          reviewerSeat: 0,
+          stackAtGrant: 3,
+          grantorSeatAfterKeep: 1,
+        },
+      }),
+      TEACHING_REVIEW_PLAY_BLOCKED_MESSAGE,
+    );
   });
 });
 

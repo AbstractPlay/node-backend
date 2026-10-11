@@ -97,6 +97,7 @@ import { wsBroadcast } from '../wsBroadcast.js';
 import {
   captureTeachingPlyStart,
   shouldRefreshPlyStartForEngine,
+  teachingReviewBlocksPlay,
 } from './teachingMode.js';
 import type { PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput } from '@aws-sdk/lib-dynamodb';
 import { validateToken } from '@sunknudsen/totp';
@@ -405,10 +406,11 @@ export async function submitMove(userid: string, pars: {
       return formatReturnError(`Unknown game type (${gameRefLabel(pars.metaGame, pars.id)}).`);
     }
 
-    if (game.teachingUndo) {
+    const teachingReviewErr = teachingReviewBlocksPlay(game);
+    if (teachingReviewErr) {
       logSubmitMoveFailure('teaching_review', userid, pars);
       return formatReturnError(
-        `Finish teaching review (keep or undo) before playing (${gameRefLabel(pars.metaGame, pars.id)}).`,
+        `${teachingReviewErr} (${gameRefLabel(pars.metaGame, pars.id)}).`,
       );
     }
 
@@ -991,6 +993,12 @@ export async function invokePie(userid: string, pars: { id: string, metaGame: st
     const game = hydrateGameState(data.Item as FullGame);
     console.log("got game in invokePie:");
     console.log(game);
+    const teachingReviewErr = teachingReviewBlocksPlay(game);
+    if (teachingReviewErr) {
+      return formatReturnError(
+        `${teachingReviewErr} (${gameRefLabel(pars.metaGame, pars.id)}).`,
+      );
+    }
     if (("pieInvoked" in game) && (game.pieInvoked === true)) {
       console.log("Double pie detected! Aborting!");
       return {
