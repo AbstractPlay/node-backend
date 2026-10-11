@@ -298,6 +298,19 @@ export function playerSeat0(
   return idx >= 0 ? idx : null;
 }
 
+export const TEACHING_REVIEW_PLAY_BLOCKED_MESSAGE =
+  'Finish teaching review (keep or undo) before playing.';
+
+/** While `teachingUndo` is set, only `teaching_keep_move` / `teaching_undo_move` apply. */
+export function teachingReviewBlocksPlay(
+  game: Pick<TeachingPlayGame, 'teachingUndo'>,
+): string | null {
+  if (game.teachingUndo) {
+    return TEACHING_REVIEW_PLAY_BLOCKED_MESSAGE;
+  }
+  return null;
+}
+
 export function teachingModePlayGate(
   game: Pick<TeachingPlayGame, 'teachingMode' | 'numPlayers' | 'metaGame'>,
 ): string | null {

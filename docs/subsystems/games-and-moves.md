@@ -52,7 +52,7 @@ When **`teachingMode: true`** on the live `GAME` (from the challenge at start), 
 
 ### Handshake
 
-1. **Normal play** — `submit_move` as usual. While `teachingUndo` is set, **`submit_move` is rejected**; only keep/undo RPCs apply.
+1. **Normal play** — `submit_move` as usual. While `teachingUndo` is set, **`submit_move` and `invoke_pie` are rejected**; only `teaching_keep_move` / `teaching_undo_move` apply for the reviewer.
 2. **Grant** (`teaching_grant_undo`) — Caller must be `toMove` (grantor). Requires `stack.length > 1`. Reviewer is the **actor of the last completed ply** (`engine.getPlies()` / gameslib ply walk). Sets `toMove` to the reviewer; stack unchanged.
 3. **Keep** (`teaching_keep_move`) — Reviewer only. Restores `toMove` to the grantor; clears `teachingUndo`.
 4. **Undo** (`teaching_undo_move`) — Reviewer only. Rolls the engine back to the stack length **before the reviewer’s trailing same-actor ply run** (sequenced double-activation included). Restores clocks from `teachingPlyStart` when `stackIndex` matches; trims `GAMEEXPLORATION#` rows with `move` ≥ new stack length; sets `toMove` to the reviewer for a replacement move.
