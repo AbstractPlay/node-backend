@@ -9,6 +9,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 - **Games** — full game state
   - pk: `GAME`
   - sk: `<metaGame>#<completedbit>#<gameid>`
+  - optional `teachingMode`, `teachingUndo`, `teachingPlyStart` on teaching games (see [Games and moves](/backend/subsystems/games-and-moves/))
 
 - **Game comments** — chat for a game
   - pk: `GAMECOMMENTS`
@@ -172,7 +173,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `STANDINGCHALLENGE#<metaGame>`
   - sk: `<challengeid>`
 
-- **Direct challenges** — challenge details (`openSlots` = seats open to anyone; named invitees on `challengees`)
+- **Direct challenges** — challenge details (`openSlots` = seats open to anyone; named invitees on `challengees`; optional `teachingMode` with `rated: false`)
   - pk: `CHALLENGE`
   - sk: `<challengeid>`
 

@@ -29,15 +29,43 @@ When a game completes, the completion bit becomes `1` and summary rows are writt
 | `timeloss` | auth | Report timeout |
 | `abandoned` | auth | Abandon game |
 | `invoke_pie` | auth | Pie rule — reverse player order |
+| `teaching_grant_undo` | auth | Teaching mode — offer opponent review of last ply (see below) |
+| `teaching_keep_move` | auth | Teaching mode — reviewer keeps the move under review |
+| `teaching_undo_move` | auth | Teaching mode — reviewer rolls back to start of their last ply batch |
 | `start_solo_game` | auth | Start solo play (`numPlayers: 1`, `rated: false`, optional `challengeSeed`) |
 | `set_game_state` | auth | Admin state injection |
 | `update_game_settings` | auth | Per-game settings |
 | `submit_comment` | auth | Game chat (`GAMECOMMENTS`) |
 | `update_note` | auth | Per-user notes (`NOTE`) |
 
+## Teaching mode (mutual undo)
+
+When **`teachingMode: true`** on the live `GAME` (from the challenge at start), players can cooperatively rewind recent plies. Implementation: [`lib/games/teachingMode.ts`](../../lib/games/teachingMode.ts).
+
+### `GAME` fields
+
+| Field | When set | Purpose |
+|-------|----------|---------|
+| `teachingMode` | Game create | Immutable flag; gates teaching RPCs. |
+| `teachingUndo` | After `teaching_grant_undo` | Handshake: `grantorSeat`, `reviewerSeat`, `stackAtGrant`, `grantorSeatAfterKeep` (0-based seats). Cleared on keep or undo. |
+| `teachingPlyStart` | Start of each human ply on `submit_move` | Snapshot: `stackIndex`, `playerTimes[]`, `lastMoveTime` — used to restore clocks on undo when the anchor matches the rollback target. |
+
+### Handshake
+
+1. **Normal play** — `submit_move` as usual. **`invoke_pie` is not available** on teaching games (seat swap is not recorded as an engine ply and cannot be cooperatively reverted). While `teachingUndo` is set, **`submit_move` is also rejected**; only `teaching_keep_move` / `teaching_undo_move` apply for the reviewer.
+2. **Grant** (`teaching_grant_undo`) — Caller must be `toMove` (grantor). Requires `stack.length > 1`. Reviewer is the **actor of the last completed ply** (`engine.getPlies()` / gameslib ply walk). Sets `toMove` to the reviewer; stack unchanged.
+3. **Keep** (`teaching_keep_move`) — Reviewer only. Restores `toMove` to the grantor; clears `teachingUndo`.
+4. **Undo** (`teaching_undo_move`) — Reviewer only. Rolls the engine back to the stack length **before the reviewer’s trailing same-actor ply run** (sequenced double-activation included). Restores clocks from `teachingPlyStart` when `stackIndex` matches; trims `GAMEEXPLORATION#` rows with `move` ≥ new stack length; sets `toMove` to the reviewer for a replacement move.
+
+Grant can be offered again on the next turn (including immediately after an undo, without an intervening move). There is no depth cap except the opening (`stack.length === 1`), where grant is rejected.
+
+### Ply anchor on `submit_move`
+
+For teaching games, before the human `engine.move()` in [`applyMove`](../../lib/games/playHandlers.ts), the server may refresh `teachingPlyStart` when the mover is **not** continuing the same seat’s sequenced batch (`shouldRefreshPlyStartForEngine`).
+
 ## Pie rule
 
-`invoke_pie` reverses the player list in the `GAME` record and updates watcher summaries. Pie eligibility uses `engine.getFlags()` (not static `gameinfo.flags`) so variant-gated `pie` / `pie-even` matches the front. Challenge and tournament creation use `effectiveFlags()` for `perspective`, `rotate90`, and EOG emails use it for `scores`. The stream projector refreshes each participant's `CURRENTGAMES#` row on the next `GAME` modify.
+`invoke_pie` reverses the player list in the `GAME` record and updates watcher summaries. Rejected when `teachingMode` is true on the live game. Pie eligibility uses `engine.getFlags()` (not static `gameinfo.flags`) so variant-gated `pie` / `pie-even` matches the front. Challenge and tournament creation use `effectiveFlags()` for `perspective`, `rotate90`, and EOG emails use it for `scores`. The stream projector refreshes each participant's `CURRENTGAMES#` row on the next `GAME` modify.
 
 ## Playground
 

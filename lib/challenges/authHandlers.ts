@@ -41,6 +41,10 @@ import {
   syncFillableProjection,
 } from './fillableProjection.js';
 import { loadChallengeById } from './loadChallenge.js';
+import {
+  normalizeTeachingChallengeFields,
+  validateTeachingChallengeIssue,
+} from './teachingModeEligible.js';
 import { getChallenges } from '../profile/me.js';
 import { loadDashboardGames } from '../dashboardGames.js';
 import { sendUserPush } from '../push/sendUserPush.js';
@@ -79,6 +83,7 @@ type FullChallenge = {
   clockHard: boolean;
   rated: boolean;
   noExplore?: boolean;
+  teachingMode?: boolean;
   comment?: string;
   dateIssued?: number;
   openSlots?: number;
@@ -99,6 +104,11 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
   const variantErr = validateChallengeVariantUids(challenge.metaGame, challenge.variants);
   if (variantErr) {
     return variantErr;
+  }
+  normalizeTeachingChallengeFields(challenge);
+  const teachingErr = await validateTeachingChallengeIssue(challenge);
+  if (teachingErr) {
+    return formatReturnError(teachingErr);
   }
   if (challenge.standing) {
     return await newStandingChallenge(userid, challenge);
@@ -165,6 +175,7 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
       "clockHard": challenge.clockHard,
       "rated": challenge.rated,
       "noExplore": challenge.noExplore || false,
+      "teachingMode": challenge.teachingMode === true,
       "comment": challenge.comment || "",
       "dateIssued": Date.now(),
       "openSlots": openSlots,
@@ -240,6 +251,7 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
           clockHard: challenge.clockHard,
           rated: challenge.rated,
           noExplore: challenge.noExplore || false,
+          teachingMode: challenge.teachingMode === true,
           comment: challenge.comment || "",
           dateIssued: Date.now(),
         },
@@ -312,6 +324,7 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
       "clockHard": challenge.clockHard,
       "rated": challenge.rated,
       "noExplore": challenge.noExplore || false,
+      "teachingMode": challenge.teachingMode === true,
       "comment": challenge.comment || "",
       "dateIssued": Date.now(),
     }
@@ -1099,13 +1112,14 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
         "id": gameId,
         "metaGame": challenge.metaGame,
         "numPlayers": challenge.numPlayers,
-        "rated": challenge.rated === true,
+        "rated": challenge.teachingMode === true ? false : challenge.rated === true,
         "players": gamePlayers,
         "clockStart": challenge.clockStart,
         "clockInc": challenge.clockInc,
         "clockMax": challenge.clockMax,
         "clockHard": challenge.clockHard,
         "noExplore": challenge.noExplore || false,
+        "teachingMode": challenge.teachingMode === true,
         "state": state,
         "toMove": whoseTurn,
         "lastMoveTime": now,
