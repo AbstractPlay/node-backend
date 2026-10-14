@@ -9,10 +9,11 @@ POST body is a flat JSON object with a `verb` field (not `query`/`pars`).
 | Verb | Purpose | Key fields |
 |------|---------|------------|
 | `move` | Submit a move for a game | `gameid`, `metaGame`, `move` |
+| `pie` | Invoke seat swap (pie) on the bot's turn | `gameid`, `metaGame` |
 
 Returns updated game JSON on success (`200`).
 
-Example body:
+Example (`move`):
 
 ```json
 {
@@ -22,6 +23,18 @@ Example body:
   "move": "d4"
 }
 ```
+
+Example (`pie` — games with the `pie` or `pie-even` flag, same turn rules as `move`):
+
+```json
+{
+  "verb": "pie",
+  "gameid": "uuid-of-game",
+  "metaGame": "dagnacht"
+}
+```
+
+Engines that report a **Swap** action (for example AiAi) should call `pie`, not `move` with `move: "Swap"`. Human players use auth `invoke_pie`; bots use this verb.
 
 ## Authentication
 
@@ -41,7 +54,7 @@ See [Bot protocol](/backend/bots/protocol/) and [Implementation guide](/backend/
 
 ## Reference client
 
-[`lib/botClient.ts`](../../lib/botClient.ts) — `getBotAccessToken()`, `submitBotMove()` with token cache and 401 retry.
+[`lib/botClient.ts`](../../lib/botClient.ts) — `getBotAccessToken()`, `submitBotMove()`, `submitBotPie()` with token cache and 401 retry.
 
 ## Related
 
