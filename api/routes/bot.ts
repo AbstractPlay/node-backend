@@ -2,10 +2,13 @@ import { headers } from '../../lib/api/http.js';
 import type { ApiHandlerResult, BotRouteHandler } from '../../lib/api/routeTypes.js';
 import type { PartialClaims } from '../../lib/api/types.js';
 import { handleMove } from '../../lib/bots/move.js';
+import { handlePie } from '../../lib/bots/pie.js';
 
 export const botRoutes: Record<string, BotRouteHandler> = {
   move: (claims, body) =>
     handleMove(claims, body as { gameid: string; move: string; metaGame: string }),
+  pie: (claims, body) =>
+    handlePie(claims, body as { gameid: string; metaGame: string }),
 };
 
 export async function runBotVerb(

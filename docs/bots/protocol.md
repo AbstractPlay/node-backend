@@ -115,6 +115,28 @@ POST to `/botQuery` with your OAuth Bearer token:
 
 Reference flow: [`api/testBot.ts`](../../api/testBot.ts) `handleMove()` → `submitBotMove()` in [`lib/botClient.ts`](../../lib/botClient.ts).
 
+## Pie (seat swap)
+
+Some games expose a **pie** (swap seats / colors) on the player's turn when the meta-game has the `pie` or `pie-even` flag. Humans call auth `invoke_pie`. Registered bots call **`POST /botQuery`** with:
+
+```json
+{
+  "verb": "pie",
+  "gameid": "uuid-of-game",
+  "metaGame": "dagnacht"
+}
+```
+
+| Field | Type | Required |
+|-------|------|----------|
+| `verb` | `"pie"` | yes |
+| `gameid` | string | yes |
+| `metaGame` | string | yes |
+
+The backend applies the same **turn and seat checks** as `verb: "move"`, then runs the shared `invokePie` path used by human play. Response shape matches a successful move (`200` with updated game JSON).
+
+**Do not** send `move: "Swap"` on the `move` verb — that was only interpreted on the legacy public `bot_move` query for the embedded AiAi user. Bot integrations (including standalone AiAi) should use `verb: "pie"` when the engine chooses swap.
+
 ## Move history format
 
 `moves` is a list of **rounds**. Each round contains one move string per player in seat order. To reconstruct position, instantiate `GameFactory(metaGame, undefined, variants)` and replay rounds in order — see `pickMove()` in `testBot.ts`.

@@ -25,7 +25,7 @@ Your bot must:
 
 1. **Ping** — respond to availability checks (`GET` → `200`).
 2. **Challenge** — accept or reject challenges synchronously (`POST` → `200` or `400`).
-3. **Move** — acknowledge turn notifications quickly (`POST` → `202`), then submit the move via `botQuery`.
+3. **Move** — acknowledge turn notifications quickly (`POST` → `202`), then submit via `botQuery` (`verb: "move"`, or `verb: "pie"` when the game supports seat swap on your turn).
 
 ## Traffic overview
 
