@@ -22,7 +22,6 @@ import {
   filterHumanIds,
 } from '../participants.js';
 import { enqueueBotOutbound } from '../botOutbound.js';
-import { notifyRegisteredBotsTurn } from '../bots/notifyTurn.js';
 import { realPingBot } from '../bots/realPingBot.js';
 import { getPlayers } from '../players/getPlayers.js';
 import { declinesDirectChallenges } from '../challenges.js';
@@ -1081,11 +1080,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       throw new Error(`Expected ${challenge.numPlayers} players for game start, got ${playerIDs.length}`);
     }
     const playersFull = await getParticipants(playerIDs);
-    let whoseTurn: string | boolean[] = "0";
     const info = gameinfo.get(challenge.metaGame);
-    if (info.flags !== undefined && info.flags.includes('simultaneous')) {
-      whoseTurn = playerIDs.map(() => true);
-    }
     const variants = challenge.variants;
     console.log(`Variants in the challenge object: ${JSON.stringify(variants)}`);
     let engine;
@@ -1096,6 +1091,12 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     if (!engine)
       throw new Error(`Unknown metaGame ${challenge.metaGame}`);
     console.log(`Variants in the game engine: ${JSON.stringify(engine.variants)}`);
+    let whoseTurn: string | boolean[] = '0';
+    if (info.flags !== undefined && info.flags.includes('simultaneous')) {
+      whoseTurn = playerIDs.map(() => true);
+    } else if (typeof engine.currplayer === 'number') {
+      whoseTurn = `${engine.currplayer - 1}`;
+    }
     const state = engine.serialize();
     const now = Date.now();
     const gamePlayers = playersFull.map(p => { return { "id": p.id, "name": p.name, "time": challenge.clockStart * 3600000 } }) as User[];
@@ -1133,7 +1134,12 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
 
     try {
       await Promise.all(list);
-      await notifyRegisteredBotsTurn(challenge.metaGame, gameId);
+      await realPingBot(challenge.metaGame, gameId, {
+        metaGame: challenge.metaGame,
+        state,
+        toMove: whoseTurn,
+        players: gamePlayers,
+      });
       await enqueueGameStartNotifications(
         ddbDocClient,
         process.env.ABSTRACT_PLAY_TABLE!,
