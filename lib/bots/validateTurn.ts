@@ -2,7 +2,9 @@ import { gameinfo } from '@abstractplay/gameslib';
 import { formatReturnError, headers } from '../api/http.js';
 import type { ApiHandlerResult } from '../api/routeTypes.js';
 import { getToMovePlayerIds, loadGameRecord } from '../botOutbound.js';
-import { getBotRecord } from '../participants.js';
+import { getBotRecord, type BotRecord } from '../participants.js';
+
+type BotTurnGame = NonNullable<Awaited<ReturnType<typeof loadGameRecord>>>;
 
 export type BotTurnContext = {
   metaGame: string;
@@ -15,7 +17,10 @@ export type BotTurnContext = {
 export async function validateBotTurn(
   botId: string,
   pars: BotTurnContext,
-): Promise<{ ok: true } | { ok: false; response: ApiHandlerResult }> {
+): Promise<
+  { ok: true; bot: BotRecord; game: BotTurnGame }
+  | { ok: false; response: ApiHandlerResult }
+> {
   if (!pars.metaGame) {
     return {
       ok: false,
@@ -51,5 +56,5 @@ export async function validateBotTurn(
     };
   }
 
-  return { ok: true };
+  return { ok: true, bot, game };
 }

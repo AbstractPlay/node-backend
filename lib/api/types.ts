@@ -20,6 +20,7 @@ export type UserSettings = {
       completedGameChat: boolean;
       tournamentStart: boolean;
       tournamentEnd: boolean;
+      bots?: boolean;
     };
   };
 };

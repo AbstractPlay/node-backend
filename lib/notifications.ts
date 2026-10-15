@@ -29,6 +29,7 @@ export const IN_APP_NOTIFICATION_CATEGORIES = [
   'feedbackDeleted',
   'feedbackReviewRequested',
   'feedbackNew',
+  'bots',
 ] as const;
 
 export type InAppNotificationCategory = typeof IN_APP_NOTIFICATION_CATEGORIES[number];
@@ -84,6 +85,9 @@ export function inAppCategoryForBody(body: NotificationBody): InAppNotificationC
       return 'feedbackReviewRequested';
     case 'feedbackNew':
       return 'feedbackNew';
+    case 'botMoveFailed':
+    case 'botOwnerPing':
+      return 'bots';
     default: {
       const _exhaustive: never = body;
       return _exhaustive;
@@ -246,6 +250,25 @@ export type NotificationBody =
     postId: string;
     kind: string;
     title: string;
+  }
+  | {
+    type: 'botMoveFailed';
+    botId: string;
+    botName: string;
+    gameId: string;
+    metaGame: string;
+    variants: string[];
+    verb: 'move' | 'pie';
+    detail?: string;
+  }
+  | {
+    type: 'botOwnerPing';
+    botId: string;
+    botName: string;
+    message: string;
+    gameId?: string;
+    metaGame?: string;
+    variants?: string[];
   };
 
 export type NotificationRecord = {
