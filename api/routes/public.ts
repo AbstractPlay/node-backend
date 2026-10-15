@@ -1,7 +1,6 @@
 import type { AnnouncementGetPars, AnnouncementsListPars } from '../../lib/announcements/index.js';
 import { headers } from '../../lib/api/http.js';
 import type { ApiHandlerResult, PublicRouteHandler } from '../../lib/api/routeTypes.js';
-import { botMove } from '../../lib/games/playHandlers.js';
 import {
   allStandingChallenges,
   announcementGetOpen,
@@ -42,7 +41,6 @@ export const publicRoutes: Record<string, PublicRouteHandler> = {
   meta_games: () => metaGamesDetails(),
   get_game: (pars) => game('', pars),
   get_public_exploration: (pars) => getPublicExploration(pars),
-  bot_move: (pars) => botMove(pars),
   get_tournaments: () => getTournaments(),
   get_old_tournaments: (pars) => getOldTournaments(pars),
   get_tournament: (pars) => getTournament(pars),

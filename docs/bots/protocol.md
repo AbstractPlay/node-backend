@@ -135,7 +135,7 @@ Some games expose a **pie** (swap seats / colors) on the player's turn when the 
 
 The backend applies the same **turn and seat checks** as `verb: "move"`, then runs the shared `invokePie` path used by human play. Response shape matches a successful move (`200` with updated game JSON).
 
-**Do not** send `move: "Swap"` on the `move` verb — that was only interpreted on the legacy public `bot_move` query for the embedded AiAi user. Bot integrations (including standalone AiAi) should use `verb: "pie"` when the engine chooses swap.
+Use `verb: "pie"` when the engine chooses a seat swap (for example Tumbleweed opening pie). Do not send `move: "Swap"` on the `move` verb.
 
 ## Move history format
 

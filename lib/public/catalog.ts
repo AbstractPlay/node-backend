@@ -75,15 +75,9 @@ export async function userNames() {
     ]);
     const adminIds = new Set((adminData.Items ?? []).map((user) => String(user.sk)));
 
-    const users = data.Items;
-    if (users == undefined) {
+    const users = (data.Items ?? []).filter(u => u.sk !== 'SkQfHAjeDxs8eeEnScuYA');
+    if (users.length === 0 && (data.Items?.length ?? 0) === 0) {
       throw new Error("Found no users?");
-    }
-
-    // tweak bot info
-    const idx = users.findIndex(u => u.sk === process.env.AIAI_USERID);
-    if (idx !== -1) {
-      users[idx].lastSeen = Date.now();
     }
 
     const userResults = users.map(u => ({
