@@ -27,8 +27,10 @@ export async function touchUserLastSeen(
     await client.send(new UpdateCommand({
       TableName: tableName,
       Key: { pk: 'USERS', sk: userId },
-      ConditionExpression: 'attribute_not_exists(lastSeen) OR lastSeen < :touchBefore',
+      ConditionExpression:
+        'attribute_exists(#name) AND (attribute_not_exists(lastSeen) OR lastSeen < :touchBefore)',
       UpdateExpression: 'SET lastSeen = :now',
+      ExpressionAttributeNames: { '#name': 'name' },
       ExpressionAttributeValues: {
         ':now': now,
         ':touchBefore': touchBefore,

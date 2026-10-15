@@ -52,6 +52,7 @@ import {
   optionalNotificationNote,
   type InAppNotificationUserSettings,
 } from '../notifications.js';
+import { isBlankDisplayName } from '../userDisplayName.js';
 
 type Challenge = {
   metaGame: string;
@@ -127,6 +128,12 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
   let challengeePlayers: FullUser[] = [];
   if (humanChallengees.length > 0) {
     challengeePlayers = await getPlayers(humanChallengees.map(c => c.id));
+    for (const challengee of humanChallengees) {
+      const player = challengeePlayers.find(p => p.id === challengee.id);
+      if (!player || isBlankDisplayName(player.name)) {
+        return formatReturnError('Opponent has not completed registration.');
+      }
+    }
     directChallengeOptOutUser = challengeePlayers.find(p => declinesDirectChallenges(p.settings));
   }
   const skipChallengeeNotify = directChallengeOptOutUser !== undefined;

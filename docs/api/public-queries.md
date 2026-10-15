@@ -8,7 +8,7 @@ POST body: `{ "query": "<name>", "pars": { ... } }`
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `user_names` | Player and bot directory for challenges (no `about` field; use `player_about`). Humans may include `onVacation: true` during a live vacation stint. | — |
+| `user_names` | Player and bot directory for challenges (no `about` field; use `player_about`). Omits humans who have not completed registration (no `USERS.name`). Humans may include `onVacation: true` during a live vacation stint. | — |
 | `player_highlights` | Highlighted games for a player page | `userId` |
 | `player_about` | Player or bot bio (`about` / `description`) and optional `vacation` object (stint times, open-ended quota remaining) | `userId` |
 | `meta_games` | Meta game counts and stats | — |
