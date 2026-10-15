@@ -3,12 +3,14 @@ import type { ApiHandlerResult, BotRouteHandler } from '../../lib/api/routeTypes
 import type { PartialClaims } from '../../lib/api/types.js';
 import { handleMove } from '../../lib/bots/move.js';
 import { handlePie } from '../../lib/bots/pie.js';
+import { handlePingOwner } from '../../lib/bots/pingOwner.js';
 
 export const botRoutes: Record<string, BotRouteHandler> = {
   move: (claims, body) =>
     handleMove(claims, body as { gameid: string; move: string; metaGame: string }),
   pie: (claims, body) =>
     handlePie(claims, body as { gameid: string; metaGame: string }),
+  pingOwner: (claims, body) => handlePingOwner(claims, body),
 };
 
 export async function runBotVerb(

@@ -241,3 +241,63 @@ export async function submitBotPie(params: SubmitBotPieParams): Promise<SubmitBo
 
   return result;
 }
+
+export type SubmitBotPingOwnerParams = {
+  message: string;
+  gameid?: string;
+  metaGame?: string;
+  clientId: string;
+  clientSecret: string;
+};
+
+export async function submitBotPingOwner(params: SubmitBotPingOwnerParams): Promise<SubmitBotMoveResult> {
+  const botQueryUrl = process.env.BOT_QUERY_URL;
+  if (!botQueryUrl) {
+    throw new Error('BOT_QUERY_URL environment variable is not set');
+  }
+
+  const attempt = async (token: string, _attemptNumber: number): Promise<SubmitBotMoveResult> => {
+    const tokenClaims = summarizeJwtForLog(token);
+    const payload: Record<string, string> = {
+      verb: 'pingOwner',
+      message: params.message,
+    };
+    if (params.gameid && params.metaGame) {
+      payload.gameid = params.gameid;
+      payload.metaGame = params.metaGame;
+    }
+    const response = await fetch(botQueryUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const body = await response.text();
+    const likelyApiGatewayAuthFailure = isApiGatewayUnauthorized(response.status, body);
+    return {
+      statusCode: response.status,
+      body,
+      debug: {
+        clientId: params.clientId,
+        botQueryUrl: summarizeUrlForLog(botQueryUrl),
+        tokenClaims,
+        retriedAuth: false,
+        likelyApiGatewayAuthFailure,
+      },
+    };
+  };
+
+  let token = await getBotAccessToken(params.clientId, params.clientSecret);
+  let result = await attempt(token, 1);
+  if (result.statusCode === 401) {
+    tokenCaches.delete(params.clientId);
+    token = await getBotAccessToken(params.clientId, params.clientSecret);
+    result = await attempt(token, 2);
+    result.debug.retriedAuth = true;
+  }
+
+  return result;
+}

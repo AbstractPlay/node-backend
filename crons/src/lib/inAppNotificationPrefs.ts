@@ -6,7 +6,8 @@ export type InAppNotificationCategory =
     | "eventInvitation"
     | "completedGameChat"
     | "tournamentStart"
-    | "tournamentEnd";
+    | "tournamentEnd"
+    | "bots";
 
 export type InAppNotificationUserSettings = {
     all?: {
