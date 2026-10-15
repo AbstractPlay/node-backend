@@ -1,6 +1,12 @@
 'use strict';
 
-import { S3Client, GetObjectCommand, ListObjectsV2Command, type _Object } from "@aws-sdk/client-s3";
+import {
+    DeleteObjectCommand,
+    GetObjectCommand,
+    ListObjectsV2Command,
+    S3Client,
+    type _Object,
+} from "@aws-sdk/client-s3";
 import { Handler } from "aws-lambda";
 import { addResource } from '@abstractplay/gameslib';
 import { type APGameRecord } from '@abstractplay/recranks';
@@ -16,13 +22,17 @@ import { putRecordsJson } from "../utils/recordsJson.js";
 import { skipCompletedGameWithoutState } from "../utils/completedGameRec.js";
 import { buildGameRecordForDumpRow } from "../utils/archiveGameRecord.js";
 import { pruneOrphanMetaShards } from "../utils/pruneMetaShards.js";
+import {
+    aiaiBotRecordsCanonicalPlayerId,
+    canonicalRecordsPlayerId,
+    LEGACY_AIAI_BOT_PLAYER_ID,
+    seedRegisteredBotIdsForRecords,
+} from "../utils/recordsPlayerAlias.js";
 
 const REGION = "us-east-1";
 const s3 = new S3Client({region: REGION});
 const DUMP_BUCKET = "abstractplay-db-dump";
 const REC_BUCKET = "records.abstractplay.com";
-/** Legacy built-in AI opponent (see node-backend AIAI_USERID). */
-const LEGACY_BOT_ID = "SkQfHAjeDxs8eeEnScuYA";
 
 export const handler: Handler = async (event: any, context?: any) => {
   const i18nInstance = i18next as unknown as i18n;
@@ -80,7 +90,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     const tournaments: Tournament[] = [];
     const events: OrgEvent[] = [];
     const eventGames: OrgEventGame[] = [];
-    const registeredBots = new Set<string>([LEGACY_BOT_ID]);
+    const registeredBots = seedRegisteredBotIdsForRecords();
     for (const file of dataFiles) {
         console.log(`Loading ${file.Key}`);
         const command = new GetObjectCommand({
@@ -192,7 +202,7 @@ export const handler: Handler = async (event: any, context?: any) => {
         allRecs.push(rec);
         pushToMap(metaRecs, gdata.metaGame, rec);
         for (const p of gdata.players) {
-            pushToMap(userRecs, p.id, rec);
+            pushToMap(userRecs, canonicalRecordsPlayerId(p.id), rec);
         }
         if (event !== null) {
             let id: string|undefined;
@@ -225,6 +235,19 @@ export const handler: Handler = async (event: any, context?: any) => {
         await putRecordsJson(s3, `player/${player}.json`, recs);
     }
     console.log("Player recs done");
+    const canonicalAiai = aiaiBotRecordsCanonicalPlayerId();
+    if (canonicalAiai.length > 0) {
+        const legacyShard = `player/${LEGACY_AIAI_BOT_PLAYER_ID}.json`;
+        try {
+            await s3.send(new DeleteObjectCommand({
+                Bucket: REC_BUCKET,
+                Key: legacyShard,
+            }));
+            console.log(`Removed legacy AiAi player shard ${legacyShard} (canonical ${canonicalAiai})`);
+        } catch (err) {
+            console.error(`Failed to delete legacy player shard ${legacyShard}`, err);
+        }
+    }
     for (const [eventid, recs] of eventRecs.entries()) {
         await putRecordsJson(s3, `event/${eventid}.json`, recs);
     }

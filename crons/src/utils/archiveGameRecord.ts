@@ -10,6 +10,7 @@ import { decompressGameState } from "./gameState.js";
 import { encodeRecordGameId } from "./recordGameId.js";
 import { resolveGameVariantUids } from "./resolveGameVariants.js";
 import { gameRecordIsUnrated } from "./recordUnrated.js";
+import { canonicalRecordsPlayerId } from "./recordsPlayerAlias.js";
 
 type ArchivedState = {
     gameover?: boolean;
@@ -161,11 +162,16 @@ export function buildGameRecordForDumpRow(
 
     const unrated = gameRecordIsUnrated(gdata.metaGame, variantUids, gdata.rated);
     const uid = encodeRecordGameId(gdata.id, gdata.metaGame, variantUids);
-    const players = gdata.players.map((p) => ({
-        uid: p.id,
-        name: p.name,
-        isai: ctx.registeredBots.has(p.id) ? true : undefined,
-    }));
+    const players = gdata.players.map((p) => {
+        const canonicalId = canonicalRecordsPlayerId(p.id);
+        return {
+            uid: canonicalId,
+            name: p.name,
+            isai: ctx.registeredBots.has(p.id) || ctx.registeredBots.has(canonicalId)
+                ? true
+                : undefined,
+        };
+    });
 
     if (g !== undefined) {
         const rec = g.genRecord({
