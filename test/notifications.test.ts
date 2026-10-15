@@ -144,6 +144,18 @@ describe('inApp notification prefs', () => {
     );
     assert.equal(
       inAppCategoryForBody({
+        type: 'botMoveFailed',
+        botId: 'bot-1',
+        botName: 'My Bot',
+        gameId: 'g1',
+        metaGame: 'go',
+        variants: [],
+        verb: 'move',
+      }),
+      'bots',
+    );
+    assert.equal(
+      inAppCategoryForBody({
         type: 'tournamentStart',
         tournamentId: 'tour-1',
         metaGame: 'go',

@@ -10,8 +10,11 @@ POST body is a flat JSON object with a `verb` field (not `query`/`pars`).
 |------|---------|------------|
 | `move` | Submit a move for a game | `gameid`, `metaGame`, `move` |
 | `pie` | Invoke seat swap (pie) on the bot's turn | `gameid`, `metaGame` |
+| `pingOwner` | Notify the bot owner (in-app) of an internal error | `message`; optional `gameid` + `metaGame` (both or neither) |
 
-Returns updated game JSON on success (`200`).
+Returns updated game JSON on success (`200`) for `move` and `pie`. `pingOwner` returns `{ "notified": true }` or `{ "notified": false, "reason": "rate_limited" }` (still HTTP `200` when rate-limited).
+
+When `move` or `pie` fails after turn validation, AP notifies the bot owner and posts a system in-game chat message (deduped per game). Turn-gate errors (for example not the bot's turn) do not alert the owner.
 
 Example (`move`):
 
@@ -36,6 +39,17 @@ Example (`pie` — games with the `pie` or `pie-even` flag, same turn rules as `
 
 Engines that report a **Swap** action (for example AiAi) should call `pie`, not `move` with `move: "Swap"`. Human players use auth `invoke_pie`; bots use this verb.
 
+Example (`pingOwner` — optional escape hatch for crashes or logic errors your service detects locally; rate-limited per bot):
+
+```json
+{
+  "verb": "pingOwner",
+  "message": "Java think process exited with code 1",
+  "gameid": "uuid-of-game",
+  "metaGame": "amazons"
+}
+```
+
 ## Authentication
 
 1. Bot owner creates a bot via auth `create_bot` — provisions a Cognito app client and `BOT` record. See [Registration](/backend/bots/registration/).
@@ -54,7 +68,7 @@ See [Bot protocol](/backend/bots/protocol/) and [Implementation guide](/backend/
 
 ## Reference client
 
-[`lib/botClient.ts`](../../lib/botClient.ts) — `getBotAccessToken()`, `submitBotMove()`, `submitBotPie()` with token cache and 401 retry.
+[`lib/botClient.ts`](../../lib/botClient.ts) — `getBotAccessToken()`, `submitBotMove()`, `submitBotPie()`, `submitBotPingOwner()` with token cache and 401 retry.
 
 ## Related
 

@@ -52,6 +52,7 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `completedGameChat` | `completedGameChat` |
 | `tournamentStart` | `tournamentStart` (crons `starttournaments`) |
 | `tournamentEnd` | `tournamentEnd` (node-backend `endTournament`) |
+| `bots` | `botMoveFailed`, `botOwnerPing` |
 
 | `body.type` | When created | Front display |
 |-------------|--------------|---------------|
@@ -63,6 +64,8 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `ratingChange` | Daily batch Glicko diff after summarize (crons stack) | Game name links to `/ratings/{metaGame}`; variant labels in message when applicable |
 | `tournamentStart` | Tournament series starts (`starttournaments` cron) | Tournament name links to `/tournament/{tournamentId}`; variant labels when applicable; dismiss only |
 | `tournamentEnd` | All tournament divisions complete (`endTournament`) | Tournament name links to `/tournament/{tournamentId}`; includes division winner name when available; dismiss only |
+| `botMoveFailed` | Registered bot `botQuery` `move` or `pie` fails after turn validation | Bot name + game link to `/move/{metaGame}/0/{gameId}` when applicable |
+| `botOwnerPing` | Bot calls `botQuery` `pingOwner` | Bot name + owner-supplied message; optional game link |
 
 Tournament-end **email** includes division winner, plain-text standings for the recipient’s division, a link to the finished tournament, and a signup nudge for the next series (earliest start window and current signup count). **Push** uses winner + nudge only (no standings table); tap opens `/tournament/{tournamentId}`.
 

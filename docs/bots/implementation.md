@@ -37,7 +37,7 @@ Deployed as the `testBot` Lambda with HTTP routes on **dev** only (`custom.testB
 | Module | Use on | Purpose |
 |--------|--------|---------|
 | [`lib/botVerify.ts`](../../lib/botVerify.ts) | Your server | Verify AP webhook signatures |
-| [`lib/botClient.ts`](../../lib/botClient.ts) | Your server | OAuth token cache + `botQuery` `move` / `pie` submission |
+| [`lib/botClient.ts`](../../lib/botClient.ts) | Your server | OAuth token cache + `botQuery` `move` / `pie` / `pingOwner` |
 | [`lib/botOutbound.ts`](../../lib/botOutbound.ts) | AP backend | Build payloads, sign, POST to bots |
 | [`lib/botSigning.ts`](../../lib/botSigning.ts) | AP backend | Ed25519 signing for outbound webhooks |
 | [`lib/botSecrets.ts`](../../lib/botSecrets.ts) | AP backend | Cognito secret rotation |
@@ -64,9 +64,10 @@ Challenge acceptance triggers `botRespondToChallenge()` → `respondedChallenge(
 2. **Implement GET ping** — return `200` and `{ "operational": true }`.
 3. **Implement signed POST handler** — verify signatures before parsing JSON.
 4. **Challenge** — return `200` or `400` synchronously; no background work.
-5. **Move** — return `202` within the timeout (30s on AP's `postToBot`); compute move asynchronously; call `botQuery` with `verb: "move"`. If your engine chooses **pie** (seat swap), use `verb: "pie"` instead — see [Protocol — Pie](/backend/bots/protocol/#pie-seat-swap).
-6. **Register** with `create_bot`; store `clientId` / `clientSecret` securely.
-7. **Test on dev** before creating a prod bot.
+5. **Move** — return `202` within the timeout (30s on AP's `postToBot`); compute move asynchronously; call `botQuery` with `verb: "move"`. If your engine chooses **pie** (seat swap), use `verb: "pie"` instead — see [Protocol — Pie](/backend/bots/protocol/#pie-seat-swap). If `move`/`pie` fails validation, AP notifies your bot owner and posts a system in-game chat line (you do not need to duplicate that).
+6. **Internal errors** — when your worker crashes or cannot think (errors AP cannot see), call `verb: "pingOwner"` with a short `message` and optional `gameid`/`metaGame`. Do not use `pingOwner` for failed `move`/`pie` responses; those already alert the owner.
+7. **Register** with `create_bot`; store `clientId` / `clientSecret` securely.
+8. **Test on dev** before creating a prod bot.
 
 ## Environment variables (your bot)
 
