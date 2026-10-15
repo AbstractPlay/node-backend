@@ -73,6 +73,13 @@ custom:
         - Ref: AWS::Region
         - ".amazonaws.com"
 
+  # AWS Billing → Cost allocation tags (activate ap:service and ap:stage once per account).
+  apCostAllocationCfnTags:
+    - Key: ap:service
+      Value: ${self:service}
+    - Key: ap:stage
+      Value: ${self:provider.stage}
+
   stageConfig:
     dev:
       profile: AbstractPlayDev
@@ -122,6 +129,12 @@ provider:
   stage: ${opt:stage, 'dev'}
   profile: ${self:custom.stageConfig.${self:provider.stage}.profile}
   region: us-east-1
+  stackTags:
+    ap:service: ${self:service}
+    ap:stage: ${self:provider.stage}
+  tags:
+    ap:service: ${self:service}
+    ap:stage: ${self:provider.stage}
   logs:
     restApi:
       accessLogging: false
@@ -296,6 +309,7 @@ resources:
         StreamSpecification:
           StreamViewType: "NEW_AND_OLD_IMAGES"
         TableName: ${self:provider.environment.ABSTRACT_PLAY_TABLE}
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     FeedbackDynamoDbTable:
       Type: 'AWS::DynamoDB::Table'
@@ -355,6 +369,7 @@ resources:
           AttributeName: expiresAt
           Enabled: true
         TableName: ${self:provider.environment.FEEDBACK_TABLE}
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     AnnouncementsAttachmentsBucket:
       Type: AWS::S3::Bucket
@@ -381,6 +396,7 @@ resources:
               ExposedHeaders:
                 - ETag
               MaxAge: 3000
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     FeedbackAttachmentsBucket:
       Type: AWS::S3::Bucket
@@ -407,6 +423,7 @@ resources:
               ExposedHeaders:
                 - ETag
               MaxAge: 3000
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     GatewayResponseDefault4XX:
        Type: 'AWS::ApiGateway::GatewayResponse'
@@ -424,6 +441,7 @@ resources:
         QueueName: abstractplay-ws-messages-${self:provider.stage}
         VisibilityTimeout: 900   # match your consumer Lambda timeout
         MessageRetentionPeriod: 86400  # 1 day, adjust as needed
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     PresenceCoalesceQueue:
       Type: AWS::SQS::Queue
@@ -431,6 +449,7 @@ resources:
         QueueName: abstractplay-presence-coalesce-${self:provider.stage}
         VisibilityTimeout: 60
         MessageRetentionPeriod: 86400
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     BotOutboundQueue:
       Type: AWS::SQS::Queue
@@ -438,12 +457,14 @@ resources:
         QueueName: abstractplay-bot-outbound-${self:provider.stage}
         VisibilityTimeout: 60
         MessageRetentionPeriod: 86400
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     GameProjectorDLQ:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: abstractplay-game-projector-dlq-${self:provider.stage}
         MessageRetentionPeriod: 1209600
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     OpsAlertsTopic:
       Type: AWS::SNS::Topic
@@ -451,6 +472,7 @@ resources:
       Properties:
         DisplayName: AbstractPlay Ops Alerts (${self:provider.stage})
         TopicName: abstractplay-ops-alerts-${self:provider.stage}
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     OpsAlertsEmailSubscription:
       Type: AWS::SNS::Subscription

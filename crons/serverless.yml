@@ -7,6 +7,13 @@ build:
   esbuild: false
 
 custom:
+  # AWS Billing → Cost allocation tags (activate ap:service and ap:stage once per account).
+  apCostAllocationCfnTags:
+    - Key: ap:service
+      Value: ${self:service}
+    - Key: ap:stage
+      Value: ${self:provider.stage}
+
   scheduleEnabled:
     prod: true
     dev: false
@@ -72,6 +79,12 @@ provider:
   stage: ${opt:stage, "dev"}
   profile: ${param:profile}
   region: us-east-1
+  stackTags:
+    ap:service: ${self:service}
+    ap:stage: ${self:provider.stage}
+  tags:
+    ap:service: ${self:service}
+    ap:stage: ${self:provider.stage}
   memorySize: 1024
   logs:
     retentionInDays: 30   # set to any valid retention period (1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653)
@@ -658,6 +671,7 @@ resources:
       Type: AWS::SQS::Queue
       Properties:
         MessageRetentionPeriod: 1209600
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     PlayerSummaryQueue:
       Type: AWS::SQS::Queue
@@ -666,12 +680,14 @@ resources:
         RedrivePolicy:
           deadLetterTargetArn: !GetAtt PlayerSummaryDeadLetterQueue.Arn
           maxReceiveCount: 3
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     RenderDeadLetterQueue:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: abstractplay-render-dlq-${self:provider.stage}
         MessageRetentionPeriod: 1209600
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     RenderQueue:
       Type: AWS::SQS::Queue
@@ -682,6 +698,7 @@ resources:
         RedrivePolicy:
           deadLetterTargetArn: !GetAtt RenderDeadLetterQueue.Arn
           maxReceiveCount: 3
+        Tags: ${self:custom.apCostAllocationCfnTags}
 
     RenderDlqAlarm:
       Type: AWS::CloudWatch::Alarm
