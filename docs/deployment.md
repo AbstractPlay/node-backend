@@ -24,6 +24,8 @@ The former [backend-crons](https://github.com/AbstractPlay/backend-crons) reposi
 
 Crons source lives in [`crons/`](https://github.com/AbstractPlay/node-backend/tree/develop/crons). See [Crons deployment](/crons/deployment/).
 
+Both stacks tag billable resources with `ap:service` (Serverless `service` name) and `ap:stage` (`dev` / `prod`) for AWS Cost Explorer. Activate those keys once per account under **Billing → Cost allocation tags**.
+
 ## AP dependency pins (`ci-deps.*.json`)
 
 Canonical pins live in `ci-deps.dev.json` and `ci-deps.prod.json`. CI runs `npm ci` → manifest validation → `ap-install-deps --stage dev|prod` → strict lockfile check → build/test.
