@@ -8,6 +8,11 @@ export function isBlankDisplayName(value: unknown): boolean {
   return typeof value !== 'string' || value.trim() === '';
 }
 
+/** `USERS.name` is set only after `new_profile`; omit incomplete accounts from public directory APIs. */
+export function hasRegisteredDisplayName(value: unknown): boolean {
+  return !isBlankDisplayName(value);
+}
+
 export function placeholderUserDisplayName(userId: string): string {
   return `Player-${userId.slice(0, 8)}`;
 }

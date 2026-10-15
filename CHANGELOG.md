@@ -33,6 +33,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Fixed
 
+- **`user_names`:** omit humans without a registered display name (incomplete `new_profile` / phantom `USERS` rows); direct `new_challenge` rejects unregistered human opponents; presence `lastSeen` touches no longer create nameless `USERS` rows.
 - **Thumbnails:** daily cron skips per-meta render/upload failures and logs a structured `THUMBNAIL_GENERATION_REPORT` (meta, game id/sk, phase) so one bad sample does not fail the whole batch.
 - **Tournaments:** `endTournament` now awaits pending DynamoDB, email, and notification work.
 - **Challenges:** repair legacy standing-challenge `challengees` corruption on accept/leave; correct 3+ player fixed seating on game start; `bin/backfill-standing-challenge-challengees.mjs` for one-time DynamoDB cleanup.

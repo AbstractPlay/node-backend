@@ -22,10 +22,19 @@ function makeClient(store: Store) {
       const input = command.input;
       if (command.constructor.name === 'UpdateCommand') {
         const itemKey = input.Key as { pk: string; sk: string };
-        const item = store.get(key(itemKey.pk, itemKey.sk)) ?? {
-          pk: itemKey.pk,
-          sk: itemKey.sk,
-        };
+        const stored = store.get(key(itemKey.pk, itemKey.sk));
+        const names = input.ExpressionAttributeNames as Record<string, string> | undefined;
+        const nameAttr = names?.['#name'] ?? 'name';
+        if (
+          stored === undefined
+          || typeof stored[nameAttr] !== 'string'
+          || String(stored[nameAttr]).trim() === ''
+        ) {
+          const err = new Error('conditional failed');
+          (err as Error & { name: string }).name = 'ConditionalCheckFailedException';
+          throw err;
+        }
+        const item = { ...stored };
         const values = input.ExpressionAttributeValues as Record<string, number>;
         const touchBefore = values[':touchBefore'];
         const existing = item.lastSeen as number | undefined;
@@ -54,7 +63,13 @@ function makeClient(store: Store) {
 
 describe('touchUserLastSeen', () => {
   it('writes lastSeen when absent', async () => {
-    const store: Store = new Map();
+    const store: Store = new Map([
+      [key('USERS', USER_ID), {
+        pk: 'USERS',
+        sk: USER_ID,
+        name: 'Registered',
+      }],
+    ]);
     const touched = await touchUserLastSeen(
       makeClient(store) as never,
       TABLE,
@@ -65,11 +80,24 @@ describe('touchUserLastSeen', () => {
     assert.equal((store.get(key('USERS', USER_ID)) as { lastSeen: number }).lastSeen, NOW);
   });
 
+  it('does not create USERS row without a registered name', async () => {
+    const store: Store = new Map();
+    const touched = await touchUserLastSeen(
+      makeClient(store) as never,
+      TABLE,
+      USER_ID,
+      NOW,
+    );
+    assert.equal(touched, false);
+    assert.equal(store.has(key('USERS', USER_ID)), false);
+  });
+
   it('skips when lastSeen is recent', async () => {
     const store: Store = new Map([
       [key('USERS', USER_ID), {
         pk: 'USERS',
         sk: USER_ID,
+        name: 'Registered',
         lastSeen: NOW - 1000,
       }],
     ]);
@@ -88,6 +116,7 @@ describe('touchUserLastSeen', () => {
       [key('USERS', USER_ID), {
         pk: 'USERS',
         sk: USER_ID,
+        name: 'Registered',
         lastSeen: NOW - TOUCH_USER_LAST_SEEN_INTERVAL_MS - 1,
       }],
     ]);
