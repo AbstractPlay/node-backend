@@ -1,4 +1,4 @@
-/** Legacy embedded AiAi user id (node-backend `AIAI_USERID`). */
+/** Legacy embedded AiAi user id (historical games; excluded from `user_names`). */
 export const LEGACY_AIAI_BOT_PLAYER_ID = "SkQfHAjeDxs8eeEnScuYA";
 
 /**

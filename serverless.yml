@@ -91,7 +91,6 @@ custom:
       botpoolId: us-east-1_kqlqXHDJ5
       botTokenUrl: https://abstract-play-bots-dev.auth.us-east-1.amazoncognito.com/oauth2/token
       botOAuthScope: default-m2m-resource-server-dev/communicate
-      sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-dev-aiai-queue
       wsDomain: qwmw4fb0l6.execute-api.us-east-1.amazonaws.com
       wsSqs: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-ws-messages-dev
 
@@ -105,7 +104,6 @@ custom:
       botpoolId: us-east-1_nEKyig64I
       botTokenUrl: https://botauth.abstractplay.com/oauth2/token
       botOAuthScope: default-m2m-resource-server-zssvzy/communicate
-      sqsurl: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-aiai-prod-aiai-queue
       wsDomain: qwmw4fb0l6.execute-api.us-east-1.amazonaws.com
       wsSqs: https://sqs.us-east-1.amazonaws.com/153672715141/abstractplay-ws-messages-prod
 
@@ -158,8 +156,6 @@ provider:
     userpoolId: ${self:custom.stageConfig.${self:provider.stage}.userpoolId}
     userpoolClient: ${self:custom.stageConfig.${self:provider.stage}.userpoolClient}
     BOTPOOL_ID: ${self:custom.stageConfig.${self:provider.stage}.botpoolId}
-    SQS_URL: ${self:custom.stageConfig.${self:provider.stage}.sqsurl}
-    AIAI_USERID: SkQfHAjeDxs8eeEnScuYA
     WEBSOCKET_DOMAIN: ${self:custom.stageConfig.${self:provider.stage}.wsDomain}
     WEBSOCKET_STAGE: ${self:provider.stage}
     WEBSOCKET_SQS: ${self:custom.stageConfig.${self:provider.stage}.wsSqs}

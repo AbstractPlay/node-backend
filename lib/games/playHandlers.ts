@@ -101,7 +101,6 @@ import {
   teachingModeBlocksPie,
 } from './teachingMode.js';
 import type { PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput } from '@aws-sdk/lib-dynamodb';
-import { validateToken } from '@sunknudsen/totp';
 import { getUsersLastSeen } from '../touchUserLastSeen.js';
 import { hasCurrentGameRow } from '../dashboardGames.js';
 import { setWatchedSeen } from '../playerGameMarks.js';
@@ -1142,59 +1141,6 @@ export async function invokePie(userid: string, pars: { id: string, metaGame: st
       error,
     );
   }
-}
-
-export async function botMove(pars: { uid: string, token: string, metaGame: string, gameid: string, move: string }) {
-  try {
-    if (!validateToken(process.env.TOTP_KEY as string, pars.token, 2)) {
-      return formatReturnError(`Invalid token provided: ${JSON.stringify(pars)}`);
-    }
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Something went wrong while validating the token: ${JSON.stringify(pars)}`);
-  }
-
-  let gameRecord: FullGame | undefined;
-  try {
-    const data = await ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          pk: 'GAME',
-          sk: pars.metaGame + '#0#' + pars.gameid,
-        },
-      }));
-    if (!data.Item) {
-      throw new Error(`No game ${pars.metaGame + '#0#' + pars.gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
-    }
-    gameRecord = hydrateGameState(data.Item as FullGame);
-  } catch (error) {
-    logGetItemError(error);
-    return formatReturnError(`Unable to load game ${pars.gameid} to make a bot move`);
-  }
-
-  if (gameRecord === undefined) {
-    throw new Error('Unable to load game object');
-  }
-  const engine = GameFactory(pars.metaGame, gameRecord.state);
-  if (!engine) {
-    throw new Error(`Unknown metaGame ${pars.metaGame}`);
-  }
-
-  if (pars.move === 'Swap') {
-    return await invokePie(pars.uid, { id: pars.gameid, metaGame: pars.metaGame, cbit: 0 });
-  }
-  if (pars.move === 'resign') {
-    return await submitMove(pars.uid, { id: pars.gameid, move: pars.move, metaGame: pars.metaGame, cbit: 0, draw: '' });
-  }
-
-  const realmove = engine.translateAiai(pars.move);
-
-  if (realmove === 'Swap') {
-    return await invokePie(pars.uid, { id: pars.gameid, metaGame: pars.metaGame, cbit: 0 });
-  }
-
-  return await submitMove(pars.uid, { id: pars.gameid, move: realmove, metaGame: pars.metaGame, cbit: 0, draw: '' });
 }
 
 export async function checkForAbandonedGame(userid: string, pars: { id: string, metaGame: string }) {

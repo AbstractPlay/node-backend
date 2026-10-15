@@ -44,8 +44,6 @@ import {
   normalizeTeachingChallengeFields,
   validateTeachingChallengeIssue,
 } from './teachingModeEligible.js';
-import { getChallenges } from '../profile/me.js';
-import { loadDashboardGames } from '../dashboardGames.js';
 import { sendUserPush } from '../push/sendUserPush.js';
 import {
   createNotification,
@@ -277,15 +275,6 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
         botId: challengee.id,
         standing: false,
       });
-    }
-
-    // If the bot is challenged, trigger its challenge mgmt code here
-    if (challenge.challengees !== undefined) {
-      const idx = challenge.challengees.findIndex(u => u.id === process.env.AIAI_USERID);
-      if (idx !== -1) {
-        console.log("Triggering bot management code");
-        await botManageChallenges();
-      }
     }
 
     return {
@@ -1237,108 +1226,6 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
   }
 }
 
-
-async function botManageChallenges() {
-  const userId = process.env.AIAI_USERID;
-  try {
-    console.log(`Getting USER record`);
-    const userData = await ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "USER",
-          "sk": userId
-        },
-      }));
-    if (userData.Item === undefined) {
-      throw new Error("Could not find a USER record for the AiAi bot");
-    }
-    const user = userData.Item as FullUser;
-    const games = await loadDashboardGames(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId!,
-    );
-
-    console.log(`Fetching challenges`);
-    const challengesReceivedIDs: string[] = Array.from(user?.challenges_received ?? new Set());
-    const data = await getChallenges(challengesReceivedIDs);
-    const challengesReceived = data.map(r => r.Item as FullChallenge);
-    console.log(`Got the following challenges:\n${JSON.stringify(challengesReceived, null, 2)}`);
-
-    // process each challenge and accept/reject as appropriate
-    for (const challenge of challengesReceived) {
-      let accepted = false;
-      // the overall meta must be supported
-      const info = gameinfo.get(challenge.metaGame);
-      if (info?.flags.includes("aiai")) {
-        accepted = true;
-      }
-      // add any variant exceptions here too
-      if (challenge.metaGame === "tumbleweed") {
-        if (challenge.variants.includes("free-neutral") || challenge.variants.includes("capture-delay")) {
-          accepted = false;
-        }
-      }
-
-      // accept/reject challenge
-      console.log(`About to ${accepted ? "accept" : "deny"} challenge ${challenge.sk}`)
-      await respondedChallenge(process.env.AIAI_USERID!, { response: accepted, id: challenge.sk!, standing: challenge.standing, metaGame: challenge.metaGame, comment: "Let's play!" });
-    }
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to manage bot challenges: ${err}`);
-  }
-
-  // now get list of games where it's your turn and make moves
-  // have to refetch, sadly!
-  // but check for bot's turn early to avoid unnecessary refetches
-  try {
-    console.log(`Getting USER record`);
-    const userData = await ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        Key: {
-          "pk": "USER",
-          "sk": userId
-        },
-      }));
-    if (userData.Item === undefined) {
-      throw new Error("Could not find a USER record for the AiAi bot");
-    }
-    const user = userData.Item as FullUser;
-    const games = await loadDashboardGames(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      userId!,
-    );
-
-    for (const game of games) {
-      const info = gameinfo.get(game.metaGame);
-      if (game.toMove !== null && game.toMove !== "") {
-        const ids: string[] = [];
-        if (info.flags.includes("simultaneous")) {
-          const toMove = game.toMove as boolean[];
-          if (toMove) {
-            for (let i = 0; i < toMove.length; i++) {
-              if (toMove[i]) {
-                ids.push(game.players[i].id);
-              }
-            }
-          }
-        } else {
-          ids.push(game.players[parseInt(game.toMove as string, 10)].id);
-        }
-        if (ids.includes(process.env.AIAI_USERID!)) {
-          await realPingBot(game.metaGame, game.id);
-        }
-      }
-    }
-  } catch (err) {
-    logGetItemError(err);
-    return formatReturnError(`Unable to manage bot challenges: ${err}`);
-  }
-}
 
 export async function botRespondToChallenge(
   botId: string,
