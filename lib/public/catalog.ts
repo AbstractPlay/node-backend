@@ -28,6 +28,7 @@ import {
   assembleTags,
   type MetaGameCounts,
 } from '../metaGameBootstrap.js';
+import { hasRegisteredDisplayName } from '../userDisplayName.js';
 
 type FullGame = {
   metaGame: string;
@@ -75,8 +76,10 @@ export async function userNames() {
     ]);
     const adminIds = new Set((adminData.Items ?? []).map((user) => String(user.sk)));
 
-    const users = (data.Items ?? []).filter(u => u.sk !== 'SkQfHAjeDxs8eeEnScuYA');
-    if (users.length === 0 && (data.Items?.length ?? 0) === 0) {
+    const users = (data.Items ?? []).filter(
+      u => u.sk !== 'SkQfHAjeDxs8eeEnScuYA' && hasRegisteredDisplayName(u.name),
+    );
+    if ((data.Items?.length ?? 0) === 0) {
       throw new Error("Found no users?");
     }
 
@@ -94,7 +97,9 @@ export async function userNames() {
       ...(adminIds.has(u.sk) ? { admin: true } : {}),
       bot: false,
     } as UsersData));
-    const botResults = (botData.Items ?? []).map(b => ({
+    const botResults = (botData.Items ?? [])
+      .filter(b => hasRegisteredDisplayName(b.name))
+      .map(b => ({
       id: b.sk,
       name: b.name,
       country: "",

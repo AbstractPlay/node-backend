@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
+  hasRegisteredDisplayName,
   isBlankDisplayName,
   placeholderUserDisplayName,
   validateUserDisplayName,
@@ -46,6 +47,12 @@ test('isBlankDisplayName treats missing and whitespace as blank', () => {
   assert.equal(isBlankDisplayName(''), true);
   assert.equal(isBlankDisplayName('  '), true);
   assert.equal(isBlankDisplayName('Bob'), false);
+});
+
+test('hasRegisteredDisplayName matches completed registration names', () => {
+  assert.equal(hasRegisteredDisplayName(undefined), false);
+  assert.equal(hasRegisteredDisplayName('  '), false);
+  assert.equal(hasRegisteredDisplayName('Bob'), true);
 });
 
 test('placeholderUserDisplayName uses first eight id characters', () => {
