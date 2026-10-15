@@ -130,6 +130,7 @@ Omit `OPS_ALERT_EMAIL` to skip the topic and alarm actions (dev deploys by defau
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `TOTP_KEY`, `OPENSSH_PRIVATE_KEY`
 - `OPS_ALERT_EMAIL` — ops CloudWatch alarm notifications (prod workflow)
 - `TEST_BOT_CLIENT_ID`, `TEST_BOT_CLIENT_SECRET` (dev workflow)
+- `AIAI_BOT_ID_PROD` — prod registered AiAi bot client id; passed to crons deploy as `AIAI_BOT_RECORDS_CANONICAL_ID` for records player-shard merge (same value as **bot-aiai** prod OAuth client id)
 
 ## Cognito setup (essentials)
 
