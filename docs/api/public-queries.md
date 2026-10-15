@@ -85,7 +85,6 @@ See [Announcements](/backend/subsystems/announcements/).
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `bot_move` | Legacy/internal bot move path | varies |
 | `report_problem` | User problem reports | varies |
 
 ## Related

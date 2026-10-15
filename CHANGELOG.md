@@ -11,7 +11,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Added
 
-- **Bots:** `botQuery` verb `pie` for registered bots (seat swap on the bot's turn; same checks as `move`, delegates to `invokePie`). Documented in [Bot protocol](/backend/bots/protocol/) and [Bot queries](/backend/api/bot-queries/). Legacy `bot_move` `Swap` handling unchanged.
+- **Bots:** `botQuery` verb `pie` for registered bots (seat swap on the bot's turn; same checks as `move`, delegates to `invokePie`). Documented in [Bot protocol](/backend/bots/protocol/) and [Bot queries](/backend/api/bot-queries/).
 - **Bots:** owner diagnostics — failed `move`/`pie` after turn validation notifies the bot owner (`botMoveFailed`) and posts a system in-game chat message (deduped); new `pingOwner` verb for bot-reported internal errors (`botOwnerPing`, rate-limited). In-app category `bots`.
 - **Records (crons):** optional merge of legacy AiAi player id `SkQfHAjeDxs8eeEnScuYA` into prod registered bot client id via `AIAI_BOT_RECORDS_CANONICAL_ID` (prod deploy sets from `AIAI_BOT_ID_PROD`); drops stale `player/{legacy}.json` shard when canonical is set.
 - **Teaching mode:** optional `teachingMode` on `new_challenge` / standing challenges (2-player, non-simultaneous only); server forces `rated: false` and copies the flag onto started games. Auth queries `teaching_grant_undo`, `teaching_keep_move`, and `teaching_undo_move`; `submit_move` blocked during review; `invoke_pie` disabled. Documented under [Challenges](/backend/subsystems/challenges/) and [Games and moves](/backend/subsystems/games-and-moves/). Front: challenge modals and move-page grant/keep/undo UI; pie rule hidden on teaching games.
@@ -20,6 +20,10 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Ops:** `ap:service` and `ap:stage` cost-allocation tags on the `abstract-play` and `abstract-play-backend-crons` Serverless stacks (Lambdas, DynamoDB, S3, SQS, SNS).
 - **Notifications:** WebSocket `notification` verb after in-app items are created (`createNotification`); user-targeted delivery via `lib/wsMessageDelivery.ts`.
 - **Tournaments:** richer tournament-end email (division winner, standings, tournament link, next-series signup nudge); shorter tournament-end push (winner + nudge). Division standings logic extracted to `lib/tournaments/divisionStandings.ts` with prod-sampled regression fixtures and `npm run verify-division-standings`.
+
+### Removed
+
+- **AiAi (embedded bot):** legacy public `bot_move` query, `AIAI_USERID` / `abstractplay-aiai-*` SQS env, embedded challenge auto-accept (`botManageChallenges`), and `realPingBot` SQS path. Turn notifications use registered bots only (`BOT_OUTBOUND_QUEUE_URL`). Legacy user `SkQfHAjeDxs8eeEnScuYA` is omitted from `user_names`; records alias via `AIAI_BOT_RECORDS_CANONICAL_ID` unchanged.
 
 ### Changed
 
