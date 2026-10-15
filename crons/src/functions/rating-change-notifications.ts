@@ -27,10 +27,11 @@ import {
 import type { InAppNotificationUserSettings } from "../lib/inAppNotificationPrefs.js";
 import type { StatSummaryRatings } from "types/stats/StatSummaryTiers.js";
 import { getRecordsJson, putRecordsJson, tryGetRecordsJson } from "../utils/recordsJson.js";
+import { LEGACY_AIAI_BOT_PLAYER_ID } from "../utils/recordsPlayerAlias.js";
 
 const REGION = "us-east-1";
 const BATCH_WRITE_CHUNK = 25;
-const LEGACY_BOT_ID = "SkQfHAjeDxs8eeEnScuYA";
+const LEGACY_BOT_ID = LEGACY_AIAI_BOT_PLAYER_ID;
 
 const s3 = new S3Client({ region: REGION });
 const ddbClient = new DynamoDBClient({ region: REGION });

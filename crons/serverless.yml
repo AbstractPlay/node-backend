@@ -92,6 +92,8 @@ provider:
     ABSTRACT_PLAY_TABLE: abstract-play-${self:provider.stage}
     FEEDBACK_TABLE: abstract-play-feedback-${self:provider.stage}
     FEEDBACK_ATTACHMENTS_BUCKET: ap-feedback-attachments-${self:provider.stage}
+    # Prod records merge legacy AiAi games under the registered bot client id (see recordsPlayerAlias.ts).
+    AIAI_BOT_RECORDS_CANONICAL_ID: ${env:AIAI_BOT_RECORDS_CANONICAL_ID, ''}
   iam:
     role:
       statements:

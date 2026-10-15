@@ -131,6 +131,8 @@ jobs:
       run: bash bin/serverless-deploy.sh prod AbstractPlayProd
 
     - name: Deploy crons stack
+      env:
+        AIAI_BOT_RECORDS_CANONICAL_ID: ${{ secrets.AIAI_BOT_ID_PROD }}
       run: bash crons/scripts/serverless-deploy.sh prod
 
     - name: Trigger docs rebuild
