@@ -205,6 +205,11 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `TOURNAMENTPLAYER`
   - sk: `<tournamentid>#<division>#<playerid>`
 
+- **Tournament by user** — sparse index of in-progress tournaments a user is assigned to (dashboard / `me_dashboard`)
+  - pk: `TOURNAMENTBYUSER#<userid>`
+  - sk: `<tournamentid>`
+  - optional: `division`, `metaGame`
+
 - **Tournament game** — game reference
   - pk: `TOURNAMENTGAME`
   - sk: `<tournamentid>#<division>#<gameid>`

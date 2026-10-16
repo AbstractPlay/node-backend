@@ -1,6 +1,7 @@
 import { GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { ddbDocClient } from '../ddb.js';
 import { headers, formatReturnError, logGetItemError } from '../api/http.js';
+import { deleteTournamentForUser } from '../tournaments/byUserIndex.js';
 import { tournamentSeriesCounterSk } from '../tournaments/matchLegs.js';
 
 type Tournament = {
@@ -14,7 +15,7 @@ type Tournament = {
   players?: TournamentPlayer[];
 };
 
-type TournamentPlayer = { sk: string };
+type TournamentPlayer = { sk: string; playerid?: string };
 type TournamentGame = { id: string };
 
 export async function archiveTournaments() {
@@ -146,6 +147,15 @@ async function archiveTournament(tournament: Tournament) {
           },
         })
       ));
+      const playerId = player.playerid ?? player.sk.split('#').pop();
+      if (playerId !== undefined && playerId !== '') {
+        work.push(deleteTournamentForUser(
+          ddbDocClient,
+          process.env.ABSTRACT_PLAY_TABLE!,
+          playerId,
+          tournament.id,
+        ));
+      }
     }
     return Promise.all(work);
   }

@@ -11,6 +11,7 @@ import {
   type MeAncillaryData,
   type MeChallengeData,
 } from '../meQuery.js';
+import { resolveCurrentTournamentsForDashboard } from '../tournaments/currentForDashboard.js';
 import { listActiveGameKeys, loadDashboardGames, type DashboardGame } from '../dashboardGames.js';
 import { runDashboardMaintenance } from '../dashboardMaintenance.js';
 import {
@@ -308,10 +309,11 @@ export async function meDashboard(claim: PartialClaims, pars: { size: string, va
       console.log(`me_dashboard evicted games for ${user.name}:`, maintenance.evictedIds);
     }
     console.log('Fetching challenges');
-    const [ancillary, challenges, vacation] = await Promise.all([
+    const [ancillary, challenges, vacation, currentTournaments] = await Promise.all([
       resolveMeAncillary(userId, user),
       resolveMeChallenges(user),
       readVacationSnapshot(ddbDocClient, tableName, userId, now),
+      resolveCurrentTournamentsForDashboard(ddbDocClient, tableName, userId),
     ]);
     console.log(`me_dashboard returning for ${user.name}, id ${user.id} with games`, games);
     return {
@@ -323,6 +325,7 @@ export async function meDashboard(claim: PartialClaims, pars: { size: string, va
           games,
           challenges,
           vacation,
+          currentTournaments,
         ),
         Set_toJSON,
       ),
