@@ -37,6 +37,11 @@ import {
 } from "@backend/lib/tournaments/clock.js";
 import { tournamentPlaySupported } from "@backend/lib/tournamentGame.js";
 import {
+  putCurrentTournamentForUser,
+  tournamentByUserPk,
+  tournamentByUserSk,
+} from "@backend/lib/tournaments/byUserIndex.js";
+import {
   acquireTournamentStartingLock,
   loadItem,
   releaseTournamentStartingLock,
@@ -553,6 +558,16 @@ async function startTournament(
           TableName: tableName,
           Item: player
         }));
+        const byUserPk = tournamentByUserPk(player.playerid);
+        const byUserSk = tournamentByUserSk(tournament.id);
+        const prevByUser = await loadItem(ddbDocClient, tableName, byUserPk, byUserSk);
+        journal.trackReplace(prevByUser, byUserPk, byUserSk);
+        await putCurrentTournamentForUser(ddbDocClient, tableName, {
+          userId: player.playerid,
+          tournamentId: tournament.id,
+          division: player.division,
+          metaGame: tournament.metaGame,
+        });
         if (division > 1) {
           const div1Sk = tournament.id + "#1#" + player.playerid;
           console.log(`Deleting player ${player.playerid} from tournament ${tournament.id} with division 1 (so they can be put in the right division)`);

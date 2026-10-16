@@ -11,7 +11,7 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `me_profile` | Site-wide profile for navbar, settings, and game renderer: settings, bots, tags, `activeGames` (`CURRENTGAMES#` keys only), `vacation` quota/stint snapshot. No dashboard maintenance, challenges, or `lastSeen` writes. | — |
-| `me_dashboard` | Dashboard tables: active `games` (with `clockDisplayServerTime` and per on-clock player `effectiveRemainingMs` / `clockPaused`), `notifications`, challenges, timeout sweep. Includes `vacation` snapshot. Clears `USER.cleaned` when set by abandoned-account cron. Does not refresh notification seen state. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
+| `me_dashboard` | Dashboard tables: active `games` (with `clockDisplayServerTime` and per on-clock player `effectiveRemainingMs` / `clockPaused`), `currentTournaments`, `notifications`, challenges, timeout sweep. Includes `vacation` snapshot. Clears `USER.cleaned` when set by abandoned-account cron. Does not refresh notification seen state. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
 | `next_game` | Next game id in user's list | — |
 | `my_settings` | **Deprecated** — minimal id/name/email/language; use `me_profile` instead | — |
 | `new_setting` | Update name, language, country, bggid, about | `attribute`, `value`. For `name`, value must be unique among current human and bot display names (trim + case-insensitive). |
@@ -22,6 +22,8 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 | `list_notifications` | List in-app notifications for the navbar bell (does not mark seen) | — |
 | `mark_notifications_seen` | Mark notifications as read (shortens TTL; retained until dismissed) | optional `sks` (array); omit to mark all **new** items |
 | `toggle_star` | Favorite a metaGame | `metaGame` |
+
+**`me_dashboard.currentTournaments`:** array of in-progress automated tournaments the user is assigned to (from `TOURNAMENTBYUSER#` index, filtered to `started` and not `dateEnded`). Each item: `{ id, metaGame, variants, number, matchLegs, dateStarted, divisions, players }` where `players` lists user ids with a `division` on their `TOURNAMENTPLAYER` row (same rule as `/tournaments/current` with registered-only). Empty array when none.
 
 **`me_dashboard.notifications`:** array of `{ sk, createdAt, body, status }` items where `status` is `new` or `read` (see [Notifications — In-app dashboard feed](/backend/subsystems/notifications/)). Omitted from `me_profile`. Use `list_notifications` for navbar bootstrap and `mark_notifications_seen` when the user opens the bell panel.
 

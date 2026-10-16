@@ -92,6 +92,17 @@ describe('buildMeDashboardPayload', () => {
     assert.equal('activeGames' in payload, false);
     assert.equal(payload.challengesIssued.length, 1);
     assert.equal('notifications' in payload, false);
+    assert.deepEqual(payload.currentTournaments, []);
+  });
+
+  it('defaults currentTournaments to an empty array', () => {
+    const payload = buildMeDashboardPayload(user, ancillary, [], {
+      challengesIssued: [],
+      challengesReceived: [],
+      challengesAccepted: [],
+      standingChallenges: [],
+    }, vacation);
+    assert.deepEqual(payload.currentTournaments, []);
   });
 
   it('does not include notifications on dashboard payload', () => {
