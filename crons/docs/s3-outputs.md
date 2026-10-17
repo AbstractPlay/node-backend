@@ -134,6 +134,17 @@ Produced by `records-move-times`. Object with:
 
 PMI-normalized co-occurrence neighbors per meta-game for the hybrid recommender. Includes optional stars boost (`includeStarredBoost`). Full schema and algorithm: [Recommendation co-occurrence](/crons/recommendations-cooccur/).
 
+## Thumbnails bucket (`thumbnails.abstractplay.com`)
+
+Public CDN for meta-game board previews. Produced by the `thumbnails` cron (JSON) and `sqs-to-render` (SVG). Prerender staging uses `thumbnails-prerender-{stage}` (see [`serverless.yml`](../serverless.yml)).
+
+| Key pattern | Producer | Description |
+|-------------|----------|-------------|
+| `{uid}.json` | `thumbnails` | v1 envelope: `source` (sampled game provenance) + `render` (gameslib `render()` rep for `@abstractplay/renderer`). Legacy objects may be a bare `render` rep until regenerated. |
+| `{uid}-light.svg`, `{uid}-dark.svg` | `sqs-to-render` | Static SVG variants; may include `<metadata id="ap-thumbnail-source">` when `source` was present in the prerender JSON. |
+
+Parse helpers: [`thumbnailArtifact.ts`](../src/utils/thumbnailArtifact.ts) (`parseThumbnailJson`, `buildThumbnailArtifact`). Consumers must pass **`render`** to the renderer, not the outer envelope.
+
 ## Private ops bucket (`private-ops-153672715141-us-east-1-an`)
 
 Not served via CloudFront. IAM-restricted.
