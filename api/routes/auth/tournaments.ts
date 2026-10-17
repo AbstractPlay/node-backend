@@ -5,6 +5,7 @@ import {
   newTournament,
   withdrawTournament,
 } from '../../../lib/tournaments/authHandlers.js';
+import { submitTournamentComment } from '../../../lib/tournaments/tournamentComments.js';
 import { bindAuth } from './shared.js';
 
 export const tournamentsAuthRoutes: Record<string, AuthRouteHandler> = {
@@ -12,4 +13,5 @@ export const tournamentsAuthRoutes: Record<string, AuthRouteHandler> = {
   join_tournament: bindAuth(joinTournament),
   withdraw_tournament: bindAuth(withdrawTournament),
   end_tournament: bindAuth(endATournament),
+  submit_tournament_comment: bindAuth(submitTournamentComment),
 };

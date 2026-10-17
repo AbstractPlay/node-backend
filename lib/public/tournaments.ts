@@ -2,6 +2,7 @@ import { GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand } fr
 import { ddbDocClient } from '../ddb.js';
 import { headers, formatReturnError, logGetItemError } from '../api/http.js';
 import { deleteTournamentForUser } from '../tournaments/byUserIndex.js';
+import { getTournamentCommentsItem } from '../tournaments/tournamentComments.js';
 import { tournamentSeriesCounterSk } from '../tournaments/matchLegs.js';
 
 type Tournament = {
@@ -260,7 +261,10 @@ export async function getTournament(pars: { tournamentid: string, metaGame: stri
       })
     ));
 
+    const commentsPromise = getTournamentCommentsItem(pars.tournamentid);
+
     const data = await Promise.all(work);
+    const comments = await commentsPromise;
 
     // If tournament not found in active tournaments and we have gameId and metaGame, try archived
     if (!isArchived && pars.metaGame !== 'undefined' && data[0].Items.length === 0 && pars.gameId) {
@@ -312,7 +316,8 @@ export async function getTournament(pars: { tournamentid: string, metaGame: stri
         body: JSON.stringify({
           tournament: data[0].Items,
           tournamentPlayers: data[1]?.Items || [],
-          tournamentGames: data[2].Items
+          tournamentGames: data[2].Items,
+          comments,
         }),
         headers
       };
@@ -322,7 +327,8 @@ export async function getTournament(pars: { tournamentid: string, metaGame: stri
         body: JSON.stringify({
           tournament: data[0].Items,
           tournamentPlayers: [],
-          tournamentGames: isArchived ? data[1].Items : data[2].Items
+          tournamentGames: isArchived ? data[1].Items : data[2].Items,
+          comments,
         }),
         headers
       };

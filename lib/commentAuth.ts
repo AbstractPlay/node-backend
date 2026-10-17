@@ -40,7 +40,7 @@ async function getGameRecord(
   return game;
 }
 
-async function isSiteAdmin(
+export async function isSiteAdmin(
   client: DynamoDBDocumentClient,
   tableName: string,
   userid: string,

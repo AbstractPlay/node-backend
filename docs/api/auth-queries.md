@@ -171,6 +171,7 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `join_tournament` | Enter tournament (same 2-player requirement) | `id` |
 | `withdraw_tournament` | Leave tournament | `id` |
 | `end_tournament` | End tournament | `id` |
+| `submit_tournament_comment` | Tournament chat message (participants and admins) | `tournamentid`, `comment`, optional `metaGame` for archived lookup |
 
 ## Organizer events
 

@@ -3,6 +3,7 @@ import {
   isLegacyGameFanout,
   usesStrictGameWatch,
   watchingGamesHas,
+  watchingTournamentsHas,
   wantsPresenceUpdates,
   type WsConnectionItem,
 } from "./wsConnectionStore.js";
@@ -34,6 +35,14 @@ export function shouldDeliverWsMessage(
       return watchingGamesHas(conn, key);
     }
     return watchingGamesHas(conn, key);
+  }
+
+  if (verb === "tournament") {
+    const id = payload?.id;
+    if (!id) {
+      return false;
+    }
+    return watchingTournamentsHas(conn, id);
   }
 
   if (verb === "notification") {

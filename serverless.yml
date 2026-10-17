@@ -778,6 +778,14 @@ functions:
       - websocket:
           route: watchGames
 
+  watchTournaments:
+    handler: api/sockets/watchTournamentsHandler.handler
+    logRetentionInDays: 7
+    timeout: 30
+    events:
+      - websocket:
+          route: watchTournaments
+
   syncPresence:
     handler: api/sockets/syncPresenceHandler.handler
     logRetentionInDays: 7
