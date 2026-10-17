@@ -139,6 +139,24 @@ test('hydrateGameState reconciles empty state variants from record variants', ()
   assert.deepEqual(hydrated.variants, ['scrambled']);
 });
 
+test('hydrateGameState infers orb noglobes from engine when GAME variants are empty', () => {
+  const g = GameFactory('orb', undefined, ['noglobes']);
+  assert.ok(g);
+  const parsed = JSON.parse(g.serialize()) as { variants: string[] };
+  parsed.variants = [];
+  const state = JSON.stringify(parsed);
+  const record = {
+    pk: 'GAME',
+    sk: 'orb#1#test',
+    metaGame: 'orb',
+    state,
+    variants: [] as string[],
+  };
+  const hydrated = hydrateGameState(record);
+  assert.deepEqual(hydrated.variants, ['noglobes']);
+  assert.deepEqual(JSON.parse(hydrated.state).variants, ['noglobes']);
+});
+
 test('setGameEndedFromEngine sets gameEnded and winner when game is over', () => {
   const engine = GameFactory('saltire', saltireState);
   assert.ok(engine);

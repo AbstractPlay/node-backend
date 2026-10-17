@@ -1,6 +1,14 @@
-import { GameBase, GameBaseSimultaneous } from '@abstractplay/gameslib';
+import { GameBase, GameBaseSimultaneous, GameFactory } from '@abstractplay/gameslib';
 import { gzipSync, gunzipSync } from 'zlib';
 import { reconcileVariantsInGameState } from './resolveGameVariants.js';
+
+function variantsFromEngine(metaGame: string, stateJson: string): string[] {
+  const engine = GameFactory(metaGame, stateJson);
+  if (engine === undefined || engine.variants === undefined || engine.variants.length === 0) {
+    return [];
+  }
+  return [...new Set(engine.variants)].sort();
+}
 
 type GameEndedTarget = {
   gameEnded?: number;
@@ -86,15 +94,50 @@ export function compressGameStateIfNeeded(state: string): string {
   return compressed;
 }
 
-export function hydrateGameState<T extends { state: string; variants?: string[] }>(record: T): T {
+export function hydrateGameState<T extends { state: string; variants?: string[]; metaGame?: string }>(record: T): T {
   let state = decompressGameState(record.state);
-  if (record.variants !== undefined && record.variants.length > 0) {
-    state = reconcileVariantsInGameState(state, record.variants);
+  let variants = record.variants;
+
+  if (variants !== undefined && variants.length > 0) {
+    state = reconcileVariantsInGameState(state, variants);
+  } else if (record.metaGame) {
+    const fromEngine = variantsFromEngine(record.metaGame, state);
+    if (fromEngine.length > 0) {
+      variants = fromEngine;
+      state = reconcileVariantsInGameState(state, variants);
+    }
   }
-  if (state === record.state) {
+
+  if (state === record.state && variants === record.variants) {
     return record;
   }
-  return { ...record, state };
+  return {
+    ...record,
+    state,
+    ...(variants !== undefined ? { variants } : {}),
+  };
+}
+
+/** Canonical variant uids from a stored state blob (for ops backfills). */
+export function resolveVariantsForGameRecord(
+  metaGame: string,
+  storedState: string,
+  recordVariants?: string[],
+): { variants: string[]; stateJson: string } {
+  let stateJson = decompressGameState(storedState);
+  let variants = recordVariants ?? [];
+
+  if (variants.length > 0) {
+    stateJson = reconcileVariantsInGameState(stateJson, variants);
+  } else {
+    const fromEngine = variantsFromEngine(metaGame, stateJson);
+    if (fromEngine.length > 0) {
+      variants = fromEngine;
+      stateJson = reconcileVariantsInGameState(stateJson, variants);
+    }
+  }
+
+  return { variants, stateJson };
 }
 
 export function prepareGameStateForStorage<T extends { state: string }>(record: T): T {
