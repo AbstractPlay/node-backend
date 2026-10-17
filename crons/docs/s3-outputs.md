@@ -143,7 +143,7 @@ Public CDN for meta-game board previews. Produced by the `thumbnails` cron (JSON
 | `{uid}.json` | `thumbnails` | v1 envelope: `source` (sampled game provenance) + `render` (gameslib `render()` rep for `@abstractplay/renderer`). Legacy objects may be a bare `render` rep until regenerated. |
 | `{uid}-light.svg`, `{uid}-dark.svg` | `sqs-to-render` | Static SVG variants; may include `<metadata id="ap-thumbnail-source">` when `source` was present in the prerender JSON. |
 
-Parse helpers: [`thumbnailArtifact.ts`](../src/utils/thumbnailArtifact.ts) (`parseThumbnailJson`, `buildThumbnailArtifact`). Consumers must pass **`render`** to the renderer, not the outer envelope.
+Parse helpers: [`thumbnailArtifact.ts`](../src/utils/thumbnailArtifact.ts) (`parseThumbnailJson`, `buildThumbnailArtifact`). Consumers must pass **`render`** to the renderer, not the outer envelope. When `render.kind === "composite"`, `sqs-to-render` calls `renderComposite`; single-frame and multiframe reps still use `render()` (last frame for arrays).
 
 ## Private ops bucket (`private-ops-153672715141-us-east-1-an`)
 
