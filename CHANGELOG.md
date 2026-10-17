@@ -28,6 +28,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Notifications:** WebSocket `notification` verb after in-app items are created (`createNotification`); user-targeted delivery via `lib/wsMessageDelivery.ts`.
 - **Tournaments:** richer tournament-end email (division winner, standings, tournament link, next-series signup nudge); shorter tournament-end push (winner + nudge). Division standings logic extracted to `lib/tournaments/divisionStandings.ts` with prod-sampled regression fixtures and `npm run verify-division-standings`.
 - **Tournaments:** `TOURNAMENTBYUSER#` sparse index for dashboard current tournaments; `me_dashboard.currentTournaments`; ops scripts `npm run backfill-tournament-by-user` and `npm run reconcile-tournament-by-user`.
+- **Tournaments:** tournament-level chat (`TOURNAMENTCOMMENTS`, public `get_tournament` `comments`, auth `submit_tournament_comment`); in-app `tournamentChat` notifications (pref `tournamentChat`); WebSocket `watchTournaments` and `tournament` verb for live refresh on the tournament page.
 
 ### Removed
 

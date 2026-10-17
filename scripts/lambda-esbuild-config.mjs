@@ -25,6 +25,7 @@ export const LAMBDA_HANDLER_ENTRIES = [
   "api/sockets/disconnectHandler.ts",
   "api/sockets/authHandler.ts",
   "api/sockets/watchGamesHandler.ts",
+  "api/sockets/watchTournamentsHandler.ts",
   "api/sockets/syncPresenceHandler.ts",
   "api/sockets/presenceBroadcaster.ts",
   "api/sockets/messageHandler.ts",

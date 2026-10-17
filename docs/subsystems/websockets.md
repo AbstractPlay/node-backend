@@ -10,8 +10,9 @@ Real-time updates (game moves, presence) use API Gateway WebSockets plus SQS-bac
 2. **`$connect`** — [`connectHandler`](../../api/sockets/connectHandler.ts) is a no-op; connections are registered on subscribe.
 3. **`subscribe`** — [`authHandler`](../../api/sockets/authHandler.ts) validates the JWT, stores the connection under `wsConnections` (optionally including `watchingGames` from a `games: [{ meta, id }]` array in the same message), sends a direct **presence snapshot** to that connection, and enqueues a debounced join event (skipped for `invisible: true`).
 4. **`watchGames`** — [`watchGamesHandler`](../../api/sockets/watchGamesHandler.ts) replaces the connection's `watchingGames` set from `{ games: [{ meta, id }] }`. Used for incremental updates after subscribe (e.g. navigation, dashboard changes).
-5. **`syncPresence`** — [`syncPresenceHandler`](../../api/sockets/syncPresenceHandler.ts) responds with a fresh presence snapshot (no seq increment).
-6. **`$disconnect`** — [`disconnectHandler`](../../api/sockets/disconnectHandler.ts) removes the connection and enqueues a debounced leave event.
+5. **`watchTournaments`** — [`watchTournamentsHandler`](../../api/sockets/watchTournamentsHandler.ts) replaces `watchingTournaments` from `{ tournaments: [<tournamentid>, …] }` (tournament detail page).
+6. **`syncPresence`** — [`syncPresenceHandler`](../../api/sockets/syncPresenceHandler.ts) responds with a fresh presence snapshot (no seq increment).
+7. **`$disconnect`** — [`disconnectHandler`](../../api/sockets/disconnectHandler.ts) removes the connection and enqueues a debounced leave event.
 
 Clients that support targeted game delivery send `watchVersion: 1` on subscribe. Clients may include `games` on subscribe so `watchingGames` is written atomically with the connection record; they should still send `watchGames` on navigation or when the dashboard game list changes.
 
@@ -21,6 +22,8 @@ Clients that support targeted game delivery send `watchVersion: 1` on subscribe.
 
 - Sends only if `watchingGames` contains `${meta}#${id}`
 - **Legacy fallback:** connections without `watchVersion: 1` and without `watchingGames` still receive all game events (remove after frontend rollout)
+
+Tournament chat uses verb **`tournament`** with payload `{ id: <tournamentid> }`, delivered only when `watchingTournaments` contains that id.
 
 ## In-app notification hint
 

@@ -48,4 +48,16 @@ describe('shouldDeliverWsMessage', () => {
       false,
     );
   });
+
+  it('delivers tournament verb when connection watches the tournament', () => {
+    const watching = conn({ watchingTournaments: new Set(['tour-1']) });
+    assert.equal(
+      shouldDeliverWsMessage('tournament', watching, { id: 'tour-1' }),
+      true,
+    );
+    assert.equal(
+      shouldDeliverWsMessage('tournament', watching, { id: 'other' }),
+      false,
+    );
+  });
 });

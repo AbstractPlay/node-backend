@@ -15,6 +15,11 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `GAMECOMMENTS`
   - sk: `<gameid>`
 
+- **Tournament chat** — public log per tournament (survives archive)
+  - pk: `TOURNAMENTCOMMENTS`
+  - sk: `<tournamentid>`
+  - `comments[]`: `{ comment, userId, moveNumber, timeStamp }` (Markdown rendered on the client)
+
 - **Notes** — per-user notes on a game
   - pk: `NOTE`
   - sk: `<gameId>#<userid>`
@@ -106,7 +111,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - sk: `<epochMs>#<random>`
   - fields: `body` (typed JSON object), `expiresAt` (TTL seconds; 180 days on create, tightened to 30 days on first dashboard fetch)
   - no GSI
-  - `body.type` values: `gameStart`, `gameEnd`, `ratingChange`, `challengeIssued`, `challengeDeclined`, `challengeRevoked`, `eventInvitation`, `completedGameChat`
+  - `body.type` values: `gameStart`, `gameEnd`, `ratingChange`, `challengeIssued`, `challengeDeclined`, `challengeRevoked`, `eventInvitation`, `completedGameChat`, `tournamentChat`
   - `eventInvitation` is sent when an organizer saves the invite list on a moderated `ORGEVENT` (`event_update_invites`); not used for automated tournaments. Body includes `eventId`, `eventName`, `organizerId`, `organizerName`. Inspect rows with `bin/dump-dashboard.mjs` `--include-notifications` (read-only; does not refresh TTL)
 
 - **Announcements** — site news ([subsystem doc](/backend/subsystems/announcements/))
@@ -217,6 +222,10 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 - **Completed tournaments**
   - pk: `COMPLETEDTOURNAMENT`
   - sk: `<metaGame>#<tournamentid>`
+
+- **Tournament chat**
+  - pk: `TOURNAMENTCOMMENTS`
+  - sk: `<tournamentid>`
 
 - **Tournament counter** — per metaGame + variants combination (`variants` is a sorted, pipe-delimited variant list)
   - pk: `TOURNAMENTSCOUNTER`

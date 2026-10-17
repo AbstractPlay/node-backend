@@ -22,6 +22,7 @@ export const IN_APP_NOTIFICATION_CATEGORIES = [
   'ratingChange',
   'eventInvitation',
   'completedGameChat',
+  'tournamentChat',
   'tournamentStart',
   'tournamentEnd',
   'feedbackReply',
@@ -71,6 +72,8 @@ export function inAppCategoryForBody(body: NotificationBody): InAppNotificationC
       return 'eventInvitation';
     case 'completedGameChat':
       return 'completedGameChat';
+    case 'tournamentChat':
+      return 'tournamentChat';
     case 'tournamentStart':
       return 'tournamentStart';
     case 'tournamentEnd':
@@ -203,6 +206,14 @@ export type NotificationBody =
     commenterId: string;
     commenterName: string;
     backfill?: boolean;
+  }
+  | {
+    type: 'tournamentChat';
+    tournamentId: string;
+    metaGame: string;
+    variants: string[];
+    commenterId: string;
+    commenterName: string;
   }
   | {
     type: 'tournamentStart';
@@ -864,6 +875,79 @@ export async function enqueueCompletedGameChatNotifications(
         commenterId,
         commenterName,
         ...(options?.backfill ? { backfill: true } : {}),
+      }, {
+        userSettings: userSettingsFromMap(options?.settingsByUserId, player.id),
+      });
+    })());
+  }
+
+  await Promise.all(work);
+}
+
+export async function hasActiveTournamentChatNotification(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  tournamentId: string,
+  nowSec = Math.floor(Date.now() / 1000),
+): Promise<boolean> {
+  const pk = notificationPk(userId);
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const result = await client.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'pk = :pk',
+      ExpressionAttributeValues: { ':pk': pk },
+      ExclusiveStartKey: lastKey,
+    }));
+    for (const item of result.Items ?? []) {
+      const rec = item as NotificationRecord;
+      if (rec.expiresAt <= nowSec) {
+        continue;
+      }
+      if (rec.body.type === 'tournamentChat' && rec.body.tournamentId === tournamentId) {
+        return true;
+      }
+    }
+    lastKey = result.LastEvaluatedKey;
+  } while (lastKey);
+  return false;
+}
+
+/** Notify tournament participants when someone posts tournament chat. */
+export async function enqueueTournamentChatNotifications(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  tournamentId: string,
+  metaGame: string,
+  variants: string[] | undefined,
+  players: CompletedGameChatPlayer[],
+  commenterId: string,
+  options?: { settingsByUserId?: InAppSettingsByUserId },
+): Promise<void> {
+  const variantList = variants ?? [];
+  const commenter = players.find(p => p.id === commenterId);
+  const commenterName = commenter?.name ?? 'Someone';
+  const work: Promise<void>[] = [];
+
+  for (const player of players) {
+    if (player.id === commenterId) {
+      continue;
+    }
+    work.push((async () => {
+      if (await isBotId(player.id)) {
+        return;
+      }
+      if (await hasActiveTournamentChatNotification(client, tableName, player.id, tournamentId)) {
+        return;
+      }
+      await createNotification(client, tableName, player.id, {
+        type: 'tournamentChat',
+        tournamentId,
+        metaGame,
+        variants: variantList,
+        commenterId,
+        commenterName,
       }, {
         userSettings: userSettingsFromMap(options?.settingsByUserId, player.id),
       });
