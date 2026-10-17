@@ -17,6 +17,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 - **Ops:** `npm run backfill-orb-game-variants` repairs Generatorb `GAME` rows whose `variants` and serialized state lost `noglobes` (requires gameslib with opening-board inference).
 - **Thumbnails:** CDN `{uid}.json` is a v1 envelope with `source` (sampled game id, cbit, move URL) and `render` (board JSON); `sqs-to-render` unwraps `render` for SVG generation. Legacy bare render JSON remains readable until the next daily thumbnail run.
+- **Thumbnails:** composite `render()` output (`kind: "composite"`) is labeled per panel and rasterized via `renderComposite` in `sqs-to-render` (not coerced to a single frame).
 - **Bots:** `botQuery` verb `pie` for registered bots (seat swap on the bot's turn; same checks as `move`, delegates to `invokePie`). Documented in [Bot protocol](/backend/bots/protocol/) and [Bot queries](/backend/api/bot-queries/).
 - **Bots:** owner diagnostics — failed `move`/`pie` after turn validation notifies the bot owner (`botMoveFailed`) and posts a system in-game chat message (deduped); new `pingOwner` verb for bot-reported internal errors (`botOwnerPing`, rate-limited). In-app category `bots`.
 - **Records (crons):** optional merge of legacy AiAi player id `SkQfHAjeDxs8eeEnScuYA` into prod registered bot client id via `AIAI_BOT_RECORDS_CANONICAL_ID` (prod deploy sets from `AIAI_BOT_ID_PROD`); drops stale `player/{legacy}.json` shard when canonical is set.

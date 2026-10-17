@@ -4,8 +4,8 @@ import {
     type ChatLogTranslate,
     type RenderLabel,
 } from "@abstractplay/gameslib";
-import type { APRenderRep } from "@abstractplay/renderer";
-import type { ThumbnailRenderOutput } from "./thumbnailRenderRep.js";
+import type { APRenderComposite, APRenderRep } from "@abstractplay/renderer";
+import { isThumbnailComposite, type ThumbnailRenderOutput } from "./thumbnailRenderRep.js";
 
 type ThumbnailPlayer = {
     name: string;
@@ -102,6 +102,21 @@ function resolveRenderLabelsOne(
     return out;
 }
 
+function resolveCompositeRenderLabels(
+    composite: APRenderComposite,
+    playerNames: string[],
+    t: ChatLogTranslate,
+): APRenderComposite {
+    const out = structuredClone(composite);
+    for (const panel of out.panels) {
+        if (panel.label !== undefined) {
+            panel.label = resolveLabelField(panel.label, playerNames, t);
+        }
+        panel.render = resolveRenderLabelsOne(panel.render, playerNames, t);
+    }
+    return out;
+}
+
 /** Resolve structured render labels to display strings before thumbnail SVG rendering. */
 export function resolveRenderLabels(
     rep: ThumbnailRenderOutput,
@@ -109,6 +124,9 @@ export function resolveRenderLabels(
     t: ChatLogTranslate,
 ): ThumbnailRenderOutput {
     const playerNames = players.map((p) => p.name);
+    if (isThumbnailComposite(rep)) {
+        return resolveCompositeRenderLabels(rep, playerNames, t);
+    }
     if (Array.isArray(rep)) {
         return rep.map((frame) => resolveRenderLabelsOne(frame, playerNames, t));
     }

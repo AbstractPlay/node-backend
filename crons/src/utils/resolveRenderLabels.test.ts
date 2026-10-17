@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import { addResource } from "@abstractplay/gameslib";
-import type { APRenderRep } from "@abstractplay/renderer";
+import type { APRenderComposite, APRenderRep } from "@abstractplay/renderer";
 import { enApgames, enApresults } from "./gameslibEnLocaleBundles.js";
 import { resolveRenderLabels } from "./resolveRenderLabels.js";
 
@@ -16,6 +16,40 @@ describe("resolveRenderLabels", () => {
         }
         return key;
     };
+
+    it("resolves composite panel labels and nested panel renders", () => {
+        const composite = {
+            kind: "composite",
+            layout: { arrangement: "row" },
+            panels: [
+                {
+                    id: "p1",
+                    label: {
+                        textKey: "test:STASH",
+                        actor: { kind: "seat", seat: 2 },
+                    },
+                    render: {
+                        areas: [
+                            {
+                                type: "pieces",
+                                label: {
+                                    textKey: "test:STASH",
+                                    actor: { kind: "seat", seat: 1 },
+                                },
+                                pieces: ["A1"],
+                            },
+                        ],
+                        legend: { A1: "piece" },
+                    },
+                },
+            ],
+        } as unknown as APRenderComposite;
+        const resolved = resolveRenderLabels(composite, players, t);
+        expect(resolved.kind).toBe("composite");
+        const panel = (resolved as APRenderComposite).panels[0];
+        expect(panel.label).toBe("Bob's stash");
+        expect((panel.render.areas![0] as { label: string }).label).toBe("Alice's stash");
+    });
 
     it("resolves structured area labels to display names", () => {
         const rep = {
