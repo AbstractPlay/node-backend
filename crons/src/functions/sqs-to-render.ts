@@ -5,9 +5,9 @@ import {
     DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { addPrefix } from "@abstractplay/renderer";
-import type { IRenderOptions, APRenderRep } from "@abstractplay/renderer";
+import type { APRenderComposite, APRenderRep, IRenderOptions } from "@abstractplay/renderer";
 import type { SQSHandler } from "aws-lambda";
-import { coalesceRenderFrames } from "../utils/thumbnailRenderRep.js";
+import { resolveThumbnailDrawable } from "../utils/thumbnailRenderRep.js";
 import { injectSourceIntoSvg, parseThumbnailJson } from "../utils/thumbnailArtifact.js";
 import { putThumbnailMetric } from "../utils/cloudwatchMetrics.js";
 import { THUMB_BUCKET } from "../utils/thumbnailConfig.js";
@@ -87,7 +87,7 @@ export const handler: SQSHandler = async (event) => {
             const obj = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
             const data = await streamToString(obj.Body as Readable);
             const { render, source } = parseThumbnailJson(JSON.parse(data) as unknown);
-            const aprender = coalesceRenderFrames(render);
+            const drawable = resolveThumbnailDrawable(render);
 
             const contextLight = {
                 background: "#fff",
@@ -120,7 +120,7 @@ export const handler: SQSHandler = async (event) => {
                 await page.setContent(RENDER_PAGE_HTML, { waitUntil: "load" });
                 await page.addScriptTag({ url: renderScriptUrl });
                 await page.evaluate(() => document.fonts.ready);
-                await page.evaluate((pfx, colourContext, renderRep) => {
+                await page.evaluate((pfx, colourContext, drawableKind, renderRep) => {
                     const opts: IRenderOptions = {
                         prefix: pfx,
                         divid: "drawing",
@@ -128,9 +128,18 @@ export const handler: SQSHandler = async (event) => {
                         contextGlobal: true,
                         coloursGlobal: false,
                     };
-                    (window as unknown as { APRender: { render: (rep: APRenderRep, o: IRenderOptions) => void } })
-                        .APRender.render(renderRep, opts);
-                }, prefix, context, aprender);
+                    const ap = (window as unknown as {
+                        APRender: {
+                            render: (rep: APRenderRep, o: IRenderOptions) => void;
+                            renderComposite: (rep: APRenderComposite, o: IRenderOptions) => void;
+                        };
+                    }).APRender;
+                    if (drawableKind === "composite") {
+                        ap.renderComposite(renderRep as APRenderComposite, opts);
+                    } else {
+                        ap.render(renderRep as APRenderRep, opts);
+                    }
+                }, prefix, context, drawable.kind, drawable.rep);
 
                 const svgString = await page.evaluate(() => {
                     const svgEl = document.querySelector("svg");
