@@ -9,8 +9,13 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ## [1.0.0-ci] - 2026-10-17
 
+### Fixed
+
+- **Games:** `hydrateGameState` infers variant uids from the engine when both the GAME `variants` attribute and state JSON are empty (Amazons already patched state from GAME `variants` only; Generatorb needed engine inference).
+
 ### Added
 
+- **Ops:** `npm run backfill-orb-game-variants` repairs Generatorb `GAME` rows whose `variants` and serialized state lost `noglobes` (requires gameslib with opening-board inference).
 - **Thumbnails:** CDN `{uid}.json` is a v1 envelope with `source` (sampled game id, cbit, move URL) and `render` (board JSON); `sqs-to-render` unwraps `render` for SVG generation. Legacy bare render JSON remains readable until the next daily thumbnail run.
 - **Bots:** `botQuery` verb `pie` for registered bots (seat swap on the bot's turn; same checks as `move`, delegates to `invokePie`). Documented in [Bot protocol](/backend/bots/protocol/) and [Bot queries](/backend/api/bot-queries/).
 - **Bots:** owner diagnostics — failed `move`/`pie` after turn validation notifies the bot owner (`botMoveFailed`) and posts a system in-game chat message (deduped); new `pingOwner` verb for bot-reported internal errors (`botOwnerPing`, rate-limited). In-app category `bots`.
