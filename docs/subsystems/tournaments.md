@@ -12,6 +12,7 @@
 | `TOURNAMENTPLAYER` | `<tournamentid>#<division>#<playerid>` | Player entry |
 | `TOURNAMENTGAME` | `<tournamentid>#<division>#<gameid>` | Linked game |
 | `COMPLETEDTOURNAMENT` | `<metaGame>#<tournamentid>` | Archived tournament |
+| `TOURNAMENTCOMMENTS` | `<tournamentid>` | Public tournament chat log |
 | `TOURNAMENTSCOUNTER` | `<metaGame>#<variants>` (single-leg) or `…#2` (two-leg) | Serial number counter per series |
 
 ## Lifecycle
@@ -47,6 +48,12 @@ Tournament pairing and visibility are **not** affected by player blocking.
 ## Queries
 
 See [Public queries](/backend/api/public-queries/) and [Auth queries](/backend/api/auth-queries/) tournament sections.
+
+## Tournament chat
+
+- **Read** — public `get_tournament` returns `comments` (same shape as in-game `GAMECOMMENTS` entries; Markdown on the client).
+- **Write** — auth `submit_tournament_comment` (`tournamentid`, `comment`). Participants (any division) and site admins may post.
+- **Notify** — other participants receive in-app `tournamentChat` notifications (pref `tournamentChat`, deduped per tournament). Real-time refresh on the tournament page uses WebSocket `watchTournaments` and verb `tournament`.
 
 ## Related
 

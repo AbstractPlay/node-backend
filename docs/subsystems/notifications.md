@@ -50,6 +50,7 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `ratingChange` | `ratingChange` (crons daily batch) |
 | `eventInvitation` | `eventInvitation` |
 | `completedGameChat` | `completedGameChat` |
+| `tournamentChat` | `tournamentChat` |
 | `tournamentStart` | `tournamentStart` (crons `starttournaments`) |
 | `tournamentEnd` | `tournamentEnd` (node-backend `endTournament`) |
 | `bots` | `botMoveFailed`, `botOwnerPing` |
@@ -61,6 +62,7 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `gameStart` | Game begins | Game name links to `/move/{metaGame}/0/{gameId}` |
 | `gameEnd` | Game ends | **View** links to `/move/{metaGame}/0/{gameId}`; includes `opponentId` / `opponentName` when the game has a human opponent; `scores` (`(string \| number)[]`) when the game uses the `scores` flag |
 | `completedGameChat` | Post-game comment on completed game (`save_exploration` with `updateLastChat`) | **View** links to `/move/{metaGame}/1/{gameId}`; one active notification per game until dismissed; legacy backfill rows use generic message when `body.backfill` |
+| `tournamentChat` | Tournament chat (`submit_tournament_comment`) | Tournament link to `/tournament/{tournamentId}`; one active notification per tournament until dismissed |
 | `ratingChange` | Daily batch Glicko diff after summarize (crons stack) | Game name links to `/ratings/{metaGame}`; variant labels in message when applicable |
 | `tournamentStart` | Tournament series starts (`starttournaments` cron) | Tournament name links to `/tournament/{tournamentId}`; variant labels when applicable; dismiss only |
 | `tournamentEnd` | All tournament divisions complete (`endTournament`) | Tournament name links to `/tournament/{tournamentId}`; includes division winner name when available; dismiss only |

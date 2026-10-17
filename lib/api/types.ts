@@ -18,6 +18,7 @@ export type UserSettings = {
       ratingChange: boolean;
       eventInvitation: boolean;
       completedGameChat: boolean;
+      tournamentChat: boolean;
       tournamentStart: boolean;
       tournamentEnd: boolean;
       bots?: boolean;

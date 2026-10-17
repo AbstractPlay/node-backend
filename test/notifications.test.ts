@@ -17,6 +17,7 @@ import {
   collectGameEndScoresFromEngine,
   formatNotificationScores,
   hasActiveCompletedGameChatNotification,
+  hasActiveTournamentChatNotification,
   hasActiveEventInvitationNotification,
   inAppCategoryForBody,
   loadNotificationsForDashboard,
@@ -313,6 +314,24 @@ test('gameEnd body carries score fields when present', () => {
   assert.deepEqual(item.body.scores, [10, '3 goals']);
 });
 
+test('tournamentChat body carries tournament link fields', () => {
+  const tournamentId = 'tour-1';
+  const item = buildNotificationItem(USER_ID, {
+    type: 'tournamentChat',
+    tournamentId,
+    metaGame: 'go',
+    variants: [],
+    commenterId: OTHER_USER_ID,
+    commenterName: 'Bob',
+  });
+  assert.equal(item.body.type, 'tournamentChat');
+  if (item.body.type !== 'tournamentChat') {
+    return;
+  }
+  assert.equal(item.body.tournamentId, tournamentId);
+  assert.equal(inAppCategoryForBody(item.body), 'tournamentChat');
+});
+
 test('completedGameChat body carries game link fields', () => {
   const item = buildNotificationItem(USER_ID, {
     type: 'completedGameChat',
@@ -362,6 +381,38 @@ test('backfillCompletedGameChatNotification writes backfill flag and skips dup',
   );
   assert.equal(second, 'skipped_dup');
   assert.equal(store.size, 1);
+});
+
+test('hasActiveTournamentChatNotification finds non-expired notification for tournament', async () => {
+  const tournamentId = 'tour-1';
+  const store: Store = new Map([
+    [itemKey({
+      pk: notificationPk(USER_ID),
+      sk: '2000#tchat',
+    }), {
+      pk: notificationPk(USER_ID),
+      sk: '2000#tchat',
+      body: {
+        type: 'tournamentChat',
+        tournamentId,
+        metaGame: 'go',
+        variants: [],
+        commenterId: OTHER_USER_ID,
+        commenterName: 'Bob',
+      },
+      expiresAt: notificationSeenExpiresAt(),
+    }],
+  ]);
+  const client = createMockDocClient(store);
+
+  assert.equal(
+    await hasActiveTournamentChatNotification(client as never, TABLE, USER_ID, tournamentId),
+    true,
+  );
+  assert.equal(
+    await hasActiveTournamentChatNotification(client as never, TABLE, USER_ID, 'other-tour'),
+    false,
+  );
 });
 
 test('hasActiveCompletedGameChatNotification finds non-expired notification for game', async () => {
