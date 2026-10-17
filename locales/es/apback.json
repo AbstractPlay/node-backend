@@ -30,7 +30,10 @@
       "started": "Juego iniciado",
       "yourturn": "Tu turno",
       "tournament": "Torneo iniciado",
-      "tournamentOver": "Torneo finalizado"
+      "tournamentOver": "Torneo finalizado",
+      "participantLeft": "El jugador ha abandonado el reto",
+      "announcement": "Anuncio del sitio",
+      "slotOpened": "Sitio para el reto abierto"
     }
   },
   "YourMove": "Es tu turno para mover.",
@@ -48,5 +51,19 @@
   "TournamentRemoveBodyVariants": "Se te ha excluido del torneo {{- metaGame}}, variantes: {{variants}} en el que te habías inscrito, porque no está claro si sigues interesado. Si aún deseas participar, inscríbete de nuevo en https://play.abstractplay.com/tournaments.",
   "TournamentRemoveSubject": "Fuiste expulsado de un torneo",
   "TournamentStartBodyVariants": "Ha comenzado el torneo {{number}} de la serie {{- metaGame}}, variantes: {{variants}}. Consulta https://play.abstractplay.com/tournaments. También estás inscrito en el próximo torneo de la serie, que comenzará una semana después de que finalice este.",
-  "TournamentStartSubject": "Tu torneo de {{- metaGame}} ha comenzado"
+  "TournamentStartSubject": "Tu torneo de {{- metaGame}} ha comenzado",
+  "ChallengeSlotOpenedChallengerBody": "{{quitter}} ha abandonado tu reto {{- metaGame}}. {{count}} sitio(s) están disponibles ahora para cualquiera.",
+  "ChallengeSlotOpenedSubject": "AbstractPlay: Sitio del reto abierto",
+  "ChallengeParticipantLeftBody": "{{quitter}} ha abandonado el reto {{- metaGame}}. Está abierto a otros jugadores.",
+  "DirectChallengeOptOutNote": "Este usuario ha decidido no aceptar retos directos.",
+  "AnnouncementBody": "Un nuevo anuncio ha sido publicado: {{- title}}\n\nLéelo en el sitio: {{- link}}",
+  "TournamentEndIntro": "El torneo {{number}} de la serie {{- metaGame}} ha terminado.",
+  "TournamentEndWinner_you": "¡Has ganado el torneo!",
+  "TournamentEndWinner_other": "{{winnerName}} ha ganado el torneo.",
+  "TournamentEndStandingsHeader": "Finalistas en tu división:",
+  "TournamentEndLink": "Mira las partidas y los resultados: https://play.abstractplay.com/tournament/{{tournamentId}}",
+  "TournamentEndNextSignupRegistered": "Ya te has registrado para el siguiente torneo en esta serie.",
+  "AnnouncementSubject": "AbstractPlay: Anuncio del sitio",
+  "TournamentEndIntroVariants": "Torneo {{numbers}} del {{- metaGame}}, variantes: {{variantes}} series han terminado.",
+  "TournamentEndNextSignup_one": "El próximo torneo en esta serie podría comenzar en {{count}} días si por lo menos {{minSingups}} jugadores están registrados ({{singupCount}} ahora). Visita https://play.abstractplay.com/tournaments para registrarte o ajustar tu registro."
 }

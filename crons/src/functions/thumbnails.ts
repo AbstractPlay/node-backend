@@ -5,7 +5,7 @@ import { enApgames, enApresults } from "../utils/gameslibEnLocaleBundles.js";
 import { gunzipSync, strFromU8 } from "fflate";
 import { load as loadIon } from "ion-js";
 import { ReservoirSampler } from "../utils/ReservoirSampler.js";
-import type { ThumbnailRenderOutput } from "../utils/thumbnailRenderRep.js";
+import type { ThumbnailArtifactV1 } from "../utils/thumbnailArtifact.js";
 import {
     buildThumbnailForMeta,
     errorMessage,
@@ -222,13 +222,17 @@ export const handler: Handler = async () => {
             console.log("GAME records processed");
 
             const renderFailures: ThumbnailGenerationFailure[] = [];
-            const allRecs = new Map<string, ThumbnailRenderOutput>();
+            const generatedAt = new Date().toISOString();
+            const allRecs = new Map<string, ThumbnailArtifactV1>();
             for (const [meta, entry] of samplerMap.entries()) {
-                const built = buildThumbnailForMeta(meta, entry, (key, params) =>
-                    String(gamesI18n.t(key, params ?? {})),
+                const built = buildThumbnailForMeta(
+                    meta,
+                    entry,
+                    (key, params) => String(gamesI18n.t(key, params ?? {})),
+                    generatedAt,
                 );
                 if (built.ok) {
-                    allRecs.set(meta, built.output);
+                    allRecs.set(meta, built.artifact);
                 } else {
                     renderFailures.push(built.failure);
                     if (built.failure.phase === "sample") {
@@ -248,9 +252,9 @@ export const handler: Handler = async () => {
                 );
             }
 
-            const uploadEntries = [...allRecs.entries()].map(([meta, rep]) => ({
+            const uploadEntries = [...allRecs.entries()].map(([meta, artifact]) => ({
                 meta,
-                body: JSON.stringify(rep),
+                body: JSON.stringify(artifact),
             }));
             const uploadFailures: ThumbnailUploadFailure[] = [];
             await runInBatches(uploadEntries, THUMBNAIL_UPLOAD_CONCURRENCY, async ({ meta, body }) => {

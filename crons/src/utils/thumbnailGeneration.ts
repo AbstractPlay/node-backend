@@ -4,6 +4,11 @@ import { decompressGameState } from "./gameState.js";
 import { resolveRenderLabels } from "./resolveRenderLabels.js";
 import type { ThumbnailRenderOutput } from "./thumbnailRenderRep.js";
 import type { ReservoirSampler } from "./ReservoirSampler.js";
+import {
+    buildThumbnailArtifact,
+    buildThumbnailSource,
+    type ThumbnailArtifactV1,
+} from "./thumbnailArtifact.js";
 
 export type ThumbnailSamplerEntry = {
     active: ReservoirSampler<GameRec>;
@@ -80,7 +85,8 @@ export function buildThumbnailForMeta(
     meta: string,
     entry: ThumbnailSamplerEntry,
     t: (key: string, params?: Record<string, unknown>) => string,
-): { ok: true; output: ThumbnailRenderOutput } | { ok: false; failure: ThumbnailGenerationFailure } {
+    generatedAt: string = new Date().toISOString(),
+): { ok: true; artifact: ThumbnailArtifactV1 } | { ok: false; failure: ThumbnailGenerationFailure } {
     const picked = pickSampleGameRec(meta, entry);
     if ("failure" in picked) {
         return { ok: false, failure: picked.failure };
@@ -112,8 +118,9 @@ export function buildThumbnailForMeta(
 
         phase = "labels";
         const resolved = resolveRenderLabels(rep, rec.players, (key, params) => String(t(key, params ?? {})));
+        const source = buildThumbnailSource(meta, rec, sampleKind, generatedAt);
 
-        return { ok: true, output: resolved };
+        return { ok: true, artifact: buildThumbnailArtifact(source, resolved) };
     } catch (err) {
         return {
             ok: false,
