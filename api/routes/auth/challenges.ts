@@ -4,10 +4,12 @@ import {
   respondedChallenge,
   revokeChallenge,
 } from '../../../lib/challenges/authHandlers.js';
+import { getChallengePositionPreviewAuth } from '../../../lib/challenges/startPositionPreview.js';
 import { bindAuth } from './shared.js';
 
 export const challengesAuthRoutes: Record<string, AuthRouteHandler> = {
   new_challenge: bindAuth(newChallenge),
   challenge_revoke: bindAuth(revokeChallenge),
   challenge_response: bindAuth(respondedChallenge),
+  get_challenge_position_preview: bindAuth(getChallengePositionPreviewAuth),
 };
