@@ -44,6 +44,16 @@ import {
   normalizeTeachingChallengeFields,
   validateTeachingChallengeIssue,
 } from './teachingModeEligible.js';
+import {
+  deleteChallengePosition,
+  getChallengePosition,
+  hasStartPositionPayload,
+  normalizeStartPositionChallengeFields,
+  putChallengePosition,
+  resolveStartFromPosition,
+  validateStartPositionChallengeShape,
+  validateStartPositionForIssue,
+} from './startPosition.js';
 import { sendUserPush } from '../push/sendUserPush.js';
 import {
   createNotification,
@@ -86,6 +96,8 @@ type FullChallenge = {
   dateIssued?: number;
   openSlots?: number;
   fillableDirect?: boolean;
+  startPosition?: { state: string };
+  hasStartPosition?: boolean;
 };
 
 type FullUser = {
@@ -102,6 +114,23 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
   const variantErr = validateChallengeVariantUids(challenge.metaGame, challenge.variants);
   if (variantErr) {
     return variantErr;
+  }
+  normalizeStartPositionChallengeFields(challenge);
+  const startShapeErr = validateStartPositionChallengeShape(challenge);
+  if (startShapeErr) {
+    return formatReturnError(startShapeErr);
+  }
+  const issueWithStartPosition = hasStartPositionPayload(challenge);
+  if (issueWithStartPosition) {
+    const startErr = validateStartPositionForIssue(
+      challenge.metaGame,
+      challenge.numPlayers,
+      challenge.variants,
+      challenge.startPosition!.state,
+    );
+    if (startErr) {
+      return formatReturnError(startErr);
+    }
   }
   normalizeTeachingChallengeFields(challenge);
   const teachingErr = await validateTeachingChallengeIssue(challenge);
@@ -158,6 +187,8 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
     return formatReturnError(participantErr);
   }
 
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Item: {
@@ -183,6 +214,7 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
       "comment": challenge.comment || "",
       "dateIssued": Date.now(),
       "openSlots": openSlots,
+      ...(issueWithStartPosition ? { hasStartPosition: true } : {}),
     }
   }));
 
@@ -195,7 +227,17 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
   }));
 
   const list: Promise<any>[] = [addChallenge, updateChallenger];
-  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+  if (issueWithStartPosition) {
+    list.push(
+      putChallengePosition(
+        ddbDocClient,
+        tableName,
+        challengeId,
+        challenge.startPosition!.state,
+        challenge.variants,
+      ),
+    );
+  }
   for (const challengee of humanChallengees) {
     list.push(
       ddbDocClient.send(new UpdateCommand({
@@ -298,6 +340,9 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
 }
 
 async function newStandingChallenge(userid: string, challenge: FullChallenge) {
+  if (hasStartPositionPayload(challenge)) {
+    return formatReturnError('Start position cannot be used on open or standing challenges.');
+  }
   const challengeId = uuid();
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
@@ -972,6 +1017,9 @@ async function removeAChallenge(
           },
         }))
     );
+    if (challenge.hasStartPosition === true) {
+      list.push(deleteChallengePosition(ddbDocClient, tableName, challengeId));
+    }
   } else if (revoked || expired) {
     console.log(`removing challenge ${challenge.metaGame + '#' + challengeId}`);
     list.push(
@@ -1080,20 +1128,45 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     const variants = challenge.variants;
     console.log(`Variants in the challenge object: ${JSON.stringify(variants)}`);
     let engine;
-    if (info.playercounts.length > 1)
-      engine = GameFactory(challenge.metaGame, challenge.numPlayers, variants);
-    else
-      engine = GameFactory(challenge.metaGame, undefined, variants);
-    if (!engine)
-      throw new Error(`Unknown metaGame ${challenge.metaGame}`);
-    console.log(`Variants in the game engine: ${JSON.stringify(engine.variants)}`);
     let whoseTurn: string | boolean[] = '0';
-    if (info.flags !== undefined && info.flags.includes('simultaneous')) {
-      whoseTurn = playerIDs.map(() => true);
-    } else if (typeof engine.currplayer === 'number') {
-      whoseTurn = `${engine.currplayer - 1}`;
+    let state: string;
+    if (challenge.hasStartPosition === true) {
+      const position = await getChallengePosition(ddbDocClient, tableName, challengeId);
+      if (position === undefined) {
+        throw new Error(`Start position missing for challenge ${challengeId}`);
+      }
+      const startErr = validateStartPositionForIssue(
+        challenge.metaGame,
+        challenge.numPlayers,
+        challenge.variants,
+        position.state,
+      );
+      if (startErr) {
+        throw new Error(startErr);
+      }
+      const resolved = resolveStartFromPosition(
+        challenge.metaGame,
+        challenge.variants,
+        position.state,
+      );
+      engine = resolved.engine;
+      whoseTurn = resolved.toMove;
+      state = resolved.state;
+    } else {
+      if (info.playercounts.length > 1)
+        engine = GameFactory(challenge.metaGame, challenge.numPlayers, variants);
+      else
+        engine = GameFactory(challenge.metaGame, undefined, variants);
+      if (!engine)
+        throw new Error(`Unknown metaGame ${challenge.metaGame}`);
+      if (info.flags !== undefined && info.flags.includes('simultaneous')) {
+        whoseTurn = playerIDs.map(() => true);
+      } else if (typeof engine.currplayer === 'number') {
+        whoseTurn = `${engine.currplayer - 1}`;
+      }
+      state = engine.serialize();
     }
-    const state = engine.serialize();
+    console.log(`Variants in the game engine: ${JSON.stringify(engine.variants)}`);
     const now = Date.now();
     const gamePlayers = playersFull.map(p => { return { "id": p.id, "name": p.name, "time": challenge.clockStart * 3600000 } }) as User[];
     applyPerspectivePlayerRotations(
@@ -1127,6 +1200,9 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     const list: Promise<any>[] = [];
     list.push(addGame);
     list.push(removeAChallenge(challenge, storageStanding, false, true, '', loaded));
+    if (challenge.hasStartPosition === true) {
+      list.push(deleteChallengePosition(ddbDocClient, tableName, challengeId));
+    }
 
     try {
       await Promise.all(list);
