@@ -41,6 +41,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 - **Tournaments:** automated tournament games now start each player at the full `clockMax` bank (leg 2 uses the same cap); shared constants in `lib/tournaments/clock.ts`.
 - **CI deps:** cross-branch merges keep target-branch `package.json` / lockfile via `.gitattributes` (`merge=ours`); dep relay auto-commit stages root manifests and `crons/package.json`; `postinstall` syncs crons AP pins from root.
+- **CI deps:** `npm run setup-git` registers the `merge.ours` driver (`.gitattributes` alone did not prevent develop↔`main` conflicts); documented GitHub PR merge limitation.
 - **Dashboard:** `me_dashboard` no longer queries or returns in-app notifications (use `list_notifications` only).
 
 ### Fixed
