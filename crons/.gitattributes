@@ -1,2 +1,2 @@
-# See repo-root .gitattributes (crons/package.json is synced from root via postinstall / sync-deps).
+# See repo-root .gitattributes + npm run setup-git (merge.ours driver).
 package.json merge=ours

@@ -10,6 +10,7 @@
 
 ```bash
 npm install
+npm run setup-git   # once per clone — enables merge=ours for package pins (develop↔main)
 npm run build
 ```
 
