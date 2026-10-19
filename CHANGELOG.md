@@ -7,10 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Entries below are grouped by theme and approximate ship window; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-10-18
+## [1.0.0-ci] - 2026-10-19
 
 ### Fixed
 
+- **Completed games index:** stream projector deletes the previous `lastMoveTime#id` completed-dashboard rows when `lastMoveTime` changes on a completed `GAME` modify; `bin/dedupe-completed-game-indexes.mjs` removes existing duplicate index rows and fixes sharded `completedgames` counts.
+- **Completed games list:** `sanitizeInGameCommentedFlags` dedupes `GAMECOMMENTS` BatchGet keys when `COMPLETEDGAMES#<metaGame>` contains duplicate rows for the same game id (fixes 500 on Storisende completed tab).
 - **Games:** `hydrateGameState` infers variant uids from the engine when both the GAME `variants` attribute and state JSON are empty (Amazons already patched state from GAME `variants` only; Generatorb needed engine inference).
 
 ### Added
