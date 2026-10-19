@@ -192,4 +192,64 @@ describe('processGameStreamRecord', () => {
     assert.ok(puts.some(item => item.pk === 'COMPLETEDGAMES#loa' && item.sk === '200#g1'));
     assert.ok(puts.some(item => item.pk === 'COMPLETEDGAMES#human-1' && item.sk === '200#g1'));
   });
+
+  it('drops stale completed index sk when lastMoveTime changes on modify', async () => {
+    const deletes: Array<{ pk?: string; sk?: string }> = [];
+    const puts: Array<{ pk?: string; sk?: string }> = [];
+    const docClient = {
+      send: async (command: {
+        input?: {
+          Item?: { pk?: string; sk?: string };
+          RequestItems?: Record<string, Array<{ DeleteRequest?: { Key: { pk: string; sk: string } } }>>;
+        };
+      }) => {
+        if (command.input?.Item) {
+          puts.push(command.input.Item);
+        }
+        const batch = command.input?.RequestItems?.table ?? [];
+        for (const entry of batch) {
+          if (entry.DeleteRequest) {
+            deletes.push(entry.DeleteRequest.Key);
+          }
+        }
+      },
+    } as unknown as DynamoDBDocumentClient;
+
+    const baseGame = {
+      pk: { S: 'GAME' },
+      sk: { S: 'loa#1#g1' },
+      id: { S: 'g1' },
+      metaGame: { S: 'loa' },
+      numPlayers: { N: '2' },
+      numMoves: { N: '5' },
+      clockHard: { BOOL: false },
+      toMove: { S: '' },
+      state: { S: '{}' },
+      players: {
+        L: [
+          { M: { id: { S: 'human-1' }, name: { S: 'A' } } },
+          { M: { id: { S: 'human-2' }, name: { S: 'B' } } },
+        ],
+      },
+    };
+
+    await processGameStreamRecord(docClient, 'table', {
+      eventName: 'MODIFY',
+      dynamodb: {
+        OldImage: {
+          ...baseGame,
+          lastMoveTime: { N: '100' },
+          commented: { N: '0' },
+        },
+        NewImage: {
+          ...baseGame,
+          lastMoveTime: { N: '200' },
+          commented: { N: '1' },
+        },
+      },
+    } satisfies DynamoDBRecord);
+
+    assert.ok(deletes.some(item => item.pk === 'COMPLETEDGAMES#loa' && item.sk === '100#g1'));
+    assert.ok(puts.some(item => item.pk === 'COMPLETEDGAMES#loa' && item.sk === '200#g1'));
+  });
 });
