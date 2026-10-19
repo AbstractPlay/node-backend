@@ -284,13 +284,17 @@ export async function purgeCompletedGameDashboardIndexes(
   await deleteUserGameOverlaysForPlayers(docClient, tableName, game.id, playerIds);
 }
 
+export function completedGameIndexSk(lastMoveTime: number, gameId: string): string {
+  return `${lastMoveTime}#${gameId}`;
+}
+
 async function putCompletedGameIndexes(
   docClient: DynamoDBDocumentClient,
   tableName: string,
   game: GameRecord,
   summary: ReturnType<typeof toCompletedSummary>,
 ): Promise<void> {
-  const sk = `${game.lastMoveTime}#${game.id}`;
+  const sk = completedGameIndexSk(game.lastMoveTime, game.id);
   const work: Promise<unknown>[] = [
     docClient.send(new PutCommand({
       TableName: tableName,
@@ -310,12 +314,13 @@ async function putCompletedGameIndexes(
   await Promise.all(work);
 }
 
-async function deleteCompletedGameIndexes(
+async function deleteCompletedGameIndexesAt(
   docClient: DynamoDBDocumentClient,
   tableName: string,
-  game: GameRecord,
+  game: Pick<GameRecord, 'id' | 'metaGame' | 'players'>,
+  lastMoveTime: number,
 ): Promise<void> {
-  const sk = `${game.lastMoveTime}#${game.id}`;
+  const sk = completedGameIndexSk(lastMoveTime, game.id);
   const keys = [
     { pk: 'COMPLETEDGAMES', sk },
     { pk: `COMPLETEDGAMES#${game.metaGame}`, sk },
@@ -331,6 +336,14 @@ async function deleteCompletedGameIndexes(
       },
     }));
   }
+}
+
+async function deleteCompletedGameIndexes(
+  docClient: DynamoDBDocumentClient,
+  tableName: string,
+  game: GameRecord,
+): Promise<void> {
+  await deleteCompletedGameIndexesAt(docClient, tableName, game, game.lastMoveTime);
 }
 
 async function handleActiveGameInsert(
@@ -388,12 +401,23 @@ async function handleCompletedGameModify(
   game: GameRecord,
   oldGame: GameRecord | undefined,
 ): Promise<void> {
-  if (oldGame?.commented === game.commented) {
+  const commentedChanged = oldGame?.commented !== game.commented;
+  const lastMoveTimeChanged = oldGame !== undefined
+    && oldGame.lastMoveTime !== game.lastMoveTime;
+  if (!commentedChanged && !lastMoveTimeChanged) {
     return;
   }
   const numMoves = resolveNumMoves(game);
   if (!shouldKeepCompletedGame(game, numMoves)) {
     return;
+  }
+  if (lastMoveTimeChanged && oldGame) {
+    await deleteCompletedGameIndexesAt(
+      docClient,
+      tableName,
+      oldGame,
+      oldGame.lastMoveTime,
+    );
   }
   const summary = toCompletedSummary(game, numMoves);
   await putCompletedGameIndexes(docClient, tableName, game, summary);

@@ -160,16 +160,22 @@ export async function games(pars: { metaGame: string, type: string; }) {
     }
   } else if (pars.type === "completed") {
     try {
-      const gamesData = await ddbDocClient.send(
-        new QueryCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          KeyConditionExpression: "#pk = :pk",
-          ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES#" + game },
-          ExpressionAttributeNames: { "#pk": "pk" }
-        }));
-
       const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-      const items = (gamesData.Items ?? []) as Array<{ id: string; commented?: number }>;
+      const items: Array<{ id: string; commented?: number }> = [];
+      let lastEvaluatedKey: Record<string, unknown> | undefined;
+      do {
+        const gamesData = await ddbDocClient.send(
+          new QueryCommand({
+            TableName: tableName,
+            KeyConditionExpression: "#pk = :pk",
+            ExpressionAttributeValues: { ":pk": "COMPLETEDGAMES#" + game },
+            ExpressionAttributeNames: { "#pk": "pk" },
+            ExclusiveStartKey: lastEvaluatedKey,
+          }));
+        items.push(...((gamesData.Items ?? []) as Array<{ id: string; commented?: number }>));
+        lastEvaluatedKey = gamesData.LastEvaluatedKey as Record<string, unknown> | undefined;
+      } while (lastEvaluatedKey);
+
       await sanitizeInGameCommentedFlags(ddbDocClient, tableName, items);
       return {
         statusCode: 200,
