@@ -100,6 +100,18 @@ describe('teaching mode challenge eligibility', () => {
     });
     assert.equal(err, null);
   });
+
+  it('ignores empty challengee slots from open-standing UI payloads', async () => {
+    const err = await validateTeachingChallengeIssue({
+      teachingMode: true,
+      metaGame: 'saltire',
+      numPlayers: 2,
+      variants: [],
+      challenger: { id: 'human-1' },
+      challengees: ['' as unknown as { id: string }],
+    });
+    assert.equal(err, null);
+  });
 });
 
 describe('teaching mode pie gate', () => {

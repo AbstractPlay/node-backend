@@ -123,8 +123,12 @@ export async function queryAllStandingChallenges(
   return filterStandingChallengesForBlockedIssuers(items, blockedBy);
 }
 
-export function clearAllStandingChallengesCacheForTests(): void {
+export function invalidateAllStandingChallengesCache(): void {
   standingChallengeCache = undefined;
+}
+
+export function clearAllStandingChallengesCacheForTests(): void {
+  invalidateAllStandingChallengesCache();
 }
 
 /** @internal Exported for tests that stub meta-game discovery. */
