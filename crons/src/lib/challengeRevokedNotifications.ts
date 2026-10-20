@@ -190,6 +190,7 @@ export function toRevokeChallengeRecord(
   ) {
     return undefined;
   }
+  const hasStartPosition = challenge.hasStartPosition === true ? true : undefined;
   return {
     id,
     metaGame,
@@ -197,5 +198,6 @@ export function toRevokeChallengeRecord(
     challenger,
     challengees: challenge.challengees as ChallengePlayer[] | undefined,
     players: challenge.players as ChallengePlayer[] | undefined,
+    ...(hasStartPosition ? { hasStartPosition: true } : {}),
   };
 }

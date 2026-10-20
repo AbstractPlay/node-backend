@@ -1,7 +1,7 @@
-import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { ddbDocClient } from '../ddb.js';
 import { headers, formatReturnError, logGetItemError } from '../api/http.js';
 import type { User } from '../api/types.js';
+import { loadChallengeById } from './loadChallenge.js';
 import {
   getChallengePosition,
 } from './startPosition.js';
@@ -15,6 +15,7 @@ type ChallengeRecord = {
   challengees?: User[];
   players?: User[];
   hasStartPosition?: boolean;
+  standing?: boolean;
 };
 
 function isChallengeParticipant(
@@ -37,40 +38,58 @@ function isChallengeParticipant(
   return false;
 }
 
+function canViewChallengePositionPreview(
+  userId: string,
+  challenge: ChallengeRecord,
+  isStanding: boolean,
+): boolean {
+  if (challenge.hasStartPosition !== true) {
+    return false;
+  }
+  if (isChallengeParticipant(userId, challenge)) {
+    return true;
+  }
+  return isStanding;
+}
+
 export async function getChallengePositionPreviewAuth(
   userId: string,
-  pars: { id?: string },
+  pars: { id?: string; metaGame?: string },
 ) {
   if (!pars?.id) {
     return formatReturnError('id is required.');
   }
+  if (!pars.metaGame) {
+    return formatReturnError('metaGame is required.');
+  }
   const tableName = process.env.ABSTRACT_PLAY_TABLE!;
   try {
-    const challengeData = await ddbDocClient.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: { pk: 'CHALLENGE', sk: pars.id },
-      }),
+    const loaded = await loadChallengeById(
+      ddbDocClient,
+      tableName,
+      pars.id,
+      pars.metaGame,
     );
-    const challenge = challengeData.Item as ChallengeRecord | undefined;
-    if (challenge === undefined) {
+    if (loaded === undefined) {
       return {
         statusCode: 404,
         body: JSON.stringify({ message: 'Challenge not found.' }),
         headers,
       };
     }
-    if (!isChallengeParticipant(userId, challenge)) {
-      return {
-        statusCode: 403,
-        body: JSON.stringify({ message: 'Not allowed to view this challenge position.' }),
-        headers,
-      };
-    }
+    const challenge = loaded.item as ChallengeRecord;
+    const isStanding = loaded.isStanding;
     if (challenge.hasStartPosition !== true) {
       return {
         statusCode: 400,
         body: JSON.stringify({ message: 'This challenge does not include a start position.' }),
+        headers,
+      };
+    }
+    if (!canViewChallengePositionPreview(userId, challenge, isStanding)) {
+      return {
+        statusCode: 403,
+        body: JSON.stringify({ message: 'Not allowed to view this challenge position.' }),
         headers,
       };
     }

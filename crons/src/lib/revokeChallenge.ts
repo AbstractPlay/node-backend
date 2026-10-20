@@ -6,6 +6,7 @@ import {
   DynamoDBDocumentClient,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { deleteChallengePositionWhenFlagged } from '@backend/lib/challenges/startPosition.js';
 import { adjustShardedCounts } from './shardedMetaGameCounts.js';
 import { isBotId, isValidUserId } from './inactiveChallengeDiscovery.js';
 
@@ -18,6 +19,7 @@ export type RevokeChallengeRecord = {
   challenger: ChallengePlayer;
   challengees?: ChallengePlayer[];
   players?: ChallengePlayer[];
+  hasStartPosition?: boolean;
 };
 
 export async function revokeChallengeRecord(
@@ -86,6 +88,15 @@ export async function revokeChallengeRecord(
     })));
     work.push(adjustShardedCounts(client, tableName, challenge.metaGame, { standingchallenges: -1 }));
   }
+
+  work.push(
+    deleteChallengePositionWhenFlagged(
+      client,
+      tableName,
+      challenge.id,
+      challenge.hasStartPosition === true,
+    ),
+  );
 
   await Promise.all(work);
 }
