@@ -25,6 +25,7 @@ import { enqueueBotOutbound } from '../botOutbound.js';
 import { realPingBot } from '../bots/realPingBot.js';
 import { getPlayers } from '../players/getPlayers.js';
 import { declinesDirectChallenges } from '../challenges.js';
+import { invalidateAllStandingChallengesCache } from '../allStandingChallenges.js';
 import { validateChallengeVariantUids } from './variantUids.js';
 import { shuffle } from './shuffle.js';
 import {
@@ -395,6 +396,7 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
 
   try {
     await Promise.all(list);
+    invalidateAllStandingChallengesCache();
     console.log("Successfully added challenge" + challengeId);
     return {
       statusCode: 200,

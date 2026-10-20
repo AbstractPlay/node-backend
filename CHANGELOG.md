@@ -11,6 +11,8 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Fixed
 
+- **Challenges:** teaching-mode issue validation skips empty `challengees` entries (open standing payloads with `[""]` no longer fail `isBotId` lookup).
+- **Challenges:** invalidate in-memory `all_standing_challenges` cache when a new open challenge is issued so site-wide lists include it immediately.
 - **Completed games index:** stream projector deletes the previous `lastMoveTime#id` completed-dashboard rows when `lastMoveTime` changes on a completed `GAME` modify; `bin/dedupe-completed-game-indexes.mjs` removes existing duplicate index rows and fixes sharded `completedgames` counts.
 - **Completed games list:** `sanitizeInGameCommentedFlags` dedupes `GAMECOMMENTS` BatchGet keys when `COMPLETEDGAMES#<metaGame>` contains duplicate rows for the same game id (fixes 500 on Storisende completed tab).
 - **Games:** `hydrateGameState` infers variant uids from the engine when both the GAME `variants` attribute and state JSON are empty (Amazons already patched state from GAME `variants` only; Generatorb needed engine inference).
