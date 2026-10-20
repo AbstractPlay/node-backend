@@ -63,9 +63,6 @@ export function validateStartPositionChallengeShape(
   if (challenge.numPlayers !== 2) {
     return 'Start position challenges are only available for two-player games.';
   }
-  if (challenge.standing === true) {
-    return 'Start position cannot be used on open or standing challenges.';
-  }
   const openSlots = challenge.openSlots ?? 0;
   if (openSlots > 0) {
     return 'Start position challenges cannot include open seats.';
@@ -215,4 +212,17 @@ export async function deleteChallengePosition(
       Key: { pk: CHALLENGE_POSITION_PK, sk: challengeId },
     }),
   );
+}
+
+/** Delete stored position only when the challenge row carried `hasStartPosition`. */
+export async function deleteChallengePositionWhenFlagged(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  challengeId: string,
+  hasStartPosition?: boolean,
+): Promise<void> {
+  if (hasStartPosition !== true) {
+    return;
+  }
+  await deleteChallengePosition(client, tableName, challengeId);
 }

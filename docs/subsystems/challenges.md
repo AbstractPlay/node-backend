@@ -65,9 +65,13 @@ Optional **`teachingMode: true`** on **`new_challenge`** (direct and standing). 
 
 Validation lives in [`lib/challenges/teachingModeEligible.ts`](../../lib/challenges/teachingModeEligible.ts). Tournaments, events, and solo games do not use this flag.
 
-### Start position (direct 2P)
+### Start position (2P)
 
-Optional **`startPosition: { state }`** on **`new_challenge`** for **direct two-player** challenges only. The server forces **teaching mode** and **`rated: false`**, validates the gameslib state, and stores the blob on **`CHALLENGEPOSITION` / `<challengeId>`** (compressed). The `CHALLENGE` row sets **`hasStartPosition: true`** without inlining the state. At game start the stored state and `toMove` replace a fresh opening; the position row is deleted when the challenge is removed or the game is created. Participants may fetch the position before accept via auth **`get_challenge_position_preview`**. Not allowed on standing/open challenges or open seats. Implementation: [`lib/challenges/startPosition.ts`](../../lib/challenges/startPosition.ts).
+Optional **`startPosition: { state }`** on **`new_challenge`** for **two-player** challenges (closed direct or open standing). The server forces **teaching mode** and **`rated: false`**, validates the gameslib state, and stores the blob on **`CHALLENGEPOSITION` / `<challengeId>`** (compressed). The challenge row sets **`hasStartPosition: true`** without inlining the state. At game start the stored state and `toMove` replace a fresh opening.
+
+**`CHALLENGEPOSITION` lifecycle:** deleted when the challenge row is deleted (revoke, decline, inactive cleanup cron, or direct game start). **Open standing** with **`duration: 0`** (indefinite) keeps the challenge and position row after each game so the next acceptor gets the same preset; position is removed when the open challenge is revoked or on the final acceptance when **`duration === 1`**. Not allowed with open seats on direct challenges (`openSlots > 0`).
+
+**Preview:** auth **`get_challenge_position_preview`** with `id` and `metaGame` — closed direct: participants only; open standing: any signed-in user. Implementation: [`lib/challenges/startPosition.ts`](../../lib/challenges/startPosition.ts).
 
 ## Bots
 

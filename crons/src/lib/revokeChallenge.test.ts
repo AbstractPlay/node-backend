@@ -52,6 +52,20 @@ describe('revokeChallengeRecord', () => {
     )).toBe(true);
   });
 
+  it('deletes CHALLENGEPOSITION when hasStartPosition', async () => {
+    const client = mockClient();
+    await revokeChallengeRecord(client, 'table', {
+      id: 'c-pos',
+      metaGame: 'chess',
+      numPlayers: 2,
+      challenger: { id: 'u1' },
+      hasStartPosition: true,
+    }, true);
+
+    const deletes = client.commands.filter(c => c instanceof DeleteCommand);
+    expect(deletes.some(c => c.input.Key?.pk === 'CHALLENGEPOSITION')).toBe(true);
+  });
+
   it('deletes direct challenge and updates issued/received sets', async () => {
     const client = mockClient();
     await revokeChallengeRecord(client, 'table', {

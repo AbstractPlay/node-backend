@@ -45,7 +45,7 @@ import {
   validateTeachingChallengeIssue,
 } from './teachingModeEligible.js';
 import {
-  deleteChallengePosition,
+  deleteChallengePositionWhenFlagged,
   getChallengePosition,
   hasStartPositionPayload,
   normalizeStartPositionChallengeFields,
@@ -340,10 +340,9 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
 }
 
 async function newStandingChallenge(userid: string, challenge: FullChallenge) {
-  if (hasStartPositionPayload(challenge)) {
-    return formatReturnError('Start position cannot be used on open or standing challenges.');
-  }
+  const issueWithStartPosition = hasStartPositionPayload(challenge);
   const challengeId = uuid();
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
   const addChallenge = ddbDocClient.send(new PutCommand({
     TableName: process.env.ABSTRACT_PLAY_TABLE,
     Item: {
@@ -367,6 +366,7 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
       "teachingMode": challenge.teachingMode === true,
       "comment": challenge.comment || "",
       "dateIssued": Date.now(),
+      ...(issueWithStartPosition ? { hasStartPosition: true } : {}),
     }
   }));
 
@@ -380,8 +380,21 @@ async function newStandingChallenge(userid: string, challenge: FullChallenge) {
 
   const updateStandingChallengeCnt = updateStandingChallengeCount(challenge.metaGame, 1);
 
+  const list: Promise<unknown>[] = [addChallenge, updateChallenger, updateStandingChallengeCnt];
+  if (issueWithStartPosition) {
+    list.push(
+      putChallengePosition(
+        ddbDocClient,
+        tableName,
+        challengeId,
+        challenge.startPosition!.state,
+        challenge.variants,
+      ),
+    );
+  }
+
   try {
-    await Promise.all([addChallenge, updateChallenger, updateStandingChallengeCnt]);
+    await Promise.all(list);
     console.log("Successfully added challenge" + challengeId);
     return {
       statusCode: 200,
@@ -1017,9 +1030,14 @@ async function removeAChallenge(
           },
         }))
     );
-    if (challenge.hasStartPosition === true) {
-      list.push(deleteChallengePosition(ddbDocClient, tableName, challengeId));
-    }
+    list.push(
+      deleteChallengePositionWhenFlagged(
+        ddbDocClient,
+        tableName,
+        challengeId,
+        challenge.hasStartPosition === true,
+      ),
+    );
   } else if (revoked || expired) {
     console.log(`removing challenge ${challenge.metaGame + '#' + challengeId}`);
     list.push(
@@ -1033,6 +1051,14 @@ async function removeAChallenge(
     );
 
     list.push(updateStandingChallengeCount(challenge.metaGame, -1));
+    list.push(
+      deleteChallengePositionWhenFlagged(
+        ddbDocClient,
+        tableName,
+        challengeId,
+        challenge.hasStartPosition === true,
+      ),
+    );
   }
   return Promise.all(list);
 }
@@ -1200,9 +1226,6 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     const list: Promise<any>[] = [];
     list.push(addGame);
     list.push(removeAChallenge(challenge, storageStanding, false, true, '', loaded));
-    if (challenge.hasStartPosition === true) {
-      list.push(deleteChallengePosition(ddbDocClient, tableName, challengeId));
-    }
 
     try {
       await Promise.all(list);
