@@ -129,8 +129,8 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `new_challenge` | Issue direct or standing challenge | `FullChallenge` fields; optional `teachingMode` (2P, non-simultaneous, no bots — forces `rated: false`); optional `startPosition: { state }` (direct 2P only — forces teaching mode, stores payload on `CHALLENGEPOSITION`, sets `hasStartPosition` on challenge) |
-| `get_challenge_position_preview` | Start position for a pending challenge (participants only) | `id` (challenge id) |
+| `new_challenge` | Issue direct or standing challenge | `FullChallenge` fields; optional `teachingMode` (2P, non-simultaneous, no bots — forces `rated: false`); optional `startPosition: { state }` (2P direct or standing — forces teaching mode, stores payload on `CHALLENGEPOSITION`, sets `hasStartPosition` on challenge) |
+| `get_challenge_position_preview` | Start position for a pending challenge | `id`, `metaGame` — direct: participants only; open standing: any signed-in user |
 | `challenge_revoke` | Cancel a challenge | `id`, `metaGame`, `standing`, `comment` |
 | `challenge_response` | Accept or decline | `response`, `id`, `standing`, `metaGame`, `comment` |
 | `start_solo_game` | Start a 1-player solo run (`rated: false`; optional `challengeSeed`, server assigns if omitted) | `metaGame`, optional `variants`, `challengeSeed`, clock fields |

@@ -85,7 +85,14 @@ export async function validateTeachingChallengeIssue(
     return 'Teaching mode challenges cannot include bot players.';
   }
   for (const challengee of challenge.challengees ?? []) {
-    if (await isBotId(challengee.id)) {
+    const id =
+      typeof challengee === 'object' && challengee !== null && 'id' in challengee
+        ? challengee.id
+        : undefined;
+    if (!id) {
+      continue;
+    }
+    if (await isBotId(id)) {
       return 'Teaching mode challenges cannot include bot opponents.';
     }
   }

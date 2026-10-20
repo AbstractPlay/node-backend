@@ -23,7 +23,7 @@ No S3 dump scan; cost scales with open challenge count, not inactive user count.
 ## Actions per candidate
 
 1. Re-check issuer `USERS.lastSeen` (skip if logged in since discovery).
-2. Revoke challenge (mirror node-backend `removeAChallenge` revocation path).
+2. Revoke challenge (mirror node-backend `removeAChallenge` revocation path), including **`CHALLENGEPOSITION`** when `hasStartPosition`.
 3. If standing open challenge matches a `REALSTANDING` preset entry, set `suspended: true` on that entry.
 4. Notify **acceptors only** (email if prefs, push, in-app for direct challenges).
 
