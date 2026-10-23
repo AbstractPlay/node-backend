@@ -59,7 +59,7 @@ Batch dump consumers run **daily at 03:00 UTC** and read the latest completed IO
 | **Handler** | `src/functions/records-cooccur.ts` |
 | **Schedule** | Daily 03:00 UTC |
 | **Timeout / memory** | 900 s / 10240 MB |
-| **Layer** | No |
+| **Layer** | gameslib (`shouldPublishStats` for retracted meta games) |
 | **Input** | Latest ION dump (completed GAME + USER `stars[]`) |
 | **Output** | `recommendations/cooccur.json` — PMI co-occurrence matrix |
 | **Notes** | See [Recommendation co-occurrence](/crons/recommendations-cooccur/) |

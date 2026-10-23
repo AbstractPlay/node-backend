@@ -233,6 +233,8 @@ functions:
     reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
     memorySize: 10240
     logRetentionInDays: 30
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
     events:
       - eventBridge:
           name: abstractplay-${self:provider.stage}-records-cooccur
