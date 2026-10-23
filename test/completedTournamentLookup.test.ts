@@ -26,14 +26,14 @@ function createMockDocClient(store: Map<string, Item>) {
       }
       if (command instanceof QueryCommand) {
         const pk = command.input.ExpressionAttributeValues?.[':pk'] as string;
-        const suffix = command.input.ExpressionAttributeValues?.[':suffix'] as string | undefined;
+        const needle = command.input.ExpressionAttributeValues?.[':needle'] as string | undefined;
         const items: Item[] = [];
         for (const item of store.values()) {
           if (item.pk !== pk) {
             continue;
           }
           const sk = item.sk as string;
-          if (suffix !== undefined && !sk.endsWith(suffix)) {
+          if (needle !== undefined && !sk.includes(needle)) {
             continue;
           }
           items.push(item);
