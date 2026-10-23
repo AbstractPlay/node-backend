@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
-import { GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import {
   findCompletedTournament,
   isConcreteMetaGame,
@@ -18,27 +18,11 @@ function itemKey(item: Item): string {
 
 function createMockDocClient(store: Map<string, Item>) {
   return {
-    async send(command: GetCommand | QueryCommand) {
+    async send(command: GetCommand) {
       if (command instanceof GetCommand) {
         const { pk, sk } = command.input.Key as { pk: string; sk: string };
         const item = store.get(`${pk}:${sk}`);
         return { Item: item };
-      }
-      if (command instanceof QueryCommand) {
-        const pk = command.input.ExpressionAttributeValues?.[':pk'] as string;
-        const needle = command.input.ExpressionAttributeValues?.[':needle'] as string | undefined;
-        const items: Item[] = [];
-        for (const item of store.values()) {
-          if (item.pk !== pk) {
-            continue;
-          }
-          const sk = item.sk as string;
-          if (needle !== undefined && !sk.includes(needle)) {
-            continue;
-          }
-          items.push(item);
-        }
-        return { Items: items };
       }
       throw new Error('Unsupported command');
     },
@@ -82,12 +66,11 @@ test('findCompletedTournament loads by metaGame key', async () => {
   assert.equal(found?.id, TOURNAMENT_ID);
 });
 
-test('findCompletedTournament resolves id-only archived tournament', async () => {
+test('findCompletedTournament skips lookup without metaGame', async () => {
   const row = {
     pk: 'COMPLETEDTOURNAMENT',
     sk: `${META}#${TOURNAMENT_ID}`,
     id: TOURNAMENT_ID,
-    metaGame: META,
   };
   store.set(itemKey(row), row);
   const found = await findCompletedTournament(
@@ -95,5 +78,5 @@ test('findCompletedTournament resolves id-only archived tournament', async () =>
     TABLE,
     TOURNAMENT_ID,
   );
-  assert.equal(found?.metaGame, META);
+  assert.equal(found, undefined);
 });

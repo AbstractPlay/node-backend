@@ -39,7 +39,7 @@ Logged-in clients should use the auth `standing_challenges` or `all_standing_cha
 |-------|---------|------------|
 | `get_tournaments` | Active automated tournaments | — |
 | `get_old_tournaments` | Tournament history (archived plus the latest completed round still on `TOURNAMENT`) | `metaGame` |
-| `get_tournament` | Single tournament (includes `comments` chat log) | `tournamentid`, `metaGame`, optional `isArchived`, `gameId` — when the active `TOURNAMENT` row is missing, resolves `COMPLETEDTOURNAMENT` by id (and by `metaGame` when provided) |
+| `get_tournament` | Single tournament (includes `comments` chat log) | `tournamentid`, `metaGame`, optional `isArchived`, `gameId` — archived rows use `isArchived=true` or `metaGame` with a single `COMPLETEDTOURNAMENT` Get (id-only links are not supported after archive) |
 | `archive_tournaments` | Scheduler: archive completed tournaments | — |
 
 ## Events
