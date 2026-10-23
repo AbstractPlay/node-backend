@@ -1,4 +1,10 @@
-import { GameBase, GameBaseSimultaneous, GameFactory } from '@abstractplay/gameslib';
+import {
+  GameBase,
+  GameBaseSimultaneous,
+  GameFactory,
+  guerrillaStateUsesMatchVariant,
+  repairGuerrillaMatchStackJson,
+} from '@abstractplay/gameslib';
 import { gzipSync, gunzipSync } from 'zlib';
 import { reconcileVariantsInGameState } from './resolveGameVariants.js';
 
@@ -94,6 +100,33 @@ export function compressGameStateIfNeeded(state: string): string {
   return compressed;
 }
 
+function reconcileGuerrillaMatchStackJson(
+  stateJson: string,
+  metaGame?: string,
+  recordVariants?: string[],
+): string {
+  if (metaGame !== undefined && metaGame !== 'guerrilla') {
+    return stateJson;
+  }
+  let parsed: { game?: string; variants?: string[] };
+  try {
+    parsed = JSON.parse(stateJson) as { game?: string; variants?: string[] };
+  } catch {
+    return stateJson;
+  }
+  if (parsed.game !== 'guerrilla') {
+    return stateJson;
+  }
+  const variants = recordVariants !== undefined && recordVariants.length > 0
+    ? recordVariants
+    : parsed.variants;
+  if (!guerrillaStateUsesMatchVariant(variants)) {
+    return stateJson;
+  }
+  const { stateJson: repaired, repaired: didRepair } = repairGuerrillaMatchStackJson(stateJson);
+  return didRepair ? repaired : stateJson;
+}
+
 export function hydrateGameState<T extends { state: string; variants?: string[]; metaGame?: string }>(record: T): T {
   let state = decompressGameState(record.state);
   let variants = record.variants;
@@ -107,6 +140,8 @@ export function hydrateGameState<T extends { state: string; variants?: string[];
       state = reconcileVariantsInGameState(state, variants);
     }
   }
+
+  state = reconcileGuerrillaMatchStackJson(state, record.metaGame, variants);
 
   if (state === record.state && variants === record.variants) {
     return record;
@@ -136,6 +171,8 @@ export function resolveVariantsForGameRecord(
       stateJson = reconcileVariantsInGameState(stateJson, variants);
     }
   }
+
+  stateJson = reconcileGuerrillaMatchStackJson(stateJson, metaGame, variants);
 
   return { variants, stateJson };
 }
