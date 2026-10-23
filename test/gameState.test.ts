@@ -139,6 +139,53 @@ test('hydrateGameState reconciles empty state variants from record variants', ()
   assert.deepEqual(hydrated.variants, ['scrambled']);
 });
 
+test('hydrateGameState repairs legacy guerrilla match combined transition stacks', () => {
+  const g = GameFactory('guerrilla', undefined, ['match']) as unknown as {
+    board: Map<string, number>;
+    currplayer: number;
+    stack: Array<Record<string, unknown>>;
+    load: (idx: number) => void;
+    moves: () => string[];
+    move: (m: string, opts: { trusted: boolean }) => void;
+    serialize: () => string;
+  };
+  assert.ok(g);
+  g.board = new Map([['a8', 2]]);
+  g.currplayer = 1;
+  g.stack = [{
+    _version: g.stack[0]._version,
+    _results: [],
+    _timestamp: new Date(),
+    currplayer: 1,
+    board: new Map([['a8', 2]]),
+    insurgents: 66,
+  }];
+  g.load(0);
+  const mv = g.moves().find((m: string) => m.split(',').includes('a8|b7'));
+  assert.ok(mv);
+  g.move(mv, { trusted: true });
+  const g1End = g.stack[g.stack.length - 2];
+  const g2Reset = g.stack[g.stack.length - 1];
+  const corrupt: Record<string, unknown> = {
+    ...g2Reset,
+    _results: [...(g1End._results as unknown[]) ?? [], ...(g2Reset._results as unknown[]) ?? []],
+  };
+  delete corrupt.lastmove;
+  g.stack = [g.stack[0], corrupt];
+  const broken = g.serialize();
+  const record = {
+    pk: 'GAME',
+    sk: 'guerrilla#1#test',
+    metaGame: 'guerrilla',
+    state: broken,
+    variants: ['match'] as string[],
+  };
+  const hydrated = hydrateGameState(record);
+  assert.notEqual(hydrated.state, broken);
+  const parsed = JSON.parse(hydrated.state) as { stack: unknown[] };
+  assert.equal(parsed.stack.length, 3);
+});
+
 test('hydrateGameState infers orb noglobes from engine when GAME variants are empty', () => {
   const g = GameFactory('orb', undefined, ['noglobes']);
   assert.ok(g);
