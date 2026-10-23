@@ -79,12 +79,12 @@ The service role grants:
 
 | Package | Used by | Purpose |
 |---------|---------|---------|
-| `@abstractplay/gameslib` | records, records-ttm, records-move-times, summarize, player-summary-fanout, rating-change-notifications, starttournaments | `GameFactory`, `gameinfo`, `genRecord`, `addResource` |
+| `@abstractplay/gameslib` | records, records-ttm, records-move-times, records-cooccur, summarize, player-summary-fanout, rating-change-notifications, starttournaments | `GameFactory`, `gameinfo`, `genRecord`, `addResource`, `shouldPublishStats` |
 | `@abstractplay/recranks` | records, summarize | `APGameRecord`, ELO/Glicko2/Trueskill raters |
 | `ion-js`, `fflate` | dump consumers | Parse gzipped ION export files |
 | `i18next` | starttournaments, inactive-challenge-cleanup, records/thumbnails (gameslib labels) | Root `locales/*/apback.json` via `@backend/lib/apbackI18n`; gameslib bundles for meta-game names |
 
-`records-cooccur` uses `ion-js` and `fflate` only (no gameslib layer).
+`records-cooccur` reads the ION dump with `ion-js` / `fflate` and calls `shouldPublishStats` from the gameslib layer when building co-play sets.
 
 ## Project layout
 

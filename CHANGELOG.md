@@ -11,6 +11,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Fixed
 
+- **Crons:** `records-cooccur` attaches the gameslib Lambda layer so `shouldPublishStats` resolves at runtime (was missing after retracted-meta filtering).
 - **Games:** `hydrateGameState` repairs legacy Guerrilla Checkers match stack rows (combined G1→G2 transition) via gameslib `repairGuerrillaMatchStackJson`.
 
 ### Added
