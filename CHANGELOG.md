@@ -11,6 +11,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Fixed
 
+- **Tournaments:** `get_old_tournaments` includes the most recently completed round for a series while it remains on `TOURNAMENT` (before `archive_tournaments` moves it to `COMPLETEDTOURNAMENT`), so game history pages list the latest finished event.
 - **Crons:** `records-cooccur` attaches the gameslib Lambda layer so `shouldPublishStats` resolves at runtime (was missing after retracted-meta filtering).
 - **Games:** `hydrateGameState` repairs legacy Guerrilla Checkers match stack rows (combined G1→G2 transition) via gameslib `repairGuerrillaMatchStackJson`.
 

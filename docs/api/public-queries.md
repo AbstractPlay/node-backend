@@ -38,7 +38,7 @@ Logged-in clients should use the auth `standing_challenges` or `all_standing_cha
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `get_tournaments` | Active automated tournaments | — |
-| `get_old_tournaments` | Archived tournaments | `metaGame` (optional) |
+| `get_old_tournaments` | Tournament history (archived plus the latest completed round still on `TOURNAMENT`) | `metaGame` |
 | `get_tournament` | Single tournament (includes `comments` chat log) | `tournamentid`, `metaGame`, optional `isArchived`, `gameId` |
 | `archive_tournaments` | Scheduler: archive completed tournaments | — |
 
