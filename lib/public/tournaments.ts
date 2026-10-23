@@ -4,6 +4,7 @@ import { headers, formatReturnError, logGetItemError } from '../api/http.js';
 import { deleteTournamentForUser } from '../tournaments/byUserIndex.js';
 import { getTournamentCommentsItem } from '../tournaments/tournamentComments.js';
 import { tournamentSeriesCounterSk } from '../tournaments/matchLegs.js';
+import { findCompletedTournament, isConcreteMetaGame } from '../tournaments/completedTournamentLookup.js';
 
 type Tournament = {
   id: string;
@@ -317,47 +318,45 @@ export async function getTournament(pars: { tournamentid: string, metaGame: stri
     const data = await Promise.all(work);
     const comments = await commentsPromise;
 
-    // If tournament not found in active tournaments and we have gameId and metaGame, try archived
-    if (!isArchived && pars.metaGame !== 'undefined' && data[0].Items.length === 0 && pars.gameId) {
-      console.log(`Tournament ${pars.tournamentid} not found in active tournaments, trying completed tournaments`);
-
-      const completedTournamentData = await ddbDocClient.send(
-        new QueryCommand({
-          TableName: process.env.ABSTRACT_PLAY_TABLE,
-          ExpressionAttributeValues: { ":pk": "COMPLETEDTOURNAMENT", ":sk": pars.metaGame + '#' + pars.tournamentid },
-          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-          KeyConditionExpression: "#pk = :pk and #sk = :sk",
-        })
+    // Active row missing — resolve archived tournament (id-only links, notifications, etc.)
+    if (!isArchived && (data[0].Items?.length ?? 0) === 0) {
+      const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+      const archivedItem = await findCompletedTournament(
+        ddbDocClient,
+        tableName,
+        pars.tournamentid,
+        pars.metaGame,
       );
 
-      if (completedTournamentData.Items && completedTournamentData.Items.length > 0) {
-        console.log(`Found tournament ${pars.tournamentid} in completed tournaments, fixing game reference`);
+      if (archivedItem !== undefined) {
+        console.log(`Found tournament ${pars.tournamentid} in completed tournaments`);
         completedTournament = true;
+        data[0] = { Items: [archivedItem] };
 
-        // Update the game's tournament reference to point to the new archived format
-        const newTournamentRef = pars.metaGame + '#' + pars.tournamentid;
+        const resolvedMetaGame = typeof archivedItem.metaGame === 'string'
+          ? archivedItem.metaGame
+          : (isConcreteMetaGame(pars.metaGame) ? pars.metaGame : undefined);
 
-        // Since tournament is archived, all games must be completed - update completed game
-        try {
-          await ddbDocClient.send(new UpdateCommand({
-            TableName: process.env.ABSTRACT_PLAY_TABLE,
-            Key: { "pk": "GAME", "sk": pars.metaGame + '#1#' + pars.gameId },
-            ExpressionAttributeValues: { ":newTournamentRef": newTournamentRef },
-            UpdateExpression: "set tournament = :newTournamentRef",
-            ConditionExpression: 'attribute_exists(pk) AND attribute_exists(players)',
-          }));
-        } catch (error) {
-          if ((error as { name?: string }).name === 'ConditionalCheckFailedException') {
-            console.warn(
-              `Skipping tournament ref fix for missing game ${pars.metaGame}#1#${pars.gameId}`,
-            );
-          } else {
-            throw error;
+        if (pars.gameId && resolvedMetaGame !== undefined) {
+          const newTournamentRef = `${resolvedMetaGame}#${pars.tournamentid}`;
+          try {
+            await ddbDocClient.send(new UpdateCommand({
+              TableName: tableName,
+              Key: { pk: 'GAME', sk: `${resolvedMetaGame}#1#${pars.gameId}` },
+              ExpressionAttributeValues: { ':newTournamentRef': newTournamentRef },
+              UpdateExpression: 'set tournament = :newTournamentRef',
+              ConditionExpression: 'attribute_exists(pk) AND attribute_exists(players)',
+            }));
+          } catch (error) {
+            if ((error as { name?: string }).name === 'ConditionalCheckFailedException') {
+              console.warn(
+                `Skipping tournament ref fix for missing game ${resolvedMetaGame}#1#${pars.gameId}`,
+              );
+            } else {
+              throw error;
+            }
           }
         }
-
-        // Replace the empty tournament data with the found completed tournament
-        data[0] = completedTournamentData;
       }
     }
 
