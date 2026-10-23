@@ -4,6 +4,7 @@ import {
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
 import { isSiteAdmin } from '../commentAuth.js';
+import { findCompletedTournament } from './completedTournamentLookup.js';
 
 export type TournamentCommentAuthResult =
   | { ok: true }
@@ -51,33 +52,12 @@ export async function listTournamentParticipantIds(
     return [...new Set(fromIndex)];
   }
 
-  let completed: CompletedTournament | undefined;
-  if (metaGame !== undefined && metaGame !== '' && metaGame !== 'undefined') {
-    const data = await client.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: {
-          pk: 'COMPLETEDTOURNAMENT',
-          sk: `${metaGame}#${tournamentId}`,
-        },
-      }),
-    );
-    completed = data.Item as CompletedTournament | undefined;
-  } else {
-    const data = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        KeyConditionExpression: '#pk = :pk',
-        FilterExpression: 'ends_with(#sk, :suffix)',
-        ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
-        ExpressionAttributeValues: {
-          ':pk': 'COMPLETEDTOURNAMENT',
-          ':suffix': `#${tournamentId}`,
-        },
-      }),
-    );
-    completed = data.Items?.[0] as CompletedTournament | undefined;
-  }
+  const completed = await findCompletedTournament(
+    client,
+    tableName,
+    tournamentId,
+    metaGame,
+  ) as CompletedTournament | undefined;
 
   const fromArchive = (completed?.players ?? [])
     .map(playerIdFromRow)
@@ -129,33 +109,12 @@ export async function listTournamentChatPlayers(
     return [...byId.values()];
   }
 
-  let completed: CompletedTournament | undefined;
-  if (metaGame !== undefined && metaGame !== '' && metaGame !== 'undefined') {
-    const data = await client.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: {
-          pk: 'COMPLETEDTOURNAMENT',
-          sk: `${metaGame}#${tournamentId}`,
-        },
-      }),
-    );
-    completed = data.Item as CompletedTournament | undefined;
-  } else {
-    const data = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        KeyConditionExpression: '#pk = :pk',
-        FilterExpression: 'ends_with(#sk, :suffix)',
-        ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
-        ExpressionAttributeValues: {
-          ':pk': 'COMPLETEDTOURNAMENT',
-          ':suffix': `#${tournamentId}`,
-        },
-      }),
-    );
-    completed = data.Items?.[0] as CompletedTournament | undefined;
-  }
+  const completed = await findCompletedTournament(
+    client,
+    tableName,
+    tournamentId,
+    metaGame,
+  ) as CompletedTournament | undefined;
 
   const fromArchive = (completed?.players ?? [])
     .map((row) => {

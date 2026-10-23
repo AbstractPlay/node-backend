@@ -9,6 +9,7 @@ import {
   checkTournamentCommentAuth,
   listTournamentChatPlayers,
 } from './tournamentCommentAuth.js';
+import { findCompletedTournament } from './completedTournamentLookup.js';
 
 const COMMENT_BLOB_BUDGET = 360_000;
 const MAX_COMMENT_LEN = 4000;
@@ -55,19 +56,11 @@ async function loadTournamentMeta(
     }
   }
 
-  const archivedQuery = await ddbDocClient.send(
-    new QueryCommand({
-      TableName: tableName,
-      KeyConditionExpression: '#pk = :pk',
-      FilterExpression: 'ends_with(#sk, :suffix)',
-      ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
-      ExpressionAttributeValues: {
-        ':pk': 'COMPLETEDTOURNAMENT',
-        ':suffix': `#${tournamentId}`,
-      },
-    }),
-  );
-  const item = archivedQuery.Items?.[0] as { metaGame?: string; variants?: string[] } | undefined;
+  const item = await findCompletedTournament(
+    ddbDocClient,
+    tableName,
+    tournamentId,
+  ) as { metaGame?: string; variants?: string[] } | undefined;
   if (item?.metaGame) {
     return { metaGame: item.metaGame, variants: item.variants ?? [] };
   }
