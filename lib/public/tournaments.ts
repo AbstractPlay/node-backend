@@ -318,8 +318,8 @@ export async function getTournament(pars: { tournamentid: string, metaGame: stri
     const data = await Promise.all(work);
     const comments = await commentsPromise;
 
-    // Active row missing — resolve archived tournament (id-only links, notifications, etc.)
-    if (!isArchived && (data[0].Items?.length ?? 0) === 0) {
+    // Archived row (requires concrete metaGame — see front tournamentDetailPathArchived)
+    if (!isArchived && (data[0].Items?.length ?? 0) === 0 && isConcreteMetaGame(pars.metaGame)) {
       const tableName = process.env.ABSTRACT_PLAY_TABLE!;
       const archivedItem = await findCompletedTournament(
         ddbDocClient,
