@@ -194,18 +194,69 @@ export async function getTournaments() {
   }
 }
 
+async function loadTournamentPlayers(tournamentId: string): Promise<TournamentPlayer[]> {
+  const data = await ddbDocClient.send(
+    new QueryCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      ExpressionAttributeValues: { ":pk": "TOURNAMENTPLAYER", ":sk": tournamentId + '#' },
+      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+    }),
+  );
+  return (data.Items ?? []) as TournamentPlayer[];
+}
+
+/** Latest completed per series stays on `TOURNAMENT` until superseded or `archive_tournaments` ages it out. */
+export function completedTournamentsPendingArchive(
+  activeItems: Tournament[],
+  metaGame: string,
+  archivedIds: ReadonlySet<string>,
+): Tournament[] {
+  return activeItems.filter(
+    (t) => t.metaGame === metaGame
+      && t.dateEnded !== undefined
+      && !archivedIds.has(t.id),
+  );
+}
+
 export async function getOldTournaments(pars: { metaGame: string }) {
   try {
-    const tournamentsData = await ddbDocClient.send(
-      new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        ExpressionAttributeValues: { ":pk": "COMPLETEDTOURNAMENT", ":sk": pars.metaGame + '#' },
-        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
-      }));
+    const [archivedData, activeData] = await Promise.all([
+      ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          ExpressionAttributeValues: { ":pk": "COMPLETEDTOURNAMENT", ":sk": pars.metaGame + '#' },
+          ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+          KeyConditionExpression: "#pk = :pk and begins_with(#sk, :sk)",
+        }),
+      ),
+      ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.ABSTRACT_PLAY_TABLE,
+          KeyConditionExpression: "#pk = :pk",
+          ExpressionAttributeValues: { ":pk": "TOURNAMENT" },
+          ExpressionAttributeNames: { "#pk": "pk" },
+        }),
+      ),
+    ]);
+    const archived = (archivedData.Items ?? []) as Tournament[];
+    const archivedIds = new Set(archived.map((t) => t.id));
+    const pendingArchive = completedTournamentsPendingArchive(
+      (activeData.Items ?? []) as Tournament[],
+      pars.metaGame,
+      archivedIds,
+    );
+    if (pendingArchive.length > 0) {
+      const playerLists = await Promise.all(
+        pendingArchive.map((t) => loadTournamentPlayers(t.id)),
+      );
+      for (let i = 0; i < pendingArchive.length; i++) {
+        pendingArchive[i].players = playerLists[i];
+      }
+    }
     return {
       statusCode: 200,
-      body: JSON.stringify({ tournaments: tournamentsData.Items }),
+      body: JSON.stringify({ tournaments: [...pendingArchive, ...archived] }),
       headers
     };
   }
