@@ -8,6 +8,7 @@ const TWO_WEEKS_MS = ONE_WEEK_MS * 2;
 
 export type TournamentEndMessageContext = {
   metaGameName: string;
+  metaGameUid: string;
   number: number;
   tournamentId: string;
   variants: string[];
@@ -95,7 +96,10 @@ export function buildTournamentEndEmailBody(ctx: TournamentEndMessageContext): s
     segments.push(i18n.t('TournamentEndStandingsHeader'));
     segments.push(formatDivisionStandingsPlainText(ctx.standings.ranked));
   }
-  segments.push(i18n.t('TournamentEndLink', { tournamentId: ctx.tournamentId }));
+  segments.push(i18n.t('TournamentEndLink', {
+    tournamentId: ctx.tournamentId,
+    metaGameUid: ctx.metaGameUid,
+  }));
   const nextLine = nextSignupLine(ctx);
   if (nextLine !== undefined) {
     segments.push(nextLine);

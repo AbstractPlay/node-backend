@@ -11,7 +11,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Fixed
 
-- **Tournaments:** `get_tournament` resolves archived tournaments by id when the active `TOURNAMENT` row is gone (fixes `/tournament/{uuid}` after `archive_tournaments`); id-only lookup uses DynamoDB `contains` (not unsupported `ends_with`).
+- **Tournaments:** `get_tournament` loads archived rows with one `COMPLETEDTOURNAMENT` Get when `metaGame` is set (`/tournament/{metaGame}/{id}`); no catalog-wide BatchGet fallback.
 - **Tournaments:** `get_old_tournaments` includes the most recently completed round for a series while it remains on `TOURNAMENT` (before `archive_tournaments` moves it to `COMPLETEDTOURNAMENT`), so game history pages list the latest finished event.
 - **Crons:** `records-cooccur` attaches the gameslib Lambda layer so `shouldPublishStats` resolves at runtime (was missing after retracted-meta filtering).
 - **Games:** `hydrateGameState` repairs legacy Guerrilla Checkers match stack rows (combined G1→G2 transition) via gameslib `repairGuerrillaMatchStackJson`.

@@ -614,6 +614,7 @@ export async function endTournament(tournament: Tournament) {
               const metaGameName = localizedGameName(tournament.metaGame);
               const messageCtx = {
                 metaGameName,
+                metaGameUid: tournament.metaGame,
                 number: tournament.number,
                 tournamentId: tournament.id,
                 variants,
