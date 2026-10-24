@@ -16,10 +16,12 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Tournaments:** `get_old_tournaments` includes the most recently completed round for a series while it remains on `TOURNAMENT` (before `archive_tournaments` moves it to `COMPLETEDTOURNAMENT`), so game history pages list the latest finished event.
 - **Crons:** `records-cooccur` attaches the gameslib Lambda layer so `shouldPublishStats` resolves at runtime (was missing after retracted-meta filtering).
 - **Games:** `hydrateGameState` repairs legacy Guerrilla Checkers match stack rows (combined G1→G2 transition) via gameslib `repairGuerrillaMatchStackJson`.
+- **Tournaments:** clock timeouts (`timeloss`) now run the same post-game tournament updates as `submit_move`, including `endTournament` when a division finishes (fixes events stuck at 100% games with no `dateEnded`).
 
 ### Added
 
 - **Ops:** `npm run backfill-guerrilla-match-stack` repairs affected `GAME` rows in DynamoDB (`--dry-run` / `--apply`).
+- **Ops:** `npm run unblock-stuck-tournaments` calls `endTournament` for known stuck prod tournaments (`--live`, optional `--id`).
 
 ## [1.0.0-ci] - 2026-10-20
 
