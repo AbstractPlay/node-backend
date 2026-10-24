@@ -81,6 +81,52 @@ test('get_tournament resolves archived tournament with metaGame when active row 
   assert.deepEqual(body.tournamentPlayers, []);
 });
 
+test('get_tournament with isArchived falls back to active TOURNAMENT row', async () => {
+  const active: Item = {
+    pk: 'TOURNAMENT',
+    sk: TOURNAMENT_ID,
+    id: TOURNAMENT_ID,
+    metaGame: META,
+    started: true,
+    divisions: { 1: { numGames: 2, numCompleted: 0, processed: false } },
+  };
+
+  ddbSend.mockImplementation(async (command: unknown) => {
+    if (command instanceof QueryCommand) {
+      const pk = command.input.ExpressionAttributeValues?.[':pk'] as string;
+      const sk = command.input.ExpressionAttributeValues?.[':sk'] as string | undefined;
+      if (pk === 'COMPLETEDTOURNAMENT') {
+        return { Items: [] };
+      }
+      if (pk === 'TOURNAMENT' && sk === TOURNAMENT_ID) {
+        return { Items: [active] };
+      }
+      if (pk === 'TOURNAMENTPLAYER') {
+        return { Items: [{ playerid: 'p1', sk: `${TOURNAMENT_ID}#1#p1` }] };
+      }
+      if (pk === 'TOURNAMENTGAME') {
+        return { Items: [] };
+      }
+      return { Items: [] };
+    }
+    if (command instanceof GetCommand) {
+      return {};
+    }
+    return {};
+  });
+
+  const result = await getTournament({
+    tournamentid: TOURNAMENT_ID,
+    metaGame: META,
+    isArchived: 'true',
+  });
+
+  assert.equal(result.statusCode, 200);
+  const body = JSON.parse(result.body as string);
+  assert.equal(body.tournament[0]?.id, TOURNAMENT_ID);
+  assert.equal(body.tournamentPlayers.length, 1);
+});
+
 test('get_tournament does not scan archived partition without metaGame', async () => {
   ddbSend.mockImplementation(async (command: unknown) => {
     if (command instanceof QueryCommand) {

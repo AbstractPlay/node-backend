@@ -62,7 +62,7 @@
   "TournamentEndWinner_you": "Vous avez remporté le tournoi !",
   "TournamentEndWinner_other": "{{winnerName}} a remporté le tournoi.",
   "TournamentEndStandingsHeader": "Classement final dans votre division :",
-  "TournamentEndLink": "Voir les parties et les résultats : https://play.abstractplay.com/tournament/{{tournamentId}}",
+  "TournamentEndLink": "Voir les parties et les résultats : https://play.abstractplay.com/tournament/{{metaGameUid}}/{{tournamentId}}",
   "TournamentEndNextSignup_one": "Le prochain tournoi de cette série peut commencer dans {{count}} jour si au moins {{minSignups}} joueurs sont inscrits ({{signupCount}} actuellement). Visitez https://play.abstractplay.com/tournaments pour vous inscrire ou modifier votre inscription.",
   "TournamentEndNextSignup_other": "Le prochain tournoi de cette série peut commencer dans {{count}} jours si au moins {{minSignups}} joueurs sont inscrits ({{signupCount}} actuellement). Visitez https://play.abstractplay.com/tournaments pour vous inscrire ou modifier votre inscription.",
   "TournamentEndNextSignupRegistered": "Vous êtes déjà inscrit au prochain tournoi de cette série.",
