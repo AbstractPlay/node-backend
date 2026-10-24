@@ -29,4 +29,14 @@ describe('divisionReadyForFinalization', () => {
     expect(divisionReadyForFinalization(inProgress)).toBe(false);
     expect(divisionReadyForFinalization(done)).toBe(false);
   });
+
+  it('is true when numCompleted exceeds numGames (duplicate pairing games)', () => {
+    const over = {
+      id: 't1',
+      divisions: {
+        1: { numGames: 15, numCompleted: 16, processed: false },
+      },
+    } as unknown as Tournament;
+    expect(divisionReadyForFinalization(over)).toBe(true);
+  });
 });

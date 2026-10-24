@@ -42,6 +42,10 @@ import {
   type DivisionStandingsResult,
 } from './divisionStandings.js';
 import {
+  divisionNeedsStandingsProcessing,
+  divisionPlayScheduleComplete,
+} from './divisionCompletion.js';
+import {
   buildTournamentEndEmailBody,
   buildTournamentEndPushBody,
   computeEarliestNextTournamentStartMs,
@@ -441,10 +445,16 @@ export async function endTournament(tournament: Tournament) {
       let tournamentUpdated = false;
       const divisionStandingsByNumber = new Map<string, DivisionStandingsResult>();
       for (const [divisionNumber, division] of Object.entries(tournament.divisions)) {
-        if (division.numCompleted < division.numGames) {
+        if (!divisionPlayScheduleComplete(division)) {
           alldone = false;
         }
-        if (division.numCompleted === division.numGames && !division.processed) {
+        if (divisionNeedsStandingsProcessing(division)) {
+          if (division.numCompleted > division.numGames) {
+            console.warn(
+              `Tournament ${tournament.id} division ${divisionNumber}: `
+              + `numCompleted (${division.numCompleted}) exceeds numGames (${division.numGames})`,
+            );
+          }
           // Get games
           const work2: Promise<QueryCommandOutput>[] = [];
           work2.push(sendCommandWithRetry<QueryCommandOutput>(
