@@ -180,8 +180,8 @@
     "out": "El torneo {{number}} de la serie de {{- metaGame}}, variantes: {{variants}} ha terminado."
   },
   "TournamentEndLink": {
-    "src": "View games and results: https://play.abstractplay.com/tournament/{{tournamentId}}",
-    "out": "Ver partidas y resultados: https://play.abstractplay.com/tournament/{{tournamentId}}"
+    "src": "View games and results: https://play.abstractplay.com/tournament/{{metaGameUid}}/{{tournamentId}}",
+    "out": "Ver partidas y resultados: https://play.abstractplay.com/tournament/{{metaGameUid}}/{{tournamentId}}"
   },
   "TournamentEndNextSignupRegistered": {
     "src": "You are already registered for the next tournament in this series.",
