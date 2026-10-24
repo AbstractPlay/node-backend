@@ -104,9 +104,8 @@ import type { PutCommandOutput, UpdateCommandOutput, DeleteCommandOutput } from 
 import { getUsersLastSeen } from '../touchUserLastSeen.js';
 import { hasCurrentGameRow } from '../dashboardGames.js';
 import { setWatchedSeen } from '../playerGameMarks.js';
-import { callEventGameUpdater, callTournamentDivisionCompleter } from './moveIntegration.js';
-import type { Tournament as AuthTournament } from '../tournaments/authHandlers.js';
-import { spawnTournamentLeg2IfNeeded } from '../tournaments/spawnTournamentLeg2.js';
+import { callEventGameUpdater } from './moveIntegration.js';
+import { applyTournamentGameEndUpdates } from './tournamentGameEndUpdates.js';
 
 
 type FullUser = {
@@ -688,7 +687,9 @@ export async function submitMove(userid: string, pars: {
 }
 
 async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: number | undefined) {
-  let work: Promise<any>[] = [];
+  if (game.tournament === undefined || game.division === undefined) {
+    return;
+  }
   for (let i = 0; i < 2; i++) {
     const player = players[i];
     let score = 0;
@@ -698,51 +699,24 @@ async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: n
       score = 0.5;
     }
     console.log(`player ${player.name} now has score ${score} in game ${game.id} from tournament ${game.tournament}`);
-    work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { "pk": "TOURNAMENTPLAYER", "sk": game.tournament + '#' + game.division!.toString() + '#' + player.id },
-      ExpressionAttributeNames: { "#s": "score", "#t": "timeout" },
-      ExpressionAttributeValues: { ":inc": score, ":t": i === timeout },
-      UpdateExpression: "add #s :inc set #t = :t"
-    })));
   }
-  const winner = game.winner?.map((w: number) => game.players[w - 1].id);
-  work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "TOURNAMENTGAME", "sk": game.tournament + '#' + game.division!.toString() + '#' + game.id },
-    ExpressionAttributeNames: { "#w": "winner" },
-    ExpressionAttributeValues: { ":w": winner },
-    UpdateExpression: "set #w = :w"
-  })));
-  const tournamentData = await sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { "pk": "TOURNAMENT", "sk": game.tournament },
-    ExpressionAttributeNames: { "#d": "divisions", "#n": game.division!.toString() },
-    ExpressionAttributeValues: { ":inc": 1, ":zero": 0 },
-    UpdateExpression: "set #d.#n.numCompleted = if_not_exists(#d.#n.numCompleted, :zero) + :inc",
-    ReturnValues: "ALL_NEW"
-  }));
-  const tournament = tournamentData.Attributes as AuthTournament;
-  work.push(spawnTournamentLeg2IfNeeded(
-    ddbDocClient,
-    process.env.ABSTRACT_PLAY_TABLE!,
-    game,
-    tournament,
-  ));
-  let divisionCompleted = false;
-  for (const division of Object.values(tournament.divisions!)) {
-    if (division.numCompleted === division.numGames && !division.processed) {
-      divisionCompleted = true;
-      break;
-    }
-  }
-  if (divisionCompleted) {
-    console.log("division completed, processing tournament");
-    await Promise.all(work);
-    work = [];
-    work.push(callTournamentDivisionCompleter(tournament))
-  }
-  return Promise.all(work);
+  return applyTournamentGameEndUpdates(
+    {
+      id: game.id,
+      metaGame: game.metaGame,
+      variants: game.variants,
+      tournament: game.tournament,
+      division: game.division,
+      winner: game.winner,
+      players: game.players,
+      matchLeg: game.matchLeg,
+      clockStart: game.clockStart,
+      clockInc: game.clockInc,
+      clockMax: game.clockMax,
+    },
+    players,
+    timeout,
+  );
 }
 
 async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], simultaneous: any) {
