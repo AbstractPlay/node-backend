@@ -318,6 +318,34 @@ export async function getTournament(pars: { tournamentid: string, metaGame: stri
     const data = await Promise.all(work);
     const comments = await commentsPromise;
 
+    // `/tournament/{metaGame}/{id}` is for archived rows, but series still on `TOURNAMENT` until archive cron runs.
+    if (isArchived && (data[0].Items?.length ?? 0) === 0) {
+      const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+      const [activeData, playersData] = await Promise.all([
+        ddbDocClient.send(
+          new QueryCommand({
+            TableName: tableName,
+            ExpressionAttributeValues: { ':pk': 'TOURNAMENT', ':sk': pars.tournamentid },
+            ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
+            KeyConditionExpression: '#pk = :pk and #sk = :sk',
+          }),
+        ),
+        ddbDocClient.send(
+          new QueryCommand({
+            TableName: tableName,
+            ExpressionAttributeValues: { ':pk': 'TOURNAMENTPLAYER', ':sk': `${pars.tournamentid}#` },
+            ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
+            KeyConditionExpression: '#pk = :pk and begins_with(#sk, :sk)',
+          }),
+        ),
+      ]);
+      if ((activeData.Items?.length ?? 0) > 0) {
+        completedTournament = false;
+        data[0] = activeData;
+        data.splice(1, 0, playersData);
+      }
+    }
+
     // Archived row (requires concrete metaGame — see front tournamentDetailPathArchived)
     if (!isArchived && (data[0].Items?.length ?? 0) === 0 && isConcreteMetaGame(pars.metaGame)) {
       const tableName = process.env.ABSTRACT_PLAY_TABLE!;
