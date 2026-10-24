@@ -43,6 +43,7 @@
     "dedupe-completed-game-indexes": "tsx bin/dedupe-completed-game-indexes.mjs",
     "backfill-tournament-by-user": "tsx bin/backfill-tournament-by-user.mjs",
     "reconcile-tournament-by-user": "tsx bin/reconcile-tournament-by-user.mjs",
+    "unblock-stuck-tournaments": "tsx bin/unblock-stuck-tournaments.mjs",
     "sync-deps": "ap-install-deps --stage dev && node scripts/sync-crons-ap-deps.mjs --stage dev && node scripts/prune-crons-nested-ap-deps.mjs",
     "sync-deps:prod": "ap-install-deps --stage prod && node scripts/sync-crons-ap-deps.mjs --stage prod && node scripts/prune-crons-nested-ap-deps.mjs",
     "postinstall": "node scripts/sync-crons-ap-deps.mjs --stage dev",
@@ -73,9 +74,9 @@
     "crons"
   ],
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-40120118040.0",
+    "@abstractplay/gameslib": "1.0.0-ci-40025334685.0",
     "@abstractplay/recranks": "1.0.0-ci-38058446108.0",
-    "@abstractplay/renderer": "1.0.0-ci-40109814064.0",
+    "@abstractplay/renderer": "1.0.0-ci-39804265277.0",
     "@aws-sdk/client-apigatewaymanagementapi": "3.1090.0",
     "@aws-sdk/client-cognito-identity-provider": "3.1090.0",
     "@aws-sdk/client-dynamodb": "3.1090.0",

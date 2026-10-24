@@ -2,13 +2,11 @@ import {
   DeleteCommand,
   GetCommand,
   PutCommand,
-  UpdateCommand,
-  type UpdateCommandOutput,
 } from '@aws-sdk/lib-dynamodb';
 import { GameFactory } from '@abstractplay/gameslib';
 import { ddbDocClient } from '../ddb.js';
-import { sendCommandWithRetry } from '../api/ddbRetry.js';
 import { logGetItemError } from '../api/http.js';
+import { applyTournamentGameEndUpdates } from './tournamentGameEndUpdates.js';
 import { effectiveFlags, flagSetIncludes } from '../effectiveGameFlags.js';
 import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } from '../gameState.js';
 import type { GameMarkSummary } from '../playerGameMarks.js';
@@ -46,6 +44,10 @@ type FullGame = {
   tournament?: string;
   division?: number;
   variants?: string[];
+  matchLeg?: number;
+  clockStart?: number;
+  clockInc?: number;
+  clockMax?: number;
   gameEnded?: number;
   numMoves?: number;
 };
@@ -77,43 +79,6 @@ function toNotificationGame(
     winner: game.winner,
     ...(scores !== undefined && scores.length > 0 ? { scores } : {}),
   };
-}
-
-async function tournamentUpdates(game: FullGame, players: { id: string; name: string }[], timeout: number | undefined) {
-  const work: Promise<unknown>[] = [];
-  for (let i = 0; i < 2; i++) {
-    const player = players[i];
-    let score = 0;
-    if (game.winner?.length === 1 && game.players[game.winner[0] - 1].id === player.id) {
-      score = 1;
-    } else if (game.winner?.length === 2) {
-      score = 0.5;
-    }
-    work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      Key: { pk: 'TOURNAMENTPLAYER', sk: game.tournament + '#' + game.division!.toString() + '#' + player.id },
-      ExpressionAttributeNames: { '#s': 'score', '#t': 'timeout' },
-      ExpressionAttributeValues: { ':inc': score, ':t': i === timeout },
-      UpdateExpression: 'add #s :inc set #t = :t',
-    })));
-  }
-  const winner = game.winner?.map((w: number) => game.players[w - 1].id);
-  work.push(sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { pk: 'TOURNAMENTGAME', sk: game.tournament + '#' + game.division!.toString() + '#' + game.id },
-    ExpressionAttributeNames: { '#w': 'winner' },
-    ExpressionAttributeValues: { ':w': winner },
-    UpdateExpression: 'set #w = :w',
-  })));
-  await sendCommandWithRetry<UpdateCommandOutput>(new UpdateCommand({
-    TableName: process.env.ABSTRACT_PLAY_TABLE,
-    Key: { pk: 'TOURNAMENT', sk: game.tournament },
-    ExpressionAttributeNames: { '#d': 'divisions', '#n': game.division!.toString() },
-    ExpressionAttributeValues: { ':inc': 1, ':zero': 0 },
-    UpdateExpression: 'set #d.#n.numCompleted = if_not_exists(#d.#n.numCompleted, :zero) + :inc',
-    ReturnValues: 'ALL_NEW',
-  }));
-  return Promise.all(work);
 }
 
 export async function timeloss(
@@ -257,8 +222,24 @@ export async function timeloss(
     game.id,
     playerGame as GameMarkSummary,
   ));
-  if (game.tournament !== undefined) {
-    work.push(tournamentUpdates(game, players, player));
+  if (game.tournament !== undefined && game.division !== undefined) {
+    work.push(applyTournamentGameEndUpdates(
+      {
+        id: game.id,
+        metaGame: game.metaGame,
+        variants: game.variants,
+        tournament: game.tournament,
+        division: game.division,
+        winner: game.winner,
+        players: game.players,
+        matchLeg: game.matchLeg,
+        clockStart: game.clockStart,
+        clockInc: game.clockInc,
+        clockMax: game.clockMax,
+      },
+      players,
+      player,
+    ));
   }
   work.push(enqueueGameEndNotifications(
     ddbDocClient,
