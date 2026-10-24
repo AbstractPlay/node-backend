@@ -14,9 +14,6 @@ import { endTournament } from '../lib/tournaments/authHandlers.js';
 import { divisionReadyForFinalization } from '../lib/games/tournamentGameEndUpdates.js';
 
 /** Verified 2026-10-24 — all games finished, division unprocessed, no dateEnded. */
-/** Lie Low #21 — duplicate BerretSO4/bael pairing; unblock after >= finalization fix. */
-const LIELOW_OVER_COMPLETE_ID = '21d2ba92-f1b6-4d7d-b181-49cf8323156a';
-
 const DEFAULT_STUCK_IDS = [
   '2d85992c-461d-42cc-8619-731ee7b376c9',
   'b820c958-3dc5-49ee-80dd-eff42e7afdb0',
@@ -32,7 +29,6 @@ const DEFAULT_STUCK_IDS = [
   '73aa6a07-b764-4b5f-b2ef-0883c52a71ea',
   '9c0e2c19-9997-4d51-916c-3462aaaf56d7',
   'fe2cbc9b-0e6c-4a9b-8429-1f79c9747e67',
-  LIELOW_OVER_COMPLETE_ID,
 ];
 
 function tableNameForStage(stage) {

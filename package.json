@@ -44,6 +44,7 @@
     "backfill-tournament-by-user": "tsx bin/backfill-tournament-by-user.mjs",
     "reconcile-tournament-by-user": "tsx bin/reconcile-tournament-by-user.mjs",
     "unblock-stuck-tournaments": "tsx bin/unblock-stuck-tournaments.mjs",
+    "repair-tournament-duplicate-pairing": "tsx bin/repair-tournament-duplicate-pairing.mjs",
     "sync-deps": "ap-install-deps --stage dev && node scripts/sync-crons-ap-deps.mjs --stage dev && node scripts/prune-crons-nested-ap-deps.mjs",
     "sync-deps:prod": "ap-install-deps --stage prod && node scripts/sync-crons-ap-deps.mjs --stage prod && node scripts/prune-crons-nested-ap-deps.mjs",
     "postinstall": "node scripts/sync-crons-ap-deps.mjs --stage dev",
