@@ -24,6 +24,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 - **Ops:** `npm run backfill-guerrilla-match-stack` repairs affected `GAME` rows in DynamoDB (`--dry-run` / `--apply`).
 - **Ops:** `npm run unblock-stuck-tournaments` calls `endTournament` for known stuck prod tournaments (`--live`, optional `--id`).
+- **Ops:** `npm run repair-tournament-duplicate-pairing` removes a duplicate `TOURNAMENTGAME`, recalculates `TOURNAMENTPLAYER` scores, and sets `numCompleted` (`--live`).
 
 ## [1.0.0-ci] - 2026-10-20
 
