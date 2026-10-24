@@ -22,7 +22,6 @@ import {
   existingLeg1PairKeys,
   findExistingGameForPair,
   loadExistingTournamentGames,
-  type ExistingTournamentGame,
 } from "../lib/tournamentPairing.js";
 import {
   normalizeMatchLegs,
@@ -537,10 +536,12 @@ async function startTournament(
     const numBigDivisions = players.length - divisionSizeSmall * numDivisions; // big divisions have one more player than small divisions!
     // Sort players into divisions by rating
     players.sort((a, b) => b.rating! - a.rating!);
-    let existingGames: ExistingTournamentGame[] = [];
-    if (resume) {
-      existingGames = await loadExistingTournamentGames(ddbDocClient, tableName, tournament.id);
-      console.log(`Resume: found ${existingGames.length} existing game(s) for tournament ${tournament.id}`);
+    const existingGames = await loadExistingTournamentGames(ddbDocClient, tableName, tournament.id);
+    if (existingGames.length > 0) {
+      console.log(
+        `Found ${existingGames.length} existing game(s) for tournament ${tournament.id}`
+        + `${resume ? ' (resume)' : ''}`,
+      );
     }
     const pairedKeys = existingLeg1PairKeys(existingGames);
     const twoLeg = normalizeMatchLegs(tournament.matchLegs) === 2;
@@ -608,10 +609,10 @@ async function startTournament(
             gamePlayers.push(allGamePlayers[player1]);
           }
           const pairKey = canonicalPlayerPair(gamePlayers[0]!.id, gamePlayers[1]!.id);
-          if (resume && pairedKeys.has(pairKey)) {
+          if (pairedKeys.has(pairKey)) {
             const existing = findExistingGameForPair(existingGames, pairKey, 1);
             if (existing !== undefined) {
-              console.log(`Resume: linking existing game ${existing.id} for tournament ${tournament.id}`);
+              console.log(`Linking existing game ${existing.id} for tournament ${tournament.id}`);
               const tgSk = tournament.id + "#" + division.toString() + '#' + existing.id;
               const linked = await ensureTournamentGameLink(
                 ddbDocClient,
