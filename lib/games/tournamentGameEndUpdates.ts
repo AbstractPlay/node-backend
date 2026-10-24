@@ -3,6 +3,7 @@ import { ddbDocClient } from '../ddb.js';
 import { sendCommandWithRetry } from '../api/ddbRetry.js';
 import type { User } from '../api/types.js';
 import { endTournament, type Tournament } from '../tournaments/authHandlers.js';
+import { tournamentDivisionReadyForFinalization } from '../tournaments/divisionCompletion.js';
 import { spawnTournamentLeg2IfNeeded } from '../tournaments/spawnTournamentLeg2.js';
 
 export type TournamentFinishedGame = {
@@ -19,14 +20,9 @@ export type TournamentFinishedGame = {
   clockMax?: number;
 };
 
-/** True when any division has all games done but standings not yet processed. */
+/** True when any division is ready for `endTournament` standings processing. */
 export function divisionReadyForFinalization(tournament: Tournament): boolean {
-  if (tournament.divisions === undefined) {
-    return false;
-  }
-  return Object.values(tournament.divisions).some(
-    (division) => division.numCompleted === division.numGames && !division.processed,
-  );
+  return tournamentDivisionReadyForFinalization(tournament.divisions);
 }
 
 /**

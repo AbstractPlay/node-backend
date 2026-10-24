@@ -109,6 +109,15 @@ const trulyStuck = categories.completeUnprocessed.filter((r) => {
     && s.openOnBoard === 0;
 });
 
+/** Counter ahead of numGames but every linked game finished (e.g. duplicate pairing). */
+const overCompleteStuck = categories.overCompleted.filter((r) => {
+  const s = r.stats;
+  return s.tournamentGames >= r.numCompleted
+    && s.withWinner === s.tournamentGames
+    && s.openOnBoard === 0
+    && r.numCompleted >= r.numGames;
+});
+
 console.log(JSON.stringify({
   table,
   totalActiveTournamentRows: resp.Items?.length ?? 0,
@@ -116,8 +125,10 @@ console.log(JSON.stringify({
     counterCompleteButUnprocessed: categories.completeUnprocessed.length,
     counterOverNumGames: categories.overCompleted.length,
     verifiedAllGamesFinished: trulyStuck.length,
+    verifiedOverCompleteUnprocessed: overCompleteStuck.length,
   },
   verifiedStuck: trulyStuck,
+  verifiedOverCompleteStuck: overCompleteStuck,
   completeUnprocessedCounterOnly: categories.completeUnprocessed.filter(
     (r) => !trulyStuck.some((t) => t.id === r.id),
   ),
