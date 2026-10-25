@@ -30,6 +30,8 @@
     "import-discord-announcements": "tsx bin/import-discord-announcements.mjs",
     "generate-announcements-rss": "tsx bin/generate-announcements-rss.mjs",
     "verify-division-standings": "tsx bin/verify-division-standings.mjs",
+    "analyze-ladder-calibration": "tsx bin/analyze-ladder-calibration.mjs",
+    "analyze-ladder-delta-monte-carlo": "tsx bin/analyze-ladder-delta-monte-carlo.mjs",
     "report-bgg-wishlist-users": "tsx bin/report-bgg-wishlist-users.mjs",
     "report-discord-feedback-users": "tsx bin/report-discord-feedback-users.mjs",
     "feedback-archive": "tsx bin/feedback-archive.mjs",
