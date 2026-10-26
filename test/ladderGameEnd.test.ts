@@ -3,6 +3,7 @@ import {
   GetCommand,
   PutCommand,
   TransactWriteCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { computeLadderPointDeltas, DEFAULT_LADDER_DELTA_TUNING } from '../lib/ladders/delta.js';
 import { ladderGameSk, ladderPlayerSk } from '../lib/ladders/keys.js';
@@ -16,6 +17,12 @@ const { send } = vi.hoisted(() => ({
 
 vi.mock('../lib/ddb.js', () => ({
   ddbDocClient: { send },
+}));
+
+const enqueueLadderPointsChangeNotifications = vi.fn(async () => {});
+
+vi.mock('../lib/notifications.js', () => ({
+  enqueueLadderPointsChangeNotifications,
 }));
 
 const { applyLadderGameEnd } = await import('../lib/ladders/applyLadderGameEnd.js');
@@ -86,8 +93,11 @@ function installDdbRouter(players: Record<string, PlayerState>, ladderStatus: 'a
       return {};
     }
     if (command instanceof PutCommand) {
-      const item = command.input.Item as { pk?: string };
-      if (item.pk === 'LADDERPAIR') {
+      return {};
+    }
+    if (command instanceof UpdateCommand) {
+      const key = command.input.Key as { pk?: string };
+      if (key.pk === 'LADDERPAIR') {
         return {};
       }
       return {};
@@ -101,6 +111,7 @@ function installDdbRouter(players: Record<string, PlayerState>, ladderStatus: 'a
 describe('applyLadderGameEnd integration (mocked DDB)', () => {
   beforeEach(() => {
     send.mockReset();
+    enqueueLadderPointsChangeNotifications.mockClear();
     process.env.ABSTRACT_PLAY_TABLE = TABLE;
   });
 
@@ -130,8 +141,22 @@ describe('applyLadderGameEnd integration (mocked DDB)', () => {
     const loserVals = playerUpdateValues(transact, ladderPlayerSk(LADDER_ID, U2));
     expect(winnerVals?.[':p']).toBe(1000 + expected.winnerGain);
     expect(loserVals?.[':p']).toBe(1050 - expected.loserLoss);
+    expect(enqueueLadderPointsChangeNotifications).toHaveBeenCalledTimes(1);
+    expect(enqueueLadderPointsChangeNotifications).toHaveBeenCalledWith(
+      expect.anything(),
+      TABLE,
+      expect.objectContaining({
+        ladderId: LADDER_ID,
+        gameId: GAME_ID,
+        winnerId: U1,
+        loserId: U2,
+        winnerPointsBefore: 1000,
+        loserPointsBefore: 1050,
+      }),
+    );
 
     send.mockReset();
+    enqueueLadderPointsChangeNotifications.mockClear();
     installDdbRouter({
       [U2]: { points: 1050, activeLadderGameCount: 1 },
       [U1]: { points: 1000, activeLadderGameCount: 2 },
@@ -184,6 +209,7 @@ describe('applyLadderGameEnd integration (mocked DDB)', () => {
       expect(u.UpdateExpression).not.toMatch(/points/);
       expect(u.ExpressionAttributeValues?.[':neg']).toBe(-1);
     }
+    expect(enqueueLadderPointsChangeNotifications).not.toHaveBeenCalled();
   });
 
   it('settles when parent ladder is suspended', async () => {

@@ -5,6 +5,7 @@ import { ladderPlayerFixture, ladderRecordFixture } from '../fixtures/ladders.js
 
 const ladderPoolPairBlocked = vi.hoisted(() => vi.fn());
 const getLadderPairLastPlayedAt = vi.hoisted(() => vi.fn());
+const getOpenLadderGameCountBetween = vi.hoisted(() => vi.fn());
 const isBotId = vi.hoisted(() => vi.fn());
 
 vi.mock('../../lib/ladders/blocks.js', () => ({
@@ -17,6 +18,7 @@ vi.mock('../../lib/ladders/pairHistory.js', async (importOriginal) => {
   return {
     ...orig,
     getLadderPairLastPlayedAt,
+    getOpenLadderGameCountBetween,
   };
 });
 
@@ -89,6 +91,8 @@ describe('ladder eligibility guards (Phase 2 matrix)', () => {
     ladderPoolPairBlocked.mockResolvedValue(false);
     getLadderPairLastPlayedAt.mockReset();
     getLadderPairLastPlayedAt.mockResolvedValue(undefined);
+    getOpenLadderGameCountBetween.mockReset();
+    getOpenLadderGameCountBetween.mockResolvedValue(0);
     isBotId.mockReset();
     isBotId.mockImplementation(async (id: string) => id.startsWith('bot'));
   });
@@ -126,6 +130,12 @@ describe('ladder eligibility guards (Phase 2 matrix)', () => {
     const ctx = baseCtx();
     ctx.opponent = ladderPlayerFixture('bot-1', LADDER_ID);
     expect(await opponentPassesLadderGuards(ctx)).toBe('opponent_is_bot');
+  });
+
+  it('opponentPassesLadderGuards: open_ladder_game_between_players', async () => {
+    getOpenLadderGameCountBetween.mockResolvedValue(1);
+    const ctx = baseCtx();
+    expect(await opponentPassesLadderGuards(ctx)).toBe('open_ladder_game_between_players');
   });
 
   it('opponentPassesLadderGuards: rematch_cooldown', async () => {

@@ -26,6 +26,8 @@ export const IN_APP_NOTIFICATION_CATEGORIES = [
   'ladderChat',
   'ladderJoin',
   'ladderLeave',
+  'ladderPointsGain',
+  'ladderPointsLoss',
   'ladderDecay',
   'tournamentStart',
   'tournamentEnd',
@@ -84,6 +86,8 @@ export function inAppCategoryForBody(body: NotificationBody): InAppNotificationC
       return 'ladderJoin';
     case 'ladderLeave':
       return 'ladderLeave';
+    case 'ladderPointsChange':
+      return body.delta < 0 ? 'ladderPointsLoss' : 'ladderPointsGain';
     case 'ladderDecay':
       return 'ladderDecay';
     case 'tournamentStart':
@@ -257,6 +261,17 @@ export type NotificationBody =
     delta: number;
     pointsBefore: number;
     pointsAfter: number;
+  }
+  | {
+    type: 'ladderPointsChange';
+    ladderId: string;
+    gameId: string;
+    metaGame: string;
+    variants: string[];
+    delta: number;
+    pointsBefore: number;
+    pointsAfter: number;
+    opponentId: string;
   }
   | {
     type: 'tournamentStart';
@@ -1028,6 +1043,59 @@ export async function hasActiveLadderChatNotification(
     lastKey = result.LastEvaluatedKey;
   } while (lastKey);
   return false;
+}
+
+export async function enqueueLadderPointsChangeNotifications(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  params: {
+    ladderId: string;
+    gameId: string;
+    metaGame: string;
+    variants?: string[];
+    winnerId: string;
+    loserId: string;
+    winnerPointsBefore: number;
+    winnerPointsAfter: number;
+    loserPointsBefore: number;
+    loserPointsAfter: number;
+  },
+): Promise<void> {
+  const variantList = params.variants ?? [];
+  const notifyPlayer = async (
+    userId: string,
+    opponentId: string,
+    pointsBefore: number,
+    pointsAfter: number,
+  ) => {
+    const delta = pointsAfter - pointsBefore;
+    if (delta === 0) {
+      return;
+    }
+    await createNotification(client, tableName, userId, {
+      type: 'ladderPointsChange',
+      ladderId: params.ladderId,
+      gameId: params.gameId,
+      metaGame: params.metaGame,
+      variants: variantList,
+      delta,
+      pointsBefore,
+      pointsAfter,
+      opponentId,
+    });
+  };
+  await notifyPlayer(
+    params.winnerId,
+    params.loserId,
+    params.winnerPointsBefore,
+    params.winnerPointsAfter,
+  );
+  await notifyPlayer(
+    params.loserId,
+    params.winnerId,
+    params.loserPointsBefore,
+    params.loserPointsAfter,
+  );
 }
 
 export async function enqueueLadderChatNotifications(

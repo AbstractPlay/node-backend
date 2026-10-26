@@ -5,6 +5,7 @@ import { computePaceMultiplier } from './paceMultiplier.js';
 import { getLadderRecord } from './ladderStore.js';
 import { ladderGameSk, ladderPlayerSk } from './keys.js';
 import type { LadderGameRecord, LadderTuning } from './types.js';
+import { enqueueLadderPointsChangeNotifications } from '../notifications.js';
 import { recordLadderPairPlayed } from './pairHistory.js';
 
 const TABLE = () => process.env.ABSTRACT_PLAY_TABLE!;
@@ -84,6 +85,16 @@ export async function applyLadderGameEnd(game: LadderFinishedGame): Promise<void
   );
 
   const transactItems: object[] = [];
+  let pointsNotify:
+    | {
+      winnerId: string;
+      loserId: string;
+      winnerPointsBefore: number;
+      winnerPointsAfter: number;
+      loserPointsBefore: number;
+      loserPointsAfter: number;
+    }
+    | undefined;
   const activityUpdate = {
     TableName: TABLE(),
     Key: { pk: 'LADDERGAME', sk: ladderGameSk(game.ladderId, game.id) },
@@ -109,6 +120,14 @@ export async function applyLadderGameEnd(game: LadderFinishedGame): Promise<void
     );
     const winnerAfter = winnerBefore + winnerGain;
     const loserAfter = Math.max(0, loserBefore - loserLoss);
+    pointsNotify = {
+      winnerId,
+      loserId,
+      winnerPointsBefore: winnerBefore,
+      winnerPointsAfter: winnerAfter,
+      loserPointsBefore: loserBefore,
+      loserPointsAfter: loserAfter,
+    };
 
     transactItems.push({
       Update: {
@@ -157,6 +176,19 @@ export async function applyLadderGameEnd(game: LadderFinishedGame): Promise<void
   try {
     await ddbDocClient.send(new TransactWriteCommand({ TransactItems: transactItems }));
     await recordLadderPairPlayed(ddbDocClient, TABLE(), game.ladderId, p0, p1, now);
+    if (pointsNotify !== undefined) {
+      try {
+        await enqueueLadderPointsChangeNotifications(ddbDocClient, TABLE(), {
+          ladderId: game.ladderId,
+          gameId: game.id,
+          metaGame: game.metaGame,
+          variants: game.variants,
+          ...pointsNotify,
+        });
+      } catch (err) {
+        console.warn(`applyLadderGameEnd: ladder points notifications failed for game ${game.id}`, err);
+      }
+    }
   } catch (err: unknown) {
     const name = (err as { name?: string }).name;
     if (name === 'TransactionCanceledException') {
