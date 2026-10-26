@@ -11,7 +11,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Added
 
-- **Continuous Delta Ladder (in progress):** Phase 1–3 backend — kernel, matchmaking (`LADDERPOOL`, ladder `CHALLENGE`, `LADDERCOMMENTS`, eligibility guards, `watchLadders`), daily crons `ladder-decay` (00:00 UTC) and `ladder-reconcile-counts` (00:01 UTC, ops S3 `ladders/reconcile/*`); `records` ingests `LADDER` and writes `event/{ladderId}.json` with `formatLadderDisplayName` event labels; ops `npx tsx scripts/reconcile-ladder-active-counts.ts`. Front UI not shipped yet (edit this bullet in place until release).
+- **Continuous Delta Ladder (in progress):** Phase 1–3 backend — kernel, matchmaking (`LADDERPOOL`, ladder `CHALLENGE`, `LADDERCOMMENTS`, eligibility guards, `watchLadders`), `ladderPointsChange` in-app notifications on decisive game end (`ladderPointsGain` / `ladderPointsLoss` prefs), daily crons `ladder-decay` and `ladder-reconcile-counts` (ops S3 `ladders/reconcile/*`); `records` `event/{ladderId}.json`; ops `npx tsx scripts/reconcile-ladder-active-counts.ts`. Front UI + bell copy not shipped yet (edit this bullet in place until release).
 
 ### Changed
 

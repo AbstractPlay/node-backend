@@ -15,6 +15,7 @@ import { gameinfo, GameFactory } from '@abstractplay/gameslib';
 import { enqueueGameStartNotifications } from '../notifications.js';
 import { getLadderRecord } from './ladderStore.js';
 import { ladderGameSk, ladderPlayerSk, ladderSeriesSk } from './keys.js';
+import { ladderPairOpenGameIncrementTransactItem } from './pairHistory.js';
 export type CreateLadderGameParams = {
   client: DynamoDBDocumentClient;
   tableName: string;
@@ -133,6 +134,12 @@ export async function createLadderGame(params: CreateLadderGameParams): Promise<
         ConditionExpression: 'attribute_not_exists(pk)',
       },
     },
+    ladderPairOpenGameIncrementTransactItem(
+      tableName,
+      ladderId,
+      players[0].id,
+      players[1].id,
+    ),
   ];
 
   await client.send(new TransactWriteCommand({ TransactItems: transactItems }));

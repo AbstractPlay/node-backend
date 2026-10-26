@@ -4,7 +4,11 @@ import { isBotId } from '../participants.js';
 import { isVacationStintLive } from '../vacation/resolve.js';
 import type { VacationUserFields } from '../vacation/types.js';
 import { ladderPoolPairBlocked } from './blocks.js';
-import { getLadderPairLastPlayedAt, isWithinRematchCooldown } from './pairHistory.js';
+import {
+  getLadderPairLastPlayedAt,
+  getOpenLadderGameCountBetween,
+  isWithinRematchCooldown,
+} from './pairHistory.js';
 import { isPointsWithinReach } from './reach.js';
 import { rankLadderMembers } from './rank.js';
 import type { LadderPlayerRecord, LadderRecord, LadderTuning } from './types.js';
@@ -22,6 +26,7 @@ export type LadderEligibilityReject =
   | 'on_vacation'
   | 'opponent_on_vacation'
   | 'rematch_cooldown'
+  | 'open_ladder_game_between_players'
   | 'blocked'
   | 'opponent_is_bot'
   | 'alone_on_ladder';
@@ -136,6 +141,16 @@ export async function opponentPassesLadderGuards(
   if (ctx.requireReach && !isPointsWithinReach(caller.points, opponent.points, tuning.challengeReachPercent)) {
     return 'out_of_reach';
   }
+  const openBetween = await getOpenLadderGameCountBetween(
+    ctx.client,
+    ctx.tableName,
+    ladder.id,
+    caller.userid,
+    opponent.userid,
+  );
+  if (openBetween > 0) {
+    return 'open_ladder_game_between_players';
+  }
   const rematch = await assertRematchAllowed(
     ctx.client,
     ctx.tableName,
@@ -188,6 +203,8 @@ export function eligibilityMessage(reason: LadderEligibilityReject): string {
       return 'Opponent is on vacation';
     case 'rematch_cooldown':
       return 'Rematch cooldown has not elapsed for this opponent';
+    case 'open_ladder_game_between_players':
+      return 'You already have an in-progress ladder game with this opponent';
     case 'blocked':
       return 'Cannot pair with this opponent in the pool';
     case 'opponent_is_bot':

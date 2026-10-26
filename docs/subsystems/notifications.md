@@ -53,6 +53,12 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `tournamentChat` | `tournamentChat` |
 | `tournamentStart` | `tournamentStart` (crons `starttournaments`) |
 | `tournamentEnd` | `tournamentEnd` (node-backend `endTournament`) |
+| `ladderChat` | `ladderChat` |
+| `ladderJoin` | `ladderJoin` (reserved; not emitted yet) |
+| `ladderLeave` | `ladderLeave` (reserved; not emitted yet) |
+| `ladderPointsGain` | `ladderPointsChange` when `delta` ≥ 0 (`applyLadderGameEnd`) |
+| `ladderPointsLoss` | `ladderPointsChange` when `delta` &lt; 0 (`applyLadderGameEnd`) |
+| `ladderDecay` | `ladderDecay` (crons `ladder-decay`) |
 | `bots` | `botMoveFailed`, `botOwnerPing` |
 
 | `body.type` | When created | Front display |
@@ -63,6 +69,9 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `gameEnd` | Game ends | **View** links to `/move/{metaGame}/0/{gameId}`; includes `opponentId` / `opponentName` when the game has a human opponent; `scores` (`(string \| number)[]`) when the game uses the `scores` flag |
 | `completedGameChat` | Post-game comment on completed game (`save_exploration` with `updateLastChat`) | **View** links to `/move/{metaGame}/1/{gameId}`; one active notification per game until dismissed; legacy backfill rows use generic message when `body.backfill` |
 | `tournamentChat` | Tournament chat (`submit_tournament_comment`) | Tournament link to `/tournament/{tournamentId}`; one active notification per tournament until dismissed |
+| `ladderPointsChange` | Decisive ladder game settled (`applyLadderGameEnd`) | Pref gated as `ladderPointsGain` or `ladderPointsLoss` from sign of `delta`; draw (Δ = 0) emits none; front copy in Phase 4 |
+| `ladderChat` | Ladder hub chat (`submit_ladder_comment`) | One active notification per ladder until dismissed (like tournament chat) |
+| `ladderDecay` | Daily ladder inactivity decay (`ladder-decay` cron) | `delta`, `pointsBefore`, `pointsAfter` |
 | `ratingChange` | Daily batch Glicko diff after summarize (crons stack) | Game name links to `/ratings/{metaGame}`; variant labels in message when applicable |
 | `tournamentStart` | Tournament series starts (`starttournaments` cron) | Tournament name links to `/tournament/{tournamentId}`; variant labels when applicable; dismiss only |
 | `tournamentEnd` | All tournament divisions complete (`endTournament`) | Tournament name links to `/tournament/{tournamentId}`; includes division winner name when available; dismiss only |
