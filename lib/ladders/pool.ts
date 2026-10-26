@@ -65,6 +65,21 @@ async function listPoolWaiters(
   return items;
 }
 
+export async function getLadderPoolStatus(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  ladderId: string,
+  viewerUserId?: string,
+): Promise<{ poolWaiterCount: number; viewerInPool: boolean }> {
+  const waiterIds = await listPoolWaiters(client, tableName, ladderId);
+  return {
+    poolWaiterCount: waiterIds.length,
+    viewerInPool:
+      viewerUserId !== undefined && viewerUserId !== ''
+      && waiterIds.includes(viewerUserId),
+  };
+}
+
 async function pickPoolOpponent(
   client: DynamoDBDocumentClient,
   tableName: string,
