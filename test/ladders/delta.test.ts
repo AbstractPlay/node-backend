@@ -45,4 +45,14 @@ describe('ladder delta', () => {
   it('win multiplier has a floor', () => {
     expect(ladderWinMultiplier(2000, 500, K)).toBeGreaterThanOrEqual(0.2);
   });
+
+  it('win delta is unchanged for timeloss vs normal win (same winner/loser points)', () => {
+    const decisive = computeLadderPointDeltas(1000, 1100, 1, { B, K, lossFraction });
+    const timelossSameRoles = computeLadderPointDeltas(1000, 1100, 1, { B, K, lossFraction });
+    expect(timelossSameRoles).toEqual(decisive);
+  });
+
+  it('draw settlement is handled in applyLadderGameEnd (no winner branch in delta)', () => {
+    expect(ladderWinDelta(1000, 1000, 1, { B, K })).toBe(B);
+  });
 });

@@ -42,6 +42,15 @@ Logged-in clients should use the auth `standing_challenges` or `all_standing_cha
 | `get_tournament` | Single tournament (includes `comments` chat log) | `tournamentid`, `metaGame`, optional `isArchived`, `gameId` — archived rows use `isArchived=true` or `metaGame` with a single `COMPLETEDTOURNAMENT` Get (id-only links are not supported after archive) |
 | `archive_tournaments` | Scheduler: archive completed tournaments | — |
 
+## Ladders
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `get_ladders` | List player-created ladders | optional `metaGame`, `status` (`forming` \| `active` \| `suspended`) |
+| `get_ladder` | Leaderboard (`board` = active members), ladder metadata, computed `displayName` | `ladderId` |
+
+Authenticated clients may call auth `get_ladder` for the same ladder with a **`viewer`** block (membership and points when not on the public board).
+
 ## Events
 
 | Query | Purpose | Key `pars` |

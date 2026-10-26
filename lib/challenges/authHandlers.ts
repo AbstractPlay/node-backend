@@ -64,6 +64,14 @@ import {
   type InAppNotificationUserSettings,
 } from '../notifications.js';
 import { isBlankDisplayName } from '../userDisplayName.js';
+import { createLadderGame, dequeueLadderPool } from '../ladders/createLadderGame.js';
+import {
+  assertActiveLadderMember,
+  assertLadderMatchmakingOpen,
+  assertNotOnVacation,
+  assertUnderLadderConcurrentCap,
+} from '../ladders/eligibility.js';
+import { getLadderPlayer, getLadderRecord } from '../ladders/ladderStore.js';
 
 type Challenge = {
   metaGame: string;
@@ -99,6 +107,8 @@ type FullChallenge = {
   fillableDirect?: boolean;
   startPosition?: { state: string };
   hasStartPosition?: boolean;
+  ladderId?: string;
+  reachOverride?: 'nearest_anyway';
 };
 
 type FullUser = {
@@ -110,8 +120,30 @@ type FullUser = {
   challenges_received?: Set<string>;
 };
 
-export async function newChallenge(userid: string, challenge: FullChallenge) {
+export type NewChallengeOptions = {
+  /** Set when invoked from `new_ladder_challenge` (allows `ladderId` on the row). */
+  source?: 'ladder' | 'casual';
+};
+
+export async function newChallenge(
+  userid: string,
+  challenge: FullChallenge,
+  options: NewChallengeOptions = { source: 'casual' },
+) {
   console.log("newChallenge challenge:", challenge);
+  if (options.source !== 'ladder') {
+    if (challenge.ladderId !== undefined || challenge.reachOverride !== undefined) {
+      return formatReturnError('Ladder challenges must use new_ladder_challenge');
+    }
+  }
+  if (options.source === 'ladder') {
+    if (challenge.ladderId === undefined) {
+      return formatReturnError('ladderId is required for ladder challenges');
+    }
+    if (challenge.numPlayers !== 2 || challenge.teachingMode === true || challenge.hasStartPosition === true) {
+      return formatReturnError('Invalid ladder challenge');
+    }
+  }
   const variantErr = validateChallengeVariantUids(challenge.metaGame, challenge.variants);
   if (variantErr) {
     return variantErr;
@@ -216,6 +248,8 @@ export async function newChallenge(userid: string, challenge: FullChallenge) {
       "dateIssued": Date.now(),
       "openSlots": openSlots,
       ...(issueWithStartPosition ? { hasStartPosition: true } : {}),
+      ...(challenge.ladderId ? { ladderId: challenge.ladderId } : {}),
+      ...(challenge.reachOverride ? { reachOverride: challenge.reachOverride } : {}),
     }
   }));
 
@@ -1153,6 +1187,71 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
     }
     const playersFull = await getParticipants(playerIDs);
     const info = gameinfo.get(challenge.metaGame);
+    if (challenge.ladderId && challenge.numPlayers === 2) {
+      const ladderId = challenge.ladderId;
+      const ladder = await getLadderRecord(ladderId);
+      if (ladder === undefined) {
+        throw new Error('Ladder not found');
+      }
+      const openErr = assertLadderMatchmakingOpen(ladder);
+      if (openErr !== null) {
+        throw new Error('This ladder is not accepting matchmaking right now');
+      }
+      const issuerId = challenge.challenger.id;
+      const accepterId = userid;
+      const nowLadder = Date.now();
+      const [issuerRow, accepterRow] = await Promise.all([
+        getLadderPlayer(ladderId, issuerId),
+        getLadderPlayer(ladderId, accepterId),
+      ]);
+      for (const spec of [
+        { row: issuerRow, which: 'caller' as const },
+        { row: accepterRow, which: 'opponent' as const },
+      ]) {
+        const memberErr = assertActiveLadderMember(spec.row);
+        if (memberErr !== null || spec.row === undefined) {
+          throw new Error('Ladder membership required to accept');
+        }
+        const capErr = assertUnderLadderConcurrentCap(spec.row, ladder.tuning, spec.which);
+        if (capErr !== null) {
+          throw new Error('A player has the maximum number of active ladder games');
+        }
+        const vacErr = await assertNotOnVacation(
+          ddbDocClient,
+          tableName,
+          spec.row.userid,
+          nowLadder,
+          spec.which,
+        );
+        if (vacErr !== null) {
+          throw new Error('Matchmaking is unavailable while a player is on vacation');
+        }
+      }
+      const pairing = playersFull.map(p => ({ id: p.id, name: p.name, time: 0 })) as [
+        { id: string; name: string; time: number },
+        { id: string; name: string; time: number },
+      ];
+      try {
+        const { gameId } = await createLadderGame({
+          client: ddbDocClient,
+          tableName,
+          ladderId,
+          players: pairing,
+          now: nowLadder,
+        });
+        await dequeueLadderPool(ddbDocClient, tableName, ladderId, [issuerId, accepterId]);
+        await removeAChallenge(challenge, storageStanding, false, true, '', loaded);
+        return {
+          metaGame: info!.name,
+          players: playersFull.filter(p => !p.isBot) as unknown as FullUser[],
+          simultaneous: info!.flags !== undefined && info!.flags.includes('simultaneous'),
+          gameId,
+        };
+      } catch (error) {
+        logGetItemError(error);
+        throw new Error('Unable to start ladder game');
+      }
+    }
     const variants = challenge.variants;
     console.log(`Variants in the challenge object: ${JSON.stringify(variants)}`);
     let engine;

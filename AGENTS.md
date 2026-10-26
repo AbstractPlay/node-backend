@@ -13,7 +13,8 @@ Follow the canonical org-wide policy in [gameslib `AGENTS.md` — Abstract Play 
 | `api/` | Thin Lambda entries (`query`, `authQuery`, `botQuery`) |
 | `api/routes/` | Query name → handler routing (source of truth for RPC names) |
 | `lib/` | Business logic imported by routes |
-| `bin/` | Ops scripts (`.mjs`; some use `tsx` when importing `lib/*.ts`) |
+| `bin/` | Scratch / one-off analysis (`.mjs`; calibration dumps — not durable ops) |
+| `scripts/` | Build/CI tooling and **durable ops CLIs** (`.mjs`; prefer here for maintained backfill/reconcile tools) |
 | `locales/en/apback.json` | English notification/email strings |
 | `crons/` | Scheduled jobs workspace (`abstractplay-backend-crons`) |
 | `serverless.yml` | Functions, env, stages |

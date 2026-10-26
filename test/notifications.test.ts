@@ -157,6 +157,17 @@ describe('inApp notification prefs', () => {
     );
     assert.equal(
       inAppCategoryForBody({
+        type: 'ladderChat',
+        ladderId: 'ladder-1',
+        metaGame: 'go',
+        variants: [],
+        commenterId: 'u2',
+        commenterName: 'Bob',
+      }),
+      'ladderChat',
+    );
+    assert.equal(
+      inAppCategoryForBody({
         type: 'tournamentStart',
         tournamentId: 'tour-1',
         metaGame: 'go',

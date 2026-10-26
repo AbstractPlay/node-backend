@@ -60,4 +60,16 @@ describe('shouldDeliverWsMessage', () => {
       false,
     );
   });
+
+  it('delivers ladder verb when connection watches the ladder', () => {
+    const watching = conn({ watchingLadders: new Set(['ladder-1']) });
+    assert.equal(
+      shouldDeliverWsMessage('ladder', watching, { id: 'ladder-1' }),
+      true,
+    );
+    assert.equal(
+      shouldDeliverWsMessage('ladder', watching, { id: 'other' }),
+      false,
+    );
+  });
 });

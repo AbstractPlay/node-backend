@@ -7,4 +7,5 @@ export * from './exploration.js';
 export * from './events.js';
 export * from './analytics.js';
 export * from './tournaments.js';
+export * from './ladders.js';
 export { game } from '../games/getGame.js';

@@ -232,6 +232,46 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - sk: `<metaGame>#<variants>` (single-leg) or `…#2` (two-leg `matchLegs`)
   - fields: `counter`, `over`
 
+## Ladders (continuous delta)
+
+- **Ladder** — one canonical board per meta + variants series
+  - pk: `LADDER`
+  - sk: `<ladderId>`
+  - `metaGame`, `variants`, `status` (`forming` | `active` | `suspended`), `activeMemberCount`, `activeMemberIds`, `tuning`, …
+
+- **Ladder series registry** — maps tournament-style series key → `ladderId`
+  - pk: `LADDERSERIES`
+  - sk: `<metaGame>#<variants>` (same as single-leg `TOURNAMENTSCOUNTER` sk via `tournamentSeriesCounterSk`)
+
+- **Ladder member**
+  - pk: `LADDERPLAYER`
+  - sk: `<ladderId>#<userid>`
+  - `points`, `membershipStatus` (`active` | `left`), join seed snapshot, `activeLadderGameCount`, `lastDecayAt` (ms; last daily decay application), …
+
+- **Per-user ladder index** (dashboard)
+  - pk: `LADDERBYUSER#<userid>`
+  - sk: `<ladderId>`
+
+- **Ladder game link**
+  - pk: `LADDERGAME`
+  - sk: `<ladderId>#<gameid>`
+
+- **Pool waiters**
+  - pk: `LADDERPOOL`
+  - sk: `<ladderId>#<userid>`
+
+- **Rematch cooldown** (last rated ladder pairing between two members)
+  - pk: `LADDERPAIR`
+  - sk: `<ladderId>#<useridLo>#<useridHi>` (sorted user ids)
+  - `lastPlayedAt`
+
+- **Ladder hub chat**
+  - pk: `LADDERCOMMENTS`
+  - sk: `<ladderId>`
+  - `comments[]`
+
+`CHALLENGE` rows may include `ladderId` (and optional `reachOverride: nearest_anyway`). `GAME` rows may include `ladderId` (rated ladder games). `CURRENTGAMES#` summaries project `ladderId` when present.
+
 ## Organized events
 
 - **Events** — organizer-run event details

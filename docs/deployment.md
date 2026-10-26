@@ -105,12 +105,12 @@ Once a stage has a stream, always deploy with `true` (or use the script) so Clou
 
 ## Ops alerts (email)
 
-When `OPS_ALERT_EMAIL` is set at deploy time, CloudFormation creates an SNS topic (`abstractplay-ops-alerts-${stage}`) and wires **gameProjector** alarms to it:
+When `OPS_ALERT_EMAIL` is set at deploy time, CloudFormation creates an SNS topic (`abstractplay-ops-alerts-${stage}`) and wires **gameProjector** alarms to it (prod only; dev does not create the projector DLQ or DLQ alarm):
 
 | Alarm | Signal |
 |-------|--------|
 | `abstractplay-game-projector-errors-${stage}` | Lambda `Errors` ≥ 1 in 1 minute (catches init crashes) |
-| `abstractplay-game-projector-dlq-${stage}` | DLQ depth ≥ 1 message |
+| `abstractplay-game-projector-dlq-${stage}` | DLQ depth ≥ 1 message (**prod** only) |
 | `abstractplay-game-projector-iterator-age-${stage}` | Stream `IteratorAge` > 5 minutes for 10 minutes |
 
 **First deploy:** SNS sends a subscription confirmation email — you must click **Confirm subscription** once or alarms will not arrive.

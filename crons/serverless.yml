@@ -514,6 +514,34 @@ functions:
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           schedule: cron(30 4 * * ? *)
 
+  ladder-decay:
+    handler: src/functions/ladder-decay.handler
+    description: Daily ladder inactivity point decay (LADDERPLAYER scan)
+    timeout: 900
+    memorySize: 1024
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-ladder-decay
+          description: Ladder points decay for idle members without active ladder games
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # midnight UTC daily
+          schedule: cron(0 0 * * ? *)
+
+  ladder-reconcile-counts:
+    handler: src/functions/ladder-reconcile-counts.handler
+    description: Reconcile LADDERPLAYER.activeLadderGameCount vs open LADDERGAME rows
+    timeout: 900
+    memorySize: 1024
+    logRetentionInDays: 30
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-ladder-reconcile-counts
+          description: Fix active ladder game count drift; write ops S3 reconcile report
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          # 00:01 UTC daily (after ladder-decay)
+          schedule: cron(1 0 * * ? *)
+
   inactive-challenge-cleanup:
     handler: src/functions/inactive-challenge-cleanup.handler
     description: Revoke challenges from issuers inactive ≥14 days; pause REALSTANDING presets

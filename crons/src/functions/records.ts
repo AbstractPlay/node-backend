@@ -17,6 +17,7 @@ import i18next from "i18next";
 import type { i18n } from "i18next";
 import { enApgames, enApresults } from "../utils/gameslibEnLocaleBundles.js";
 import { findTournamentForGame } from "../utils/recordTournament.js";
+import { ladderEventLabelForGame, type LadderDumpRow } from "../utils/recordLadder.js";
 import { tournamentRecordRound } from "../utils/tournamentRecordRound.js";
 import { putRecordsJson } from "../utils/recordsJson.js";
 import { skipCompletedGameWithoutState } from "../utils/completedGameRec.js";
@@ -88,6 +89,7 @@ export const handler: Handler = async (event: any, context?: any) => {
     // load the data from each data file, but only keep the GAME records
     const justGames: GameRec[] = [];
     const tournaments: Tournament[] = [];
+    const ladders: LadderDumpRow[] = [];
     const events: OrgEvent[] = [];
     const eventGames: OrgEventGame[] = [];
     const registeredBots = seedRegisteredBotIdsForRecords();
@@ -128,6 +130,8 @@ export const handler: Handler = async (event: any, context?: any) => {
                                     justGames.push(rec as GameRec);
                                 } else if (rec.pk === "TOURNAMENT" || rec.pk === "COMPLETEDTOURNAMENT") {
                                     tournaments.push(rec as Tournament);
+                                } else if (rec.pk === "LADDER") {
+                                    ladders.push(rec as LadderDumpRow);
                                 } else if (rec.pk === "ORGEVENT") {
                                     events.push(rec as OrgEvent);
                                 } else if (rec.pk === "ORGEVENTGAME") {
@@ -188,6 +192,13 @@ export const handler: Handler = async (event: any, context?: any) => {
             } else {
                 console.log(`Could not find a matching event records for game record "${gdata.sk}".`)
             }
+        } else if (gdata.ladderId !== undefined) {
+            event = ladderEventLabelForGame(
+                ladders,
+                gdata.ladderId,
+                gdata.metaGame,
+                gdata.variants,
+            );
         }
         const rec = buildGameRecordForDumpRow(gdata, {
             registeredBots,
@@ -210,6 +221,8 @@ export const handler: Handler = async (event: any, context?: any) => {
                 id = gdata.tournament;
             } else if (gdata.event !== undefined) {
                 id = gdata.event;
+            } else if (gdata.ladderId !== undefined) {
+                id = gdata.ladderId;
             }
             if (id !== undefined) {
                 pushToMap(eventRecs, id, rec);

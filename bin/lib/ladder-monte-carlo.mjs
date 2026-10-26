@@ -1,5 +1,6 @@
 /** Monte Carlo / replay scoring for ladder Δ tuning (pure, unit-tested). */
 
+import { GLICKO_PRIOR_RATING_LOW } from '../../lib/batchRatings.js';
 import { pairingWithinReach } from './ladder-calibration-stats.mjs';
 
 /**
@@ -23,14 +24,14 @@ function pointsFor(points, userId, fallback) {
  * @param {object} computeDeltas (wPts, lPts, mPace, tuning) => { winnerGain, loserLoss }
  * @param {object} opts
  * @param {Map<string, number>} [opts.initialPoints]
- * @param {number} [opts.defaultStartPoints=1500]
+ * @param {number} [opts.defaultStartPoints] — default 500 (`GLICKO_PRIOR_RATING_LOW`) when caller omits
  * @param {number} [opts.reachFraction=0.2]
  * @param {boolean} [opts.enforceReach=true]
  */
 export function replayLadderGames(games, tuning, computeDeltas, opts = {}) {
   const {
     initialPoints = new Map(),
-    defaultStartPoints = 1500,
+    defaultStartPoints = GLICKO_PRIOR_RATING_LOW,
     reachFraction = 0.2,
     enforceReach = true,
   } = opts;

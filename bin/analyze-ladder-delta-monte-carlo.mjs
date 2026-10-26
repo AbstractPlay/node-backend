@@ -8,7 +8,7 @@ import { writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gameinfo, variantUidsForBatchRating } from '@abstractplay/gameslib';
-import { batchRatingGameLabel } from '../lib/batchRatings.js';
+import { batchRatingGameLabel, GLICKO_PRIOR_RATING_LOW } from '../lib/batchRatings.js';
 import { computeLadderPointDeltas } from '../lib/ladders/delta.ts';
 import {
   downloadLatestIonDump,
@@ -259,7 +259,7 @@ async function main() {
 
   const replayOpts = {
     initialPoints,
-    defaultStartPoints: 1500,
+    defaultStartPoints: GLICKO_PRIOR_RATING_LOW,
     reachFraction,
     enforceReach: args.ladderReachOnly,
   };

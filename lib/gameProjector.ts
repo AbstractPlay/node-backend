@@ -29,6 +29,7 @@ export type GameRecord = {
   numMoves?: number;
   variants?: string[];
   commented?: number;
+  ladderId?: string;
   state: string;
 };
 
@@ -62,6 +63,7 @@ export function toCurrentSummary(game: GameRecord) {
     variants: game.variants,
     gameStarted: game.gameStarted,
     numMoves: resolveNumMoves(game),
+    ...(game.ladderId ? { ladderId: game.ladderId } : {}),
   };
 }
 

@@ -12,6 +12,10 @@ import {
   type MeChallengeData,
 } from '../meQuery.js';
 import { resolveCurrentTournamentsForDashboard } from '../tournaments/currentForDashboard.js';
+import {
+  filterCurrentLadderGames,
+  resolveLadderMembershipsForDashboard,
+} from '../ladders/currentForDashboard.js';
 import { listActiveGameKeys, loadDashboardGames, type DashboardGame } from '../dashboardGames.js';
 import { runDashboardMaintenance } from '../dashboardMaintenance.js';
 import {
@@ -309,12 +313,14 @@ export async function meDashboard(claim: PartialClaims, pars: { size: string, va
       console.log(`me_dashboard evicted games for ${user.name}:`, maintenance.evictedIds);
     }
     console.log('Fetching challenges');
-    const [ancillary, challenges, vacation, currentTournaments] = await Promise.all([
+    const [ancillary, challenges, vacation, currentTournaments, ladderMemberships] = await Promise.all([
       resolveMeAncillary(userId, user),
       resolveMeChallenges(user),
       readVacationSnapshot(ddbDocClient, tableName, userId, now),
       resolveCurrentTournamentsForDashboard(ddbDocClient, tableName, userId),
+      resolveLadderMembershipsForDashboard(ddbDocClient, tableName, userId),
     ]);
+    const currentLadderGames = filterCurrentLadderGames(games);
     console.log(`me_dashboard returning for ${user.name}, id ${user.id} with games`, games);
     return {
       statusCode: 200,
@@ -326,6 +332,8 @@ export async function meDashboard(claim: PartialClaims, pars: { size: string, va
           challenges,
           vacation,
           currentTournaments,
+          ladderMemberships,
+          currentLadderGames,
         ),
         Set_toJSON,
       ),
