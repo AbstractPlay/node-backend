@@ -12,7 +12,7 @@ import {
 import { joinLadderMembership, leaveLadderMembership } from './membership.js';
 import { createLadder } from './newLadder.js';
 import { issueLadderChallenge, respondLadderChallenge } from './ladderChallenge.js';
-import { joinLadderPool, leaveLadderPool } from './pool.js';
+import { getLadderPoolStatus, joinLadderPool, leaveLadderPool } from './pool.js';
 import { getLadderCommentsItem, submitLadderComment } from './ladderComments.js';
 import {
   countEligibleOpponents,
@@ -133,10 +133,18 @@ export async function handleGetLadder(
         now,
       )
       : undefined;
+    const poolStatus = await getLadderPoolStatus(
+      ddbDocClient,
+      tableName,
+      pars.ladderId!,
+      viewerUserId,
+    );
     matchmaking = {
       challengeReach: reach,
       inReachOpponentCount,
       nearestAnywayCandidate,
+      poolWaiterCount: poolStatus.poolWaiterCount,
+      viewerInPool: poolStatus.viewerInPool,
     };
   }
   const boardWithReach = board.map((row) => {
