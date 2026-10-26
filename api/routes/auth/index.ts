@@ -9,6 +9,7 @@ import { challengesAuthRoutes } from './challenges.js';
 import { coreAuthRoutes } from './core.js';
 import { eventsAuthRoutes } from './events.js';
 import { tournamentsAuthRoutes } from './tournaments.js';
+import { laddersAuthRoutes } from './ladders.js';
 import { gamesAuthRoutes } from './games.js';
 import { feedbackAuthRoutes } from './feedback.js';
 import { marksAuthRoutes } from './marks.js';
@@ -26,6 +27,7 @@ export const authRoutes: Record<string, import('../../../lib/api/routeTypes.js')
   ...challengesAuthRoutes,
   ...gamesAuthRoutes,
   ...tournamentsAuthRoutes,
+  ...laddersAuthRoutes,
   ...eventsAuthRoutes,
   ...coreAuthRoutes,
   ...notificationsAuthRoutes,

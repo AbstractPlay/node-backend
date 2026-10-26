@@ -106,6 +106,7 @@ import { hasCurrentGameRow } from '../dashboardGames.js';
 import { setWatchedSeen } from '../playerGameMarks.js';
 import { callEventGameUpdater } from './moveIntegration.js';
 import { applyTournamentGameEndUpdates } from './tournamentGameEndUpdates.js';
+import { runLadderGameEndHook } from '../ladders/gameEndHook.js';
 
 
 type FullUser = {
@@ -173,6 +174,8 @@ type FullGame = {
   smevent?: string;
   smeventRound?: number;
   tournament?: string;
+  ladderId?: string;
+  ladderSeries?: string;
   event?: string;
   division?: number;
   matchLeg?: number;
@@ -586,6 +589,20 @@ export async function submitMove(userid: string, pars: {
       //   }
       if (game.tournament !== undefined) {
         list.push(tournamentUpdates(game, players as unknown as FullUser[], pars.move === "timeout" ? parseInt(game.toMove) : undefined));
+      }
+      if (game.ladderId !== undefined) {
+        list.push(runLadderGameEndHook({
+          id: game.id,
+          ladderId: game.ladderId,
+          metaGame: game.metaGame,
+          variants: game.variants,
+          winner: game.winner,
+          players: game.players,
+          rated: game.rated,
+          gameStarted: game.gameStarted,
+          gameEnded: game.gameEnded,
+          numMoves: game.numMoves,
+        }));
       }
       if (game.event !== undefined) {
         const winners = engine.winner.map(n => players[n - 1]).map(p => p.id);

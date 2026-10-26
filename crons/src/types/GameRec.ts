@@ -13,5 +13,7 @@ export type GameRec = {
     }[];
     tournament?: string;
     event?: string;
+    ladderId?: string;
+    variants?: string[];
     [key: string]: any;
 }

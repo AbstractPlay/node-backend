@@ -174,6 +174,24 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `end_tournament` | End tournament | `id` |
 | `submit_tournament_comment` | Tournament chat message (participants and admins) | `tournamentid`, `comment`, optional `metaGame` for archived lookup |
 
+## Ladders
+
+Player-created continuous delta ladders (one canonical ladder per meta + variants series). See [Database schema](/backend/database-schema/) (Ladders section).
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `new_ladder` | Create ladder in `forming` and join as first member (2-player meta only; duplicate series → **409** with `existingLadderId`, `seriesKey`) | `metaGame`, `variants` |
+| `join_ladder` | Join or rejoin (`left` keeps prior points) | `ladderId` |
+| `leave_ladder` | Soft leave (blocked while `activeLadderGameCount > 0`) | `ladderId` |
+| `get_ladder` | Leaderboard, **`comments`**, **`matchmaking`** (reach band, `inReachOpponentCount`, `nearestAnywayCandidate` when viewer is active), board rows include **`withinReach`** for viewer; plus auth **`viewer`** | `ladderId` |
+| `join_ladder_pool` | Queue for in-reach pairing (tournament clocks; may start a game immediately) | `ladderId` |
+| `leave_ladder_pool` | Leave queue | `ladderId` |
+| `new_ladder_challenge` | Direct 2P rated challenge (`opponentId` or `nearestAnyway: true` when empty in-reach band) | `ladderId`, optional `opponentId`, `nearestAnyway`, `comment` |
+| `respond_ladder_challenge` | Accept/decline ladder challenge (accept uses `createLadderGame`; cap failure leaves challenge pending) | `id`, `metaGame`, `response`, optional `comment` |
+| `submit_ladder_comment` | Ladder hub chat (active members) | `ladderId`, `comment` |
+
+`me_dashboard` adds **`ladderMemberships`** (active only), **`currentLadderGames`**, and **`ladderId`** on each active game row when set on the game.
+
 ## Organizer events
 
 | Query | Purpose | Key `pars` |
