@@ -10,12 +10,12 @@
  * no USER-table scan is required.
  *
  * Usage:
- *   node bin/purge-legacy-palettes.mjs [--stage dev|prod] [--dry-run] [--user-id <cognitoSub>]
+ *   node scripts/purge-legacy-palettes.mjs [--stage dev|prod] [--dry-run] [--user-id <cognitoSub>]
  *
  * Examples:
- *   node bin/purge-legacy-palettes.mjs --stage dev --dry-run
- *   node bin/purge-legacy-palettes.mjs --stage prod
- *   node bin/purge-legacy-palettes.mjs --stage dev --user-id <cognitoSub>
+ *   node scripts/purge-legacy-palettes.mjs --stage dev --dry-run
+ *   node scripts/purge-legacy-palettes.mjs --stage prod
+ *   node scripts/purge-legacy-palettes.mjs --stage dev --user-id <cognitoSub>
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -42,7 +42,7 @@ const BATCH_WRITE_SIZE = 25;
 const BATCH_RETRY_MS = 200;
 
 function usage() {
-  console.error(`Usage: node bin/purge-legacy-palettes.mjs [options]
+  console.error(`Usage: node scripts/purge-legacy-palettes.mjs [options]
 
 Options:
   --stage dev|prod          AWS profile + DynamoDB table (default: dev)

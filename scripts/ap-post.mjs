@@ -6,14 +6,14 @@
  * Request file shape:
  *   { "query": string, "pars": object, "userid"?: string }
  *
- * Without userid â†’ POST /query (no auth).
- * With userid â†’ password prompted on stdin (not stored in JSON); Cognito SRP login â†’ POST /authQuery.
+ * Without userid ? POST /query (no auth).
+ * With userid ? password prompted on stdin (not stored in JSON); Cognito SRP login ? POST /authQuery.
  *
  * Usage:
- *   node bin/ap-post.mjs request.json [--stage dev|prod] [--base-url URL]
+ *   node scripts/ap-post.mjs request.json [--stage dev|prod] [--base-url URL]
  *
  * Environment:
- *   AP_API_BASE_URL_DEV / AP_API_BASE_URL_PROD â€” override default API root per stage
+ *   AP_API_BASE_URL_DEV / AP_API_BASE_URL_PROD — override default API root per stage
  */
 import fs from 'fs';
 import path from 'path';
@@ -42,7 +42,7 @@ const STAGES = {
 };
 
 function usage() {
-  console.error(`Usage: node bin/ap-post.mjs <request.json> [--stage dev|prod] [--base-url URL]
+  console.error(`Usage: node scripts/ap-post.mjs <request.json> [--stage dev|prod] [--base-url URL]
 
 Request JSON:
   {
@@ -55,7 +55,7 @@ When "userid" is set, the password is prompted interactively (not echoed).
 
 Options:
   --stage dev|prod   Cognito pool + API base URL (default: dev)
-  --base-url URL     Override API root (â€¦/dev or â€¦/prod), no trailing slash
+  --base-url URL     Override API root (…/dev or …/prod), no trailing slash
 
 Environment:
   AP_API_BASE_URL_DEV / AP_API_BASE_URL_PROD   Per-stage API root override
@@ -323,7 +323,7 @@ async function main() {
     const password =
       resolveAuthPassword() ??
       (await promptPassword(`Password for ${params.userid}: `));
-    console.error(`Authenticating as ${params.userid}â€¦`);
+    console.error(`Authenticating as ${params.userid}…`);
     const idToken = await fetchIdToken(
       stageConfig,
       params.userid,

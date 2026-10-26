@@ -5,7 +5,7 @@ import {
   gridSearchDeltaTuning,
   replayLadderGames,
   scoreReplayForTuning,
-} from '../../bin/lib/ladder-monte-carlo.mjs';
+} from '../../scripts/lib/ladder-monte-carlo.mjs';
 
 function computeDeltas(wPts, lPts, mPace, tuning) {
   return computeLadderPointDeltas(wPts, lPts, mPace, tuning);

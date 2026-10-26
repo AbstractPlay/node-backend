@@ -4,7 +4,7 @@
  * Dump Game Move layout usage events (LAYOUTEVT#*) as JSONL.
  *
  * Usage:
- *   node bin/dump-gamemove-layout-events.mjs [--stage dev|prod]
+ *   node scripts/dump-gamemove-layout-events.mjs [--stage dev|prod]
  *     [--from YYYY-MM-DD] [--to YYYY-MM-DD]
  *     [--event session_start|layout_switch]
  *     [--out path.jsonl] [--format jsonl|json]
@@ -33,7 +33,7 @@ const STAGES = {
 const EVENT_TYPES = new Set(['session_start', 'layout_switch']);
 
 function usage() {
-  console.error(`Usage: node bin/dump-gamemove-layout-events.mjs [options]
+  console.error(`Usage: node scripts/dump-gamemove-layout-events.mjs [options]
 
 Options:
   --stage dev|prod              AWS profile + DynamoDB table (default: dev)

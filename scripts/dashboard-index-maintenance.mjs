@@ -4,13 +4,13 @@
  * Dashboard index maintenance (admin ops).
  *
  * Steps (index-only; does not read USER.games[]):
- *   purge-all-recent-completed â€” Delete every legacy RECENTCOMPLETED# row (should be empty after Phase 4)
- *   purge-usergame-orphans     â€” Delete USERGAME# rows not on CURRENTGAMES#
+ *   purge-all-recent-completed — Delete every legacy RECENTCOMPLETED# row (should be empty after Phase 4)
+ *   purge-usergame-orphans     — Delete USERGAME# rows not on CURRENTGAMES#
  *
  * Meta game counts: use admin authQuery `update_meta_game_counts` (live recount to METAGAMES#), not this script.
  *
  * Usage:
- *   node bin/dashboard-index-maintenance.mjs [--stage dev|prod] [--dry-run]
+ *   node scripts/dashboard-index-maintenance.mjs [--stage dev|prod] [--dry-run]
  *     --step purge-all-recent-completed|purge-usergame-orphans [--user-id <cognitoSub>]
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
@@ -41,7 +41,7 @@ const STEPS = [
 ];
 
 function usage() {
-  console.error(`Usage: node bin/dashboard-index-maintenance.mjs [options]
+  console.error(`Usage: node scripts/dashboard-index-maintenance.mjs [options]
 
 Options:
   --stage dev|prod                    AWS profile + DynamoDB table (default: dev)
@@ -205,7 +205,7 @@ async function purgeAllRecentCompletedForUser(docClient, tableName, userId, dryR
 async function purgeAllRecentCompleted(docClient, tableName, { dryRun, userId }) {
   const stats = { users: 0 };
 
-  console.log('\nDeleting all RECENTCOMPLETED# rows (legacy completed-dashboard index)â€¦');
+  console.log('\nDeleting all RECENTCOMPLETED# rows (legacy completed-dashboard index)…');
 
   if (userId) {
     const user = await getUserRecord(docClient, tableName, userId);
@@ -253,7 +253,7 @@ async function purgeUserGameOrphansForUser(docClient, tableName, userId, dryRun,
 async function purgeUserGameOrphans(docClient, tableName, { dryRun, userId }) {
   const stats = { users: 0 };
 
-  console.log('\nPurging USERGAME# rows not on CURRENTGAMES#â€¦');
+  console.log('\nPurging USERGAME# rows not on CURRENTGAMES#…');
 
   if (userId) {
     const user = await getUserRecord(docClient, tableName, userId);

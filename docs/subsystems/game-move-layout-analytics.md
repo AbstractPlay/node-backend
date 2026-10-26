@@ -1,6 +1,6 @@
 # Game Move layout analytics
 
-Append-only usage events for the permanent four-layout play page (classic, strip, card, narrative). Events are written at request time and exported on demand via CLI â€” there is **no** nightly rollup cron.
+Append-only usage events for the permanent four-layout play page (classic, strip, card, narrative). Events are written at request time and exported on demand via CLI — there is **no** nightly rollup cron.
 
 Preview-era layout feedback (`LAYOUTFB#`, `log_layout_feedback_event`, `layout-feedback-analytics`) was removed in permanent-layouts Phase 3. S3 `gamemove-layout/analytics/` remains an archived snapshot only.
 
@@ -37,7 +37,7 @@ Same payload shape. Anonymous rows are stored under `LAYOUTEVT#anon#<sessionId>`
 
 | Event | When | Extra `pars` |
 |-------|------|----------------|
-| `session_start` | Layout resolved on game page mount | â€” |
+| `session_start` | Layout resolved on game page mount | — |
 | `layout_switch` | User picks another layout in the switcher | `from`, `to` |
 
 Common fields: `event`, `sessionId`, `layout`, `resolvedFrom`, `metaGame`. Optional: `storedLayout` (value in `gameMoveLayout` localStorage if any), `viewportWidth`.
@@ -61,8 +61,8 @@ Single-table layout in `abstract-play-{stage}`:
 
 Attributes: `event`, `sessionId`, `layout`, `resolvedFrom`, `metaGame`, `ts` (server ms), `isLoggedIn`, optional `storedLayout`, `viewportWidth`, `userHash` (logged-in only), `from` / `to` on switches.
 
-- **No GSI** â€” export via CLI only.
-- **No TTL** â€” purge or archive manually if volume grows.
+- **No GSI** — export via CLI only.
+- **No TTL** — purge or archive manually if volume grows.
 - **Rate limits (UTC day):** 100 events per logged-in user (server); 25 per anonymous session (server + client cap).
 
 Implementation: [`lib/layoutEvents.ts`](../../lib/layoutEvents.ts), wired from [`lib/analytics/authHandlers.ts`](../../lib/analytics/authHandlers.ts) and [`lib/public/analytics.ts`](../../lib/public/analytics.ts).
@@ -70,8 +70,8 @@ Implementation: [`lib/layoutEvents.ts`](../../lib/layoutEvents.ts), wired from [
 ## CLI dump
 
 ```bash
-node bin/dump-gamemove-layout-events.mjs --stage dev
-node bin/dump-gamemove-layout-events.mjs --stage prod --from 2026-09-01 --to 2026-09-30 --out scratch/layout-events.jsonl
+node scripts/dump-gamemove-layout-events.mjs --stage dev
+node scripts/dump-gamemove-layout-events.mjs --stage prod --from 2026-09-01 --to 2026-09-30 --out scratch/layout-events.jsonl
 ```
 
 - Default: all time, JSONL to stdout.
@@ -89,7 +89,7 @@ Pipe JSONL to an agent for layout share, switch matrices, viewport buckets, etc.
 
 ## Related
 
-- [Auth queries â€” `log_gamemove_layout_event`](/backend/api/auth-queries/)
-- [Public queries â€” `log_gamemove_layout_event`](/backend/api/public-queries/)
-- [Database schema â€” `LAYOUTEVT#`](/backend/database-schema/)
+- [Auth queries — `log_gamemove_layout_event`](/backend/api/auth-queries/)
+- [Public queries — `log_gamemove_layout_event`](/backend/api/public-queries/)
+- [Database schema — `LAYOUTEVT#`](/backend/database-schema/)
 - [Front: Game move layouts](/front/subsystems/game-move/)

@@ -1,6 +1,6 @@
 # Announcements
 
-Site news replaces the weekly Discord export â†’ `news.json` pipeline. **Abstract Play is the source of truth**; Discord `#announcements` is mirrored on first publish only.
+Site news replaces the weekly Discord export ? `news.json` pipeline. **Abstract Play is the source of truth**; Discord `#announcements` is mirrored on first publish only.
 
 Front plan: [announcements fan-out architecture](https://github.com/AbstractPlay/front) (living plan in maintainer docs). Phase 0 locked 2026-09-16.
 
@@ -45,13 +45,13 @@ Single-table keys (stage table `abstract-play-dev` / `abstract-play-prod`):
 | `announcement_publish` | Admin | First-publish fan-out only |
 | `announcements_mark_read` | Auth | Bump `announcementsLastReadAt` |
 | `announcement_react` | Auth | Toggle allowlisted emoji |
-| `announcement_reactions_mine` | Auth | `{ ids: string[] }` â†’ user's emojis per id |
+| `announcement_reactions_mine` | Auth | `{ ids: string[] }` ? user's emojis per id |
 
 Register handlers in [`lib/announcements/authHandlers.ts`](../../lib/announcements/authHandlers.ts) alongside feedback patterns.
 
 ## Unread and in-app bell (front)
 
-- **No** Dynamo notification rows on publish (avoid NÃ—users writes).
+- **No** Dynamo notification rows on publish (avoid N×users writes).
 - Front merges **synthetic unread rows** in the navbar bell from `announcements_list` + server cursor.
 - Hidden when `settings.all.inAppNotifications.announcements === false` (default **on**).
 
@@ -98,11 +98,11 @@ Example payload:
 }
 ```
 
-Excerpt = plain-text first ~200 chars of body, unless the body contains an excerpt marker `<!--ap:discord-excerpt-end-->` (HTML comment in markdown). With the marker, Discord uses plain text **before** the marker and always appends `â€¦`; text after the marker is site-only. The marker is stripped for `/news`, RSS, and preview. Full markdown and images live on site only.
+Excerpt = plain-text first ~200 chars of body, unless the body contains an excerpt marker `<!--ap:discord-excerpt-end-->` (HTML comment in markdown). With the marker, Discord uses plain text **before** the marker and always appends `…`; text after the marker is site-only. The marker is stripped for `/news`, RSS, and preview. Full markdown and images live on site only.
 
 ## Attachments
 
-- S3 prefix: `announcements/{announcementId}/â€¦` (bucket TBD per stage; separate from feedback attachments).
+- S3 prefix: `announcements/{announcementId}/…` (bucket TBD per stage; separate from feedback attachments).
 - Markdown: `![alt](ap-att:{key})` in body; resolve to presigned GET on read.
 - Import: `npm run import-discord-announcements` uploads from DiscordChatExporter `attachments[]` only (not avatars/reaction SVGs).
 
@@ -121,6 +121,6 @@ Excerpt = plain-text first ~200 chars of body, unless the body contains an excer
 
 ## Related
 
-- [Notifications](/backend/subsystems/notifications/) â€” email/push delivery
-- [Public queries](/backend/api/public-queries/) â€” `announcements_list`, `announcement_get`
-- [Auth queries](/backend/api/auth-queries/) â€” admin save/publish, mark_read, react
+- [Notifications](/backend/subsystems/notifications/) — email/push delivery
+- [Public queries](/backend/api/public-queries/) — `announcements_list`, `announcement_get`
+- [Auth queries](/backend/api/auth-queries/) — admin save/publish, mark_read, react

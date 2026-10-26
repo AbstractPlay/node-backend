@@ -12,9 +12,9 @@
  * present; otherwise keeps the newest sk (lexicographic max).
  *
  * Usage:
- *   npx tsx bin/dedupe-completed-game-indexes.mjs --stage dev --dry-run
- *   npx tsx bin/dedupe-completed-game-indexes.mjs --stage prod --apply
- *   npx tsx bin/dedupe-completed-game-indexes.mjs --stage prod --metaGame storisende --apply
+ *   npx tsx scripts/dedupe-completed-game-indexes.mjs --stage dev --dry-run
+ *   npx tsx scripts/dedupe-completed-game-indexes.mjs --stage prod --apply
+ *   npx tsx scripts/dedupe-completed-game-indexes.mjs --stage prod --metaGame storisende --apply
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
@@ -38,7 +38,7 @@ const STAGES = {
 };
 
 function usage() {
-  console.error(`Usage: npx tsx bin/dedupe-completed-game-indexes.mjs --stage dev|prod [--metaGame <uid>] [--dry-run|--apply]
+  console.error(`Usage: npx tsx scripts/dedupe-completed-game-indexes.mjs --stage dev|prod [--metaGame <uid>] [--dry-run|--apply]
 
 Options:
   --stage dev|prod   AWS profile + DynamoDB table (default: dev)

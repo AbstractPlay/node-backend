@@ -1,6 +1,6 @@
 # Bot queries
 
-Handler: `module.exports.botQuery` â€” requires a Cognito **machine-to-machine** access token from the stage's bot pool.
+Handler: `module.exports.botQuery` — requires a Cognito **machine-to-machine** access token from the stage's bot pool.
 
 POST body is a flat JSON object with a `verb` field (not `query`/`pars`).
 
@@ -27,7 +27,7 @@ Example (`move`):
 }
 ```
 
-Example (`pie` â€” games with the `pie` or `pie-even` flag, same turn rules as `move`):
+Example (`pie` — games with the `pie` or `pie-even` flag, same turn rules as `move`):
 
 ```json
 {
@@ -39,7 +39,7 @@ Example (`pie` â€” games with the `pie` or `pie-even` flag, same turn rules as `
 
 Engines that report a **Swap** action (for example AiAi) should call `pie`, not `move` with `move: "Swap"`. Human players use auth `invoke_pie`; bots use this verb.
 
-Example (`pingOwner` â€” optional escape hatch for crashes or logic errors your service detects locally; rate-limited per bot):
+Example (`pingOwner` — optional escape hatch for crashes or logic errors your service detects locally; rate-limited per bot):
 
 ```json
 {
@@ -52,7 +52,7 @@ Example (`pingOwner` â€” optional escape hatch for crashes or logic errors your 
 
 ## Authentication
 
-1. Bot owner creates a bot via auth `create_bot` â€” provisions a Cognito app client and `BOT` record. See [Registration](/backend/bots/registration/).
+1. Bot owner creates a bot via auth `create_bot` — provisions a Cognito app client and `BOT` record. See [Registration](/backend/bots/registration/).
 2. Bot service exchanges `client_id` + `client_secret` for an access token at the stage's `BOT_TOKEN_URL` with scope `BOT_OAUTH_SCOPE`.
 3. Bot POSTs to `/botQuery` with `Authorization: Bearer <token>`.
 
@@ -60,7 +60,7 @@ Full details: [Bot authentication](/backend/bots/authentication/).
 
 Dev and prod use **separate** pools, token URLs, scopes, DynamoDB tables, and `botQuery` base URLs. Credentials do not transfer between stages.
 
-## Inbound traffic (AP â†’ bot)
+## Inbound traffic (AP ? bot)
 
 Challenges and move notifications are **not** sent to `botQuery`. AP POSTs signed webhooks to your bot's registered HTTPS endpoint via the `bot-outbound` SQS worker.
 
@@ -68,10 +68,10 @@ See [Bot protocol](/backend/bots/protocol/) and [Implementation guide](/backend/
 
 ## Reference client
 
-[`lib/botClient.ts`](../../lib/botClient.ts) â€” `getBotAccessToken()`, `submitBotMove()`, `submitBotPie()`, `submitBotPingOwner()` with token cache and 401 retry.
+[`lib/botClient.ts`](../../lib/botClient.ts) — `getBotAccessToken()`, `submitBotMove()`, `submitBotPie()`, `submitBotPingOwner()` with token cache and 401 retry.
 
 ## Related
 
 - [Bot framework](/backend/bots/)
 - [API overview](/backend/api/overview/)
-- [Auth queries](/backend/api/auth-queries/) â€” `create_bot`, `ping_bot`, etc.
+- [Auth queries](/backend/api/auth-queries/) — `create_bot`, `ping_bot`, etc.

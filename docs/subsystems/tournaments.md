@@ -13,15 +13,15 @@
 | `TOURNAMENTGAME` | `<tournamentid>#<division>#<gameid>` | Linked game |
 | `COMPLETEDTOURNAMENT` | `<metaGame>#<tournamentid>` | Archived tournament |
 | `TOURNAMENTCOMMENTS` | `<tournamentid>` | Public tournament chat log |
-| `TOURNAMENTSCOUNTER` | `<metaGame>#<variants>` (single-leg) or `â€¦#2` (two-leg) | Serial number counter per series |
+| `TOURNAMENTSCOUNTER` | `<metaGame>#<variants>` (single-leg) or `…#2` (two-leg) | Serial number counter per series |
 
 ## Lifecycle
 
-1. **Create** â€” auth `new_tournament` (organizer). Requires the meta game to support `playercount: 2` in gameslib (`playercounts` includes `2`). Optional `matchLegs: 2` enables **two-leg** pairings (leg 2 opens when leg 1 ends, with swapped seats). Default is single game per opponent (`matchLegs: 1` or omitted).
-2. **Join / withdraw** â€” `join_tournament`, `withdraw_tournament`. Join is rejected for the same 2-player requirement.
-3. **Start** â€” [`starttournaments`](/crons/live-crons/) Lambda (EventBridge 10:00/22:00 UTC). Admins can also invoke it for one tournament (including resume after a partial start). Signup tournaments for ineligible games are cancelled (same path as zero participants).
-4. **Play** â€” games are normal `GAME` records linked via `TOURNAMENTGAME`.
-5. **End** â€” auth `end_tournament`; public `archive_tournaments` moves completed tournaments.
+1. **Create** — auth `new_tournament` (organizer). Requires the meta game to support `playercount: 2` in gameslib (`playercounts` includes `2`). Optional `matchLegs: 2` enables **two-leg** pairings (leg 2 opens when leg 1 ends, with swapped seats). Default is single game per opponent (`matchLegs: 1` or omitted).
+2. **Join / withdraw** — `join_tournament`, `withdraw_tournament`. Join is rejected for the same 2-player requirement.
+3. **Start** — [`starttournaments`](/crons/live-crons/) Lambda (EventBridge 10:00/22:00 UTC). Admins can also invoke it for one tournament (including resume after a partial start). Signup tournaments for ineligible games are cancelled (same path as zero participants).
+4. **Play** — games are normal `GAME` records linked via `TOURNAMENTGAME`.
+5. **End** — auth `end_tournament`; public `archive_tournaments` moves completed tournaments.
 
 ### Time control
 
@@ -30,7 +30,7 @@ Automated tournament games use a **hard** Fischer clock set when [`starttourname
 ### Two-leg format (`matchLegs: 2`)
 
 - At start, only **leg 1** games are created (same round-robin pairings as single-leg).
-- `divisions.*.numGames` counts **both** legs (`2 Ã—` pairings per division).
+- `divisions.*.numGames` counts **both** legs (`2 ×` pairings per division).
 - When a leg-1 game finishes, the API creates **leg 2** for that pairing with reversed seat order.
 - Generated game records use `header.round` of `1:1` and `1:2` (`{schedulingRound}:{matchLeg}`). Single-leg tournaments remain `1`.
 
@@ -51,11 +51,11 @@ See [Public queries](/backend/api/public-queries/) and [Auth queries](/backend/a
 
 ## Tournament chat
 
-- **Read** â€” public `get_tournament` returns `comments` (same shape as in-game `GAMECOMMENTS` entries; Markdown on the client).
-- **Write** â€” auth `submit_tournament_comment` (`tournamentid`, `comment`). Participants (any division) and site admins may post.
-- **Notify** â€” other participants receive in-app `tournamentChat` notifications (pref `tournamentChat`, deduped per tournament). Real-time refresh on the tournament page uses WebSocket `watchTournaments` and verb `tournament`.
+- **Read** — public `get_tournament` returns `comments` (same shape as in-game `GAMECOMMENTS` entries; Markdown on the client).
+- **Write** — auth `submit_tournament_comment` (`tournamentid`, `comment`). Participants (any division) and site admins may post.
+- **Notify** — other participants receive in-app `tournamentChat` notifications (pref `tournamentChat`, deduped per tournament). Real-time refresh on the tournament page uses WebSocket `watchTournaments` and verb `tournament`.
 
 ## Related
 
-- [Events](/backend/subsystems/events/) â€” manual organizer events
+- [Events](/backend/subsystems/events/) — manual organizer events
 - [Database schema](/backend/database-schema/)

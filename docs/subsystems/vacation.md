@@ -1,11 +1,11 @@
 # Vacation mode
 
-Correspondence **vacation** pauses a player‚Äôs turn clock across **all** active games while a stint is live, using **14 √ó 24-hour blocks** (336 hours) of pause time per UTC quota year. This page describes how the feature is implemented today (backend + front).
+Correspondence **vacation** pauses a playerís turn clock across **all** active games while a stint is live, using **14 ◊ 24-hour blocks** (336 hours) of pause time per UTC quota year. This page describes how the feature is implemented today (backend + front).
 
 ## Single path for clock state
 
 - **Server authority:** Live remaining time, timeout eligibility, and move `timeUsed` go through [`lib/clockElapsed.ts`](../../lib/clockElapsed.ts) and [`lib/vacation/`](../../lib/vacation/). Production paths do not use ad hoc `bank - (now - lastMoveTime)`.
-- **Clients:** Display only. Use server fields (`effectiveRemainingMs`, `clockDisplayServerTime`, `clockPaused`) and a single helper such as `tickDisplayRemaining` ‚Äî no parallel elapsed math for timeloss or countdown correctness. **`effectiveRemainingMs` may be negative** on soft-clock games so the UI can show how far over time a player is (same as legacy client math); hard-clock timeout still uses server `wouldTimeOut` / timeloss paths. **`clockPaused`** stops the display countdown during vacation but does not block manual timeloss when effective remaining is already negative.
+- **Clients:** Display only. Use server fields (`effectiveRemainingMs`, `clockDisplayServerTime`, `clockPaused`) and a single helper such as `tickDisplayRemaining` ó no parallel elapsed math for timeloss or countdown correctness. **`effectiveRemainingMs` may be negative** on soft-clock games so the UI can show how far over time a player is (same as legacy client math); hard-clock timeout still uses server `wouldTimeOut` / timeloss paths. **`clockPaused`** stops the display countdown during vacation but does not block manual timeloss when effective remaining is already negative.
 
 See [Games and moves](/backend/subsystems/games-and-moves/) for lazy timeout collapse (`me_dashboard`, `get_game`, timeout move).
 
@@ -14,12 +14,12 @@ See [Games and moves](/backend/subsystems/games-and-moves/) for lazy timeout col
 | Rule | Detail |
 |------|--------|
 | Scope | Universal (casual, tournament, event, solo; hard and soft clocks) |
-| Allotment | 14 √ó 86_400_000 ms pause per UTC quota year |
+| Allotment | 14 ◊ 86_400_000 ms pause per UTC quota year |
 | Start | Immediate or scheduled future datetime |
 | End | Fixed end (editable until passed) or open-ended until stop or quota exhausted |
 | Stop | Anytime; cancel scheduled stint before start without charge |
 
-Policy gate: [`lib/vacation/policy.ts`](../../lib/vacation/policy.ts) (`vacationSchedulePolicyError` ‚Äî extensible; no game-type blocks today).
+Policy gate: [`lib/vacation/policy.ts`](../../lib/vacation/policy.ts) (`vacationSchedulePolicyError` ó extensible; no game-type blocks today).
 
 ---
 
@@ -32,11 +32,11 @@ Policy gate: [`lib/vacation/policy.ts`](../../lib/vacation/policy.ts) (`vacation
 | Surface | What clients see |
 |---------|------------------|
 | `user_names` | Optional `onVacation: true` on human entries ([`lib/public/catalog.ts`](../../lib/public/catalog.ts)) |
-| `player_about` | `{ about?, vacation? }` ‚Äî `vacation` is a full snapshot (scheduled/active, times, open-ended, blocks/quota remaining); omitted when no stint on file |
+| `player_about` | `{ about?, vacation? }` ó `vacation` is a full snapshot (scheduled/active, times, open-ended, blocks/quota remaining); omitted when no stint on file |
 | `me_profile` / `me_dashboard` | `vacation` snapshot on the authenticated user |
 | Dashboard games / `get_game` | Per-player `onVacation` / `vacationScheduled`; on-clock players also get `effectiveRemainingMs`, `clockPaused`, plus `clockDisplayServerTime` on the game slice |
 
-See [Public queries](/backend/api/public-queries/) (`user_names`, `player_about`) and [Auth queries ‚Äî Vacation](/backend/api/auth-queries/#vacation-correspondence-clock-pause).
+See [Public queries](/backend/api/public-queries/) (`user_names`, `player_about`) and [Auth queries ó Vacation](/backend/api/auth-queries/#vacation-correspondence-clock-pause).
 
 ---
 
@@ -44,7 +44,7 @@ See [Public queries](/backend/api/public-queries/) (`user_names`, `player_about`
 
 | Query | Handler |
 |-------|---------|
-| `schedule_vacation` | [`lib/vacation/authHandlers.ts`](../../lib/vacation/authHandlers.ts) ‚Üí [`mutations.ts`](../../lib/vacation/mutations.ts) |
+| `schedule_vacation` | [`lib/vacation/authHandlers.ts`](../../lib/vacation/authHandlers.ts) ? [`mutations.ts`](../../lib/vacation/mutations.ts) |
 | `update_vacation` | same |
 | `stop_vacation` | same |
 
@@ -100,9 +100,9 @@ Server seeds: `clockDisplayServerTime`, per on-clock player `effectiveRemainingM
 | Settings | `UserSettingsModal.js`, `VacationSettingsPanel.js`, `lib/vacationApi.js` |
 | Public indicators | `OnVacationBadge.js`, `Players.js`, `Player.js`, challenge pickers; profile detail via `PlayerAboutSection.js`, `PlayerVacationDetail.js`, `lib/playerVacationTooltip.js` |
 
-Challenge **settings** modals (start/inc/max/hard) and ‚Äúlast activity‚Äù timestamps are unrelated to live vacation elapsed math.
+Challenge **settings** modals (start/inc/max/hard) and ìlast activityî timestamps are unrelated to live vacation elapsed math.
 
-**Follow-up:** optional `bin/check-clock-derivation.mjs` in the front repo mirroring backend guard patterns.
+**Follow-up:** optional `scripts/check-clock-derivation.mjs` in the front repo mirroring backend guard patterns.
 
 ---
 

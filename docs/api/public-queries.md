@@ -1,6 +1,6 @@
 # Public queries
 
-Handler: `module.exports.query` â€” no authentication required.
+Handler: `module.exports.query` — no authentication required.
 
 POST body: `{ "query": "<name>", "pars": { ... } }`
 
@@ -8,17 +8,17 @@ POST body: `{ "query": "<name>", "pars": { ... } }`
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `user_names` | Player and bot directory for challenges (no `about` field; use `player_about`). Omits humans who have not completed registration (no `USERS.name`). Humans may include `onVacation: true` during a live vacation stint. | â€” |
+| `user_names` | Player and bot directory for challenges (no `about` field; use `player_about`). Omits humans who have not completed registration (no `USERS.name`). Humans may include `onVacation: true` during a live vacation stint. | — |
 | `player_highlights` | Highlighted games for a player page | `userId` |
 | `player_about` | Player or bot bio (`about` / `description`) and optional `vacation` object (stint times, open-ended quota remaining) | `userId` |
-| `meta_games` | Meta game counts and stats | â€” |
+| `meta_games` | Meta game counts and stats | — |
 
 ## Games
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `games` | Active games for a metaGame | `metaGame` |
-| `recent_completed_games` | Completed games site-wide in the last N days (default 7, max 30; global `COMPLETEDGAMES` index) | `days` (optional) â€” returns `{ items }` for the full in-window list |
+| `recent_completed_games` | Completed games site-wide in the last N days (default 7, max 30; global `COMPLETEDGAMES` index) | `days` (optional) — returns `{ items }` for the full in-window list |
 | `representative_games` | Community-recommended completed games | `metaGame` |
 | `get_game` | Full game record with `watchCount` | `metaGame`, `id`, `cbit` |
 | `get_public_exploration` | Published exploration tree | `gameid`, `userid`, `movenumber` |
@@ -29,7 +29,7 @@ POST body: `{ "query": "<name>", "pars": { ... } }`
 |-------|---------|------------|
 | `challenge_details` | Single challenge record | `id` |
 | `standing_challenges` | Open challenges for a metaGame (unfiltered) | `metaGame` |
-| `all_standing_challenges` | All open standing challenges site-wide (unfiltered) | â€” |
+| `all_standing_challenges` | All open standing challenges site-wide (unfiltered) | — |
 
 Logged-in clients should use the auth `standing_challenges` or `all_standing_challenges` query instead so blocked players' challenges are hidden.
 
@@ -37,10 +37,10 @@ Logged-in clients should use the auth `standing_challenges` or `all_standing_cha
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `get_tournaments` | Active automated tournaments | â€” |
+| `get_tournaments` | Active automated tournaments | — |
 | `get_old_tournaments` | Tournament history (archived plus the latest completed round still on `TOURNAMENT`) | `metaGame` |
-| `get_tournament` | Single tournament (includes `comments` chat log) | `tournamentid`, `metaGame`, optional `isArchived`, `gameId` â€” archived rows use `isArchived=true` or `metaGame` with a single `COMPLETEDTOURNAMENT` Get (id-only links are not supported after archive) |
-| `archive_tournaments` | Scheduler: archive completed tournaments | â€” |
+| `get_tournament` | Single tournament (includes `comments` chat log) | `tournamentid`, `metaGame`, optional `isArchived`, `gameId` — archived rows use `isArchived=true` or `metaGame` with a single `COMPLETEDTOURNAMENT` Get (id-only links are not supported after archive) |
+| `archive_tournaments` | Scheduler: archive completed tournaments | — |
 
 ## Ladders
 
@@ -55,7 +55,7 @@ Authenticated clients may call auth `get_ladder` for the same ladder with a **`v
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `get_events` | List organizer events | â€” |
+| `get_events` | List organizer events | — |
 | `get_event` | Single event | `id` |
 
 ## Telemetry

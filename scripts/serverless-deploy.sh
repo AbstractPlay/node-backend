@@ -4,8 +4,8 @@
 # First deploy to a stage (no stream yet): enables StreamSpecification on the table only.
 # Subsequent deploys (stream exists): attaches GameProjectorEventSourceMapping.
 #
-# Usage: bin/serverless-deploy.sh <stage> <aws-profile>
-# Example: bin/serverless-deploy.sh dev AbstractPlayDev
+# Usage: scripts/serverless-deploy.sh <stage> <aws-profile>
+# Example: scripts/serverless-deploy.sh dev AbstractPlayDev
 set -euo pipefail
 
 STAGE="${1:?usage: serverless-deploy.sh <stage> <aws-profile>}"

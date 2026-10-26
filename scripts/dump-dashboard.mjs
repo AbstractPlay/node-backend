@@ -5,11 +5,11 @@
  *
  * Assembles the same dashboard lists a `me_dashboard` auth query returns for games,
  * challenges, watched/highlight/representative games, blocked players, and bots.
- * Uses DynamoDB reads only â€” no API calls, no writes, no Cognito login.
+ * Uses DynamoDB reads only — no API calls, no writes, no Cognito login.
  *
  * Usage:
  *   npm run dump-dashboard -- <cognito-sub> [--stage dev|prod] [--verbose] [--include-index] [--include-notifications]
- *   npx tsx bin/dump-dashboard.mjs <cognito-sub> [options]
+ *   npx tsx scripts/dump-dashboard.mjs <cognito-sub> [options]
  *
  * Requires tsx (devDependency) to load lib/*.ts sources. Plain `node` will not work.
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).

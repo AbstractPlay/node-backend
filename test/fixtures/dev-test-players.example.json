@@ -1,0 +1,25 @@
+{
+  "_comment": "Copy to test/fixtures/dev-test-players.json (gitignored). Named dev accounts + Cognito refresh tokens for automated authQuery testing.",
+  "authQueryUrl": "https://alyhqu85me.execute-api.us-east-1.amazonaws.com/dev/authQuery",
+  "cognitoClientId": "14mpql1tmvntup4p2anm4jt782",
+  "defaults": {
+    "ladderId": "9700d1c7-cf2b-4303-b0ed-99843183349d"
+  },
+  "players": {
+    "owner": {
+      "label": "Primary dev account",
+      "userId": "optional-cognito-sub",
+      "refreshToken": "PASTE_REFRESH_TOKEN"
+    },
+    "p2": {
+      "label": "Second dev account",
+      "refreshToken": "PASTE_REFRESH_TOKEN"
+    },
+    "p3": {
+      "refreshToken": "PASTE_REFRESH_TOKEN"
+    },
+    "p4": {
+      "refreshToken": "PASTE_REFRESH_TOKEN"
+    }
+  }
+}

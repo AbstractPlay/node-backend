@@ -2,7 +2,7 @@
 
 Integration with the [AbstractPlay/docs](https://github.com/AbstractPlay/docs) repository is complete:
 
-- Submodule: `vendor/node-backend` → `https://github.com/AbstractPlay/node-backend.git` (`develop` / `main`)
+- Submodule: `vendor/node-backend` ? `https://github.com/AbstractPlay/node-backend.git` (`develop` / `main`)
 - Prebuild: `syncDocs("node-backend", "backend", false)`
 - Site nav: **Backend** section at `/backend/`
 - Deploy workflows fetch `vendor/node-backend` with renderer and gameslib

@@ -8,7 +8,7 @@ AP records bot health on the `BOT` DynamoDB record (`lastseen`, `lastStatusCode`
 
 | Direction | Method | Expected response |
 |-----------|--------|-------------------|
-| AP → bot | `GET` to your registered endpoint | `200` with `{ "operational": true }` recommended |
+| AP ? bot | `GET` to your registered endpoint | `200` with `{ "operational": true }` recommended |
 
 | Response | Meaning |
 |----------|---------|
@@ -20,7 +20,7 @@ The reference bot implements ping in [`api/testBot.ts`](../../api/testBot.ts) `h
 
 ## Challenge (synchronous)
 
-When a human challenges your bot, AP enqueues a `bot-outbound` message. The worker POSTs a signed JSON body to your endpoint. You must respond **immediately** — do not queue challenge decisions.
+When a human challenges your bot, AP enqueues a `bot-outbound` message. The worker POSTs a signed JSON body to your endpoint. You must respond **immediately** � do not queue challenge decisions.
 
 | HTTP status | Meaning |
 |-------------|---------|
@@ -54,7 +54,7 @@ Built by `buildOutChallengePayload()` in [`lib/botOutbound.ts`](../../lib/botOut
 | `clockMax` | number | Maximum clock in **hours** |
 | `challengers` | string[] | AP ids of human players (excluding the bot) |
 
-On `200`, the backend calls `botRespondToChallenge()` → `respondedChallenge()` to accept on the bot's behalf. On reject, the challenge is declined.
+On `200`, the backend calls `botRespondToChallenge()` ? `respondedChallenge()` to accept on the bot's behalf. On reject, the challenge is declined.
 
 ## Move (asynchronous)
 
@@ -111,9 +111,9 @@ POST to `/botQuery` with your OAuth Bearer token:
 | Response | Meaning |
 |----------|---------|
 | `200` | Move accepted; body contains updated game JSON |
-| Other | Move failed — log and alert; AP will not retry automatically |
+| Other | Move failed � log and alert; AP will not retry automatically |
 
-Reference flow: [`api/testBot.ts`](../../api/testBot.ts) `handleMove()` → `submitBotMove()` in [`lib/botClient.ts`](../../lib/botClient.ts).
+Reference flow: [`api/testBot.ts`](../../api/testBot.ts) `handleMove()` ? `submitBotMove()` in [`lib/botClient.ts`](../../lib/botClient.ts).
 
 ## Pie (seat swap)
 
@@ -139,7 +139,7 @@ Use `verb: "pie"` when the engine chooses a seat swap (for example Tumbleweed op
 
 ## Move history format
 
-`moves` is a list of **rounds**. Each round contains one move string per player in seat order. To reconstruct position, instantiate `GameFactory(metaGame, undefined, variants)` and replay rounds in order — see `pickMove()` in `testBot.ts`.
+`moves` is a list of **rounds**. Each round contains one move string per player in seat order. To reconstruct position, instantiate `GameFactory(metaGame, undefined, variants)` and replay rounds in order � see `pickMove()` in `testBot.ts`.
 
 ## JSON schemas (wiki)
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /* eslint-env node */
 /**
- * Repair Guerrilla Checkers match GAME rows with legacy combined G1→G2 stack frames.
+ * Repair Guerrilla Checkers match GAME rows with legacy combined G1?G2 stack frames.
  *
  * Usage:
- *   npx tsx bin/backfill-guerrilla-match-stack.mjs --stage dev --dry-run
- *   npx tsx bin/backfill-guerrilla-match-stack.mjs --stage prod --apply
+ *   npx tsx scripts/backfill-guerrilla-match-stack.mjs --stage dev --dry-run
+ *   npx tsx scripts/backfill-guerrilla-match-stack.mjs --stage prod --apply
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
@@ -34,7 +34,7 @@ const STAGES = {
 };
 
 function usage() {
-  console.error(`Usage: npx tsx bin/backfill-guerrilla-match-stack.mjs --stage dev|prod [--dry-run|--apply]
+  console.error(`Usage: npx tsx scripts/backfill-guerrilla-match-stack.mjs --stage dev|prod [--dry-run|--apply]
 
 Options:
   --stage dev|prod   AWS profile + DynamoDB table (default: dev)

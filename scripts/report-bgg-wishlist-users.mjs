@@ -157,10 +157,10 @@ async function main() {
   if (unmatched.length > 0) {
     console.log('=== Need lookup ===');
     for (const row of unmatched) {
-      console.log(`${row.bggName} [${row.itemCount} items] â€” e.g. ${row.titles.join('; ')}`);
+      console.log(`${row.bggName} [${row.itemCount} items] — e.g. ${row.titles.join('; ')}`);
     }
     console.log('');
-    console.log('Add entries to bin/bgg-ap-user-map.json (BGG username -> AP user UUID).');
+    console.log('Add entries to scripts/bgg-ap-user-map.json (BGG username -> AP user UUID).');
   }
 
   if (args.emitMap) {

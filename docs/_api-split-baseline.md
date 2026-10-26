@@ -1,4 +1,4 @@
-# API split â€” Phase 0 baseline
+# API split — Phase 0 baseline
 
 Captured **2026-09-16** before splitting [`api/abstractplay.ts`](../api/abstractplay.ts).
 
@@ -17,22 +17,22 @@ Use this file to compare bundle sizes and monolith size after each migration pha
 
 | Region | Lines (approx) | Notes |
 |--------|----------------|-------|
-| Imports, locale setup, AWS clients, types | 1â€“666 | Duplicate `ddbDocClient` vs [`lib/ddb.ts`](../lib/ddb.ts) |
-| Lambda dispatch (`query` / `botQuery` / `authQuery` switches) | 740â€“1136 | ~27 public cases, ~75+ auth cases, 1 bot verb |
-| Catalog / challenges (public) | 1138â€“1593 | `userNames`, `games`, `metaGamesDetails`, â€¦ |
-| `game()` read path | 1594â€“1751 | Shared auth + public |
-| Playground auth glue | 1752â€“1916 | |
-| Announcements HTTP glue | 1917â€“2227 | Logic in `lib/announcements` |
-| Feedback HTTP glue | 2228â€“2660 | Logic in `lib/feedback` |
-| Player marks + public player pages | 2661â€“2973 | |
-| Game settings / inject state | 2974â€“3307 | |
-| Bot CRUD + Cognito | 3308â€“3831 | |
-| Me / profile / settings | 3832â€“4889 | Uses `lib/meQuery` |
-| Challenges (auth) | 4892â€“5798 | Includes `botRespondToChallenge` (exported) |
-| Moves, timeloss, comments, exploration | 5799â€“7379 | Largest block; heavy `gameslib` |
-| Tournaments | 7382â€“8162 | |
-| Events | 8163â€“9467 | |
-| Admin / ops / email helpers / misc | 9470â€“10574 | `deleteGames`, `test_push`, shared email/i18n exports |
+| Imports, locale setup, AWS clients, types | 1–666 | Duplicate `ddbDocClient` vs [`lib/ddb.ts`](../lib/ddb.ts) |
+| Lambda dispatch (`query` / `botQuery` / `authQuery` switches) | 740–1136 | ~27 public cases, ~75+ auth cases, 1 bot verb |
+| Catalog / challenges (public) | 1138–1593 | `userNames`, `games`, `metaGamesDetails`, … |
+| `game()` read path | 1594–1751 | Shared auth + public |
+| Playground auth glue | 1752–1916 | |
+| Announcements HTTP glue | 1917–2227 | Logic in `lib/announcements` |
+| Feedback HTTP glue | 2228–2660 | Logic in `lib/feedback` |
+| Player marks + public player pages | 2661–2973 | |
+| Game settings / inject state | 2974–3307 | |
+| Bot CRUD + Cognito | 3308–3831 | |
+| Me / profile / settings | 3832–4889 | Uses `lib/meQuery` |
+| Challenges (auth) | 4892–5798 | Includes `botRespondToChallenge` (exported) |
+| Moves, timeloss, comments, exploration | 5799–7379 | Largest block; heavy `gameslib` |
+| Tournaments | 7382–8162 | |
+| Events | 8163–9467 | |
+| Admin / ops / email helpers / misc | 9470–10574 | `deleteGames`, `test_push`, shared email/i18n exports |
 
 ## Test Lambda bundles (`npm run build:lambda-bundles`)
 
@@ -53,7 +53,7 @@ Esbuild output under [`.test-artifacts/lambda-bundles/`](../.test-artifacts/lamb
 | `api/authQuery.mjs` (Phase 7 partial) | 716,066 | 700 |
 | `api/query.mjs` (Phase 7 complete) | 367,971 | 359 |
 | `api/authQuery.mjs` (Phase 7 complete) | 718,268 | 702 |
-| `api/abstractplay.ts` lines (Phase 8) | â€” | ~689 |
+| `api/abstractplay.ts` lines (Phase 8) | — | ~689 |
 | `api/authQuery.mjs` (Phase 8) | 718,903 | 703 |
 | `api/botQuery.mjs` (Phase 2) | 300,117 | 293 |
 | `api/botQuery.mjs` (Phase 9) | 116,531 | 114 |
@@ -62,9 +62,9 @@ Esbuild output under [`.test-artifacts/lambda-bundles/`](../.test-artifacts/lamb
 | `api/sockets/authHandler.mjs` | 47,628 | 47 |
 | `api/testBot.mjs` | 24,462 | 24 |
 | `utils/game-projector.mjs` | 12,522 | 12 |
-| Other socket handlers | 121â€“7,058 | |
+| Other socket handlers | 121–7,058 | |
 
-**Note:** Test bundles use three entries â€” `api/query.ts`, `api/authQuery.ts`, `api/botQuery.ts` ([`scripts/lambda-esbuild-config.mjs`](../scripts/lambda-esbuild-config.mjs)).
+**Note:** Test bundles use three entries — `api/query.ts`, `api/authQuery.ts`, `api/botQuery.ts` ([`scripts/lambda-esbuild-config.mjs`](../scripts/lambda-esbuild-config.mjs)).
 
 ### Deploy package (baseline)
 
@@ -78,9 +78,9 @@ Esbuild output under [`.test-artifacts/lambda-bundles/`](../.test-artifacts/lamb
 
 Serverless v4 emits one **service** zip here, not separate `query` / `authQuery` / `botQuery` files on disk. Compare per-handler sizes via `.test-artifacts/lambda-bundles/`.
 
-## Phase 10 â€” monolith retired (2026-09-16)
+## Phase 10 — monolith retired (2026-09-16)
 
-`api/abstractplay.ts` removed. HTTP entries: `api/query.ts`, `api/authQuery.ts`, `api/botQuery.ts` â†’ `api/routes/*` â†’ `lib/*`. Move hooks: `lib/games/registerMoveHooks.ts` (imported from `playHandlers`). One-off migration scripts under `scripts/phase*.mjs` deleted.
+`api/abstractplay.ts` removed. HTTP entries: `api/query.ts`, `api/authQuery.ts`, `api/botQuery.ts` ? `api/routes/*` ? `lib/*`. Move hooks: `lib/games/registerMoveHooks.ts` (imported from `playHandlers`). One-off migration scripts under `scripts/phase*.mjs` deleted.
 
 ## RPC surface (unchanged by split)
 

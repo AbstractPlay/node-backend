@@ -13,12 +13,12 @@ When a game completes, the completion bit becomes `1` and summary rows are writt
 
 ## Lifecycle
 
-1. **Created** â€” from an accepted challenge, tournament/event pairing, or **`start_solo_game`** (1-player, always unrated).
-2. **In progress** â€” `submit_move` validates via `@abstractplay/gameslib`, updates state, clocks, and `toMove`.
-3. **Automove** â€” for games with the `automove` flag, if the next player has only one legal move, the backend plays it automatically.
-4. **Time loss** â€” `timeloss` (auth or internal) ends games when clocks expire.
-5. **Abandoned** â€” `abandoned` handles resign/abandon flows.
-6. **Completed** â€” archived to `COMPLETEDGAMES#*` indexes; removed from active lists after the user has seen the result.
+1. **Created** — from an accepted challenge, tournament/event pairing, or **`start_solo_game`** (1-player, always unrated).
+2. **In progress** — `submit_move` validates via `@abstractplay/gameslib`, updates state, clocks, and `toMove`.
+3. **Automove** — for games with the `automove` flag, if the next player has only one legal move, the backend plays it automatically.
+4. **Time loss** — `timeloss` (auth or internal) ends games when clocks expire.
+5. **Abandoned** — `abandoned` handles resign/abandon flows.
+6. **Completed** — archived to `COMPLETEDGAMES#*` indexes; removed from active lists after the user has seen the result.
 
 ## Key queries
 
@@ -28,10 +28,10 @@ When a game completes, the completion bit becomes `1` and summary rows are writt
 | `get_game` | public / auth | Fetch game state |
 | `timeloss` | auth | Report timeout |
 | `abandoned` | auth | Abandon game |
-| `invoke_pie` | auth | Pie rule â€” reverse player order |
-| `teaching_grant_undo` | auth | Teaching mode â€” offer opponent review of last ply (see below) |
-| `teaching_keep_move` | auth | Teaching mode â€” reviewer keeps the move under review |
-| `teaching_undo_move` | auth | Teaching mode â€” reviewer rolls back to start of their last ply batch |
+| `invoke_pie` | auth | Pie rule — reverse player order |
+| `teaching_grant_undo` | auth | Teaching mode — offer opponent review of last ply (see below) |
+| `teaching_keep_move` | auth | Teaching mode — reviewer keeps the move under review |
+| `teaching_undo_move` | auth | Teaching mode — reviewer rolls back to start of their last ply batch |
 | `start_solo_game` | auth | Start solo play (`numPlayers: 1`, `rated: false`, optional `challengeSeed`) |
 | `set_game_state` | auth | Admin state injection |
 | `update_game_settings` | auth | Per-game settings |
@@ -48,20 +48,20 @@ When **`teachingMode: true`** on the live `GAME` (from the challenge at start), 
 |-------|----------|---------|
 | `teachingMode` | Game create | Immutable flag; gates teaching RPCs. |
 | `teachingUndo` | After `teaching_grant_undo` | Handshake: `grantorSeat`, `reviewerSeat`, `stackAtGrant`, `grantorSeatAfterKeep` (0-based seats). Cleared on keep or undo. |
-| `teachingPlyStart` | Start of each human ply on `submit_move` | Snapshot: `stackIndex`, `playerTimes[]`, `lastMoveTime` â€” used to restore clocks on undo when the anchor matches the rollback target. |
+| `teachingPlyStart` | Start of each human ply on `submit_move` | Snapshot: `stackIndex`, `playerTimes[]`, `lastMoveTime` — used to restore clocks on undo when the anchor matches the rollback target. |
 
 ### Handshake
 
-1. **Normal play** â€” `submit_move` as usual. **`invoke_pie` is not available** on teaching games (seat swap is not recorded as an engine ply and cannot be cooperatively reverted). While `teachingUndo` is set, **`submit_move` is also rejected**; only `teaching_keep_move` / `teaching_undo_move` apply for the reviewer.
-2. **Grant** (`teaching_grant_undo`) â€” Caller must be `toMove` (grantor). Requires `stack.length > 1`. Reviewer is the **actor of the last completed ply** (`engine.getPlies()` / gameslib ply walk). Sets `toMove` to the reviewer; stack unchanged.
-3. **Keep** (`teaching_keep_move`) â€” Reviewer only. Restores `toMove` to the grantor; clears `teachingUndo`.
-4. **Undo** (`teaching_undo_move`) â€” Reviewer only. Rolls the engine back to the stack length **before the reviewerâ€™s trailing same-actor ply run** (sequenced double-activation included). Restores clocks from `teachingPlyStart` when `stackIndex` matches; trims `GAMEEXPLORATION#` rows with `move` â‰¥ new stack length; sets `toMove` to the reviewer for a replacement move.
+1. **Normal play** — `submit_move` as usual. **`invoke_pie` is not available** on teaching games (seat swap is not recorded as an engine ply and cannot be cooperatively reverted). While `teachingUndo` is set, **`submit_move` is also rejected**; only `teaching_keep_move` / `teaching_undo_move` apply for the reviewer.
+2. **Grant** (`teaching_grant_undo`) — Caller must be `toMove` (grantor). Requires `stack.length > 1`. Reviewer is the **actor of the last completed ply** (`engine.getPlies()` / gameslib ply walk). Sets `toMove` to the reviewer; stack unchanged.
+3. **Keep** (`teaching_keep_move`) — Reviewer only. Restores `toMove` to the grantor; clears `teachingUndo`.
+4. **Undo** (`teaching_undo_move`) — Reviewer only. Rolls the engine back to the stack length **before the reviewer’s trailing same-actor ply run** (sequenced double-activation included). Restores clocks from `teachingPlyStart` when `stackIndex` matches; trims `GAMEEXPLORATION#` rows with `move` = new stack length; sets `toMove` to the reviewer for a replacement move.
 
 Grant can be offered again on the next turn (including immediately after an undo, without an intervening move). There is no depth cap except the opening (`stack.length === 1`), where grant is rejected.
 
 ### Ply anchor on `submit_move`
 
-For teaching games, before the human `engine.move()` in [`applyMove`](../../lib/games/playHandlers.ts), the server may refresh `teachingPlyStart` when the mover is **not** continuing the same seatâ€™s sequenced batch (`shouldRefreshPlyStartForEngine`).
+For teaching games, before the human `engine.move()` in [`applyMove`](../../lib/games/playHandlers.ts), the server may refresh `teachingPlyStart` when the mover is **not** continuing the same seat’s sequenced batch (`shouldRefreshPlyStartForEngine`).
 
 ## Pie rule
 
@@ -73,9 +73,9 @@ Users can save unlimited playground positions. Each save is stored as `pk: PLAYG
 
 ## Record types
 
-- [Database schema](/backend/database-schema/) â€” `GAME`, `GAMECOMMENTS`, `NOTE`, `COMPLETEDGAMES*`, `PLAYGROUND`
+- [Database schema](/backend/database-schema/) — `GAME`, `GAMECOMMENTS`, `NOTE`, `COMPLETEDGAMES*`, `PLAYGROUND`
 
 ## Related
 
-- [Challenges](/backend/subsystems/challenges/) â€” how games start
-- [Gameslib](/gameslib/) â€” rules engine
+- [Challenges](/backend/subsystems/challenges/) — how games start
+- [Gameslib](/gameslib/) — rules engine

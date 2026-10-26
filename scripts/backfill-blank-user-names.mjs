@@ -8,8 +8,8 @@
  *   2. Otherwise set both USER.name and USERS.name to Player-{first8OfUserId}
  *
  * Usage:
- *   node bin/backfill-blank-user-names.mjs --stage dev --dry-run
- *   node bin/backfill-blank-user-names.mjs --stage prod --apply
+ *   node scripts/backfill-blank-user-names.mjs --stage dev --dry-run
+ *   node scripts/backfill-blank-user-names.mjs --stage prod --apply
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -38,7 +38,7 @@ const STAGES = {
 };
 
 function usage() {
-  console.error(`Usage: node bin/backfill-blank-user-names.mjs --stage dev|prod [--dry-run|--apply]
+  console.error(`Usage: node scripts/backfill-blank-user-names.mjs --stage dev|prod [--dry-run|--apply]
 
 Options:
   --stage dev|prod   AWS profile + DynamoDB table (default: dev)

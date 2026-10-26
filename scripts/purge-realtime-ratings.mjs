@@ -11,14 +11,14 @@
  * Does NOT remove ratingChange NOTIFICATION# rows (historical in-app notifications).
  *
  * Usage:
- *   node bin/purge-realtime-ratings.mjs [--stage dev|prod] [--dry-run]
+ *   node scripts/purge-realtime-ratings.mjs [--stage dev|prod] [--dry-run]
  *     --step purge-ratings-index|strip-user-ratings|all
  *     [--meta-game <metaGameUid>] [--user-id <cognitoSub>]
  *
  * Examples:
- *   node bin/purge-realtime-ratings.mjs --stage prod --dry-run --step all
- *   node bin/purge-realtime-ratings.mjs --stage prod --step purge-ratings-index --meta-game chess
- *   node bin/purge-realtime-ratings.mjs --stage prod --step strip-user-ratings --user-id <cognitoSub>
+ *   node scripts/purge-realtime-ratings.mjs --stage prod --dry-run --step all
+ *   node scripts/purge-realtime-ratings.mjs --stage prod --step purge-ratings-index --meta-game chess
+ *   node scripts/purge-realtime-ratings.mjs --stage prod --step strip-user-ratings --user-id <cognitoSub>
  *
  * After a full purge, run admin authQuery `update_meta_game_counts` so METAGAMES# ratingsCount
  * matches _summary-ratings.json (not updated by this script).
@@ -56,7 +56,7 @@ const BATCH_WRITE_SIZE = 25;
 const BATCH_RETRY_MS = 200;
 
 function usage() {
-  console.error(`Usage: node bin/purge-realtime-ratings.mjs [options]
+  console.error(`Usage: node scripts/purge-realtime-ratings.mjs [options]
 
 Options:
   --stage dev|prod                    AWS profile + DynamoDB table (default: dev)
@@ -222,7 +222,7 @@ async function batchDeleteKeys(docClient, tableName, keys, dryRun, stats) {
 async function purgeRatingsIndex(docClient, tableName, { dryRun, metaGame }) {
   const stats = { partitions: 0 };
 
-  console.log('\nPurging RATINGS#<metaGame> leaderboard rowsâ€¦');
+  console.log('\nPurging RATINGS#<metaGame> leaderboard rows…');
   if (metaGame) {
     console.log(`  meta game: ${metaGame}`);
   }
@@ -335,7 +335,7 @@ async function stripRatingsForUser(docClient, tableName, userId, ratings, { dryR
 async function stripUserRatings(docClient, tableName, { dryRun, metaGame, userId }) {
   const stats = { usersScanned: 0 };
 
-  console.log('\nRemoving USER.ratings from profile recordsâ€¦');
+  console.log('\nRemoving USER.ratings from profile records…');
   if (metaGame) {
     console.log(`  meta game key: ${metaGame}`);
   }
