@@ -2,20 +2,15 @@
 /**
  * Interactive dev login → refresh tokens → dev-test-players.json
  *
- * Default: Cognito hosted UI (same OAuth flow as play.dev).
- *   npx tsx scripts/seed-dev-test-players.ts
+ * Cognito SRP (dev pool + app client) → refresh tokens for dev-auth-query → authQuery.
  *
- * Password + SRP (optional):
- *   npx tsx scripts/seed-dev-test-players.ts --password
+ *   npx tsx scripts/seed-dev-test-players.ts
  */
 import { createInterface } from 'node:readline/promises';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  signInDevWithHostedUi,
-  signInDevWithPassword,
-} from '../lib/test/devAmplifyAuth.js';
+import { signInDevWithPassword } from '../lib/test/devAmplifyAuth.js';
 import {
   DEV_AUTH_QUERY_URL,
   DEV_COGNITO_CLIENT_ID,
@@ -25,7 +20,6 @@ import { resolveDevTestPlayersPath } from '../lib/test/devTestPlayers.js';
 
 const repoRoot = path.join(fileURLToPath(new URL('../', import.meta.url)));
 const examplePath = path.join(repoRoot, 'test/fixtures/dev-test-players.example.json');
-const usePassword = process.argv.includes('--password');
 
 async function loadOrCreateManifest(): Promise<DevTestPlayersManifest> {
   const outPath = resolveDevTestPlayersPath();
@@ -52,12 +46,8 @@ async function main() {
 
   console.log('Dev test players manifest seed');
   console.log(`Output: ${resolveDevTestPlayersPath()}`);
-  console.log(
-    usePassword
-      ? 'Mode: username/password (Amplify SRP)\n'
-      : 'Mode: hosted UI OAuth (same as play.dev)\n',
-  );
-  console.log('Enter player keys (e.g. owner, p2). Empty key to finish.\n');
+  console.log(`authQuery: ${manifest.authQueryUrl}`);
+  console.log('Sign in with each dev account (email + password). Empty player key to finish.\n');
 
   for (;;) {
     const key = (await rl.question('Player key (empty = done): ')).trim();
@@ -65,46 +55,32 @@ async function main() {
       break;
     }
 
+    const username = (await rl.question('Username (email): ')).trim();
+    if (!username) {
+      console.log('Skipped.\n');
+      continue;
+    }
+    const password = await rl.question('Password: ');
+    if (!password) {
+      console.log('Skipped.\n');
+      continue;
+    }
+
     try {
-      let refreshToken: string;
-      let sub: string | undefined;
-      let label = manifest.players[key]?.label;
-
-      if (usePassword) {
-        const username = (await rl.question('Username (email): ')).trim();
-        if (!username) {
-          console.log('Skipped.\n');
-          continue;
-        }
-        const password = await rl.question('Password: ');
-        if (!password) {
-          console.log('Skipped.\n');
-          continue;
-        }
-        const tokens = await signInDevWithPassword(
-          username,
-          password,
-          async (step) => (await rl.question(`${step} code: `)).trim(),
-        );
-        refreshToken = tokens.refreshToken;
-        sub = tokens.sub;
-        label = label ?? username;
-      } else {
-        console.log(`Sign in as "${key}" in the browser when it opens…`);
-        const tokens = await signInDevWithHostedUi();
-        refreshToken = tokens.refreshToken;
-        sub = tokens.sub;
-      }
-
+      const tokens = await signInDevWithPassword(
+        username,
+        password,
+        async (step) => (await rl.question(`${step} code: `)).trim(),
+      );
       const existing = manifest.players[key] ?? {};
       manifest.players[key] = {
         ...existing,
-        label: label ?? existing.label ?? key,
-        userId: sub ?? existing.userId,
-        refreshToken,
+        label: existing.label ?? username,
+        userId: tokens.sub ?? existing.userId,
+        refreshToken: tokens.refreshToken,
       };
       delete manifest.players[key]!.idToken;
-      console.log(`OK ${key} → sub ${sub ?? '(unknown)'}\n`);
+      console.log(`OK ${key} → sub ${tokens.sub ?? '(unknown)'}\n`);
     } catch (err) {
       console.error(`Auth failed for ${key}:`, err instanceof Error ? err.message : err);
       console.log('');
