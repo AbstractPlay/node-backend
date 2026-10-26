@@ -12,7 +12,7 @@
  *   - USERGAME# row is not on CURRENTGAMES# (orphan overlay)
  *
  * Usage:
- *   node bin/verify-dashboard-index.mjs <userid> [userid...] [--stage dev|prod] [--verbose]
+ *   node scripts/verify-dashboard-index.mjs <userid> [userid...] [--stage dev|prod] [--verbose]
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -35,7 +35,7 @@ const STAGES = {
 };
 
 function usage() {
-  console.error(`Usage: node bin/verify-dashboard-index.mjs <userid> [userid...] [--stage dev|prod] [--verbose]
+  console.error(`Usage: node scripts/verify-dashboard-index.mjs <userid> [userid...] [--stage dev|prod] [--verbose]
 
 Index-only dashboard verify (CURRENTGAMES#, USERGAME#; RECENTCOMPLETED# must be empty).
 
@@ -260,7 +260,7 @@ async function main() {
 
   for (const userId of userIds) {
     if (multi) {
-      console.log('═'.repeat(72));
+      console.log('-'.repeat(72));
     }
     const result = await verifyUser(docClient, table, userId, verbose);
     results.push(result);
@@ -269,11 +269,11 @@ async function main() {
 
   if (multi) {
     const healthy = results.filter(r => r.healthy).length;
-    console.log('═'.repeat(72));
+    console.log('-'.repeat(72));
     console.log(`SUMMARY: ${healthy}/${results.length} DASHBOARD INDEX OK`);
     for (const r of results) {
       const status = r.healthy ? 'YES' : 'NO';
-      const issues = r.issues?.length ? ` — ${r.issues.join('; ')}` : '';
+      const issues = r.issues?.length ? ` � ${r.issues.join('; ')}` : '';
       console.log(`  ${status}  ${r.name} (${r.userId})${issues}`);
     }
     console.log('');

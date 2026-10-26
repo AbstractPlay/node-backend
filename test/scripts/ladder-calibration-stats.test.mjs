@@ -11,7 +11,7 @@ import {
   reachAllowanceRates,
   stackHasTerminalFailure,
   summarizeDistribution,
-} from '../../bin/lib/ladder-calibration-stats.mjs';
+} from '../../scripts/lib/ladder-calibration-stats.mjs';
 
 describe('ladder-calibration-stats', () => {
   it('percentile and summarizeDistribution', () => {

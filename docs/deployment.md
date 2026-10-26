@@ -17,38 +17,38 @@ Each deploy runs **two** Serverless stacks (API first, then crons):
 
 | Stack | Service name | Deploy (CI) |
 |-------|----------------|-------------|
-| API / WebSocket | `abstract-play` | `bash bin/serverless-deploy.sh <stage> <profile>` |
+| API / WebSocket | `abstract-play` | `bash scripts/serverless-deploy.sh <stage> <profile>` |
 | Scheduled jobs | `abstract-play-backend-crons` | `bash crons/scripts/serverless-deploy.sh <stage>` |
 
-The former [backend-crons](https://github.com/AbstractPlay/backend-crons) repository is **archived**; deploy and develop only from this repoâ€™s `crons/` workspace.
+The former [backend-crons](https://github.com/AbstractPlay/backend-crons) repository is **archived**; deploy and develop only from this repo’s `crons/` workspace.
 
 Crons source lives in [`crons/`](https://github.com/AbstractPlay/node-backend/tree/develop/crons). See [Crons deployment](/crons/deployment/).
 
-Both stacks tag billable resources with `ap:service` (Serverless `service` name) and `ap:stage` (`dev` / `prod`) for AWS Cost Explorer. Activate those keys once per account under **Billing â†’ Cost allocation tags**.
+Both stacks tag billable resources with `ap:service` (Serverless `service` name) and `ap:stage` (`dev` / `prod`) for AWS Cost Explorer. Activate those keys once per account under **Billing ? Cost allocation tags**.
 
 ## AP dependency pins (`ci-deps.*.json`)
 
-Canonical pins live in `ci-deps.dev.json` and `ci-deps.prod.json`. CI runs `npm ci` â†’ manifest validation â†’ `ap-install-deps --stage dev|prod` â†’ strict lockfile check â†’ build/test.
+Canonical pins live in `ci-deps.dev.json` and `ci-deps.prod.json`. CI runs `npm ci` ? manifest validation ? `ap-install-deps --stage dev|prod` ? strict lockfile check ? build/test.
 
 After merging `develop` into `main` (or another branch that changes dependency files), run `npm run sync-deps:prod` on `main` or `npm run sync-deps` on `develop`, then commit if anything changed. Do not hand-merge AP version strings in `package.json`.
 
 `npm run sync-deps` runs `ap-install-deps` at the repo root, copies AP pins into `crons/package.json` from the root manifest, then prunes any stale `crons/node_modules/@abstractplay` tree. Deploy/Test workflows run `scripts/sync-crons-ap-deps.mjs` **before** `npm ci` so a stale `crons/package.json` (for example after a cross-branch merge with `merge=ours`) cannot break install. The gameslib relay auto-commit on `dep_update_dev` / `dep_update_prod` also stages `crons/package.json` with the root manifests. `postinstall` re-runs sync after install; `npm run lint` runs `check-crons-ap-pins` so committed pins cannot drift from root. Locally after a merge, prefer `npm run ci:install` (or `ci:install:prod` on `main`) instead of bare `npm ci` if install fails on workspace pin mismatch.
 
-`.gitattributes` marks `ci-deps.prod.json`, `ci-deps.dev.json`, `package.json`, `package-lock.json`, and `crons/package.json` with `merge=ours` so the branch you merge **into** keeps its pins until you run `sync-deps`. That only works when Gitâ€™s **`merge.ours` driver** is registered in your clone â€” run **`npm run setup-git`** once after clone (or before your first developâ†”`main` merge). Do not hand-pick AP version lines from the other branch.
+`.gitattributes` marks `ci-deps.prod.json`, `ci-deps.dev.json`, `package.json`, `package-lock.json`, and `crons/package.json` with `merge=ours` so the branch you merge **into** keeps its pins until you run `sync-deps`. That only works when Git’s **`merge.ours` driver** is registered in your clone — run **`npm run setup-git`** once after clone (or before your first develop?`main` merge). Do not hand-pick AP version lines from the other branch.
 
-**GitHub pull-request merges** do not run custom merge drivers. For a conflict-free prod merge, check out `main`, run `npm run setup-git`, merge `develop` locally, push `main`; or on the PR conflict UI, keep **`main`**â€™s copies of every file listed above (and the same for **`develop`** when back-merging `main`).
+**GitHub pull-request merges** do not run custom merge drivers. For a conflict-free prod merge, check out `main`, run `npm run setup-git`, merge `develop` locally, push `main`; or on the PR conflict UI, keep **`main`**’s copies of every file listed above (and the same for **`develop`** when back-merging `main`).
 
-Prod deploys may fail at build when code on `main` uses a gameslib API not yet in the prod pin â€” wait for `dep_update_prod` or bump `ci-deps.prod.json` when releasing.
+Prod deploys may fail at build when code on `main` uses a gameslib API not yet in the prod pin — wait for `dep_update_prod` or bump `ci-deps.prod.json` when releasing.
 
 ## Lambda module-load checks (CI)
 
-Deploy workflows run `npm test` after `npm run build`. `pretest` runs `npm run build:lambda-bundles`, which esbuilds every Lambda handler entry with the same options as serverless-esbuild (ESM `.mjs`, same `external` list). `vitest run` executes unit tests from `test/**/*.test.ts`. `test/lambdaInit.test.mjs` dynamically imports those bundles plus `@abstractplay/gameslib` â€” matching Lambda cold-start module loading.
+Deploy workflows run `npm test` after `npm run build`. `pretest` runs `npm run build:lambda-bundles`, which esbuilds every Lambda handler entry with the same options as serverless-esbuild (ESM `.mjs`, same `external` list). `vitest run` executes unit tests from `test/**/*.test.ts`. `test/lambdaInit.test.mjs` dynamically imports those bundles plus `@abstractplay/gameslib` — matching Lambda cold-start module loading.
 
-If vitest fails with `exports is not defined` loading `lib/*.js`, delete stale local `tsc` sidecars (`lib/*.js`, `utils/*.js`) left over from before the ESM flip â€” they are gitignored and must not remain on disk beside the `.ts` sources.
+If vitest fails with `exports is not defined` loading `lib/*.js`, delete stale local `tsc` sidecars (`lib/*.js`, `utils/*.js`) left over from before the ESM flip — they are gitignored and must not remain on disk beside the `.ts` sources.
 
 Handlers are packaged with **serverless-esbuild** (ESM `.mjs` bundles). Heavy `@abstractplay/*` dependencies live in a shared Lambda layer built by `npm run build:layers` before `serverless package` / deploy.
 
-CJS packages that use dynamic `require()` (e.g. `web-push`, `@sunknudsen/totp`, `i18next`) must stay in the esbuild `external` list so they load from `node_modules` at runtime â€” bundling them into ESM output causes init errors like `Dynamic require of "crypto" is not supported`.
+CJS packages that use dynamic `require()` (e.g. `web-push`, `@sunknudsen/totp`, `i18next`) must stay in the esbuild `external` list so they load from `node_modules` at runtime — bundling them into ESM output causes init errors like `Dynamic require of "crypto" is not supported`.
 
 ## Manual deploy
 
@@ -67,7 +67,7 @@ Or use npm scripts: `npm run deploy-dev`, `npm run deploy-prod`, `npm run full-d
 Serverless Framework **v4** resolves `provider.environment` when you run `serverless package`, `print`, or `deploy`. CI and local deploys use the pinned **`serverless@4.42.0`** devDependency via `npx serverless` (no global Serverless install). The Dashboard org is **`abstractplay`** (`SERVERLESS_ORG` in CI; `org:` in `serverless.yml`).
 
 - **CI:** GitHub Actions set `SERVERLESS_ACCESS_KEY` (org secret), `SERVERLESS_ORG=abstractplay`, plus `TOTP_KEY`, VAPID keys, and `OPENSSH_PRIVATE_KEY` from repository secrets.
-- **Local:** Keep values in **`../apsecrets.yml`** (sibling of this repo, e.g. `ap/apsecrets.yml` next to `node-backend/`). That path is **outside** this git repository, so it cannot be committed here. [`serverless.yml`](../serverless.yml) uses `${env:VAR, file(../apsecrets.yml):key}` â€” CI environment variables win when set; otherwise the CLI reads the file.
+- **Local:** Keep values in **`../apsecrets.yml`** (sibling of this repo, e.g. `ap/apsecrets.yml` next to `node-backend/`). That path is **outside** this git repository, so it cannot be committed here. [`serverless.yml`](../serverless.yml) uses `${env:VAR, file(../apsecrets.yml):key}` — CI environment variables win when set; otherwise the CLI reads the file.
 
 Expected keys in `../apsecrets.yml`: `totp_key`, `vapid_private_key`, `vapid_public_key`, `openssh_private_key`, `announcements_discord_webhook_url` (YAML snake_case; `openssh_private_key` is OpenSSH PEM text for bot webhook signing). For CI prod deploy, also set GitHub secret `ANNOUNCEMENTS_DISCORD_WEBHOOK_URL` (same webhook URL).
 
@@ -86,10 +86,10 @@ Table name: `abstract-play-${stage}`.
 
 The DynamoDB table must have streams enabled **before** CloudFormation can reference `StreamArn`. The stream Lambda trigger is gated by the `enableGameProjectorStream` deploy parameter.
 
-**CI** (`bin/serverless-deploy.sh`) checks `LatestStreamArn` on the stage table before deploy:
+**CI** (`scripts/serverless-deploy.sh`) checks `LatestStreamArn` on the stage table before deploy:
 
-- **No stream yet** â†’ `enableGameProjectorStream=false` (enables `StreamSpecification` on the table; deploys `gameProjector` Lambda without a trigger).
-- **Stream exists** â†’ `enableGameProjectorStream=true` (creates `GameProjectorEventSourceMapping` + DLQ wiring).
+- **No stream yet** ? `enableGameProjectorStream=false` (enables `StreamSpecification` on the table; deploys `gameProjector` Lambda without a trigger).
+- **Stream exists** ? `enableGameProjectorStream=true` (creates `GameProjectorEventSourceMapping` + DLQ wiring).
 
 So the **first** deploy to a new stage only enables streams. The **next** CI run on that stage attaches the mapping. No manual flags.
 
@@ -97,7 +97,7 @@ So the **first** deploy to a new stage only enables streams. The **next** CI run
 
 ```bash
 npm run build
-bash bin/serverless-deploy.sh dev AbstractPlayDev
+bash scripts/serverless-deploy.sh dev AbstractPlayDev
 # After first run succeeds, any later run passes enableGameProjectorStream=true automatically.
 ```
 
@@ -109,46 +109,46 @@ When `OPS_ALERT_EMAIL` is set at deploy time, CloudFormation creates an SNS topi
 
 | Alarm | Signal |
 |-------|--------|
-| `abstractplay-game-projector-errors-${stage}` | Lambda `Errors` â‰¥ 1 in 1 minute (catches init crashes) |
-| `abstractplay-game-projector-dlq-${stage}` | DLQ depth â‰¥ 1 message (**prod** only) |
+| `abstractplay-game-projector-errors-${stage}` | Lambda `Errors` = 1 in 1 minute (catches init crashes) |
+| `abstractplay-game-projector-dlq-${stage}` | DLQ depth = 1 message (**prod** only) |
 | `abstractplay-game-projector-iterator-age-${stage}` | Stream `IteratorAge` > 5 minutes for 10 minutes |
 
-**First deploy:** SNS sends a subscription confirmation email â€” you must click **Confirm subscription** once or alarms will not arrive.
+**First deploy:** SNS sends a subscription confirmation email — you must click **Confirm subscription** once or alarms will not arrive.
 
 **Local / manual deploy:**
 
 ```bash
 export OPS_ALERT_EMAIL=you@example.com
-bash bin/serverless-deploy.sh prod AbstractPlayProd
+bash scripts/serverless-deploy.sh prod AbstractPlayProd
 ```
 
 Omit `OPS_ALERT_EMAIL` to skip the topic and alarm actions (dev deploys by default).
 
 ## Required GitHub secrets
 
-- `SERVERLESS_ACCESS_KEY` â€” Serverless Dashboard access key (org secret `abstractplay`)
-- `AWS_KEY`, `AWS_SECRET` â€” deploy credentials
-- `PAT_READ_PACKAGES` â€” npm install from GitHub Packages
+- `SERVERLESS_ACCESS_KEY` — Serverless Dashboard access key (org secret `abstractplay`)
+- `AWS_KEY`, `AWS_SECRET` — deploy credentials
+- `PAT_READ_PACKAGES` — npm install from GitHub Packages
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `TOTP_KEY`, `OPENSSH_PRIVATE_KEY`
-- `OPS_ALERT_EMAIL` â€” ops CloudWatch alarm notifications (prod workflow)
+- `OPS_ALERT_EMAIL` — ops CloudWatch alarm notifications (prod workflow)
 - `TEST_BOT_CLIENT_ID`, `TEST_BOT_CLIENT_SECRET` (dev workflow)
-- `AIAI_BOT_ID_PROD` â€” prod registered AiAi bot client id; passed to crons deploy as `AIAI_BOT_RECORDS_CANONICAL_ID` for records player-shard merge (same value as **bot-aiai** prod OAuth client id)
+- `AIAI_BOT_ID_PROD` — prod registered AiAi bot client id; passed to crons deploy as `AIAI_BOT_RECORDS_CANONICAL_ID` for records player-shard merge (same value as **bot-aiai** prod OAuth client id)
 
 ## Cognito setup (essentials)
 
 Each stage needs a Cognito user pool with an app client for the front end:
 
 1. Create a user pool (defaults are fine).
-2. Add an app client â€” **do not** generate a client secret.
+2. Add an app client — **do not** generate a client secret.
 3. Copy the pool ARN into `serverless.yml` (`custom.stageConfig.{stage}.userpool`) for the `authQuery` authorizer.
 4. App client settings: enable identity providers; set callback/sign-out URLs (`http://localhost:3000` for local dev; `https://play.dev.abstractplay.com` / `https://play.abstractplay.com` for deployed front ends).
 5. OAuth: Authorization code grant, Implicit grant, `openid` scope; enable `aws.cognito.signin.user.admin` and `Email`.
 
-Bot pools are separate per stage â€” see [Bots](/backend/subsystems/bots/).
+Bot pools are separate per stage — see [Bots](/backend/subsystems/bots/).
 
 ## Documentation deploys
 
-When a push to `develop` or `main` includes changes under `docs/` or `crons/docs/`, the deploy workflow dispatches `dep_update_dev` / `dep_update_prod` to the [docs](https://github.com/AbstractPlay/docs) repository so the site rebuilds (after the docs repo vendors this monorepo and syncs `/crons/` â€” see `crons/docs/_docs-repo-integration.md`).
+When a push to `develop` or `main` includes changes under `docs/` or `crons/docs/`, the deploy workflow dispatches `dep_update_dev` / `dep_update_prod` to the [docs](https://github.com/AbstractPlay/docs) repository so the site rebuilds (after the docs repo vendors this monorepo and syncs `/crons/` — see `crons/docs/_docs-repo-integration.md`).
 
 ## Related
 

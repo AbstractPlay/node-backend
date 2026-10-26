@@ -5,8 +5,8 @@
  * (challenger / seated players incorrectly listed as invitees).
  *
  * Usage:
- *   npx tsx bin/backfill-standing-challenge-challengees.mjs --stage dev --dry-run
- *   npx tsx bin/backfill-standing-challenge-challengees.mjs --stage prod --apply
+ *   npx tsx scripts/backfill-standing-challenge-challengees.mjs --stage dev --dry-run
+ *   npx tsx scripts/backfill-standing-challenge-challengees.mjs --stage prod --apply
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -34,7 +34,7 @@ const STAGES = {
 };
 
 function usage() {
-  console.error(`Usage: npx tsx bin/backfill-standing-challenge-challengees.mjs --stage dev|prod [--dry-run|--apply]
+  console.error(`Usage: npx tsx scripts/backfill-standing-challenge-challengees.mjs --stage dev|prod [--dry-run|--apply]
 
 Options:
   --stage dev|prod   AWS profile + DynamoDB table (default: dev)

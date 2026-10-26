@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Phase 6 — audit and clear legacy embedded AiAi user (prod/dev).
+ * Phase 6 � audit and clear legacy embedded AiAi user (prod/dev).
  *
- *   npx tsx bin/aiai-legacy-cutover.mjs --stage prod           # audit only
- *   npx tsx bin/aiai-legacy-cutover.mjs --stage prod --execute # decline + resign
+ *   npx tsx scripts/aiai-legacy-cutover.mjs --stage prod           # audit only
+ *   npx tsx scripts/aiai-legacy-cutover.mjs --stage prod --execute # decline + resign
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
@@ -50,7 +50,7 @@ function parseArgs(argv) {
       challengesOnly = true;
       execute = true;
     } else if (argv[i] === '--help' || argv[i] === '-h') {
-      console.error('Usage: npx tsx bin/aiai-legacy-cutover.mjs [--stage dev|prod] [--execute]');
+      console.error('Usage: npx tsx scripts/aiai-legacy-cutover.mjs [--stage dev|prod] [--execute]');
       process.exit(0);
     }
   }
@@ -154,7 +154,7 @@ async function main() {
       metaGame,
       comment: 'Legacy AiAi cutover (Phase 6).',
     });
-    console.error(`  → HTTP ${result.statusCode}: ${result.body?.slice(0, 240)}`);
+    console.error(`  ? HTTP ${result.statusCode}: ${result.body?.slice(0, 240)}`);
   }
   }
 
@@ -170,7 +170,7 @@ async function main() {
       cbit: 0,
       draw: '',
     });
-    console.error(`  → HTTP ${result.statusCode}: ${result.body?.slice(0, 240)}`);
+    console.error(`  ? HTTP ${result.statusCode}: ${result.body?.slice(0, 240)}`);
   }
   }
 

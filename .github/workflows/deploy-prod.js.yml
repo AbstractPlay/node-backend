@@ -128,7 +128,7 @@ jobs:
     #     aws-region: us-east-1
 
     - name: Deploy API stack
-      run: bash bin/serverless-deploy.sh prod AbstractPlayProd
+      run: bash scripts/serverless-deploy.sh prod AbstractPlayProd
 
     - name: Deploy crons stack
       env:

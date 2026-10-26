@@ -16,7 +16,9 @@ npm run build
 
 `npm run build` runs ESLint and TypeScript typecheck (`tsc --noEmit`). Lambda handlers are bundled at deploy time by serverless-esbuild; there is no separate `lib/*.js` compile step.
 
-Ops scripts under `bin/` that only talk to AWS run with `node bin/<script>.mjs`. Scripts that import `lib/*.ts` (e.g. `dump-dashboard`, `import-bgg-wishlist`, `import-discord-feedback`) run via `tsx` — see `npm run dump-dashboard`, `npm run import-bgg-wishlist`, and `npm run import-discord-feedback`. BGG and Discord imports accept optional user maps (`bin/bgg-ap-user-map.json`, `bin/discord-ap-user-map.json`; see `.example.json` files for format).
+Maintained ops CLIs live under `scripts/` (`node scripts/<script>.mjs` or `npm run ?`; **tsx** when they import `lib/*.ts`). BGG and Discord imports accept optional user maps (`scripts/bgg-ap-user-map.json`, `scripts/discord-ap-user-map.json`; see `.example.json` files). **`bin/`** is gitignored local scratch (e.g. ladder calibration JSON from `npm run analyze-ladder-calibration`).
+
+**Dev auth RPC (multi-player):** copy `test/fixtures/dev-test-players.example.json` ? `dev-test-players.json` (gitignored), seed Cognito refresh tokens with `npx tsx scripts/seed-dev-test-players.ts`, then `npx tsx scripts/dev-auth-query.ts`. See [Dev auth RPC testing](/backend/testing/dev-auth-rpc/).
 
 ## GitHub Packages
 

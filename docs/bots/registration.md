@@ -29,7 +29,7 @@ Bot owners manage bots through authenticated `authQuery` endpoints. Creating a b
 3. `BOT` record written (`pk: BOT`, `sk: clientId`) with `name`, `endpoint`, `owner`.
 4. Owner's `USER.bots` set updated.
 
-Store `clientSecret` immediately â€” it is not retrievable later except via secret rotation.
+Store `clientSecret` immediately — it is not retrievable later except via secret rotation.
 
 Implementation: `createBot()` in [`lib/bots/crud.ts`](../../lib/bots/crud.ts).
 
@@ -95,10 +95,10 @@ Bots appear in `user_names` and the owner's `me.bots` list via [`lib/participant
 
 ## Dev test bot
 
-The platform hosts a reference bot on the dev stage at `/testBot`. It uses `TEST_BOT_CLIENT_ID` / `TEST_BOT_CLIENT_SECRET` from CI secrets. Dashboard queries `test_bot_status` and `update_test_bot` are dev-only owner tools â€” see [Implementation guide](/backend/bots/implementation/).
+The platform hosts a reference bot on the dev stage at `/testBot`. It uses `TEST_BOT_CLIENT_ID` / `TEST_BOT_CLIENT_SECRET` from CI secrets. Dashboard queries `test_bot_status` and `update_test_bot` are dev-only owner tools — see [Implementation guide](/backend/bots/implementation/).
 
 ## Related
 
 - [Bot framework overview](/backend/bots/)
 - [Authentication](/backend/bots/authentication/)
-- [Auth queries](/backend/api/auth-queries/) â€” full query table
+- [Auth queries](/backend/api/auth-queries/) — full query table

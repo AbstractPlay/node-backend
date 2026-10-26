@@ -100,12 +100,12 @@ jobs:
 
 # --- MACHINE TRANSLATION PIPELINE START ---
     - name: Prune stale managed locale keys
-      run: node bin/locale-prune.mjs locales/en/apback.json
+      run: node scripts/locale-prune.mjs locales/en/apback.json
 
     - name: Run Machine Translation on Locales
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      run: node bin/translate.mjs locales/en/apback.json
+      run: node scripts/translate.mjs locales/en/apback.json
 
     - name: Auto-commit Updated Translations Back to Branch
       uses: stefanzweifel/git-auto-commit-action@v5
@@ -154,7 +154,7 @@ jobs:
     #     aws-region: us-east-1
 
     - name: Deploy API stack
-      run: bash bin/serverless-deploy.sh dev AbstractPlayDev
+      run: bash scripts/serverless-deploy.sh dev AbstractPlayDev
 
     - name: Deploy crons stack
       run: bash crons/scripts/serverless-deploy.sh dev

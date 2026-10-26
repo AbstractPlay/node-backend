@@ -31,7 +31,7 @@ Both are deleted on unblock.
 |-------|---------|--------|
 | `block_player` | Create block records | `playerId` |
 | `unblock_player` | Delete block records | `playerId` |
-| `me` | Returns `blocked: string[]` of blocked player ids | â€” |
+| `me` | Returns `blocked: string[]` of blocked player ids | — |
 | `standing_challenges` (auth) | Filters challenges where `challenger.id` is in the requester's `BLOCKEDBY` set | `metaGame` |
 
 Self-blocking is rejected.

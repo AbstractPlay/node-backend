@@ -9,7 +9,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const ES_US_DIALECT = [
   "Use Latin American Spanish as spoken in the United States (es-US).",
-  'Use "ustedes" (not "vosotros"), LatAm vocabulary (e.g. computadora, celular, aplicaciÃ³n), and informal "tÃº" for game UI where natural.',
+  'Use "ustedes" (not "vosotros"), LatAm vocabulary (e.g. computadora, celular, aplicación), and informal "tú" for game UI where natural.',
   "Avoid European Spanish forms (vuestro, os, ordenador).",
   "Use standard board-game terms (Pasar, Rendirse, Tablero, etc.).",
 ].join(" ");
@@ -371,7 +371,7 @@ async function run() {
 
   const files = process.argv.slice(2);
   if (files.length === 0) {
-    console.error("Usage: node bin/translate.mjs <source.json> [...]");
+    console.error("Usage: node scripts/translate.mjs <source.json> [...]");
     process.exit(1);
   }
 

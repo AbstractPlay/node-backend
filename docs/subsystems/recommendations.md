@@ -1,6 +1,6 @@
 # Recommendation impression events
 
-The front-end game recommender logs **impression events** for logged-in users so offline batch jobs can measure show/click/challenge rates and tune hybrid weights over time. Events are **write-only** at request time â€” the live recommender never reads them.
+The front-end game recommender logs **impression events** for logged-in users so offline batch jobs can measure show/click/challenge rates and tune hybrid weights over time. Events are **write-only** at request time — the live recommender never reads them.
 
 ## Auth API
 
@@ -43,9 +43,9 @@ Common fields for all events: `event`, `batchId`, `surface`, `tier`.
 
 ### `tier` values
 
-`cold` | `warm` â€” matches the recommender tier at render time.
+`cold` | `warm` — matches the recommender tier at render time.
 
-`batchId` is a client-generated UUID per recommendation render; it links `rec_show` â†’ `rec_click` â†’ `rec_challenge` in offline analysis. It is stored as an attribute only â€” **no GSI**.
+`batchId` is a client-generated UUID per recommendation render; it links `rec_show` ? `rec_click` ? `rec_challenge` in offline analysis. It is stored as an attribute only — **no GSI**.
 
 ## DynamoDB storage
 
@@ -54,11 +54,11 @@ Single-table layout in `abstract-play-{stage}`:
 | Key | Value |
 |-----|-------|
 | pk | `RECOMMENDS#<userid>` |
-| sk | `<epochMs>#<random>` â€” unique per event |
+| sk | `<epochMs>#<random>` — unique per event |
 
 Attributes: `event`, `batchId`, `surface`, `tier`, `expiresAt`, plus event-specific fields (`metaGame`, `position`, `reasonType`, `gameIds`, `reasons`).
 
-- **No GSI** â€” events are exported and aggregated nightly, not queried live per user or per `batchId`.
+- **No GSI** — events are exported and aggregated nightly, not queried live per user or per `batchId`.
 - **TTL:** `expiresAt` (Unix epoch seconds, ~90 days). DynamoDB TTL is enabled on this attribute at the table level.
 - **Rate limit:** 50 events per user per UTC calendar day (server-side).
 
@@ -68,7 +68,7 @@ Implementation: [`lib/recommendationEvents.ts`](../../lib/recommendationEvents.t
 
 Nightly `records-rec-analytics` (crons stack) scans `RECOMMENDS#` rows, aggregates anonymized funnel metrics, and writes to private ops S3 (`recommendations/analytics/`). See [Recommendation analytics](/crons/recommendations-analytics/).
 
-The live recommender continues to use static nightly artifacts (`cooccur.json`, `mvtimes.json`, gameslib tags, player records) â€” not impression rows. Optional `tuning.json` weight updates remain deferred.
+The live recommender continues to use static nightly artifacts (`cooccur.json`, `mvtimes.json`, gameslib tags, player records) — not impression rows. Optional `tuning.json` weight updates remain deferred.
 
 ## Privacy
 
@@ -78,6 +78,6 @@ The live recommender continues to use static nightly artifacts (`cooccur.json`, 
 
 ## Related
 
-- [Database schema](/backend/database-schema/) â€” `RECOMMENDS#` key family
-- [Auth queries](/backend/api/auth-queries/) â€” query table entry
-- Front-end recommender (separate repo) â€” Phase 4b client tracking
+- [Database schema](/backend/database-schema/) — `RECOMMENDS#` key family
+- [Auth queries](/backend/api/auth-queries/) — query table entry
+- Front-end recommender (separate repo) — Phase 4b client tracking

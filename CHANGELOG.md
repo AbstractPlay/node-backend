@@ -15,6 +15,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Changed
 
+- **Ops:** Durable CLI tooling moved from `bin/` to `scripts/`; `bin/` is gitignored local scratch (calibration JSON, experiments).
 - **Ops:** Game projector SQS DLQ and DLQ CloudWatch alarm deploy on **prod** only (dev stack no longer creates `abstractplay-game-projector-dlq-dev`).
 
 ## [1.0.0-ci] - 2026-10-24

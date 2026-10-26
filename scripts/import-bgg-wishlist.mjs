@@ -3,14 +3,14 @@
  * Import BGG wishlist XML into the feedback DynamoDB table.
  *
  * Usage:
- *   npm run import-bgg-wishlist -- --stage prod --input path/to/thumbs.xml --map bin/bgg-ap-user-map.json --live
+ *   npm run import-bgg-wishlist -- --stage prod --input path/to/thumbs.xml --map scripts/bgg-ap-user-map.json --live
  *   npm run import-bgg-wishlist -- --stage dev --input path/to/thumbs.xml --dry-run
  *
  * Dry-run is the default (no DynamoDB writes). Pass --live to import.
  *
  * User map format (BGG @username -> AP user UUID):
  *   { "Striton": "uuid-here", "Kalabas07": "uuid-here" }
- * See bin/bgg-ap-user-map.example.json. Unmapped submitters fall back to the BGG Import system author.
+ * See scripts/bgg-ap-user-map.example.json. Unmapped submitters fall back to the BGG Import system author.
  * AP username auto-match (case-insensitive) is also applied when --stage is set.
  * Mapped/auto-matched authors get an auto-vote and auto-subscribe (no notifications).
  * BGG submitter "Striton" is excluded from auto-vote/subscribe.
@@ -169,7 +169,7 @@ function summarizeAuthors(items, resolver) {
 async function main() {
   const args = parseArgs(process.argv);
   if (!args.stage || !args.input) {
-    console.error('Usage: npm run import-bgg-wishlist -- --stage dev|prod --input path/to/thumbs.xml [--map bin/bgg-ap-user-map.json] [--no-map] [--live]');
+    console.error('Usage: npm run import-bgg-wishlist -- --stage dev|prod --input path/to/thumbs.xml [--map scripts/bgg-ap-user-map.json] [--no-map] [--live]');
     console.error('Dry-run is the default; pass --live to write to DynamoDB.');
     process.exit(1);
   }
@@ -196,7 +196,7 @@ async function main() {
   }).length;
 
   if (args.dryRun) {
-    console.log('*** DRY RUN â€” no data written. Pass --live to import. ***');
+    console.log('*** DRY RUN — no data written. Pass --live to import. ***');
   } else {
     console.log(`*** LIVE import into ${tableName} ***`);
   }

@@ -9,13 +9,13 @@
  * gamemove-layout/analytics/ are kept as an archive.
  *
  * Usage:
- *   node bin/purge-layout-feedback-events.mjs [--stage dev|prod] [--dry-run]
+ *   node scripts/purge-layout-feedback-events.mjs [--stage dev|prod] [--dry-run]
  *     [--user-id <cognitoSub>]
  *
  * Examples:
- *   node bin/purge-layout-feedback-events.mjs --stage dev --dry-run
- *   node bin/purge-layout-feedback-events.mjs --stage prod
- *   node bin/purge-layout-feedback-events.mjs --stage dev --user-id <cognitoSub>
+ *   node scripts/purge-layout-feedback-events.mjs --stage dev --dry-run
+ *   node scripts/purge-layout-feedback-events.mjs --stage prod
+ *   node scripts/purge-layout-feedback-events.mjs --stage dev --user-id <cognitoSub>
  *
  * Requires AWS profile AbstractPlayDev or AbstractPlayProd (see serverless.yml).
  */
@@ -44,7 +44,7 @@ const BATCH_WRITE_SIZE = 25;
 const BATCH_RETRY_MS = 200;
 
 function usage() {
-  console.error(`Usage: node bin/purge-layout-feedback-events.mjs [options]
+  console.error(`Usage: node scripts/purge-layout-feedback-events.mjs [options]
 
 Options:
   --stage dev|prod          AWS profile + DynamoDB table (default: dev)
@@ -182,7 +182,7 @@ async function purgeLayoutFeedbackEvents(docClient, tableName, { dryRun, userId 
     deleted: 0,
   };
 
-  console.log('\nPurging LAYOUTFB# layout feedback eventsâ€¦');
+  console.log('\nPurging LAYOUTFB# layout feedback events…');
 
   const partitionKeys = userId
     ? [`${LAYOUT_FB_PK_PREFIX}${userId}`]

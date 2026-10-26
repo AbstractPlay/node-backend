@@ -14,18 +14,18 @@
 
 ## Lifecycle
 
-1. **Create** â€” `event_create` (organizer).
-2. **Publish** â€” `event_publish` makes the event visible.
-3. **Register / withdraw** â€” `event_register`, `event_withdraw`.
-4. **Update** â€” name, description, start time, invites, divisions, results.
-5. **Create games** â€” `event_create_games` links new `GAME` records.
-6. **Close** â€” `event_close`.
-7. **Delete** â€” `event_delete`.
+1. **Create** — `event_create` (organizer).
+2. **Publish** — `event_publish` makes the event visible.
+3. **Register / withdraw** — `event_register`, `event_withdraw`.
+4. **Update** — name, description, start time, invites, divisions, results.
+5. **Create games** — `event_create_games` links new `GAME` records.
+6. **Close** — `event_close`.
+7. **Delete** — `event_delete`.
 
 ## Public reads
 
-- `get_events` â€” list events
-- `get_event` â€” single event with players and games
+- `get_events` — list events
+- `get_event` — single event with players and games
 
 ## Player blocking
 

@@ -5,8 +5,8 @@
  * Allowed homes: lib/clockElapsed.ts, lib/vacation/** (once added).
  *
  * Usage:
- *   node bin/check-clock-derivation.mjs          # report; exit 0
- *   node bin/check-clock-derivation.mjs --strict # exit 1 if non-allowlisted hits
+ *   node scripts/check-clock-derivation.mjs          # report; exit 0
+ *   node scripts/check-clock-derivation.mjs --strict # exit 1 if non-allowlisted hits
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 
-/** Files slated for Phase 2 wiring â€” remove entries as each is migrated to clockElapsed. */
+/** Files slated for Phase 2 wiring — remove entries as each is migrated to clockElapsed. */
 export const CLOCK_DERIVATION_ALLOWLIST = new Set([
 ]);
 
@@ -77,7 +77,7 @@ function walk(dir, out) {
  * @param {RegExp} pattern
  */
 function formatHit(rel, line, lineNo, pattern) {
-  return `${rel}:${lineNo}: ${pattern.source} â€” ${line.trim()}`;
+  return `${rel}:${lineNo}: ${pattern.source} — ${line.trim()}`;
 }
 
 /**

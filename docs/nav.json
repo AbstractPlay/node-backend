@@ -3,6 +3,7 @@
   { "slug": "architecture" },
   { "slug": "database-schema", "title": "Database schema" },
   { "slug": "getting-started", "title": "Getting started" },
+  { "slug": "testing/dev-auth-rpc", "title": "Dev auth RPC testing" },
   { "slug": "deployment" },
   { "slug": "i18n", "title": "Internationalization (apback)" },
   { "slug": "api/overview", "title": "API overview" },

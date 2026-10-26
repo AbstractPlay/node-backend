@@ -6,12 +6,12 @@
  * PITR is enabled on prod only. This script does not modify the source table.
  *
  * Usage:
- *   node bin/restore-pitr.mjs <iso-timestamp> [target-table]
- *   node bin/restore-pitr.mjs --at <iso-timestamp> [--target <table-name>]
+ *   node scripts/restore-pitr.mjs <iso-timestamp> [target-table]
+ *   node scripts/restore-pitr.mjs --at <iso-timestamp> [--target <table-name>]
  *
  * Examples:
- *   node bin/restore-pitr.mjs 2026-08-19T00:14:35.850Z
- *   node bin/restore-pitr.mjs 2026-08-19T00:14:35.850Z abstract-play-prod-restored
+ *   node scripts/restore-pitr.mjs 2026-08-19T00:14:35.850Z
+ *   node scripts/restore-pitr.mjs 2026-08-19T00:14:35.850Z abstract-play-prod-restored
  *
  * Requires AWS profile AbstractPlayProd (see serverless.yml).
  */
@@ -28,8 +28,8 @@ const SOURCE_TABLE = 'abstract-play-prod';
 const DEFAULT_TARGET_TABLE = 'abstract-play-prod-restored';
 
 function usage() {
-  console.error(`Usage: node bin/restore-pitr.mjs <iso-timestamp> [target-table]
-       node bin/restore-pitr.mjs --at <iso-timestamp> [--target <table-name>]
+  console.error(`Usage: node scripts/restore-pitr.mjs <iso-timestamp> [target-table]
+       node scripts/restore-pitr.mjs --at <iso-timestamp> [--target <table-name>]
 
 Options:
   --at <iso-timestamp>   Restore to this UTC instant (required)

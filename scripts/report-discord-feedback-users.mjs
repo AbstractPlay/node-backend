@@ -6,10 +6,12 @@
  *   npm run report-discord-feedback-users -- --stage prod --token-file path/to/token.txt
  *   npm run report-discord-feedback-users -- --stage prod --kind all --emit-map
  *
- * Map file (shared by bug + feature import): bin/discord-ap-user-map.json
+ * Map file (shared by bug + feature import): scripts/discord-ap-user-map.json
  * Format: { "discordUserId": "apUserUuid", ... }
  */
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import {
@@ -34,7 +36,7 @@ import {
 function parseArgs(argv) {
   const args = {
     stage: 'prod',
-    config: 'bin/discord-feedback-import.config.json',
+    config: join(dirname(fileURLToPath(import.meta.url)), 'discord-feedback-import.config.json'),
     tokenFile: '',
     mapFile: DEFAULT_DISCORD_MAP,
     kind: 'all',
@@ -187,7 +189,7 @@ async function main() {
     console.log('=== Need lookup (add to discord-ap-user-map.json) ===');
     for (const row of unmatched) {
       const kinds = [...row.kinds].join('+');
-      console.log(`${row.displayName} (@${row.username}) [${row.discordUserId}] â€” ${row.threads} threads, ${row.messages} messages (${kinds})`);
+      console.log(`${row.displayName} (@${row.username}) [${row.discordUserId}] — ${row.threads} threads, ${row.messages} messages (${kinds})`);
     }
     console.log('');
     console.log(`Fill AP user UUIDs in ${args.mapFile} (Discord user ID -> AP UUID).`);

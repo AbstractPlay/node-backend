@@ -11,8 +11,8 @@
  * inferred uids on the GAME item.
  *
  * Usage:
- *   npx tsx bin/backfill-orb-game-variants.mjs --stage dev --dry-run
- *   npx tsx bin/backfill-orb-game-variants.mjs --stage prod --apply
+ *   npx tsx scripts/backfill-orb-game-variants.mjs --stage dev --dry-run
+ *   npx tsx scripts/backfill-orb-game-variants.mjs --stage prod --apply
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
@@ -40,7 +40,7 @@ const STAGES = {
 };
 
 function usage() {
-  console.error(`Usage: npx tsx bin/backfill-orb-game-variants.mjs --stage dev|prod [--dry-run|--apply]
+  console.error(`Usage: npx tsx scripts/backfill-orb-game-variants.mjs --stage dev|prod [--dry-run|--apply]
 
 Options:
   --stage dev|prod   AWS profile + DynamoDB table (default: dev)

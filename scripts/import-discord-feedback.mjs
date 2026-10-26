@@ -4,13 +4,15 @@
  *
  * Usage:
  *   npm run import-discord-feedback -- --stage prod --dry-run --token-file path/to/token.txt
- *   npm run import-discord-feedback -- --stage prod --kind all --map bin/discord-ap-user-map.json --live
+ *   npm run import-discord-feedback -- --stage prod --kind all --map scripts/discord-ap-user-map.json --live
  *
  * Requires tsx to load lib/*.ts sources. Plain `node` will not work.
  * Dry-run is the default; pass --live to write.
- * User map: bin/discord-ap-user-map.json (Discord user ID -> AP UUID); shared by bug and feature import.
+ * User map: scripts/discord-ap-user-map.json (Discord user ID -> AP UUID); shared by bug and feature import.
  */
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, QueryCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import {
@@ -35,7 +37,7 @@ function parseArgs(argv) {
   const args = {
     dryRun: true,
     stage: '',
-    config: 'bin/discord-feedback-import.config.json',
+    config: join(dirname(fileURLToPath(import.meta.url)), 'discord-feedback-import.config.json'),
     tokenFile: '',
     mapFile: DEFAULT_DISCORD_MAP,
     kind: 'all',
@@ -116,7 +118,7 @@ function trackAuthor(store, user, resolver) {
 async function main() {
   const args = parseArgs(process.argv);
   if (!args.stage) {
-    console.error('Usage: npm run import-discord-feedback -- --stage dev|prod [--dry-run|--live] [--kind bug|feature|all] [--token-file path] [--map bin/discord-ap-user-map.json] [--limit N]');
+    console.error('Usage: npm run import-discord-feedback -- --stage dev|prod [--dry-run|--live] [--kind bug|feature|all] [--token-file path] [--map scripts/discord-ap-user-map.json] [--limit N]');
     console.error('Dry-run is the default; pass --live to write to DynamoDB.');
     process.exit(1);
   }
@@ -140,7 +142,7 @@ async function main() {
   const authorStats = new Map();
 
   if (args.dryRun) {
-    console.log('*** DRY RUN â€” no data written. Pass --live to import. ***');
+    console.log('*** DRY RUN — no data written. Pass --live to import. ***');
   } else {
     console.log(`*** LIVE import into ${tableName} ***`);
   }
