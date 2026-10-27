@@ -15,11 +15,11 @@ Separate from per-challenge standing records: `REALSTANDING` / `<userid>` stores
 
 ## Flow
 
-1. **Issue** â€” `new_challenge` with challenger, challengees (direct), variants, clocks, etc.
-2. **List open** â€” `standing_challenges` per metaGame, or `all_standing_challenges` site-wide (public unfiltered; auth filters blocked issuers).
-3. **Respond** â€” `challenge_response` accept/decline; accepted players join `players` list.
-4. **Revoke** â€” `challenge_revoke` by challenger (cancels the whole challenge).
-5. **Game start** â€” when enough players accept, a `GAME` record is created.
+1. **Issue** — `new_challenge` with challenger, challengees (direct), variants, clocks, etc.
+2. **List open** — `standing_challenges` per metaGame, or `all_standing_challenges` site-wide (public unfiltered; auth filters blocked issuers).
+3. **Respond** — `challenge_response` accept/decline; accepted players join `players` list.
+4. **Revoke** — `challenge_revoke` by challenger (cancels the whole challenge).
+5. **Game start** — when enough players accept, a `GAME` record is created.
 
 ### Multi-player seats (`numPlayers > 2`)
 
@@ -27,7 +27,7 @@ Challenges track **`openSlots`**: seats anyone may fill (listed on open challeng
 
 - **Leave / decline** (not revoke): frees a seat (`openSlots++` on direct challenges; standing challenges update `players` in place). The challenge **stays** active except **2-player direct** decline, which still removes the whole challenge.
 - **Closed issue**: first opponent required; further seats may be named or open (`openSlots`). All-open multi-player challenges use **`standing: true`** (open type), not closed with every seat open.
-- **Discoverability**: direct challenges with `openSlots > 0` upsert a **`STANDINGCHALLENGE#<metaGame>`** listing projection (`fillableDirect: true`) for the gameâ€™s open-challenge list.
+- **Discoverability**: direct challenges with `openSlots > 0` upsert a **`STANDINGCHALLENGE#<metaGame>`** listing projection (`fillableDirect: true`) for the game’s open-challenge list.
 - **Uniqueness**: each user id may appear at most once among `players` and `challengees` (the challenger is seated once in `players`). Join and persist paths reject duplicates.
 
 Standing challenges for two-player games support a `duration` field: `0` = indefinite; `>0` = expires after that many acceptances.
@@ -53,7 +53,7 @@ Open/standing challenges and the player block list are **not** affected.
 
 ## Teaching mode
 
-Optional **`teachingMode: true`** on **`new_challenge`** (direct and standing). Teaching games are cooperative review sessions: either player can offer the opponent a chance to **keep** or **undo** the last completed ply batch during play (see [Games and moves](/backend/subsystems/games-and-moves/) â€” teaching RPCs).
+Optional **`teachingMode: true`** on **`new_challenge`** (direct and standing). Teaching games are cooperative review sessions: either player can offer the opponent a chance to **keep** or **undo** the last completed ply batch during play (see [Games and moves](/backend/subsystems/games-and-moves/) — teaching RPCs).
 
 | Rule | Server behaviour |
 |------|------------------|
@@ -71,7 +71,7 @@ Optional **`startPosition: { state }`** on **`new_challenge`** for **two-player*
 
 **`CHALLENGEPOSITION` lifecycle:** deleted when the challenge row is deleted (revoke, decline, inactive cleanup cron, or direct game start). **Open standing** with **`duration: 0`** (indefinite) keeps the challenge and position row after each game so the next acceptor gets the same preset; position is removed when the open challenge is revoked or on the final acceptance when **`duration === 1`**. Not allowed with open seats on direct challenges (`openSlots > 0`).
 
-**Preview:** auth **`get_challenge_position_preview`** with `id` and `metaGame` â€” closed direct: participants only; open standing: any signed-in user. Implementation: [`lib/challenges/startPosition.ts`](../../lib/challenges/startPosition.ts).
+**Preview:** auth **`get_challenge_position_preview`** with `id` and `metaGame` — closed direct: participants only; open standing: any signed-in user. Implementation: [`lib/challenges/startPosition.ts`](../../lib/challenges/startPosition.ts).
 
 ## Bots
 

@@ -4,21 +4,21 @@ The Abstract Play backend is a Serverless Framework service on AWS: Node.js Lamb
 
 ## Documentation
 
-- [Architecture](/backend/architecture/) â€” Lambdas, request routing, key modules
-- [Database schema](/backend/database-schema/) â€” DynamoDB record types (pk/sk catalog)
-- [Getting started](/backend/getting-started/) â€” local build, credentials, dependencies
-- [Deployment](/backend/deployment/) â€” CI/CD, stages, Cognito essentials
+- [Architecture](/backend/architecture/) — Lambdas, request routing, key modules
+- [Database schema](/backend/database-schema/) — DynamoDB record types (pk/sk catalog)
+- [Getting started](/backend/getting-started/) — local build, credentials, dependencies
+- [Deployment](/backend/deployment/) — CI/CD, stages, Cognito essentials
 
 ### API
 
-- [API overview](/backend/api/overview/) â€” `query`, `authQuery`, `botQuery` envelopes
-- [Public queries](/backend/api/public-queries/) â€” unauthenticated RPC endpoints
-- [Auth queries](/backend/api/auth-queries/) â€” Cognito-authenticated endpoints
-- [Bot queries](/backend/api/bot-queries/) â€” M2M bot endpoints
+- [API overview](/backend/api/overview/) — `query`, `authQuery`, `botQuery` envelopes
+- [Public queries](/backend/api/public-queries/) — unauthenticated RPC endpoints
+- [Auth queries](/backend/api/auth-queries/) — Cognito-authenticated endpoints
+- [Bot queries](/backend/api/bot-queries/) — M2M bot endpoints
 
 ### Bot framework
 
-- [Bot framework](/backend/bots/) â€” protocol, auth, registration, implementation
+- [Bot framework](/backend/bots/) — protocol, auth, registration, implementation
 - [Authentication](/backend/bots/authentication/)
 - [Protocol](/backend/bots/protocol/)
 - [Registration](/backend/bots/registration/)
@@ -30,17 +30,17 @@ The Abstract Play backend is a Serverless Framework service on AWS: Node.js Lamb
 - [Challenges](/backend/subsystems/challenges/)
 - [Tournaments](/backend/subsystems/tournaments/)
 - [Events](/backend/subsystems/events/)
-- [Bots](/backend/subsystems/bots/) â€” short overview (see Bot framework above)
+- [Bots](/backend/subsystems/bots/) — short overview (see Bot framework above)
 - [WebSockets](/backend/subsystems/websockets/)
 - [Notifications](/backend/subsystems/notifications/)
 - [Player blocking](/backend/subsystems/player-blocking/)
 
 ## Resources
 
-- [CHANGELOG](../CHANGELOG.md) â€” release history (repo root)
-- [Gameslib docs](/gameslib/) â€” rules engine used by move validation
-- [Renderer docs](/renderer/) â€” board rendering (transitive dependency)
-- [Wiki bot RFC](https://abstractplay.com/wiki/doku.php?id=rfcs:bots) â€” original RFC (superseded by [Bot framework](/backend/bots/) docs here)
+- [CHANGELOG](../CHANGELOG.md) — release history (repo root)
+- [Gameslib docs](/gameslib/) — rules engine used by move validation
+- [Renderer docs](/renderer/) — board rendering (transitive dependency)
+- [Wiki bot RFC](https://abstractplay.com/wiki/doku.php?id=rfcs:bots) — original RFC (superseded by [Bot framework](/backend/bots/) docs here)
 
 Query names and record field shapes are defined in TypeScript; these docs describe intent and patterns. When you add a query or record type, update `/docs` in the same PR.
 

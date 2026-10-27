@@ -16,17 +16,17 @@ Language follows the recipient's `language` field (`locales/*/apback.json` for e
 
 VAPID keys (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`) enable browser push. Each device/browser subscription is stored as its own `PUSH` record (`sk: <userid>#<subscriptionKey>`). Auth queries:
 
-- `save_push` â€” register or refresh **this device** (upserts one `PUSH` record; sets `mayPush` on the user)
-- `delete_push` â€” unregister **this device** (`pars.endpoint`; clears `mayPush` when no subscriptions remain)
-- `set_push({ state: false })` â€” unregister **all devices** for the user
-- `set_push({ state: true })` â€” sets user preference only; still requires `save_push` to register a device
-- `test_push` â€” send a test notification to all registered devices
+- `save_push` — register or refresh **this device** (upserts one `PUSH` record; sets `mayPush` on the user)
+- `delete_push` — unregister **this device** (`pars.endpoint`; clears `mayPush` when no subscriptions remain)
+- `set_push({ state: false })` — unregister **all devices** for the user
+- `set_push({ state: true })` — sets user preference only; still requires `save_push` to register a device
+- `test_push` — send a test notification to all registered devices
 
 When a push fails with HTTP 404 or 410 (stale endpoint), only that subscription record is deleted.
 
 ## Your turn batching
 
-The `yourturn` Lambda runs on a schedule (14:00 and 22:00 UTC, prod only) via EventBridge in the **crons** stack. It scans active games and sends batched "your turn" emails â€” not on every move.
+The `yourturn` Lambda runs on a schedule (14:00 and 22:00 UTC, prod only) via EventBridge in the **crons** stack. It scans active games and sends batched "your turn" emails — not on every move.
 
 Implementation: [`utils/yourturn.ts`](../../utils/yourturn.ts) (deployed as `crons/src/functions/yourturn`).
 
@@ -34,7 +34,7 @@ Implementation: [`utils/yourturn.ts`](../../utils/yourturn.ts) (deployed as `cro
 
 Push messages use topics such as `challenges` and game-related channels. See [`lib/push/sendUserPush.ts`](../../lib/push/sendUserPush.ts).
 
-Realtime `yourturn` push is sent after each move when it becomes a player's turn. Solo games (`numPlayers === 1`) are skipped â€” the player is always on move.
+Realtime `yourturn` push is sent after each move when it becomes a player's turn. Solo games (`numPlayers === 1`) are skipped — the player is always on move.
 
 ## In-app dashboard feed
 
@@ -53,6 +53,12 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `tournamentChat` | `tournamentChat` |
 | `tournamentStart` | `tournamentStart` (crons `starttournaments`) |
 | `tournamentEnd` | `tournamentEnd` (node-backend `endTournament`) |
+| `ladderChat` | `ladderChat` |
+| `ladderJoin` | `ladderJoin` (`join_ladder` / `new_ladder` creator join) |
+| `ladderLeave` | `ladderLeave` (`leave_ladder`) |
+| `ladderPointsGain` | `ladderPointsChange` when `delta` &gt; 0 (`applyLadderGameEnd`) |
+| `ladderPointsLoss` | `ladderPointsChange` when `delta` &lt; 0 (`applyLadderGameEnd`) |
+| `ladderDecay` | `ladderDecay` (crons `ladder-decay`) |
 | `bots` | `botMoveFailed`, `botOwnerPing` |
 
 | `body.type` | When created | Front display |
@@ -63,21 +69,26 @@ Users control which in-app categories are created via `settings.all.inAppNotific
 | `gameEnd` | Game ends | **View** links to `/move/{metaGame}/0/{gameId}`; includes `opponentId` / `opponentName` when the game has a human opponent; `scores` (`(string \| number)[]`) when the game uses the `scores` flag |
 | `completedGameChat` | Post-game comment on completed game (`save_exploration` with `updateLastChat`) | **View** links to `/move/{metaGame}/1/{gameId}`; one active notification per game until dismissed; legacy backfill rows use generic message when `body.backfill` |
 | `tournamentChat` | Tournament chat (`submit_tournament_comment`) | Tournament link to `/tournament/{tournamentId}`; one active notification per tournament until dismissed |
+| `ladderPointsChange` | Decisive ladder game settled (`applyLadderGameEnd`) | Pref gated as `ladderPointsGain` or `ladderPointsLoss` from sign of `delta`; draw (? = 0) emits none |
+| `ladderJoin` | `join_ladder` (including rejoin) | Ladder display name in body |
+| `ladderLeave` | `leave_ladder` | Ladder display name in body |
+| `ladderChat` | Ladder hub chat (`submit_ladder_comment`) | One active notification per ladder until dismissed (like tournament chat) |
+| `ladderDecay` | Daily ladder inactivity decay (`ladder-decay` cron) | `delta`, `pointsBefore`, `pointsAfter` |
 | `ratingChange` | Daily batch Glicko diff after summarize (crons stack) | Game name links to `/ratings/{metaGame}`; variant labels in message when applicable |
 | `tournamentStart` | Tournament series starts (`starttournaments` cron) | Tournament name links to `/tournament/{tournamentId}`; variant labels when applicable; dismiss only |
 | `tournamentEnd` | All tournament divisions complete (`endTournament`) | Tournament name links to `/tournament/{tournamentId}`; includes division winner name when available; dismiss only |
 | `botMoveFailed` | Registered bot `botQuery` `move` or `pie` fails after turn validation | Bot name + game link to `/move/{metaGame}/0/{gameId}` when applicable |
 | `botOwnerPing` | Bot calls `botQuery` `pingOwner` | Bot name + owner-supplied message; optional game link |
 
-Tournament-end **email** includes division winner, plain-text standings for the recipientâ€™s division, a link to the finished tournament, and a signup nudge for the next series (earliest start window and current signup count). **Push** uses winner + nudge only (no standings table); tap opens `/tournament/{tournamentId}`.
+Tournament-end **email** includes division winner, plain-text standings for the recipient’s division, a link to the finished tournament, and a signup nudge for the next series (earliest start window and current signup count). **Push** uses winner + nudge only (no standings table); tap opens `/tournament/{tournamentId}`.
 
 ### Batch `ratingChange` issuer (crons stack)
 
 Realtime Elo at game end was removed in Phase 4. `ratingChange` rows are now written by the `rating-change-notifications` Lambda in the **crons** stack, scheduled at **6:20 UTC** daily (after summarize at 6:00).
 
-**Source data:** `_summary-ratings.json` on `records.abstractplay.com` â€” diffs conservative Glicko (`ratingLow`) per variant pool (`batchRatingGameLabel` keys in `highest[]`).
+**Source data:** `_summary-ratings.json` on `records.abstractplay.com` — diffs conservative Glicko (`ratingLow`) per variant pool (`batchRatingGameLabel` keys in `highest[]`).
 
-**Idempotency:** Prior run state in `_ratings-notification-snapshot.json` (same bucket). First deploy run seeds the snapshot only â€” **zero** notifications. Re-runs on the same `glickoMeta.generatedAt` are no-ops.
+**Idempotency:** Prior run state in `_ratings-notification-snapshot.json` (same bucket). First deploy run seeds the snapshot only — **zero** notifications. Re-runs on the same `glickoMeta.generatedAt` are no-ops.
 
 **Per-pool deduplication:** One notification per `(userId, gameLabel)` per run. Multiple rated games in the same pool between runs produce a single notification with the net `ratingLow` change.
 
@@ -103,7 +114,7 @@ Implementation: [`lib/notifications.ts`](../../lib/notifications.ts), wired from
 
 ### Admin read-only dump
 
-`bin/dump-dashboard.mjs` assembles dashboard-shaped data from DynamoDB without Cognito or writes. Pass `--include-notifications` to add the `NOTIFICATION#` feed using `loadNotificationsForDashboard(..., { refreshExpiry: false })` so TTL is not tightened during inspection.
+`scripts/dump-dashboard.mjs` assembles dashboard-shaped data from DynamoDB without Cognito or writes. Pass `--include-notifications` to add the `NOTIFICATION#` feed using `loadNotificationsForDashboard(..., { refreshExpiry: false })` so TTL is not tightened during inspection.
 
 ### Completed-game chat backfill (done)
 
@@ -111,7 +122,7 @@ One-time prod backfill (Aug 2026) created `completedGameChat` notifications for 
 
 ## Related
 
-- [Getting started](/backend/getting-started/) â€” VAPID env vars
+- [Getting started](/backend/getting-started/) — VAPID env vars
 - [Deployment](/backend/deployment/)
-- [Live crons](/crons/live-crons/) â€” `yourturn` schedule
+- [Live crons](/crons/live-crons/) — `yourturn` schedule
 - [Architecture](/backend/architecture/)

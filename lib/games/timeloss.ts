@@ -7,6 +7,7 @@ import { GameFactory } from '@abstractplay/gameslib';
 import { ddbDocClient } from '../ddb.js';
 import { logGetItemError } from '../api/http.js';
 import { applyTournamentGameEndUpdates } from './tournamentGameEndUpdates.js';
+import { runLadderGameEndHook } from '../ladders/gameEndHook.js';
 import { effectiveFlags, flagSetIncludes } from '../effectiveGameFlags.js';
 import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } from '../gameState.js';
 import type { GameMarkSummary } from '../playerGameMarks.js';
@@ -42,8 +43,11 @@ type FullGame = {
   toMove: string | boolean[];
   lastMoveTime: number;
   tournament?: string;
+  ladderId?: string;
   division?: number;
   variants?: string[];
+  rated?: boolean;
+  gameStarted?: number;
   matchLeg?: number;
   clockStart?: number;
   clockInc?: number;
@@ -222,6 +226,20 @@ export async function timeloss(
     game.id,
     playerGame as GameMarkSummary,
   ));
+  if (game.ladderId !== undefined) {
+    work.push(runLadderGameEndHook({
+      id: game.id,
+      ladderId: game.ladderId,
+      metaGame: game.metaGame,
+      variants: game.variants,
+      winner: game.winner,
+      players: game.players,
+      rated: game.rated,
+      gameStarted: game.gameStarted,
+      gameEnded: game.gameEnded,
+      numMoves: game.numMoves,
+    }));
+  }
   if (game.tournament !== undefined && game.division !== undefined) {
     work.push(applyTournamentGameEndUpdates(
       {

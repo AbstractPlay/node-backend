@@ -36,10 +36,10 @@ Defined in [`serverless.yml`](../serverless.yml):
 
 ## Dependencies
 
-- **`@abstractplay/gameslib`** â€” game rules, `GameFactory`, move validation, `gameinfo`
-- **`@abstractplay/renderer`** â€” transitive dependency of gameslib
-- **AWS SDK** â€” DynamoDB, SES, SQS, Cognito Identity Provider
-- **`web-push`** â€” browser push notifications
+- **`@abstractplay/gameslib`** — game rules, `GameFactory`, move validation, `gameinfo`
+- **`@abstractplay/renderer`** — transitive dependency of gameslib
+- **AWS SDK** — DynamoDB, SES, SQS, Cognito Identity Provider
+- **`web-push`** — browser push notifications
 
 ## Key modules
 
@@ -56,16 +56,16 @@ Defined in [`serverless.yml`](../serverless.yml):
 | [`lib/wsBroadcast.ts`](../lib/wsBroadcast.ts) | Queue WebSocket fan-out |
 | [`api/sockets/`](../api/sockets/) | WebSocket connect/disconnect/subscribe handlers |
 | [`api/testBot.ts`](../api/testBot.ts) | Reference bot (dev only) |
-Scheduled batch jobs (`yourturn`, feedback archive, records pipeline, etc.) run in the **crons** stack â€” see [Crons architecture](/crons/architecture/) and [`utils/yourturn.ts`](../utils/yourturn.ts) (handler entry under `crons/src/functions/`).
+Scheduled batch jobs (`yourturn`, feedback archive, records pipeline, etc.) run in the **crons** stack — see [Crons architecture](/crons/architecture/) and [`utils/yourturn.ts`](../utils/yourturn.ts) (handler entry under `crons/src/functions/`).
 
 ## Side effects
 
 Authenticated handlers may also call:
 
-- **SES** â€” challenge, game end, your-turn emails
-- **SQS** â€” WebSocket message queue, bot outbound queue
-- **Cognito** â€” bot client create/delete/secret rotation
-- **CloudFront** â€” record invalidation (some maintenance paths)
+- **SES** — challenge, game end, your-turn emails
+- **SQS** — WebSocket message queue, bot outbound queue
+- **Cognito** — bot client create/delete/secret rotation
+- **CloudFront** — record invalidation (some maintenance paths)
 
 ## Stages
 

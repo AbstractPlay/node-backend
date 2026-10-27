@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mergeTranslatedChunkIntoTarget } from "../../bin/translate.mjs";
+import { mergeTranslatedChunkIntoTarget } from "../../scripts/translate.mjs";
 
 describe("translate merge", () => {
   it("merges a single nested leaf without clobbering sibling keys", () => {

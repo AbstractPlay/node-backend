@@ -23,6 +23,12 @@ export const IN_APP_NOTIFICATION_CATEGORIES = [
   'eventInvitation',
   'completedGameChat',
   'tournamentChat',
+  'ladderChat',
+  'ladderJoin',
+  'ladderLeave',
+  'ladderPointsGain',
+  'ladderPointsLoss',
+  'ladderDecay',
   'tournamentStart',
   'tournamentEnd',
   'feedbackReply',
@@ -74,6 +80,16 @@ export function inAppCategoryForBody(body: NotificationBody): InAppNotificationC
       return 'completedGameChat';
     case 'tournamentChat':
       return 'tournamentChat';
+    case 'ladderChat':
+      return 'ladderChat';
+    case 'ladderJoin':
+      return 'ladderJoin';
+    case 'ladderLeave':
+      return 'ladderLeave';
+    case 'ladderPointsChange':
+      return body.delta < 0 ? 'ladderPointsLoss' : 'ladderPointsGain';
+    case 'ladderDecay':
+      return 'ladderDecay';
     case 'tournamentStart':
       return 'tournamentStart';
     case 'tournamentEnd':
@@ -214,6 +230,48 @@ export type NotificationBody =
     variants: string[];
     commenterId: string;
     commenterName: string;
+  }
+  | {
+    type: 'ladderChat';
+    ladderId: string;
+    metaGame: string;
+    variants: string[];
+    commenterId: string;
+    commenterName: string;
+  }
+  | {
+    type: 'ladderJoin';
+    ladderId: string;
+    metaGame: string;
+    variants: string[];
+    displayName: string;
+  }
+  | {
+    type: 'ladderLeave';
+    ladderId: string;
+    metaGame: string;
+    variants: string[];
+    displayName: string;
+  }
+  | {
+    type: 'ladderDecay';
+    ladderId: string;
+    metaGame: string;
+    variants: string[];
+    delta: number;
+    pointsBefore: number;
+    pointsAfter: number;
+  }
+  | {
+    type: 'ladderPointsChange';
+    ladderId: string;
+    gameId: string;
+    metaGame: string;
+    variants: string[];
+    delta: number;
+    pointsBefore: number;
+    pointsAfter: number;
+    opponentId: string;
   }
   | {
     type: 'tournamentStart';
@@ -954,6 +1012,167 @@ export async function enqueueTournamentChatNotifications(
     })());
   }
 
+  await Promise.all(work);
+}
+
+export async function hasActiveLadderChatNotification(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  ladderId: string,
+  nowSec = Math.floor(Date.now() / 1000),
+): Promise<boolean> {
+  const pk = notificationPk(userId);
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const result = await client.send(new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'pk = :pk',
+      ExpressionAttributeValues: { ':pk': pk },
+      ExclusiveStartKey: lastKey,
+    }));
+    for (const item of result.Items ?? []) {
+      const rec = item as NotificationRecord;
+      if (rec.expiresAt <= nowSec) {
+        continue;
+      }
+      if (rec.body.type === 'ladderChat' && rec.body.ladderId === ladderId) {
+        return true;
+      }
+    }
+    lastKey = result.LastEvaluatedKey;
+  } while (lastKey);
+  return false;
+}
+
+export async function enqueueLadderJoinNotification(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userid: string,
+  params: {
+    ladderId: string;
+    metaGame: string;
+    variants: string[];
+    displayName: string;
+  },
+): Promise<void> {
+  await createNotification(client, tableName, userid, {
+    type: 'ladderJoin',
+    ladderId: params.ladderId,
+    metaGame: params.metaGame,
+    variants: params.variants,
+    displayName: params.displayName,
+  });
+}
+
+export async function enqueueLadderLeaveNotification(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userid: string,
+  params: {
+    ladderId: string;
+    metaGame: string;
+    variants: string[];
+    displayName: string;
+  },
+): Promise<void> {
+  await createNotification(client, tableName, userid, {
+    type: 'ladderLeave',
+    ladderId: params.ladderId,
+    metaGame: params.metaGame,
+    variants: params.variants,
+    displayName: params.displayName,
+  });
+}
+
+export async function enqueueLadderPointsChangeNotifications(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  params: {
+    ladderId: string;
+    gameId: string;
+    metaGame: string;
+    variants?: string[];
+    winnerId: string;
+    loserId: string;
+    winnerPointsBefore: number;
+    winnerPointsAfter: number;
+    loserPointsBefore: number;
+    loserPointsAfter: number;
+  },
+): Promise<void> {
+  const variantList = params.variants ?? [];
+  const notifyPlayer = async (
+    userId: string,
+    opponentId: string,
+    pointsBefore: number,
+    pointsAfter: number,
+  ) => {
+    const delta = pointsAfter - pointsBefore;
+    if (delta === 0) {
+      return;
+    }
+    await createNotification(client, tableName, userId, {
+      type: 'ladderPointsChange',
+      ladderId: params.ladderId,
+      gameId: params.gameId,
+      metaGame: params.metaGame,
+      variants: variantList,
+      delta,
+      pointsBefore,
+      pointsAfter,
+      opponentId,
+    });
+  };
+  await notifyPlayer(
+    params.winnerId,
+    params.loserId,
+    params.winnerPointsBefore,
+    params.winnerPointsAfter,
+  );
+  await notifyPlayer(
+    params.loserId,
+    params.winnerId,
+    params.loserPointsBefore,
+    params.loserPointsAfter,
+  );
+}
+
+export async function enqueueLadderChatNotifications(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  ladderId: string,
+  metaGame: string,
+  variants: string[] | undefined,
+  memberIds: string[],
+  commenterId: string,
+): Promise<void> {
+  const { getParticipants } = await import('./participants.js');
+  const parts = await getParticipants([commenterId]);
+  const commenterName = parts[0]?.name ?? 'Someone';
+  const variantList = variants ?? [];
+  const work: Promise<void>[] = [];
+  for (const playerId of memberIds) {
+    if (playerId === commenterId) {
+      continue;
+    }
+    work.push((async () => {
+      if (await isBotId(playerId)) {
+        return;
+      }
+      if (await hasActiveLadderChatNotification(client, tableName, playerId, ladderId)) {
+        return;
+      }
+      await createNotification(client, tableName, playerId, {
+        type: 'ladderChat',
+        ladderId,
+        metaGame,
+        variants: variantList,
+        commenterId,
+        commenterName,
+      });
+    })());
+  }
   await Promise.all(work);
 }
 

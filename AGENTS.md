@@ -13,7 +13,8 @@ Follow the canonical org-wide policy in [gameslib `AGENTS.md` — Abstract Play 
 | `api/` | Thin Lambda entries (`query`, `authQuery`, `botQuery`) |
 | `api/routes/` | Query name → handler routing (source of truth for RPC names) |
 | `lib/` | Business logic imported by routes |
-| `bin/` | Ops scripts (`.mjs`; some use `tsx` when importing `lib/*.ts`) |
+| `bin/` | Scratch / one-off analysis (`.mjs`; calibration dumps — not durable ops) |
+| `scripts/` | Build/CI tooling and **durable ops CLIs** (`.mjs`; prefer here for maintained backfill/reconcile tools) |
 | `locales/en/apback.json` | English notification/email strings |
 | `crons/` | Scheduled jobs workspace (`abstractplay-backend-crons`) |
 | `serverless.yml` | Functions, env, stages |
@@ -39,11 +40,11 @@ Handoff: **`npm run typecheck`** and **`npm run lint`** (exit 0), plus tests for
 - **`test/lambdaInit.test.mjs`** — every bundled handler imports cleanly; gameslib loads under deploy-like ESM. Requires `npm run build:lambda-bundles` (`pretest`).
 - Prefer **inline fixtures** in test files; do not depend on live DynamoDB or uncommitted dumps. Commit any static JSON under `test/` if needed.
 
-Ops: `node bin/<script>.mjs` for AWS-only scripts; `npm run dump-dashboard` / import scripts use **tsx** when they import `lib/*.ts` — [docs/getting-started.md](docs/getting-started.md).
+Ops: `node scripts/<script>.mjs` for AWS-only scripts; `npm run dump-dashboard` / import scripts use **tsx** when they import `lib/*.ts` — [docs/getting-started.md](docs/getting-started.md). **`bin/`** is gitignored local scratch (calibration JSON, experiments).
 
 ## Internationalization
 
-Edit **`locales/en/apback.json`** only. Other languages are Weblate + `bin/translate.mjs`. Game titles in notifications use gameslib `apgames:names.*` bundles. [docs/i18n.md](docs/i18n.md).
+Edit **`locales/en/apback.json`** only. Other languages are Weblate + `scripts/translate.mjs`. Game titles in notifications use gameslib `apgames:names.*` bundles. [docs/i18n.md](docs/i18n.md).
 
 ## Cross-repo changes
 

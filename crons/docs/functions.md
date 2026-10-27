@@ -218,6 +218,30 @@ Batch dump consumers run **daily at 03:00 UTC** and read the latest completed IO
 | **Output** | Deletes stale `RECENTCOMPLETED#` / orphan `USERGAME#`; sets `USER.cleaned` |
 | **Notes** | See [Dashboard cruft cleanup](/crons/dashboard-cruft-cleanup/) |
 
+### `ladder-decay`
+
+| | |
+|---|---|
+| **Handler** | `src/functions/ladder-decay.ts` |
+| **Schedule** | Daily 00:00 UTC |
+| **Timeout / memory** | 900 s / 1024 MB |
+| **Layer** | No |
+| **Input** | Live `abstract-play-{stage}` (`LADDER`, `LADDERPLAYER`, vacation `USER` rows) |
+| **Output** | Point decay updates + in-app `ladderDecay` notifications |
+| **Notes** | Logic in monorepo [`lib/ladders/decay.ts`](https://github.com/AbstractPlay/node-backend/blob/develop/lib/ladders/decay.ts) |
+
+### `ladder-reconcile-counts`
+
+| | |
+|---|---|
+| **Handler** | `src/functions/ladder-reconcile-counts.ts` |
+| **Schedule** | Daily 00:01 UTC |
+| **Timeout / memory** | 900 s / 1024 MB |
+| **Layer** | No |
+| **Input** | Live DynamoDB (`LADDERGAME`, `GAME`, `LADDERPLAYER`) |
+| **Output** | Corrects `activeLadderGameCount` drift; ops S3 `ladders/reconcile/*` |
+| **Notes** | Manual: `npx tsx scripts/reconcile-ladder-active-counts.ts --dry-run` at repo root |
+
 ## Related
 
 - [Records pipeline](/crons/pipeline/)

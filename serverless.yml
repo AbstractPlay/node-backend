@@ -277,6 +277,14 @@ resources:
       Fn::And:
         - Condition: GameProjectorStreamEnabled
         - Condition: OpsAlertsEnabled
+    IsProdStage:
+      Fn::Equals:
+        - '${self:provider.stage}'
+        - prod
+    GameProjectorDLQEnabled:
+      Fn::And:
+        - Condition: GameProjectorStreamEnabled
+        - Condition: IsProdStage
 
   Resources:
     # One table design
@@ -457,6 +465,7 @@ resources:
 
     GameProjectorDLQ:
       Type: AWS::SQS::Queue
+      Condition: GameProjectorDLQEnabled
       Properties:
         QueueName: abstractplay-game-projector-dlq-${self:provider.stage}
         MessageRetentionPeriod: 1209600
@@ -480,6 +489,7 @@ resources:
 
     GameProjectorDLQAlarm:
       Type: AWS::CloudWatch::Alarm
+      Condition: GameProjectorDLQEnabled
       Properties:
         AlarmName: abstractplay-game-projector-dlq-${self:provider.stage}
         AlarmDescription: Game projector Lambda failed and sent records to the DLQ
@@ -494,14 +504,10 @@ resources:
         Threshold: 1
         ComparisonOperator: GreaterThanOrEqualToThreshold
         TreatMissingData: notBreaching
-        AlarmActions: !If
-          - GameProjectorOpsAlertsEnabled
-          - [!Ref OpsAlertsTopic]
-          - !Ref AWS::NoValue
-        OKActions: !If
-          - GameProjectorOpsAlertsEnabled
-          - [!Ref OpsAlertsTopic]
-          - !Ref AWS::NoValue
+        AlarmActions:
+          - !Ref OpsAlertsTopic
+        OKActions:
+          - !Ref OpsAlertsTopic
 
     GameProjectorErrorsAlarm:
       Type: AWS::CloudWatch::Alarm
@@ -549,7 +555,7 @@ resources:
 
     GameProjectorDLQPolicy:
       Type: AWS::SQS::QueuePolicy
-      Condition: GameProjectorStreamEnabled
+      Condition: GameProjectorDLQEnabled
       Properties:
         Queues:
           - Ref: GameProjectorDLQ
@@ -575,8 +581,11 @@ resources:
         EventSourceArn: !GetAtt AbstractGamesDynamoDbTable.StreamArn
         FunctionName: !Ref GameProjectorLambdaFunction
         DestinationConfig:
-          OnFailure:
-            Destination: !GetAtt GameProjectorDLQ.Arn
+          Fn::If:
+            - GameProjectorDLQEnabled
+            - OnFailure:
+                Destination: !GetAtt GameProjectorDLQ.Arn
+            - Ref: AWS::NoValue
 
     # Apparently this is explicitly needed (which makes no sense to me, but there it is)
     ConnectLambdaPermission:
@@ -785,6 +794,14 @@ functions:
     events:
       - websocket:
           route: watchTournaments
+
+  watchLadders:
+    handler: api/sockets/watchLaddersHandler.handler
+    logRetentionInDays: 7
+    timeout: 30
+    events:
+      - websocket:
+          route: watchLadders
 
   syncPresence:
     handler: api/sockets/syncPresenceHandler.handler

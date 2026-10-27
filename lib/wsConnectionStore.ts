@@ -26,6 +26,7 @@ export type WsConnectionItem = {
   ttl: number;
   watchingGames?: Set<string> | string[];
   watchingTournaments?: Set<string> | string[];
+  watchingLadders?: Set<string> | string[];
   wantsPresence?: boolean;
   watchVersion?: number;
 };
@@ -133,6 +134,33 @@ export function watchingTournamentsHas(
   }
   return Array.isArray(conn.watchingTournaments)
     && conn.watchingTournaments.includes(tournamentId);
+}
+
+export function watchingLaddersFromIds(ladderIds: unknown): Set<string> {
+  const watching = new Set<string>();
+  if (!Array.isArray(ladderIds)) {
+    return watching;
+  }
+  for (const id of ladderIds) {
+    if (typeof id === 'string' && id.length > 0) {
+      watching.add(id);
+    }
+  }
+  return watching;
+}
+
+export function watchingLaddersHas(
+  conn: WsConnectionItem,
+  ladderId: string,
+): boolean {
+  if (!conn.watchingLadders) {
+    return false;
+  }
+  if (conn.watchingLadders instanceof Set) {
+    return conn.watchingLadders.has(ladderId);
+  }
+  return Array.isArray(conn.watchingLadders)
+    && conn.watchingLadders.includes(ladderId);
 }
 
 export function usesStrictGameWatch(conn: WsConnectionItem): boolean {

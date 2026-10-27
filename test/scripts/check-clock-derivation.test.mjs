@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
   CLOCK_DERIVATION_ALLOWLIST,
   runClockDerivationCheck,
-} from "../../bin/check-clock-derivation.mjs";
+} from "../../scripts/check-clock-derivation.mjs";
 
 describe("check-clock-derivation", () => {
   it("has empty allowlist after Phase 2 wiring", () => {

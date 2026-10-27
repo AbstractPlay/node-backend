@@ -2,7 +2,7 @@
 
 Traffic is authenticated in both directions.
 
-## Bot â†’ AP (OAuth client credentials)
+## Bot ? AP (OAuth client credentials)
 
 When you register a bot, the backend provisions a Cognito app client in the stage's **bot pool** and returns `clientId` and `clientSecret` once (from `create_bot`). The bot's player id equals the Cognito `clientId` (JWT `sub`).
 
@@ -57,11 +57,11 @@ Content-Type: application/json
 
 ### Security
 
-- Treat `client_secret` like a password â€” environment variables or a secret manager only.
+- Treat `client_secret` like a password — environment variables or a secret manager only.
 - Never commit secrets to version control.
 - Use [secret rotation](/backend/bots/registration/#secret-rotation) if a secret is lost or exposed.
 
-## AP â†’ bot (Ed25519 request signing)
+## AP ? bot (Ed25519 request signing)
 
 Every outbound POST from AP to your webhook includes three headers:
 
@@ -73,13 +73,13 @@ Every outbound POST from AP to your webhook includes three headers:
 
 ### Verification steps
 
-1. **Replay protection** â€” reject if the timestamp is older than 5 minutes relative to your server clock.
-2. **Rebuild the signing string** â€” concatenate with periods (`.`):
+1. **Replay protection** — reject if the timestamp is older than 5 minutes relative to your server clock.
+2. **Rebuild the signing string** — concatenate with periods (`.`):
    ```
    <timestamp>.<nonce>.<raw request body>
    ```
    Use the **raw** HTTP body bytes. Do not parse and re-serialize JSON; whitespace or key order changes will break verification.
-3. **Verify** â€” check the signature against AP's Ed25519 public key.
+3. **Verify** — check the signature against AP's Ed25519 public key.
 
 AP's public key is published at `https://play.abstractplay.com/ap-public-key.txt`. The reference verifier also accepts `AP_BOT_PUBLIC_KEY` env override.
 

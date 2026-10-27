@@ -157,6 +157,45 @@ describe('inApp notification prefs', () => {
     );
     assert.equal(
       inAppCategoryForBody({
+        type: 'ladderChat',
+        ladderId: 'ladder-1',
+        metaGame: 'go',
+        variants: [],
+        commenterId: 'u2',
+        commenterName: 'Bob',
+      }),
+      'ladderChat',
+    );
+    assert.equal(
+      inAppCategoryForBody({
+        type: 'ladderPointsChange',
+        ladderId: 'ladder-1',
+        gameId: 'g1',
+        metaGame: 'go',
+        variants: [],
+        delta: 12,
+        pointsBefore: 500,
+        pointsAfter: 512,
+        opponentId: OTHER_USER_ID,
+      }),
+      'ladderPointsGain',
+    );
+    assert.equal(
+      inAppCategoryForBody({
+        type: 'ladderPointsChange',
+        ladderId: 'ladder-1',
+        gameId: 'g1',
+        metaGame: 'go',
+        variants: [],
+        delta: -10,
+        pointsBefore: 520,
+        pointsAfter: 510,
+        opponentId: OTHER_USER_ID,
+      }),
+      'ladderPointsLoss',
+    );
+    assert.equal(
+      inAppCategoryForBody({
         type: 'tournamentStart',
         tournamentId: 'tour-1',
         metaGame: 'go',

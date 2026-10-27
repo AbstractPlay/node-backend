@@ -16,7 +16,7 @@ Static artifacts are published to **`records.abstractplay.com`** (S3 + CloudFron
 | `_manifest.json` | `records-manifest` | S3 object listing + `summaryFiles` (v2) |
 | `meta/{metaGame}.json` | `records` | Game records filtered by meta game name; orphan keys deleted after each run when absent from current output |
 | `player/{playerId}.json` | `records` | Game records for one player |
-| `event/{eventId}.json` | `records` | Game records for a tournament or org event |
+| `event/{eventId}.json` | `records` | Game records for a tournament, org event, or ladder (`eventId` = `ladderId`) |
 | `ttm/{playerId}.json` | `records-ttm` | Array of inter-move durations (milliseconds) |
 | `mvtimes.json` | `records-move-times` | Move activity counts by meta game and time window |
 | `recommendations/cooccur.json` | `records-cooccur` | PMI co-occurrence matrix for game recommendations |
@@ -156,8 +156,10 @@ Not served via CloudFront. IAM-restricted.
 | `recommendations/analytics/summary.json` | `records-rec-analytics` | Latest window + rolling 7d/30d |
 | `recommendations/analytics/report/YYYY-MM-DD.md` | `records-rec-analytics` | Human/agent-readable report |
 | `stats/rivalries.json` | `summarize` | All qualifying rivalry pairs with user IDs and display names (not anonymized; min 5 shared games) |
+| `ladders/reconcile/daily/YYYY-MM-DD.json` | `ladder-reconcile-counts` | Daily active-count reconcile report (JSON) |
+| `ladders/reconcile/latest.json` | `ladder-reconcile-counts` | Same report as most recent reconcile run |
 
-**Retired (preview-era layout feedback):** `gamemove-layout/analytics/*` on private ops S3 is an archived snapshot from the removed `layout-feedback-analytics` cron. No new writes after teardown; DynamoDB `LAYOUTFB#*` rows are purged via `node-backend` `bin/purge-layout-feedback-events.mjs`.
+**Retired (preview-era layout feedback):** `gamemove-layout/analytics/*` on private ops S3 is an archived snapshot from the removed `layout-feedback-analytics` cron. No new writes after teardown; DynamoDB `LAYOUTFB#*` rows are purged via `node-backend` `scripts/purge-layout-feedback-events.mjs`.
 
 See [Recommendation analytics](/crons/recommendations-analytics/) and [Summarize](/crons/summarize/).
 

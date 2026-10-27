@@ -4,6 +4,7 @@ import type { ActiveGameKey } from './dashboardGames.js';
 import type { DashboardGame } from './dashboardGames.js';
 import type { VacationSnapshot } from './vacation/types.js';
 import type { DashboardCurrentTournament } from './tournaments/currentForDashboard.js';
+import type { DashboardLadderMembership } from './ladders/currentForDashboard.js';
 
 import { stripColorFromSettings } from './stripLegacyColorSettings.js';
 
@@ -53,6 +54,8 @@ export type MeProfilePayload = {
 export type MeDashboardPayload = Omit<MeProfilePayload, 'activeGames'> & MeChallengeData & {
   games: DashboardGame[];
   currentTournaments: DashboardCurrentTournament[];
+  ladderMemberships: DashboardLadderMembership[];
+  currentLadderGames: DashboardGame[];
 };
 
 type MeUserFields = {
@@ -111,6 +114,8 @@ export function buildMeDashboardPayload(
   challenges: MeChallengeData,
   vacation: VacationSnapshot,
   currentTournaments: DashboardCurrentTournament[] = [],
+  ladderMemberships: DashboardLadderMembership[] = [],
+  currentLadderGames: DashboardGame[] = [],
 ): MeDashboardPayload {
   const profile = buildMeProfilePayload(user, ancillary, [], vacation);
   const { activeGames: _activeGames, ...profileWithoutActive } = profile;
@@ -118,6 +123,8 @@ export function buildMeDashboardPayload(
     ...profileWithoutActive,
     games,
     currentTournaments,
+    ladderMemberships,
+    currentLadderGames,
     ...challenges,
   };
 }

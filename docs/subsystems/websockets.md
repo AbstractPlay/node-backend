@@ -6,13 +6,13 @@ Real-time updates (game moves, presence) use API Gateway WebSockets plus SQS-bac
 
 ## Connection flow
 
-1. Client opens WebSocket to the stage API (`wss://â€¦/{stage}`).
-2. **`$connect`** â€” [`connectHandler`](../../api/sockets/connectHandler.ts) is a no-op; connections are registered on subscribe.
-3. **`subscribe`** â€” [`authHandler`](../../api/sockets/authHandler.ts) validates the JWT, stores the connection under `wsConnections` (optionally including `watchingGames` from a `games: [{ meta, id }]` array in the same message), sends a direct **presence snapshot** to that connection, and enqueues a debounced join event (skipped for `invisible: true`).
-4. **`watchGames`** â€” [`watchGamesHandler`](../../api/sockets/watchGamesHandler.ts) replaces the connection's `watchingGames` set from `{ games: [{ meta, id }] }`. Used for incremental updates after subscribe (e.g. navigation, dashboard changes).
-5. **`watchTournaments`** â€” [`watchTournamentsHandler`](../../api/sockets/watchTournamentsHandler.ts) replaces `watchingTournaments` from `{ tournaments: [<tournamentid>, â€¦] }` (tournament detail page).
-6. **`syncPresence`** â€” [`syncPresenceHandler`](../../api/sockets/syncPresenceHandler.ts) responds with a fresh presence snapshot (no seq increment).
-7. **`$disconnect`** â€” [`disconnectHandler`](../../api/sockets/disconnectHandler.ts) removes the connection and enqueues a debounced leave event.
+1. Client opens WebSocket to the stage API (`wss://…/{stage}`).
+2. **`$connect`** — [`connectHandler`](../../api/sockets/connectHandler.ts) is a no-op; connections are registered on subscribe.
+3. **`subscribe`** — [`authHandler`](../../api/sockets/authHandler.ts) validates the JWT, stores the connection under `wsConnections` (optionally including `watchingGames` from a `games: [{ meta, id }]` array in the same message), sends a direct **presence snapshot** to that connection, and enqueues a debounced join event (skipped for `invisible: true`).
+4. **`watchGames`** — [`watchGamesHandler`](../../api/sockets/watchGamesHandler.ts) replaces the connection's `watchingGames` set from `{ games: [{ meta, id }] }`. Used for incremental updates after subscribe (e.g. navigation, dashboard changes).
+5. **`watchTournaments`** — [`watchTournamentsHandler`](../../api/sockets/watchTournamentsHandler.ts) replaces `watchingTournaments` from `{ tournaments: [<tournamentid>, …] }` (tournament detail page).
+6. **`syncPresence`** — [`syncPresenceHandler`](../../api/sockets/syncPresenceHandler.ts) responds with a fresh presence snapshot (no seq increment).
+7. **`$disconnect`** — [`disconnectHandler`](../../api/sockets/disconnectHandler.ts) removes the connection and enqueues a debounced leave event.
 
 Clients that support targeted game delivery send `watchVersion: 1` on subscribe. Clients may include `games` on subscribe so `watchingGames` is written atomically with the connection record; they should still send `watchGames` on navigation or when the dashboard game list changes.
 
@@ -42,8 +42,8 @@ Join/leave events from subscribe/disconnect go to `PresenceCoalesceQueue` (2s ba
 Message shapes (`verb: "connections"`):
 
 ```json
-{ "type": "snapshot", "seq": 42, "totalCount": 10, "visibleUserIds": ["â€¦"] }
-{ "type": "delta", "seq": 43, "joins": ["â€¦"], "leaves": ["â€¦"] }
+{ "type": "snapshot", "seq": 42, "totalCount": 10, "visibleUserIds": ["…"] }
+{ "type": "delta", "seq": 43, "joins": ["…"], "leaves": ["…"] }
 ```
 
 Snapshots are sent directly on subscribe and on `syncPresence`. Deltas are debounced ~2s.

@@ -11,6 +11,10 @@ crons/.esbuild
 dist/
 .env
 .vscode/
+.local/
+# Local scratch only (calibration dumps, personal maps, experiments)
+bin/
+test/fixtures/dev-test-players.json
 
 # Cursor — keep shared rules, ignore other local state
 .cursor/*

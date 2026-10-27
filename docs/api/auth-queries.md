@@ -1,6 +1,6 @@
 # Auth queries
 
-Handler: `module.exports.authQuery` — requires Cognito user JWT.
+Handler: `module.exports.authQuery` � requires Cognito user JWT.
 
 POST body: `{ "query": "<name>", "pars": { ... } }`
 
@@ -10,22 +10,22 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `me_profile` | Site-wide profile for navbar, settings, and game renderer: settings, bots, tags, `activeGames` (`CURRENTGAMES#` keys only), `vacation` quota/stint snapshot. No dashboard maintenance, challenges, or `lastSeen` writes. | — |
+| `me_profile` | Site-wide profile for navbar, settings, and game renderer: settings, bots, tags, `activeGames` (`CURRENTGAMES#` keys only), `vacation` quota/stint snapshot. No dashboard maintenance, challenges, or `lastSeen` writes. | � |
 | `me_dashboard` | Dashboard tables: active `games` (with `clockDisplayServerTime` and per on-clock player `effectiveRemainingMs` / `clockPaused`), `currentTournaments`, `notifications`, challenges, timeout sweep. Includes `vacation` snapshot. Clears `USER.cleaned` when set by abandoned-account cron. Does not refresh notification seen state. No `lastSeen` writes. | `vars`, `update` (legacy; reserved) |
-| `next_game` | Next game id in user's list | — |
-| `my_settings` | **Deprecated** — minimal id/name/email/language; use `me_profile` instead | — |
+| `next_game` | Next game id in user's list | � |
+| `my_settings` | **Deprecated** � minimal id/name/email/language; use `me_profile` instead | � |
 | `new_setting` | Update name, language, country, bggid, about | `attribute`, `value`. For `name`, value must be unique among current human and bot display names (trim + case-insensitive). |
 | `new_profile` | Bulk profile update | profile fields |
 | `set_lastSeen` | Update last-seen timestamp (active dashboard game or watched game) | `gameId`, optional `interval` |
 | `dismiss_notification` | Remove an in-app dashboard notification (deleted from DynamoDB) | `sk` |
-| `dismiss_all_notifications` | Remove all in-app notifications for the user | — |
-| `list_notifications` | List in-app notifications for the navbar bell (does not mark seen) | — |
+| `dismiss_all_notifications` | Remove all in-app notifications for the user | � |
+| `list_notifications` | List in-app notifications for the navbar bell (does not mark seen) | � |
 | `mark_notifications_seen` | Mark notifications as read (shortens TTL; retained until dismissed) | optional `sks` (array); omit to mark all **new** items |
 | `toggle_star` | Favorite a metaGame | `metaGame` |
 
 **`me_dashboard.currentTournaments`:** array of in-progress automated tournaments the user is assigned to (from `TOURNAMENTBYUSER#` index, filtered to `started` and not `dateEnded`). Each item: `{ id, metaGame, variants, number, matchLegs, dateStarted, divisions, players }` where `players` lists user ids with a `division` on their `TOURNAMENTPLAYER` row (same rule as `/tournaments/current` with registered-only). Empty array when none.
 
-**`me_dashboard.notifications`:** array of `{ sk, createdAt, body, status }` items where `status` is `new` or `read` (see [Notifications — In-app dashboard feed](/backend/subsystems/notifications/)). Omitted from `me_profile`. Use `list_notifications` for navbar bootstrap and `mark_notifications_seen` when the user opens the bell panel.
+**`me_dashboard.notifications`:** array of `{ sk, createdAt, body, status }` items where `status` is `new` or `read` (see [Notifications � In-app dashboard feed](/backend/subsystems/notifications/)). Omitted from `me_profile`. Use `list_notifications` for navbar bootstrap and `mark_notifications_seen` when the user opens the bell panel.
 
 ## Vacation (correspondence clock pause)
 
@@ -33,9 +33,9 @@ The authenticated user id is `cognitoPoolClaims.sub`.
 |-------|---------|------------|
 | `schedule_vacation` | Start now or schedule a pause stint | `startsAt` (ms or ISO-8601), `openEnded` (boolean), optional `endsAt` when not open-ended |
 | `update_vacation` | Change a future scheduled stint or adjust fixed end before it passes | optional `startsAt`, `openEnded`, `endsAt` (`null` when switching to open-ended) |
-| `stop_vacation` | Cancel before start (no charge) or end active stint (charges exact pause ms to UTC-year quota) | — |
+| `stop_vacation` | Cancel before start (no charge) or end active stint (charges exact pause ms to UTC-year quota) | � |
 
-Success body: `{ vacation: VacationSnapshot }` — quota remaining, active/scheduled flags, stint times. Validation failures return **400** with `{ message: "<code>" }` (`vacation_stint_active`, `vacation_no_quota`, `vacation_invalid_range`, etc.). See [Vacation mode](/backend/subsystems/vacation/).
+Success body: `{ vacation: VacationSnapshot }` � quota remaining, active/scheduled flags, stint times. Validation failures return **400** with `{ message: "<code>" }` (`vacation_stint_active`, `vacation_no_quota`, `vacation_invalid_range`, etc.). See [Vacation mode](/backend/subsystems/vacation/).
 
 ## Watch, highlight, and representative games
 
@@ -61,13 +61,13 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
 | `feedback_presign_upload` | Presigned S3 PUT for feedback attachments | `filename`, `contentType`, `contentLength` (png/jpeg/webp/svg, text/plain, text/markdown, application/json; max 5 MB). Returns `{ uploadUrl, key, headers }`. |
-| `feedback_create` | Create a post | `kind`, `title`, optional `body`, `gameUrl`, `attachmentKeys`, `context` (bugs), optional `tags` (bug/feature, ≤3 slugs from vocab), optional `suggestedTags` (≤2 strings). Bug screenshots optional (≤3 when provided). Returns `{ id }`. |
+| `feedback_create` | Create a post | `kind`, `title`, optional `body`, `gameUrl`, `attachmentKeys`, `context` (bugs), optional `tags` (bug/feature, =3 slugs from vocab), optional `suggestedTags` (=2 strings). Bug screenshots optional (=3 when provided). Returns `{ id }`. |
 | `feedback_get` | Single post (auth adds `subscribed`, `userVoted`) | `id` |
 | `feedback_vote` | Toggle vote | `id`, `vote` (boolean). Returns `{ voteCount, effectiveVotes, voted }`. |
-| `feedback_comment` | Add comment | `id`, `body` and/or `attachmentKeys` (bugs/features only, ≤3 images), optional `subscribe` (default `true`). Allowed on terminal posts until archived. Returns `{ commentId }`. |
+| `feedback_comment` | Add comment | `id`, `body` and/or `attachmentKeys` (bugs/features only, =3 images), optional `subscribe` (default `true`). Allowed on terminal posts until archived. Returns `{ commentId }`. |
 | `feedback_set_status` | Admin status change | `id`, `status`. Sets `terminalAt` when moving to a terminal status; removes it when reopening to a non-terminal status. Notifies author and subscribers. |
 | `feedback_subscribe` | Watch/unwatch | `id`, `subscribe` (boolean). Returns `{ subscribed }`. |
-| `feedback_reclassify` | Admin reclassify bug → feature | `id`. Open → `open`; triaged → `under_review`; monitoring → `planned`. Terminal bugs rejected. Returns `{ id, kind, status }`. |
+| `feedback_reclassify` | Admin reclassify bug ? feature | `id`. Open ? `open`; triaged ? `under_review`; monitoring ? `planned`. Terminal bugs rejected. Returns `{ id, kind, status }`. |
 | `feedback_update` | Edit title/body/tags | `id`, optional `title`, `body`, `tags`, `suggestedTags` (at least one field). Author or admin on non-terminal posts. Writes `EDIT#` audit rows for title/body. |
 | `feedback_set_admin_fields` | Admin triage fields | `id`, optional `effort`, `priority`, `tags` (bug/feature, works on terminal posts), `clearSuggestedTags`, `reviewerIds`, `wishlistCategory`, `wishlistCategoryNote`. |
 | `feedback_tag_vocab` | Tag vocabulary for boards | Returns `{ tags: [{ id, kinds }] }`. |
@@ -90,7 +90,7 @@ Requires `USER.admin === true`. Records live in the main `abstract-play` table (
 | `announcements_admin_list` | List all announcements | optional `status`, `limit`, `cursor`. Returns `{ items, nextCursor? }`. |
 | `announcement_get` | Load one item | `id`. Admins see drafts; non-admins get published only (same as open API). |
 | `announcement_presign_upload` | Presigned S3 PUT for images | `announcementId`, `filename`, `contentType`, `contentLength` (png/jpeg/webp, max 5 MB). Returns `{ uploadUrl, key, headers }`. |
-| `announcement_publish` | First publish (draft → published) | `id`. **403** `announcements_publish_disabled_on_dev` when `WEBSOCKET_STAGE=dev`. Fan-out: Discord webhook (if configured), `news.rss` upload, email/push for users with `notifications.announcements` enabled. |
+| `announcement_publish` | First publish (draft ? published) | `id`. **403** `announcements_publish_disabled_on_dev` when `WEBSOCKET_STAGE=dev`. Fan-out: Discord webhook (if configured), `news.rss` upload, email/push for users with `notifications.announcements` enabled. |
 | `announcement_retract` | Hide published post from site/RSS | `id`. **403** `announcements_retract_disabled_on_dev` on dev. Sets `status: retracted` and removes published index row. |
 | `announcements_mark_read` | Bump read cursor | optional `readAt` (ms). Sets `settings.all.announcementsLastReadAt`. |
 | `announcement_react` | Toggle allowlisted emoji on published post | `id`, `emoji`. Returns `{ id, reactionCounts, myReactions }`. |
@@ -98,7 +98,7 @@ Requires `USER.admin === true`. Records live in the main `abstract-play` table (
 
 Public read: open `announcements_list` / `announcement_get` (published only).
 
-Nightly jobs (crons stack): `feedback-archive` and `feedback-attachment-cleanup` Lambdas — same logic as `npm run feedback-archive` / `npm run feedback-attachment-cleanup` at repo root ([`utils/feedback-archive.ts`](../../utils/feedback-archive.ts), [`utils/feedback-attachment-cleanup.ts`](../../utils/feedback-attachment-cleanup.ts)). Archive snapshots terminal posts to S3, writes `HISTORY#` rows, sets `archivedAt` and `expiresAt` TTL on live rows; cleanup deletes `{postId}/` screenshot objects after purge and sweeps stale `staging/` uploads; keeps `archive/{postId}.json` snapshots.
+Nightly jobs (crons stack): `feedback-archive` and `feedback-attachment-cleanup` Lambdas � same logic as `npm run feedback-archive` / `npm run feedback-attachment-cleanup` at repo root ([`utils/feedback-archive.ts`](../../utils/feedback-archive.ts), [`utils/feedback-attachment-cleanup.ts`](../../utils/feedback-attachment-cleanup.ts)). Archive snapshots terminal posts to S3, writes `HISTORY#` rows, sets `archivedAt` and `expiresAt` TTL on live rows; cleanup deletes `{postId}/` screenshot objects after purge and sweeps stale `staging/` uploads; keeps `archive/{postId}.json` snapshots.
 
 ## Push, tags, customizations
 
@@ -114,7 +114,7 @@ Per-user board colours and preferred colour are configured via **Customize** (`s
 | `save_customization` | Per-game UI customization | `metaGame`, settings |
 | `delete_customization` | Remove customization | `metaGame` |
 | `update_standing` | SDG-style standing challenge preferences | `entries` |
-| `update_user_settings` | User settings blob | `settings` (full object). Optional `settings.all.profile.avatar`: `{ style, seed }` — style must be one of the allowlisted DiceBear style ids; seed is 1–64 chars (`A–Z`, `a–z`, `0–9`, `_`, `-`). Invalid avatar returns **400**. When avatar is saved, `avatarStyle` / `avatarSeed` are mirrored on both the `USER` and public `USERS` records (the `user_names` query reads `USERS`); when avatar is removed or reset to default (key omitted), those mirror fields are removed from both. Optional `settings.all.noDirectChallenges` (boolean): when `true`, incoming direct challenges are auto-declined with a system note; open challenges are unchanged. |
+| `update_user_settings` | User settings blob | `settings` (full object). Optional `settings.all.profile.avatar`: `{ style, seed }` � style must be one of the allowlisted DiceBear style ids; seed is 1�64 chars (`A�Z`, `a�z`, `0�9`, `_`, `-`). Invalid avatar returns **400**. When avatar is saved, `avatarStyle` / `avatarSeed` are mirrored on both the `USER` and public `USERS` records (the `user_names` query reads `USERS`); when avatar is removed or reset to default (key omitted), those mirror fields are removed from both. Optional `settings.all.noDirectChallenges` (boolean): when `true`, incoming direct challenges are auto-declined with a system note; open challenges are unchanged. |
 
 ## Player blocking
 
@@ -129,14 +129,14 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `new_challenge` | Issue direct or standing challenge | `FullChallenge` fields; optional `teachingMode` (2P, non-simultaneous, no bots — forces `rated: false`); optional `startPosition: { state }` (2P direct or standing — forces teaching mode, stores payload on `CHALLENGEPOSITION`, sets `hasStartPosition` on challenge) |
-| `get_challenge_position_preview` | Start position for a pending challenge | `id`, `metaGame` — direct: participants only; open standing: any signed-in user |
+| `new_challenge` | Issue direct or standing challenge | `FullChallenge` fields; optional `teachingMode` (2P, non-simultaneous, no bots � forces `rated: false`); optional `startPosition: { state }` (2P direct or standing � forces teaching mode, stores payload on `CHALLENGEPOSITION`, sets `hasStartPosition` on challenge) |
+| `get_challenge_position_preview` | Start position for a pending challenge | `id`, `metaGame` � direct: participants only; open standing: any signed-in user |
 | `challenge_revoke` | Cancel a challenge | `id`, `metaGame`, `standing`, `comment` |
 | `challenge_response` | Accept or decline | `response`, `id`, `standing`, `metaGame`, `comment` |
 | `start_solo_game` | Start a 1-player solo run (`rated: false`; optional `challengeSeed`, server assigns if omitted) | `metaGame`, optional `variants`, `challengeSeed`, clock fields |
 | `standing_challenges` | Open challenges (filters blocked issuers) | `metaGame` |
-| `all_standing_challenges` | All open standing challenges site-wide (filters blocked issuers) | — |
-| `submit_move` | Play a move | `metaGame`, `id`, `move`, … |
+| `all_standing_challenges` | All open standing challenges site-wide (filters blocked issuers) | � |
+| `submit_move` | Play a move | `metaGame`, `id`, `move`, � |
 | `timeloss` | Report time loss | game ids |
 | `abandoned` | Mark game abandoned | game ids |
 | `invoke_pie` | Pie rule: reverse player order (not available when `teachingMode` on game) | game ids |
@@ -158,7 +158,7 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `save_exploration` | Save exploration branch | game + move tree |
 | `get_exploration` | Load exploration | game, user, move |
 | `get_private_exploration` | Private exploration | game, user, move |
-| `list_playground_saves` | List user's playground saves (metadata only) | — |
+| `list_playground_saves` | List user's playground saves (metadata only) | � |
 | `get_playground_save` | Load one playground save | `id` |
 | `create_playground_save` | Create playground save | `name`, `metaGame`, `date`, `body` |
 | `save_playground_save` | Overwrite playground save | `id`, `name`, `metaGame`, `date`, `body` |
@@ -173,6 +173,24 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `withdraw_tournament` | Leave tournament | `id` |
 | `end_tournament` | End tournament | `id` |
 | `submit_tournament_comment` | Tournament chat message (participants and admins) | `tournamentid`, `comment`, optional `metaGame` for archived lookup |
+
+## Ladders
+
+Player-created continuous delta ladders (one canonical ladder per meta + variants series). See [Continuous delta ladders](/backend/subsystems/ladders/) and [Database schema](/backend/database-schema/) (Ladders section).
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `new_ladder` | Create ladder in `forming` and join as first member (2-player meta only; duplicate series ? **409** with `existingLadderId`, `seriesKey`) | `metaGame`, `variants` |
+| `join_ladder` | Join or rejoin (`left` keeps prior points) | `ladderId` |
+| `leave_ladder` | Soft leave (blocked while `activeLadderGameCount > 0`) | `ladderId` |
+| `get_ladder` | Leaderboard, **`comments`**, **`matchmaking`** (reach band, `inReachOpponentCount`, `nearestAnywayCandidate`, `poolWaiterCount`, `viewerInPool` when viewer is active), board rows include **`withinReach`** for viewer; plus auth **`viewer`** | `ladderId` |
+| `join_ladder_pool` | Queue for in-reach pairing (tournament clocks; may start a game immediately) | `ladderId` |
+| `leave_ladder_pool` | Leave queue | `ladderId` |
+| `new_ladder_challenge` | Direct 2P rated challenge (`opponentId` or `nearestAnyway: true` when empty in-reach band) | `ladderId`, optional `opponentId`, `nearestAnyway`, `comment` |
+| `respond_ladder_challenge` | Accept/decline ladder challenge (accept uses `createLadderGame`; cap failure leaves challenge pending) | `id`, `metaGame`, `response`, optional `comment` |
+| `submit_ladder_comment` | Ladder hub chat (active members) | `ladderId`, `comment` |
+
+`me_dashboard` adds **`ladderMemberships`** (active only; each row includes `ladderStatus`, `viewerInPool`, `poolJoinEligible`), **`currentLadderGames`**, and **`ladderId`** on each active game row when set on the game.
 
 ## Organizer events
 
@@ -196,27 +214,27 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 
 | Query | Aliases | Purpose | Key `pars` |
 |-------|---------|---------|------------|
-| `create_bot` | `createBot` | Register a bot | name, endpoint URL, … |
+| `create_bot` | `createBot` | Register a bot | name, endpoint URL, � |
 | `update_bot` | `updateBot` | Update bot config | `clientId`, fields |
 | `delete_bot` | `deleteBot` | Delete bot | `clientId` |
 | `begin_bot_secret_rotation` | `beginBotSecretRotation` | Start secret rotation | `clientId` |
 | `finalize_bot_secret_rotation` | `finalizeBotSecretRotation` | Complete rotation | `clientId`, secret |
-| `ping_bot` | — | Health check bot endpoint | `clientId` |
-| `test_bot_status` | — | Dev test bot status | — |
-| `update_test_bot` | — | Dev test bot config | fields |
+| `ping_bot` | � | Health check bot endpoint | `clientId` |
+| `test_bot_status` | � | Dev test bot status | � |
+| `update_test_bot` | � | Dev test bot config | fields |
 
 ## Admin and maintenance
 
-Post–Phase 5 the dashboard is **index-only** (`CURRENTGAMES#`, `USERGAME#`). Legacy `USER.games[]` and `RECENTCOMPLETED#` are retired.
+Post�Phase 5 the dashboard is **index-only** (`CURRENTGAMES#`, `USERGAME#`). Legacy `USER.games[]` and `RECENTCOMPLETED#` are retired.
 
 ### Still supported (authQuery)
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
-| `update_meta_game_counts` | Recompute sharded `METAGAMES#<metaGame>/COUNTS` from live queries | — |
+| `update_meta_game_counts` | Recompute sharded `METAGAMES#<metaGame>/COUNTS` from live queries | � |
 | `delete_games` | Hard-delete game records and all related dashboard / spectator / exploration rows | `metaGame`, `cbit` (`0` active / `1` completed), `gameids` (comma-separated) |
 | `set_game_state` | Replace in-progress game state (`GAME` only; stream refreshes `CURRENTGAMES#`) | `id`, `metaGame`, `newState` |
-| `test_push` | Send test push notification | — |
+| `test_push` | Send test push notification | � |
 | `test_async` | Async test hook | varies |
 
 `delete_games` removes, per game id:
@@ -228,14 +246,14 @@ Post–Phase 5 the dashboard is **index-only** (`CURRENTGAMES#`, `USERGAME#`). L
 
 If `cbit` does not match the stored game, the handler tries the other completion bit automatically.
 
-### Retired — returns `{ deprecated: true, useInstead: ... }`
+### Retired � returns `{ deprecated: true, useInstead: ... }`
 
 Do **not** run these from the admin UI; use the replacement instead.
 
 | Query | Replacement |
 |-------|-------------|
 | `me` | `me_profile` (site-wide bootstrap) and `me_dashboard` (`/me` page). `size: small` is not supported. |
-| `fix_games` | `bin/verify-dashboard-index.mjs` then `bin/dashboard-index-maintenance.mjs --step purge-usergame-orphans --user-id <cognitoSub>` |
+| `fix_games` | `scripts/verify-dashboard-index.mjs` then `scripts/dashboard-index-maintenance.mjs --step purge-usergame-orphans --user-id <cognitoSub>` |
 | `purge_retired_completed_games` | One-time purge complete (no retired rows remain) |
 | `onetime_fix` | No replacement (legacy `USERS` directory sync) |
 
@@ -243,15 +261,15 @@ Do **not** run these from the admin UI; use the replacement instead.
 
 | Task | Command |
 |------|---------|
-| Dashboard health check | `node bin/verify-dashboard-index.mjs --stage prod [--verbose] <userId>…` |
-| Purge legacy `RECENTCOMPLETED#` (if rows reappear) | `node bin/dashboard-index-maintenance.mjs --stage prod --step purge-all-recent-completed [--user-id <id>]` |
-| Purge `USERGAME#` orphans | `node bin/dashboard-index-maintenance.mjs --stage prod --step purge-usergame-orphans [--user-id <id>]` |
+| Dashboard health check | `node scripts/verify-dashboard-index.mjs --stage prod [--verbose] <userId>�` |
+| Purge legacy `RECENTCOMPLETED#` (if rows reappear) | `node scripts/dashboard-index-maintenance.mjs --stage prod --step purge-all-recent-completed [--user-id <id>]` |
+| Purge `USERGAME#` orphans | `node scripts/dashboard-index-maintenance.mjs --stage prod --step purge-usergame-orphans [--user-id <id>]` |
 
 ```bash
 # Example dashboard repair for one user
-node bin/verify-dashboard-index.mjs --stage prod --verbose <cognitoSub>
-node bin/dashboard-index-maintenance.mjs --stage prod --step purge-usergame-orphans --user-id <cognitoSub>
-node bin/verify-dashboard-index.mjs --stage prod <cognitoSub>
+node scripts/verify-dashboard-index.mjs --stage prod --verbose <cognitoSub>
+node scripts/dashboard-index-maintenance.mjs --stage prod --step purge-usergame-orphans --user-id <cognitoSub>
+node scripts/verify-dashboard-index.mjs --stage prod <cognitoSub>
 ```
 
 ## Related

@@ -21,6 +21,12 @@ export type UserSettings = {
       tournamentChat: boolean;
       tournamentStart: boolean;
       tournamentEnd: boolean;
+      ladderChat?: boolean;
+      ladderJoin?: boolean;
+      ladderLeave?: boolean;
+      ladderPointsGain?: boolean;
+      ladderPointsLoss?: boolean;
+      ladderDecay?: boolean;
       bots?: boolean;
     };
   };

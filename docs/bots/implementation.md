@@ -5,7 +5,7 @@ This page maps the protocol to concrete code in **node-backend**. Use it when bu
 ## Quick start
 
 1. Read [Bot framework](/backend/bots/), [Authentication](/backend/bots/authentication/), and [Protocol](/backend/bots/protocol/).
-2. Study [`api/testBot.ts`](../../api/testBot.ts) â€” the complete reference bot (dev stage only).
+2. Study [`api/testBot.ts`](../../api/testBot.ts) — the complete reference bot (dev stage only).
 3. Reuse [`lib/botVerify.ts`](../../lib/botVerify.ts) and [`lib/botClient.ts`](../../lib/botClient.ts) in your deployment.
 4. Register on **dev** via `create_bot`, point `endpoint` at your HTTPS server, challenge the bot from the dev site.
 
@@ -23,8 +23,8 @@ Deployed as the `testBot` Lambda with HTTP routes on **dev** only (`custom.testB
 1. Read raw body string.
 2. `verifyBotRequest(rawBody, headers)` from `lib/botVerify.ts`.
 3. Parse JSON; branch on `verb`:
-   - `challenge` â†’ accept/reject based on test settings â†’ `200` / `400`
-   - `move` â†’ return `202`, then async: `pickMove()` â†’ `submitBotMove()`
+   - `challenge` ? accept/reject based on test settings ? `200` / `400`
+   - `move` ? return `202`, then async: `pickMove()` ? `submitBotMove()`
 
 `pickMove()` replays `moves` through `GameFactory` and plays the first legal move (or `pass`). Replace this with your engine.
 
@@ -49,23 +49,23 @@ Deployed as the `testBot` Lambda with HTTP routes on **dev** only (`custom.testB
 ```
 lib/challenges/authHandlers.ts / lib/games/playHandlers.ts
   newChallenge / submitMove / notifyRegisteredBotsTurn
-    â†’ enqueueBotOutbound({ type: 'challenge' | 'move', ... })
-      â†’ SQS BotOutboundQueue
-        â†’ utils/bot-outbound.ts handler
-          â†’ processBotChallengeMessage / processBotMoveMessage
-            â†’ postToBot() with signed body
+    ? enqueueBotOutbound({ type: 'challenge' | 'move', ... })
+      ? SQS BotOutboundQueue
+        ? utils/bot-outbound.ts handler
+          ? processBotChallengeMessage / processBotMoveMessage
+            ? postToBot() with signed body
 ```
 
-Challenge acceptance triggers `botRespondToChallenge()` â†’ `respondedChallenge()` in `lib/challenges/authHandlers.ts`.
+Challenge acceptance triggers `botRespondToChallenge()` ? `respondedChallenge()` in `lib/challenges/authHandlers.ts`.
 
 ## Adapting for production
 
-1. **Host any HTTPS server** â€” Lambda, Cloud Run, VPS, etc.
-2. **Implement GET ping** â€” return `200` and `{ "operational": true }`.
-3. **Implement signed POST handler** â€” verify signatures before parsing JSON.
-4. **Challenge** â€” return `200` or `400` synchronously; no background work.
-5. **Move** â€” return `202` within the timeout (30s on AP's `postToBot`); compute move asynchronously; call `botQuery` with `verb: "move"`. If your engine chooses **pie** (seat swap), use `verb: "pie"` instead â€” see [Protocol â€” Pie](/backend/bots/protocol/#pie-seat-swap). If `move`/`pie` fails validation, AP notifies your bot owner and posts a system in-game chat line (you do not need to duplicate that).
-6. **Internal errors** â€” when your worker crashes or cannot think (errors AP cannot see), call `verb: "pingOwner"` with a short `message` and optional `gameid`/`metaGame`. Do not use `pingOwner` for failed `move`/`pie` responses; those already alert the owner.
+1. **Host any HTTPS server** — Lambda, Cloud Run, VPS, etc.
+2. **Implement GET ping** — return `200` and `{ "operational": true }`.
+3. **Implement signed POST handler** — verify signatures before parsing JSON.
+4. **Challenge** — return `200` or `400` synchronously; no background work.
+5. **Move** — return `202` within the timeout (30s on AP's `postToBot`); compute move asynchronously; call `botQuery` with `verb: "move"`. If your engine chooses **pie** (seat swap), use `verb: "pie"` instead — see [Protocol — Pie](/backend/bots/protocol/#pie-seat-swap). If `move`/`pie` fails validation, AP notifies your bot owner and posts a system in-game chat line (you do not need to duplicate that).
+6. **Internal errors** — when your worker crashes or cannot think (errors AP cannot see), call `verb: "pingOwner"` with a short `message` and optional `gameid`/`metaGame`. Do not use `pingOwner` for failed `move`/`pie` responses; those already alert the owner.
 7. **Register** with `create_bot`; store `clientId` / `clientSecret` securely.
 8. **Test on dev** before creating a prod bot.
 
@@ -98,5 +98,5 @@ Set in [`serverless.yml`](../../serverless.yml): `BOTPOOL_ID`, `BOT_TOKEN_URL`, 
 
 - [Registration](/backend/bots/registration/)
 - [Protocol](/backend/bots/protocol/)
-- [Bots subsystem](/backend/subsystems/bots/) â€” short overview
-- [Database schema](/backend/database-schema/) â€” `BOT`, `BOTNAME`
+- [Bots subsystem](/backend/subsystems/bots/) — short overview
+- [Database schema](/backend/database-schema/) — `BOT`, `BOTNAME`

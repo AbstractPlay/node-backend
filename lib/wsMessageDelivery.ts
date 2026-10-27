@@ -4,6 +4,7 @@ import {
   usesStrictGameWatch,
   watchingGamesHas,
   watchingTournamentsHas,
+  watchingLaddersHas,
   wantsPresenceUpdates,
   type WsConnectionItem,
 } from "./wsConnectionStore.js";
@@ -43,6 +44,14 @@ export function shouldDeliverWsMessage(
       return false;
     }
     return watchingTournamentsHas(conn, id);
+  }
+
+  if (verb === "ladder") {
+    const id = payload?.id;
+    if (!id) {
+      return false;
+    }
+    return watchingLaddersHas(conn, id);
   }
 
   if (verb === "notification") {
