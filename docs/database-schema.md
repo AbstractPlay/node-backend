@@ -6,107 +6,107 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 
 ## Games
 
-- **Games** — full game state
+- **Games** ï¿½ full game state
   - pk: `GAME`
   - sk: `<metaGame>#<completedbit>#<gameid>`
   - optional `teachingMode`, `teachingUndo`, `teachingPlyStart` on teaching games (see [Games and moves](/backend/subsystems/games-and-moves/))
 
-- **Game comments** — chat for a game
+- **Game comments** ï¿½ chat for a game
   - pk: `GAMECOMMENTS`
   - sk: `<gameid>`
 
-- **Tournament chat** — public log per tournament (survives archive)
+- **Tournament chat** ï¿½ public log per tournament (survives archive)
   - pk: `TOURNAMENTCOMMENTS`
   - sk: `<tournamentid>`
   - `comments[]`: `{ comment, userId, moveNumber, timeStamp }` (Markdown rendered on the client)
 
-- **Notes** — per-user notes on a game
+- **Notes** ï¿½ per-user notes on a game
   - pk: `NOTE`
   - sk: `<gameId>#<userid>`
 
 ## Users
 
-- **Users** — profile, settings, challenge lists (dashboard via indexes below)
+- **Users** ï¿½ profile, settings, challenge lists (dashboard via indexes below)
   - pk: `USER`
   - sk: `<userid>`
-  - fields include `publicRivalries` (boolean, default false) — opt in to public rivalries table
-  - `cleaned` (boolean, optional) — set by [dashboard cruft cleanup](/crons/dashboard-cruft-cleanup/) for inactive users; cleared on `me_dashboard` login
-  - `dashboardMaintAt` (number, optional) — lease timestamp for per-user dashboard maintenance lock (`me_dashboard` prune/timeout sweep)
-  - **Retired (Phase 5):** `games[]`, `gamesUpdate` — removed from all USER records in prod (Aug 2025)
-  - **Vacation (correspondence):** optional `vacationQuotaYear`, `vacationPauseMsUsed` (ms charged in current UTC quota year), `vacationStartsAt`, `vacationEndsAt`, `vacationOpenEnded`, `vacationStintStartedAt` — at most one stint; see [Vacation mode](/backend/subsystems/vacation/)
+  - fields include `publicRivalries` (boolean, default false) ï¿½ opt in to public rivalries table
+  - `cleaned` (boolean, optional) ï¿½ set by [dashboard cruft cleanup](/crons/dashboard-cruft-cleanup/) for inactive users; cleared on `me_dashboard` login
+  - `dashboardMaintAt` (number, optional) ï¿½ lease timestamp for per-user dashboard maintenance lock (`me_dashboard` prune/timeout sweep)
+  - **Retired (Phase 5):** `games[]`, `gamesUpdate` ï¿½ removed from all USER records in prod (Aug 2025)
+  - **Vacation (correspondence):** optional `vacationQuotaYear`, `vacationPauseMsUsed` (ms charged in current UTC quota year), `vacationStartsAt`, `vacationEndsAt`, `vacationOpenEnded`, `vacationStintStartedAt` ï¿½ at most one stint; see [Vacation mode](/backend/subsystems/vacation/)
 
-- **Push subscriptions** — web push endpoints (one record per browser/device)
+- **Push subscriptions** ï¿½ web push endpoints (one record per browser/device)
   - pk: `PUSH`
   - sk: `<userid>#<subscriptionKey>` (`subscriptionKey` = first 16 hex chars of SHA-256 of `payload.endpoint`)
   - fields: `payload`, `endpoint`, `updatedAt`
   - legacy: `sk: <userid>` (migrated on next `save_push` or removed on 404/410)
 
-- **User list** — public directory (name, country, lastSeen, stars, bggid, optional `onVacation`; `about` fetched per profile via `player_about`)
+- **User list** ï¿½ public directory (name, country, lastSeen, stars, bggid, optional `onVacation`; `about` fetched per profile via `player_about`)
   - pk: `USERS`
   - sk: `<userid>`
-  - `about` — optional markdown bio (max 100KB UTF-8; no HTML or images; max 20 links). Not included in `user_names`; use public query `player_about`.
-  - `onVacation` (boolean, optional) — mirrored from `USER` when a **live** vacation stint is active (`user_names` only); cleared when stint ends.
+  - `about` ï¿½ optional markdown bio (max 100KB UTF-8; no HTML or images; max 20 links). Not included in `user_names`; use public query `player_about`.
+  - `onVacation` (boolean, optional) ï¿½ mirrored from `USER` when a **live** vacation stint is active (`user_names` only); cleared when stint ends.
   - `USER` record also stores `aboutSaveDay` / `aboutSaveCount` for rate limiting (10 saves per user per UTC day across human `about` and bot `description` edits)
   - **Display name:** `USER.name` and `USERS.name` are kept in sync when a user changes name (`new_setting` with `attribute: name`). Names must be unique among current human `USERS` and `BOT` display names (trim + case-insensitive check on `new_profile` and `new_setting`). The play UI resolves **current** names by userid via open query `user_names`, which lists only humans with a non-empty `USERS.name` (completed `new_profile`).
   - **Snapshot names:** Fields such as `GAME.players[].name`, challenge `challenger` / `challengees`, feedback `authorName`, and representative-game `userName` store the name at write time and are **not** updated on rename (used for archives and for deriving past names in summarize).
 
-- **Tags** — per-user game tags
+- **Tags** ï¿½ per-user game tags
   - pk: `TAG`
   - sk: `<userid>`
 
-- **Customizations** — per-user, per-game UI settings (board colours, preferred colour, glyph map)
+- **Customizations** ï¿½ per-user, per-game UI settings (board colours, preferred colour, glyph map)
   - pk: `CUSTOMIZATION#<userid>`
   - sk: `<metaGame>`
 
 **Retired (no longer written; purge with `scripts/purge-legacy-palettes.mjs`):**
 
-- **Palettes** — legacy per-user named colour palettes (replaced by Customize)
+- **Palettes** ï¿½ legacy per-user named colour palettes (replaced by Customize)
   - pk: `PALETTES`
   - sk: `<userid>`
 
-- **Playground saves** — per-user saved playground positions (unlimited slots)
+- **Playground saves** ï¿½ per-user saved playground positions (unlimited slots)
   - pk: `PLAYGROUND#<userid>`
   - sk: `<uuid>`
   - fields: `id`, `name`, `metaGame`, `date` (epoch ms), `body` (JSON string; gzip-compressed when large)
 
 **Retired (no longer written; purged from prod Aug 2025):**
 
-- pk: `PLAYGROUND`, sk: `<userid>` — legacy single-slot sandbox
+- pk: `PLAYGROUND`, sk: `<userid>` ï¿½ legacy single-slot sandbox
 
-- **Player relations** — blocking (bidirectional)
+- **Player relations** ï¿½ blocking (bidirectional)
   - pk: `PLAYER#<blockingPlayerId>`, sk: `BLOCKED#<blockedPlayerId>`
   - pk: `PLAYER#<blockedPlayerId>`, sk: `BLOCKEDBY#<blockingPlayerId>`
-  - pk: `PLAYER#<userid>`, sk: `REPRESENTATIVE#<metaGame>#<gameid>` — per-user representative-game index (max 2 per metaGame)
+  - pk: `PLAYER#<userid>`, sk: `REPRESENTATIVE#<metaGame>#<gameid>` ï¿½ per-user representative-game index (max 2 per metaGame)
 
-- **Watched games** — spectator dashboard list (not a participant)
+- **Watched games** ï¿½ spectator dashboard list (not a participant)
   - pk: `WATCHED#<userid>`, sk: `<gameid>`
   - summary fields mirror dashboard `Game` objects plus `addedAt`, `seen`, `lastChat`
 
-- **Game watchers** — reverse index for fan-out on moves and chat
+- **Game watchers** ï¿½ reverse index for fan-out on moves and chat
   - pk: `GAMEWATCHERS#<gameid>`, sk: `<userid>`
 
-- **Highlighted games** — player page pins (participant only)
+- **Highlighted games** ï¿½ player page pins (participant only)
   - pk: `HIGHLIGHT#<userid>`, sk: `<metaGame>#<gameid>`
   - summary fields plus `addedAt` for display order
 
-- **Representative games** — community recommendations per metaGame
+- **Representative games** ï¿½ community recommendations per metaGame
   - pk: `REPRESENTATIVE#<metaGame>`, sk: `<userid>#<gameid>`
   - fields: `userId`, `userName`, `addedAt`, game summary fields
 
-- **Recommendation impression events** — logged-in show/click/challenge telemetry for offline tuning (no live reads)
+- **Recommendation impression events** ï¿½ logged-in show/click/challenge telemetry for offline tuning (no live reads)
   - pk: `RECOMMENDS#<userid>`
   - sk: `<epochMs>#<random>`
   - fields: `event`, `batchId`, `surface`, `tier`, `expiresAt` (TTL, ~90 days), plus `metaGame`, `position`, `reasonType`, `gameIds`, `reasons` as applicable
   - no GSI; rate limit 50 events/user/UTC day
 
-- **Game Move layout usage events** — append-only play-page layout telemetry (CLI export only; no live reads)
+- **Game Move layout usage events** ï¿½ append-only play-page layout telemetry (CLI export only; no live reads)
   - pk: `LAYOUTEVT#<userid>` or `LAYOUTEVT#anon#<sessionId>`
   - sk: `<serverTsMs>#<random>`
   - fields: `event`, `sessionId`, `layout`, `resolvedFrom`, `metaGame`, `ts`, `isLoggedIn`, optional `storedLayout`, `viewportWidth`, `userHash` (authed), `from` / `to` on `layout_switch`
   - no GSI; rate limit 100 events/user/UTC day (authed), 25/session/UTC day (anonymous)
-  - dump: `scripts/dump-gamemove-layout-events.mjs`; purge preview rows: `scripts/purge-layout-feedback-events.mjs` (`LAYOUTFB#*` — retired)
+  - dump: `scripts/dump-gamemove-layout-events.mjs`; purge preview rows: `scripts/purge-layout-feedback-events.mjs` (`LAYOUTFB#*` ï¿½ retired)
 
-- **In-app dashboard notifications** — per-user feed shown on `me_dashboard` (distinct from email/push)
+- **In-app dashboard notifications** ï¿½ per-user feed shown on `me_dashboard` (distinct from email/push)
   - pk: `NOTIFICATION#<userid>`
   - sk: `<epochMs>#<random>`
   - fields: `body` (typed JSON object), `expiresAt` (TTL seconds; 180 days on create, tightened to 30 days on first dashboard fetch)
@@ -114,85 +114,85 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - `body.type` values: `gameStart`, `gameEnd`, `ratingChange`, `challengeIssued`, `challengeDeclined`, `challengeRevoked`, `eventInvitation`, `completedGameChat`, `tournamentChat`
   - `eventInvitation` is sent when an organizer saves the invite list on a moderated `ORGEVENT` (`event_update_invites`); not used for automated tournaments. Body includes `eventId`, `eventName`, `organizerId`, `organizerName`. Inspect rows with `scripts/dump-dashboard.mjs` `--include-notifications` (read-only; does not refresh TTL)
 
-- **Announcements** — site news ([subsystem doc](/backend/subsystems/announcements/))
-  - pk: `ANNOUNCEMENT`, sk: `<id>` — canonical row (`title`, `body`, `status`, `publishedAt`, `attachmentKeys`, …)
-  - pk: `ANNOUNCEMENT_PUBLISHED`, sk: `<paddedPublishedAt>#<id>` — published list index (newest first via `Query` + `ScanIndexForward: false`)
-  - pk: `ANNOUNCEMENT`, sk: `REACTION#<emoji>#<userId>` — per-reaction rows (Phase 4)
+- **Announcements** ï¿½ site news ([subsystem doc](/backend/subsystems/announcements/))
+  - pk: `ANNOUNCEMENT`, sk: `<id>` ï¿½ canonical row (`title`, `body`, `status`, `publishedAt`, `attachmentKeys`, ï¿½)
+  - pk: `ANNOUNCEMENT_PUBLISHED`, sk: `<paddedPublishedAt>#<id>` ï¿½ published list index (newest first via `Query` + `ScanIndexForward: false`)
+  - pk: `ANNOUNCEMENT`, sk: `REACTION#<emoji>#<userId>` ï¿½ per-reaction rows (Phase 4)
   - Attachments: S3 bucket `ap-announcements-attachments-<stage>`
 
 ## Game lists
 
-- **Current games by player** — per-player active game summaries (stream-maintained; Phase 3 reads from here)
+- **Current games by player** ï¿½ per-player active game summaries (stream-maintained; Phase 3 reads from here)
   - pk: `CURRENTGAMES#<userid>`
   - sk: `<gameid>`
   - summary fields mirror dashboard `Game` objects (`id`, `metaGame`, `players`, `toMove`, `lastMoveTime`, `numMoves`, etc.)
 
-- **Recent completed games by player** — moved to **Retired** below
+- **Recent completed games by player** ï¿½ moved to **Retired** below
 
-- **Completed games by metaGame** — summary rows for the completed-games page
+- **Completed games by metaGame** ï¿½ summary rows for the completed-games page
   - pk: `COMPLETEDGAMES#<metaGame>`
   - sk: `<timestamp>#<gameid>`
 
-- **Completed games by player** — one item per player per game
+- **Completed games by player** ï¿½ one item per player per game
   - pk: `COMPLETEDGAMES#<userid>`
   - sk: `<timestamp>#<gameid>`
 
-- **Completed games (global)** — site-wide summary index for recent-completions queries (stream-maintained; no historical backfill)
+- **Completed games (global)** ï¿½ site-wide summary index for recent-completions queries (stream-maintained; no historical backfill)
   - pk: `COMPLETEDGAMES`
   - sk: `<timestamp>#<gameid>` (`timestamp` = `lastMoveTime` epoch ms)
   - same summary fields as `COMPLETEDGAMES#<metaGame>` rows
   - `recent_completed_games` queries with `sk >= <sinceMs>` (lexicographic order matches time order for 13-digit epoch-ms prefixes)
 
-**Retired (no longer written; purged from prod — zero rows remain):**
+**Retired (no longer written; purged from prod ï¿½ zero rows remain):**
 
-- pk: `RECENTCOMPLETED#<userid>`, sk: `<gameid>` — legacy completed-dashboard index; post-game chat uses `completedGameChat` notifications
-- pk: `COMPLETEDGAMES#<metaGame>#<userid>`, sk: `<timestamp>#<gameid>` — legacy per-player-per-game index
+- pk: `RECENTCOMPLETED#<userid>`, sk: `<gameid>` ï¿½ legacy completed-dashboard index; post-game chat uses `completedGameChat` notifications
+- pk: `COMPLETEDGAMES#<metaGame>#<userid>`, sk: `<timestamp>#<gameid>` ï¿½ legacy per-player-per-game index
 
 ## Exploration
 
-- **Game exploration** — move tree for a game position entered by a user
+- **Game exploration** ï¿½ move tree for a game position entered by a user
   - pk: `GAMEEXPLORATION#<gameid>`
   - sk: `<userid>#<movenumber>`
 
 ## Ratings and meta games
 
-- **Ratings (deprecated)** — legacy realtime Elo leaderboard rows; no longer written after batch Glicko migration. Existing `RATINGS#<metaGame>` items may remain in DynamoDB.
+- **Ratings (deprecated)** ï¿½ legacy realtime Elo leaderboard rows; no longer written after batch Glicko migration. Existing `RATINGS#<metaGame>` items may remain in DynamoDB.
   - pk: `RATINGS#<metaGame>`
   - sk: `<userid>`
 
-- **Meta game counts** — aggregate stats (retired monolith; admin recount writes sharded items)
-  - pk: `METAGAMES` / sk: `COUNTS` — **retired** (Phase 5); delete after verification
+- **Meta game counts** ï¿½ aggregate stats (retired monolith; admin recount writes sharded items)
+  - pk: `METAGAMES` / sk: `COUNTS` ï¿½ **retired** (Phase 5); delete after verification
 
-- **Meta game counts (sharded, authoritative)** — per-metaGame live counters; stream + inline app writes; `meta_games` reads and admin `update_meta_game_counts` write here
+- **Meta game counts (sharded, authoritative)** ï¿½ per-metaGame live counters; stream + inline app writes; `meta_games` reads and admin `update_meta_game_counts` write here
   - pk: `METAGAMES#<metaGame>`
   - sk: `COUNTS`
   - fields: `currentgames`, `completedgames`, `standingchallenges`, `stars`, `ratingsCount` (distinct rated players per meta game; sourced from `_summary-ratings.json` `playerCountsByUid` on recount and served by `meta_games`)
 
-- **Per-user game overlay (Phase 5)** — per-user `seen` / `lastChat` on dashboard games; sole overlay store
+- **Per-user game overlay (Phase 5)** ï¿½ per-user `seen` / `lastChat` on dashboard games; sole overlay store
   - pk: `USERGAME#<userid>`
   - sk: `<gameid>`
 
 ## Challenges
 
-- **Standing challenges** — open challenges listed by game
+- **Standing challenges** ï¿½ open challenges listed by game
   - pk: `STANDINGCHALLENGE#<metaGame>`
   - sk: `<challengeid>`
 
-- **Direct challenges** — challenge details (`openSlots` = seats open to anyone; named invitees on `challengees`; optional `teachingMode` with `rated: false`)
+- **Direct challenges** ï¿½ challenge details (`openSlots` = seats open to anyone; named invitees on `challengees`; optional `teachingMode` with `rated: false`)
   - pk: `CHALLENGE`
   - sk: `<challengeid>`
 
-- **Fillable direct listing** — same `sk` as the direct challenge; `fillableDirect: true` when `openSlots > 0` (canonical row remains `CHALLENGE`)
+- **Fillable direct listing** ï¿½ same `sk` as the direct challenge; `fillableDirect: true` when `openSlots > 0` (canonical row remains `CHALLENGE`)
   - pk: `STANDINGCHALLENGE#<metaGame>`
   - sk: `<challengeid>`
 
-- **SDG-style standing requests** — standing requests for open challenges with a limit
+- **SDG-style standing requests** ï¿½ standing requests for open challenges with a limit
   - pk: `REALSTANDING`
   - sk: `<userid>`
 
 ## Bots
 
-- **Bot identity** — Cognito client linkage and owner
+- **Bot identity** ï¿½ Cognito client linkage and owner
   - pk: `BOT`
   - sk: `<clientId>`
 
@@ -202,20 +202,20 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 
 ## Automated tournaments
 
-- **Tournaments** — signup or in-progress tournaments
+- **Tournaments** ï¿½ signup or in-progress tournaments
   - pk: `TOURNAMENT`
   - sk: `<tournamentid>`
 
-- **Tournament player** — player reference
+- **Tournament player** ï¿½ player reference
   - pk: `TOURNAMENTPLAYER`
   - sk: `<tournamentid>#<division>#<playerid>`
 
-- **Tournament by user** — sparse index of in-progress tournaments a user is assigned to (dashboard / `me_dashboard`)
+- **Tournament by user** ï¿½ sparse index of in-progress tournaments a user is assigned to (dashboard / `me_dashboard`)
   - pk: `TOURNAMENTBYUSER#<userid>`
   - sk: `<tournamentid>`
   - optional: `division`, `metaGame`
 
-- **Tournament game** — game reference
+- **Tournament game** ï¿½ game reference
   - pk: `TOURNAMENTGAME`
   - sk: `<tournamentid>#<division>#<gameid>`
 
@@ -227,26 +227,26 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `TOURNAMENTCOMMENTS`
   - sk: `<tournamentid>`
 
-- **Tournament counter** — per metaGame + variants combination (`variants` is a sorted, pipe-delimited variant list)
+- **Tournament counter** ï¿½ per metaGame + variants combination (`variants` is a sorted, pipe-delimited variant list)
   - pk: `TOURNAMENTSCOUNTER`
-  - sk: `<metaGame>#<variants>` (single-leg) or `…#2` (two-leg `matchLegs`)
+  - sk: `<metaGame>#<variants>` (single-leg) or `ï¿½#2` (two-leg `matchLegs`)
   - fields: `counter`, `over`
 
 ## Ladders (continuous delta)
 
-- **Ladder** — one canonical board per meta + variants series
+- **Ladder** ï¿½ one canonical board per meta + variants series
   - pk: `LADDER`
   - sk: `<ladderId>`
-  - `metaGame`, `variants`, `status` (`forming` | `active` | `suspended`), `activeMemberCount`, `activeMemberIds`, `tuning`, …
+  - `metaGame`, `variants`, `status` (`forming` | `active` | `suspended`), `activeMemberCount`, `activeMemberIds`, `tuning`, ï¿½
 
-- **Ladder series registry** — maps tournament-style series key ? `ladderId`
+- **Ladder series registry** ï¿½ maps tournament-style series key ? `ladderId`
   - pk: `LADDERSERIES`
   - sk: `<metaGame>#<variants>` (same as single-leg `TOURNAMENTSCOUNTER` sk via `tournamentSeriesCounterSk`)
 
 - **Ladder member**
   - pk: `LADDERPLAYER`
   - sk: `<ladderId>#<userid>`
-  - `points`, `membershipStatus` (`active` | `left`), join seed snapshot, `activeLadderGameCount`, `lastDecayAt` (ms; last daily decay application), …
+  - `points`, `membershipStatus` (`active` | `left`), join seed snapshot, `activeLadderGameCount`, `lastDecayAt` (ms; last daily decay application), ï¿½
 
 - **Per-user ladder index** (dashboard)
   - pk: `LADDERBYUSER#<userid>`
@@ -274,7 +274,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 
 ## Organized events
 
-- **Events** — organizer-run event details
+- **Events** ï¿½ organizer-run event details
   - pk: `ORGEVENT`
   - sk: `<eventid>`
 
@@ -288,43 +288,43 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 
 ## WebSockets
 
-- **WebSocket connections** — active API Gateway connection registry
+- **WebSocket connections** ï¿½ active API Gateway connection registry
   - pk: `wsConnections`
   - sk: `<connectionId>`
-  - `userId`, `invisible`, `endpoint` — connection owner and API GW endpoint URL
-  - `watchingGames` — string set of `metaGame#gameId` keys the client wants game events for
-  - `wantsPresence` — boolean, default true; receive presence snapshot/delta messages
-  - `watchVersion` — `1` when the client uses targeted game watch (enables strict filtering)
-  - `ttl` — Unix epoch expiry (24h; refreshed on subscribe and `watchGames`)
+  - `userId`, `invisible`, `endpoint` ï¿½ connection owner and API GW endpoint URL
+  - `watchingGames` ï¿½ string set of `metaGame#gameId` keys the client wants game events for
+  - `wantsPresence` ï¿½ boolean, default true; receive presence snapshot/delta messages
+  - `watchVersion` ï¿½ `1` when the client uses targeted game watch (enables strict filtering)
+  - `ttl` ï¿½ Unix epoch expiry (24h; refreshed on subscribe and `watchGames`)
 
-- **WebSocket presence sequence** — monotonic counter for presence deltas
+- **WebSocket presence sequence** ï¿½ monotonic counter for presence deltas
   - pk: `wsMeta`
   - sk: `presenceSeq`
-  - `seq` — incremented on each debounced presence delta broadcast
+  - `seq` ï¿½ incremented on each debounced presence delta broadcast
 
 ## Feedback (separate table)
 
 In-app bugs, feature ideas, and game wishlist use table `abstract-play-feedback-{stage}` (not the main game table).
 
-- **Post meta** — full post record
+- **Post meta** ï¿½ full post record
   - pk: `POST#{id}`
   - sk: `META`
-  - GSI `ByKind`: `gsi1pk` = `KIND#{kind}`, `gsi1sk` = `VOTES#…` / `RECENT#…` / `UPDATED#…` on companion `LIST#*` rows
+  - GSI `ByKind`: `gsi1pk` = `KIND#{kind}`, `gsi1sk` = `VOTES#ï¿½` / `RECENT#ï¿½` / `UPDATED#ï¿½` on companion `LIST#*` rows
   - GSI `ByStatus`: `gsi2pk` = `STATUS#{kind}#{status}`, `gsi2sk` = createdAt (admin triage, Phase 3+)
 
-- **List index rows** — sparse GSI projections for board sort orders
+- **List index rows** ï¿½ sparse GSI projections for board sort orders
   - pk: `POST#{id}`
   - sk: `LIST#VOTES` \| `LIST#RECENT` \| `LIST#UPDATED`
 
-- **Comments** — pk: `POST#{id}`, sk: `COMMENT#{ts}#{commentId}`
+- **Comments** ï¿½ pk: `POST#{id}`, sk: `COMMENT#{ts}#{commentId}`
 
-- **Votes** — pk: `POST#{id}`, sk: `VOTE#{userId}`
+- **Votes** ï¿½ pk: `POST#{id}`, sk: `VOTE#{userId}`
 
-- **Subscriptions** — pk: `POST#{id}`, sk: `SUB#{userId}`
+- **Subscriptions** ï¿½ pk: `POST#{id}`, sk: `SUB#{userId}`
 
-- **User index** — pk: `USER#{userId}`, sk: `POST#{kind}#{createdAt}#{id}`
+- **User index** ï¿½ pk: `USER#{userId}`, sk: `POST#{kind}#{createdAt}#{id}`
 
-- **Tag vocabulary** — pk: `CONFIG#FEEDBACK`, sk: `TAGVOCAB` — ordered `{ id, kinds }[]` for bug/feature topic tags
+- **Tag vocabulary** ï¿½ pk: `CONFIG#FEEDBACK`, sk: `TAGVOCAB` ï¿½ ordered `{ id, kinds }[]` for bug/feature topic tags
 
 Post `META` and `LIST#*` rows may include `tags` (string slugs). `META` may include `suggestedTags` (submitter suggestions; admin-only on get).
 
@@ -339,4 +339,4 @@ Attachments: S3 bucket `ap-feedback-attachments-{stage}`, keys under `staging/{u
 - [Bots](/backend/subsystems/bots/)
 - [WebSockets](/backend/subsystems/websockets/)
 - [Player blocking](/backend/subsystems/player-blocking/)
-- [Recommendations](/backend/subsystems/recommendations/) — impression event storage
+- [Recommendations](/backend/subsystems/recommendations/) ï¿½ impression event storage

@@ -11,7 +11,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Added
 
-- **Continuous Delta Ladder (in progress):** Phase 1–3 backend — kernel, matchmaking (`LADDERPOOL`, ladder `CHALLENGE`, `LADDERCOMMENTS`, eligibility guards, `watchLadders`), `ladderPointsChange` in-app notifications on decisive game end (`ladderPointsGain` / `ladderPointsLoss` prefs), daily crons `ladder-decay` and `ladder-reconcile-counts` (ops S3 `ladders/reconcile/*`); `records` `event/{ladderId}.json`; ops `npx tsx scripts/reconcile-ladder-active-counts.ts`. Front UI + bell copy not shipped yet (edit this bullet in place until release).
+- **Continuous Delta Ladder:** Player-created correspondence ladders (kernel, pool, challenges, hub chat, `watchLadders`); `ladderJoin` / `ladderLeave` / `ladderPointsChange` / `ladderChat` / `ladderDecay` in-app notifications; daily crons `ladder-decay` and `ladder-reconcile-counts` (ops S3 `ladders/reconcile/*`); `records` `event/{ladderId}.json`; ops `scripts/reconcile-ladder-active-counts.ts`, `backfill-ladder-by-user`, `replay-ladder-member`; docs [subsystems/ladders](/backend/subsystems/ladders/). Enable prod UI by removing `VITE_LADDER_UI_DISABLED` on the front deploy.
 
 ### Changed
 

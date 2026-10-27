@@ -1045,6 +1045,46 @@ export async function hasActiveLadderChatNotification(
   return false;
 }
 
+export async function enqueueLadderJoinNotification(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userid: string,
+  params: {
+    ladderId: string;
+    metaGame: string;
+    variants: string[];
+    displayName: string;
+  },
+): Promise<void> {
+  await createNotification(client, tableName, userid, {
+    type: 'ladderJoin',
+    ladderId: params.ladderId,
+    metaGame: params.metaGame,
+    variants: params.variants,
+    displayName: params.displayName,
+  });
+}
+
+export async function enqueueLadderLeaveNotification(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userid: string,
+  params: {
+    ladderId: string;
+    metaGame: string;
+    variants: string[];
+    displayName: string;
+  },
+): Promise<void> {
+  await createNotification(client, tableName, userid, {
+    type: 'ladderLeave',
+    ladderId: params.ladderId,
+    metaGame: params.metaGame,
+    variants: params.variants,
+    displayName: params.displayName,
+  });
+}
+
 export async function enqueueLadderPointsChangeNotifications(
   client: DynamoDBDocumentClient,
   tableName: string,
