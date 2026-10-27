@@ -18,11 +18,11 @@ describe("git merge=ours setup", () => {
     for (const file of [
       "ci-deps.prod.json",
       "ci-deps.dev.json",
-      "package.json",
       "package-lock.json",
       "crons/package.json",
     ]) {
       assert.match(attrs, new RegExp(`^${file.replace(".", "\\.")} merge=ours`, "m"));
     }
+    assert.doesNotMatch(attrs, /^package\.json merge=ours/m);
   });
 });

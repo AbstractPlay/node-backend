@@ -83,7 +83,7 @@ function main() {
     console.log("setup-git-merge-ours: merge.ours driver already configured for this clone.");
   } else {
     console.log(
-      "Cross-branch merges now keep this branch's package.json, package-lock.json, ci-deps.*.json, and crons/package.json.",
+      "Cross-branch merges now keep this branch's package-lock.json, ci-deps.*.json, and crons/package.json (package.json merges normally).",
     );
     console.log(
       "GitHub PR merges do not run local merge drivers — merge main/develop locally or keep the base branch copy of those files.",
