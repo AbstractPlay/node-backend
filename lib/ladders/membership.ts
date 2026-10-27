@@ -13,6 +13,11 @@ import { getLadderPlayer, getLadderRecord } from './ladderStore.js';
 import { resolveLadderJoinSeed } from './startingPoints.js';
 import type { LadderPlayerRecord, LadderRecord } from './types.js';
 import { revokePendingLadderChallengesForUser } from './challengeRevoke.js';
+import { formatLadderDisplayName } from './displayName.js';
+import {
+  enqueueLadderJoinNotification,
+  enqueueLadderLeaveNotification,
+} from '../notifications.js';
 
 const TABLE = () => process.env.ABSTRACT_PLAY_TABLE!;
 
@@ -63,6 +68,7 @@ export async function joinLadderMembership(
     const nextCount = wasInList ? ladder.activeMemberCount : ladder.activeMemberCount + 1;
     const nextIds = wasInList ? ladder.activeMemberIds : uniqueMemberIds(ladder.activeMemberIds ?? [], userid, true);
     await applyLadderMemberCountUpdate(ladder, nextCount, nextIds);
+    await notifyLadderJoin(userid, ladder);
     return { ok: true };
   }
 
@@ -109,7 +115,34 @@ export async function joinLadderMembership(
   const nextCount = ladder.activeMemberCount + 1;
   const nextIds = uniqueMemberIds(ladder.activeMemberIds ?? [], userid, true);
   await applyLadderMemberCountUpdate(ladder, nextCount, nextIds);
+  await notifyLadderJoin(userid, ladder);
   return { ok: true };
+}
+
+async function notifyLadderJoin(userid: string, ladder: LadderRecord): Promise<void> {
+  try {
+    await enqueueLadderJoinNotification(ddbDocClient, TABLE(), userid, {
+      ladderId: ladder.id,
+      metaGame: ladder.metaGame,
+      variants: ladder.variants,
+      displayName: formatLadderDisplayName(ladder.metaGame, ladder.variants),
+    });
+  } catch (err) {
+    console.warn(`joinLadderMembership: ladder join notification failed for ${userid} on ${ladder.id}`, err);
+  }
+}
+
+async function notifyLadderLeave(userid: string, ladder: LadderRecord): Promise<void> {
+  try {
+    await enqueueLadderLeaveNotification(ddbDocClient, TABLE(), userid, {
+      ladderId: ladder.id,
+      metaGame: ladder.metaGame,
+      variants: ladder.variants,
+      displayName: formatLadderDisplayName(ladder.metaGame, ladder.variants),
+    });
+  } catch (err) {
+    console.warn(`leaveLadderMembership: ladder leave notification failed for ${userid} on ${ladder.id}`, err);
+  }
 }
 
 async function applyLadderMemberCountUpdate(
@@ -178,5 +211,6 @@ export async function leaveLadderMembership(
   const nextCount = Math.max(0, ladder.activeMemberCount - 1);
   const nextIds = uniqueMemberIds(ladder.activeMemberIds ?? [], userid, false);
   await applyLadderMemberCountUpdate(ladder, nextCount, nextIds);
+  await notifyLadderLeave(userid, ladder);
   return { ok: true };
 }
