@@ -111,6 +111,9 @@ export async function timeloss(
     throw new Error(`Unable to get game ${metaGame}, ${gameid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
   if (!data.Item) {
+    if (check) {
+      throw 'Game is already over!';
+    }
     throw new Error(`No game ${metaGame}, ${gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
 
