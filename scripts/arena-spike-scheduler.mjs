@@ -11,16 +11,13 @@
  *   ARENA_FLAG_WORKER_ARN, ARENA_SCHEDULER_ROLE_ARN — else read from stack outputs
  */
 import {
-  CreateScheduleGroupCommand,
-  SchedulerClient,
-} from '@aws-sdk/client-scheduler';
-import {
   CloudFormationClient,
   DescribeStacksCommand,
 } from '@aws-sdk/client-cloudformation';
+import { SchedulerClient } from '@aws-sdk/client-scheduler';
 import { parseArgs } from 'node:util';
 import {
-  arenaSchedulerGroupName,
+  ensureArenaSchedulerGroup,
   upsertArenaFlagSchedule,
 } from '../lib/arena/flagSchedule.js';
 
@@ -55,29 +52,14 @@ async function stackOutput(name) {
   return hit.OutputValue;
 }
 
-async function ensureScheduleGroup(client, groupName) {
-  try {
-    await client.send(new CreateScheduleGroupCommand({ Name: groupName }));
-    console.log(`Created schedule group ${groupName}`);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('already exists') || msg.includes('ConflictException')) {
-      console.log(`Schedule group ${groupName} already exists`);
-      return;
-    }
-    throw err;
-  }
-}
-
 async function main() {
   const workerArn = process.env.ARENA_FLAG_WORKER_ARN
     ?? await stackOutput('ArenaFlagWorkerArn');
   const schedulerRoleArn = process.env.ARENA_SCHEDULER_ROLE_ARN
     ?? await stackOutput('ArenaSchedulerRoleArn');
 
-  const groupName = arenaSchedulerGroupName(stage);
   const client = new SchedulerClient({});
-  await ensureScheduleGroup(client, groupName);
+  await ensureArenaSchedulerGroup(stage, client);
 
   const nominalFlagAtMs = Date.now() + delaySec * 1000;
   const payload = { metaGame, gameId, clockGeneration };
@@ -94,7 +76,7 @@ async function main() {
   console.log(JSON.stringify({
     ok: true,
     stage,
-    groupName,
+    groupName: `abstractplay-arena-${stage}`,
     scheduleName: `arena-flag-${gameId}`,
     nominalFlagAtMs,
     scheduleAtMs,
