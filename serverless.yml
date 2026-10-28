@@ -192,14 +192,6 @@ provider:
           - ${self:provider.stage}
           - '/botQuery'
     ARENA_SCHEDULER_GROUP: abstractplay-arena-${self:provider.stage}
-    ARENA_SCHEDULER_ROLE_ARN:
-      Fn::GetAtt:
-        - ArenaSchedulerExecutionRole
-        - Arn
-    ARENA_FLAG_WORKER_ARN:
-      Fn::GetAtt:
-        - ArenaFlagWorkerLambdaFunction
-        - Arn
   iam:
     role:
       statements:
@@ -678,9 +670,7 @@ resources:
                 - Effect: Allow
                   Action: lambda:InvokeFunction
                   Resource:
-                    Fn::GetAtt:
-                      - ArenaFlagWorkerLambdaFunction
-                      - Arn
+                    Fn::Sub: arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:service}-${self:provider.stage}-arenaFlagWorker
         Tags: ${self:custom.apCostAllocationCfnTags}
 
     ArenaFlagWorkerSchedulePermission:
