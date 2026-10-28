@@ -1276,13 +1276,30 @@ export async function checkForTimeloss(userid: string, pars: { id: string, metaG
     };
   }
   catch (error) {
-    // eslint-disable-next-line no-constant-condition
-    if (error === "Nobody's time is up!" || error === "Opponent's time isn't up!" || error === 'Game is already over!') {
+    if (
+      error === "Nobody's time is up!"
+      || error === "Opponent's time isn't up!"
+      || error === 'Game is already over!'
+    ) {
       return {
         statusCode: 200,
         body: "not_a_timeloss",
         headers
       };
+    }
+    if (error instanceof Error) {
+      const msg = error.message;
+      if (
+        (msg.includes('No game') && msg.includes('found'))
+        || msg.includes('already over')
+        || msg.includes('already ended')
+      ) {
+        return {
+          statusCode: 200,
+          body: "not_a_timeloss",
+          headers
+        };
+      }
     }
     logGetItemError(error);
     return formatReturnError('Unable to process check for timeloss');
