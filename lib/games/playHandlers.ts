@@ -57,7 +57,7 @@ import {
   isUserChatComment,
   type GameComment,
 } from '../gameComments.js';
-import { checkInGameCommentAuth } from '../commentAuth.js';
+import { checkArenaTableCommentAuth } from '../arena/checkArenaTableCommentAuth.js';
 import {
   countGameWatchers,
   updateLastChatForWatchers,
@@ -1576,7 +1576,7 @@ export async function submitComment(userid: string, pars: { id: string; metaGame
   }
 
   try {
-    const auth = await checkInGameCommentAuth(
+    const auth = await checkArenaTableCommentAuth(
       ddbDocClient,
       process.env.ABSTRACT_PLAY_TABLE!,
       userid,

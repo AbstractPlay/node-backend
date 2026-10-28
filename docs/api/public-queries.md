@@ -90,6 +90,15 @@ List returns `{ items, nextCursor? }` where each item includes `id`, `title`, `b
 
 See [Announcements](/backend/subsystems/announcements/).
 
+## Realtime arena
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `list_arena_time_controls` | Fischer time control catalog for arena | — |
+| `list_arena_tables` | Waiting, seated, and in-progress lobby rows (newest activity first) | optional `metaGame`, optional `limit` (default 50) |
+
+See [Auth queries — Realtime arena](/backend/api/auth-queries/) for table create/join/ready and `submit_arena_move`.
+
 ## Maintenance
 
 | Query | Purpose | Key `pars` |
