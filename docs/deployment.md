@@ -34,11 +34,11 @@ After merging `develop` into `main` (or another branch that changes dependency f
 
 `npm run sync-deps` runs `ap-install-deps` at the repo root, copies AP pins into `crons/package.json` from the root manifest, then prunes any stale `crons/node_modules/@abstractplay` tree. Deploy/Test workflows run `scripts/sync-crons-ap-deps.mjs` **before** `npm ci` so a stale `crons/package.json` (for example after a cross-branch merge with `merge=ours`) cannot break install. The gameslib relay auto-commit on `dep_update_dev` / `dep_update_prod` also stages `crons/package.json` with the root manifests. `postinstall` re-runs sync after install; `npm run lint` runs `check-crons-ap-pins` so committed pins cannot drift from root. Locally after a merge, prefer `npm run ci:install` (or `ci:install:prod` on `main`) instead of bare `npm ci` if install fails on workspace pin mismatch.
 
-`.gitattributes` marks `ci-deps.prod.json`, `ci-deps.dev.json`, `package.json`, `package-lock.json`, and `crons/package.json` with `merge=ours` so the branch you merge **into** keeps its pins until you run `sync-deps`. That only works when Gitï¿½s **`merge.ours` driver** is registered in your clone ï¿½ run **`npm run setup-git`** once after clone (or before your first develop?`main` merge). Do not hand-pick AP version lines from the other branch.
+`.gitattributes` marks `ci-deps.prod.json`, `ci-deps.dev.json`, `package-lock.json`, and `crons/package.json` with `merge=ours` so the branch you merge **into** keeps its pins until you run `sync-deps`. Root **`package.json`** merges normally (npm `scripts` stay in sync); after **develop?main**, run **`npm run sync-deps:prod`** on `main` if `@abstractplay/*` versions drifted. Register Git's **`merge.ours` driver** with **`npm run setup-git`** once per clone. Do not hand-pick AP version lines from the other branch.
 
-**GitHub pull-request merges** do not run custom merge drivers. For a conflict-free prod merge, check out `main`, run `npm run setup-git`, merge `develop` locally, push `main`; or on the PR conflict UI, keep **`main`**ï¿½s copies of every file listed above (and the same for **`develop`** when back-merging `main`).
+**GitHub pull-request merges** do not run custom merge drivers. For a conflict-free prod merge, check out `main`, run `npm run setup-git`, merge `develop` locally, push `main`; or on the PR conflict UI, keep **`main`**'s copies of the pin manifests listed above (and the same for **`develop`** when back-merging `main`).
 
-Prod deploys may fail at build when code on `main` uses a gameslib API not yet in the prod pin ï¿½ wait for `dep_update_prod` or bump `ci-deps.prod.json` when releasing.
+Prod deploys may fail at build when code on `main` uses a gameslib API not yet in the prod pin — wait for `dep_update_prod` or bump `ci-deps.prod.json` when releasing.
 
 ## Lambda module-load checks (CI)
 

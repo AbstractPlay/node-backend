@@ -17,6 +17,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 ### Changed
 
 - **Ops:** Durable CLI tooling moved from `bin/` to `scripts/`; `bin/` is gitignored local scratch (calibration JSON, experiments).
+- **Ops:** `.gitattributes` no longer uses `merge=ours` on root `package.json` (avoids stale npm `scripts` after develop→main); pin manifests unchanged.
 - **Ops:** Game projector SQS DLQ and DLQ CloudWatch alarm deploy on **prod** only (dev stack no longer creates `abstractplay-game-projector-dlq-dev`).
 - **Ladders:** `displayName` uses gameslib `expandVariantLabels` (same variant copy as the front ladder hub), e.g. `Exxit ladder (…)` instead of `(no variants)` or raw UIDs.
 
