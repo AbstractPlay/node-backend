@@ -55,6 +55,7 @@
     "arena-dev-create-game": "tsx scripts/arena-dev-create-game.mjs",
     "arena-dev-smoke": "tsx scripts/arena-dev-smoke.ts",
     "arena-dev-table-smoke": "tsx scripts/arena-dev-table-smoke.ts",
+    "arena-dev-table-gates": "tsx scripts/arena-dev-table-gates.ts",
     "arena-dev-flag-timeloss": "tsx scripts/arena-dev-flag-timeloss.ts",
     "sync-deps": "ap-install-deps --stage dev && node scripts/sync-crons-ap-deps.mjs --stage dev && node scripts/prune-crons-nested-ap-deps.mjs",
     "sync-deps:prod": "ap-install-deps --stage prod && node scripts/sync-crons-ap-deps.mjs --stage prod && node scripts/prune-crons-nested-ap-deps.mjs",
