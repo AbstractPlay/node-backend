@@ -212,20 +212,28 @@ export async function runArenaParticipantTimelossCheckE2e(
   const patched = await patchArenaDevGameForTimeloss(opts);
   const { gameId, metaGame, onClockPlayerKey, expectedWinnerSeat, fireAtMs } = patched;
 
-  const waitMs = Math.max(0, fireAtMs + 500 - Date.now());
+  const waitMs = Math.max(0, patched.fireAtMs + 500 - Date.now());
   if (waitMs > 0) {
     await sleep(waitMs);
   }
 
-  const tl = await authQueryAsPlayer(opts.manifest, onClockPlayerKey, 'timeloss', {
-    id: gameId,
-    metaGame,
-  });
-  if (!tl.ok) {
-    throw new Error(tl.message);
+  const pollDeadline = Date.now() + pollTimeoutMs;
+  let ended = false;
+  while (Date.now() < pollDeadline) {
+    const tl = await authQueryAsPlayer(opts.manifest, onClockPlayerKey, 'timeloss', {
+      id: gameId,
+      metaGame,
+    });
+    if (!tl.ok) {
+      throw new Error(tl.message);
+    }
+    if (tl.data !== 'not_a_timeloss') {
+      ended = true;
+      break;
+    }
+    await sleep(500);
   }
-  const body = tl.data;
-  if (body === 'not_a_timeloss') {
+  if (!ended) {
     throw new Error('timeloss(check) returned not_a_timeloss after clock expiry');
   }
 

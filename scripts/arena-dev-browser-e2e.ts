@@ -2,10 +2,10 @@
 /**
  * Authenticated arena UI E2E on play.dev (Cognito cookies from refresh tokens).
  *
- * End-of-game coverage: table flow still ends via API resign for stability; a dedicated
- * step patches a short arena bank (AWS) and asserts the **play shell** shows game over
- * from client timeloss polling — the path that was missing when only spectator refresh
- * and scheduler E2E ran.
+ * Table flow captures `tableId` + meta from the create-table URL, polls `get_game` after
+ * launch into `liveGame`, then ends that game via API resign before the timeloss patch game.
+ * Play shell waits for GameMove chrome (not whole-page `innerText` / Resign-only — Resign is
+ * mover-turn-only in the strip dock).
  *
  *   npx playwright install chromium
  *   AWS_PROFILE=AbstractPlayDev npm run arena-dev-browser-e2e
@@ -150,8 +150,120 @@ async function ensurePlayersFreeForArena(
   }
 }
 
+function tableRouteFromUrl(url: string): { metaGame?: string; tableId?: string } {
+  const m = url.match(/\/arena\/table\/([^/]+)\/([^/?#]+)/);
+  if (!m) {
+    return {};
+  }
+  return { metaGame: m[1], tableId: m[2] };
+}
+
 function tableIdFromUrl(url: string): string | undefined {
-  return url.match(/\/arena\/table\/[^/]+\/([^/?#]+)/)?.[1];
+  return tableRouteFromUrl(url).tableId;
+}
+
+type LiveArenaGame = {
+  gameId: string;
+  metaGame: string;
+};
+
+/** After launch, arena game id equals tableId; metaGame comes from the table row / URL. */
+async function pollLiveArenaGame(
+  manifest: Awaited<ReturnType<typeof loadDevTestPlayersManifest>>,
+  playerKey: string,
+  tableId: string,
+  metaGameHint: string,
+  timeoutMs = 60_000,
+): Promise<LiveArenaGame> {
+  const deadline = Date.now() + timeoutMs;
+  let metaGame = metaGameHint;
+  while (Date.now() < deadline) {
+    const tbl = await authQueryAsPlayer(manifest, playerKey, 'get_arena_table', { tableId });
+    if (tbl.ok) {
+      const row = tbl.data as { metaGame?: string; state?: string };
+      if (row.metaGame) {
+        metaGame = row.metaGame;
+      }
+    }
+    const g = await authQueryAsPlayer(manifest, playerKey, 'get_game', {
+      id: tableId,
+      metaGame,
+      cbit: 0,
+    });
+    if (g.ok) {
+      const game = (g.data as {
+        game?: {
+          id?: string;
+          metaGame?: string;
+          playMode?: string;
+          gameEnded?: number;
+          toMove?: string | boolean[];
+        };
+      }).game;
+      if (
+        game?.playMode === 'arena'
+        && game.id
+        && !game.gameEnded
+        && game.toMove !== ''
+        && game.toMove !== undefined
+      ) {
+        return { gameId: game.id, metaGame: game.metaGame ?? metaGame };
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`live arena game not ready (table ${tableId}, meta ${metaGame})`);
+}
+
+async function waitForPlayShellReady(page: Page, live: LiveArenaGame) {
+  const playPath = `/arena/play/${live.metaGame}/${live.gameId}`;
+  if (!page.url().includes(playPath)) {
+    await page.goto(`${ORIGIN}${playPath}`, { waitUntil: 'domcontentloaded' });
+  }
+  await page.locator('.game-move-shell').waitFor({ state: 'visible', timeout: 45_000 });
+  await page.locator('.page-loading').waitFor({ state: 'detached', timeout: 45_000 });
+  // Resign is only rendered on the mover's turn; any live shell chrome is enough here.
+  await page.waitForFunction(
+    () => {
+      const shell = document.querySelector('.game-move-shell');
+      if (!shell || document.querySelector('.page-loading')) {
+        return false;
+      }
+      const text = shell.textContent ?? '';
+      if (/resign/i.test(text)) {
+        return true;
+      }
+      return Boolean(
+        shell.querySelector('.game-move-dock-entry__turn, .playerName, .toMoveImage'),
+      );
+    },
+    undefined,
+    { timeout: 45_000 },
+  );
+}
+
+async function assertArenaGameEnded(
+  manifest: Awaited<ReturnType<typeof loadDevTestPlayersManifest>>,
+  playerKey: string,
+  live: LiveArenaGame,
+) {
+  const active = await authQueryAsPlayer(manifest, playerKey, 'get_game', {
+    id: live.gameId,
+    metaGame: live.metaGame,
+    cbit: 0,
+  });
+  if (active.ok) {
+    const game = (active.data as { game?: { gameEnded?: number; toMove?: string } }).game;
+    if (game?.gameEnded !== undefined || game?.toMove === '') {
+      return;
+    }
+  }
+  const done = await authQueryAsPlayer(manifest, playerKey, 'get_game', {
+    id: live.gameId,
+    metaGame: live.metaGame,
+    cbit: 1,
+  });
+  assert(done.ok, !done.ok ? done.message : 'no completed game after resign');
 }
 
 async function waitForQuickMatchTableId(
@@ -186,6 +298,31 @@ async function postLobbyComment(page: Page, text: string) {
   await page.getByRole('button', { name: 'Comment', exact: true }).click();
 }
 
+/** Landing requires an explicit game pick before create / quick match (front gameChosen gate). */
+async function prepareArenaLandingActions(page: Page, metaGame: string) {
+  const quickMatch = page.getByRole('button', { name: 'Quick match' });
+  await quickMatch.waitFor({ state: 'visible', timeout: 20_000 });
+  if (await quickMatch.isEnabled()) {
+    return;
+  }
+  await page.locator('#arena-meta-picker').click();
+  await page.locator('#gamePickerSearch').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.locator('#gamePickerSearch').fill(metaGame);
+  await page.waitForTimeout(400);
+  const browsePick = page.locator('.game-picker-browse-list button').first();
+  await browsePick.waitFor({ state: 'visible', timeout: 15_000 });
+  await browsePick.click();
+  await page.waitForFunction(
+    () => {
+      const buttons = Array.from(document.querySelectorAll('button'));
+      const qm = buttons.find((b) => b.textContent?.includes('Quick match'));
+      return qm instanceof HTMLButtonElement && !qm.disabled;
+    },
+    undefined,
+    { timeout: 25_000 },
+  );
+}
+
 async function main() {
   const manifest = await loadDevTestPlayersManifest(resolveDevTestPlayersPath());
   await ensurePlayersFreeForArena(manifest);
@@ -207,6 +344,8 @@ async function main() {
   }
 
   let tableId: string | undefined;
+  let tableMetaGame = META;
+  let liveGame: LiveArenaGame | undefined;
   const ctx1 = await browser.newContext();
   const page = await ctx1.newPage();
 
@@ -214,7 +353,7 @@ async function main() {
     await injectSession(page, P1);
     await assertLoggedIn(page);
     await page.getByRole('heading', { name: 'Arena' }).waitFor();
-    await page.getByRole('button', { name: 'Create open table' }).waitFor({ state: 'visible' });
+    await prepareArenaLandingActions(page, META);
   });
 
   await runStep('UI quick match (t1 queue + t2 queue → table)', async () => {
@@ -227,16 +366,15 @@ async function main() {
       await injectSession(page2, P2);
       await assertLoggedIn(page2);
       await page2.goto(`${ORIGIN}/arena`, { waitUntil: 'networkidle' });
+      await prepareArenaLandingActions(page, META);
+      await prepareArenaLandingActions(page2, META);
       const qm = page.getByRole('button', { name: 'Quick match' });
       const qm2 = page2.getByRole('button', { name: 'Quick match' });
       await qm.click();
       await page.waitForTimeout(800);
       await qm2.click();
       qTable = await waitForQuickMatchTableId(manifest, page2);
-      await page.goto(`${ORIGIN}/arena/table/${META}/${qTable}`, { waitUntil: 'networkidle' });
-      await page.getByText(/Seat/i).first().waitFor({ timeout: 15_000 });
-      await page2.goto(`${ORIGIN}/arena/table/${META}/${qTable}`, { waitUntil: 'networkidle' });
-      await page2.getByText(/Seat/i).first().waitFor({ timeout: 15_000 });
+      assert(qTable, 'quick match tableId');
     } finally {
       if (qTable) {
         await releaseTableForPlayers(manifest, qTable);
@@ -249,6 +387,7 @@ async function main() {
   await runStep('UI create open table → lobby', async () => {
     await ensurePlayersFreeForArena(manifest);
     await page.goto(`${ORIGIN}/arena`, { waitUntil: 'networkidle' });
+    await prepareArenaLandingActions(page, META);
     await page.getByRole('button', { name: 'Create open table' }).click();
     try {
       await page.waitForURL(/\/arena\/table\//, { timeout: 45_000 });
@@ -256,10 +395,13 @@ async function main() {
       const alert = await page.locator('[role="alert"]').innerText().catch(() => '');
       throw new Error(alert || 'create table navigation failed');
     }
-    const m = page.url().match(/\/arena\/table\/[^/]+\/([^/?#]+)/);
-    assert(m?.[1], 'tableId from URL');
-    tableId = m![1];
-    await page.getByText(/Seat/i).first().waitFor({ timeout: 15_000 });
+    const route = tableRouteFromUrl(page.url());
+    assert(route.tableId, 'tableId from URL');
+    tableId = route.tableId;
+    if (route.metaGame) {
+      tableMetaGame = route.metaGame;
+    }
+    await page.getByText(/Seats?/i).first().waitFor({ timeout: 15_000 });
   });
 
   await runStep('UI lobby table chat submit', async () => {
@@ -275,11 +417,19 @@ async function main() {
     await authQueryAsPlayer(manifest, P1, 'set_arena_ready', { tableId, ready: true });
     const r2 = await authQueryAsPlayer(manifest, P2, 'set_arena_ready', { tableId, ready: true });
     if (!r2.ok) throw new Error(r2.message);
+    const launched = (r2.data as { launched?: boolean }).launched === true;
+    assert(launched, `set_arena_ready did not launch (launched=${(r2.data as { launched?: boolean }).launched})`);
+    liveGame = await pollLiveArenaGame(manifest, P1, tableId, tableMetaGame);
     await page.waitForURL(/\/arena\/play\//, { timeout: 45_000 });
   });
 
+  await runStep('play shell (t1) still active', async () => {
+    assert(liveGame, 'liveGame from launch');
+    await waitForPlayShellReady(page, liveGame);
+  });
+
   await runStep('landing Watch link → watch shell', async () => {
-    assert(tableId, 'tableId');
+    assert(liveGame, 'liveGame from launch');
     await page.goto(`${ORIGIN}/arena`, { waitUntil: 'networkidle' });
     await page.getByRole('button', { name: 'Refresh' }).click();
     await page.getByRole('link', { name: 'Watch' }).first().waitFor({ timeout: 30_000 });
@@ -287,25 +437,28 @@ async function main() {
     await page.waitForURL(/\/arena\/watch\//, { timeout: 30_000 });
     await page.waitForTimeout(2000);
     const text = await page.locator('body').innerText();
-    if (!/Hex|hex|Resign|resign/i.test(text)) {
+    if (!/Hex|hex|Resign|resign|ended/i.test(text)) {
       throw new Error('watch shell missing game UI');
     }
   });
 
   await runStep('t3 watch: live chat composer hidden/blocked', async () => {
-    assert(tableId, 'tableId');
+    assert(liveGame, 'liveGame from launch');
     const ctx3 = await browser.newContext();
     const page3 = await ctx3.newPage();
     try {
       await injectSession(page3, P3);
-      await page3.goto(`${ORIGIN}/arena/watch/${META}/${tableId}`, { waitUntil: 'networkidle' });
+      await page3.goto(
+        `${ORIGIN}/arena/watch/${liveGame.metaGame}/${liveGame.gameId}`,
+        { waitUntil: 'networkidle' },
+      );
       const composer = page3.locator('#enterAComment');
       const visible = await composer.isVisible().catch(() => false);
       if (visible) {
         await postLobbyComment(page3, 'spectator blocked');
         const blocked = await authQueryAsPlayer(manifest, P3, 'submit_comment', {
-          id: tableId,
-          metaGame: META,
+          id: liveGame.gameId,
+          metaGame: liveGame.metaGame,
           comment: 'spectator blocked verify',
           moveNumber: 0,
         });
@@ -316,13 +469,42 @@ async function main() {
     }
   });
 
-  await runStep('play shell (t1) still active', async () => {
-    assert(tableId, 'tableId');
-    await page.goto(`${ORIGIN}/arena/play/${META}/${tableId}`, { waitUntil: 'networkidle' });
-    await page.waitForTimeout(2000);
-    const text = await page.locator('body').innerText();
-    if (!/resign|Resign/i.test(text)) {
-      throw new Error('play shell missing resign');
+  await runStep('API t1 resign ends game', async () => {
+    assert(liveGame, 'liveGame from launch');
+    const m = await authQueryAsPlayer(manifest, P1, 'submit_arena_move', {
+      id: liveGame.gameId,
+      metaGame: liveGame.metaGame,
+      cbit: 0,
+      move: 'resign',
+    });
+    if (!m.ok) throw new Error(m.message);
+    await assertArenaGameEnded(manifest, P1, liveGame);
+  });
+
+  await runStep('t3 post-game kibitz on watch page', async () => {
+    assert(liveGame, 'liveGame from launch');
+    const ctx3 = await browser.newContext();
+    const page3 = await ctx3.newPage();
+    try {
+      await injectSession(page3, P3);
+      await page3.goto(
+        `${ORIGIN}/arena/watch/${liveGame.metaGame}/${liveGame.gameId}`,
+        { waitUntil: 'networkidle' },
+      );
+      await page3.waitForTimeout(3000);
+      const composer = page3.locator('#enterAComment');
+      if (await composer.isVisible().catch(() => false)) {
+        await postLobbyComment(page3, 'gg from watch');
+      }
+      const ok = await authQueryAsPlayer(manifest, P3, 'submit_comment', {
+        id: liveGame.gameId,
+        metaGame: liveGame.metaGame,
+        comment: 'gg api verify',
+        moveNumber: 1,
+      });
+      assert(ok.ok, !ok.ok ? ok.message : 'post-game comment failed');
+    } finally {
+      await ctx3.close();
     }
   });
 
@@ -346,41 +528,6 @@ async function main() {
     await page.getByText(/The game has ended/i).waitFor({ timeout: 30_000 });
   });
 
-  await runStep('API t1 resign ends game', async () => {
-    assert(tableId, 'tableId');
-    const m = await authQueryAsPlayer(manifest, P1, 'submit_arena_move', {
-      id: tableId,
-      metaGame: META,
-      cbit: 0,
-      move: 'resign',
-    });
-    if (!m.ok) throw new Error(m.message);
-  });
-
-  await runStep('t3 post-game kibitz on watch page', async () => {
-    assert(tableId, 'tableId');
-    const ctx3 = await browser.newContext();
-    const page3 = await ctx3.newPage();
-    try {
-      await injectSession(page3, P3);
-      await page3.goto(`${ORIGIN}/arena/watch/${META}/${tableId}`, { waitUntil: 'networkidle' });
-      await page3.waitForTimeout(3000);
-      const composer = page3.locator('#enterAComment');
-      if (await composer.isVisible().catch(() => false)) {
-        await postLobbyComment(page3, 'gg from watch');
-      }
-      const ok = await authQueryAsPlayer(manifest, P3, 'submit_comment', {
-        id: tableId,
-        metaGame: META,
-        comment: 'gg api verify',
-        moveNumber: 1,
-      });
-      assert(ok.ok, !ok.ok ? ok.message : 'post-game comment failed');
-    } finally {
-      await ctx3.close();
-    }
-  });
-
   await ctx1.close();
   await browser.close();
   await leaveQueueBoth(manifest);
@@ -389,7 +536,7 @@ async function main() {
     console.log(`${s.ok ? 'PASS' : 'FAIL'}  ${s.name}${s.detail ? ` — ${s.detail}` : ''}`);
   }
   const failed = steps.filter((s) => !s.ok);
-  console.log(`\n${steps.length - failed.length}/${steps.length} browser steps (tableId=${tableId ?? 'n/a'})`);
+  console.log(`\n${steps.length - failed.length}/${steps.length} browser steps (tableId=${tableId ?? 'n/a'}, game=${liveGame?.gameId ?? 'n/a'})`);
   if (failed.length) process.exit(1);
 }
 
