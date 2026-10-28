@@ -208,6 +208,7 @@ Lobby tables and quick match (2-player Fischer clocks). **`GAME.id = tableId`** 
 | `set_arena_ready` | Ready toggle; launches when both ready | `tableId`, `ready` |
 | `propose_arena_seat_swap` | Request swap (clears ready) | `tableId` |
 | `accept_arena_seat_swap` | Accept swap (clears ready) | `tableId` |
+| `reject_arena_seat_swap` | Decline a pending swap offer | `tableId` |
 | `join_arena_queue` | Quick match queue | `metaGame`, `arenaTcId`, optional `variants` |
 | `leave_arena_queue` | Leave queue | `metaGame`, `arenaTcId`, optional `variants` |
 | `submit_arena_feedback` | Post-game soak survey (players, after end; idempotent) | `metaGame`, `gameId`, Likert 1–5, `unfairFlag`, `queueAgain`, optional `comment` |

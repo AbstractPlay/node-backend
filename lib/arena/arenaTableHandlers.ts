@@ -10,6 +10,7 @@ import {
   joinArenaTableRecord,
   leaveArenaTableRecord,
   proposeArenaSeatSwapRecord,
+  rejectArenaSeatSwapRecord,
   setArenaReadyRecord,
 } from './table/tableMutations.js';
 import { joinArenaQueueRecord, leaveArenaQueueRecord } from './table/queue.js';
@@ -176,6 +177,17 @@ export async function handleAcceptArenaSeatSwap(userid: string, pars: { tableId?
     return formatReturnError('tableId is required.');
   }
   const result = await acceptArenaSeatSwapRecord(ddbDocClient, tableName(), userid, pars.tableId);
+  if ('error' in result) {
+    return formatReturnError(result.error);
+  }
+  return jsonOk({ ok: true });
+}
+
+export async function handleRejectArenaSeatSwap(userid: string, pars: { tableId?: string }) {
+  if (!pars.tableId) {
+    return formatReturnError('tableId is required.');
+  }
+  const result = await rejectArenaSeatSwapRecord(ddbDocClient, tableName(), userid, pars.tableId);
   if ('error' in result) {
     return formatReturnError(result.error);
   }
