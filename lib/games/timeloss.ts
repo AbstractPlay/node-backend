@@ -30,6 +30,7 @@ import {
   prepareVacationWindowsForPlayerIds,
 } from '../vacation/persist.js';
 import { isArenaGame } from '../gamePlayMode.js';
+import { arenaTimedOutPlayerIndex } from '../arena/arenaOutOfTime.js';
 import { finishArenaTableOnGameEnd } from '../arena/table/tableMutations.js';
 
 type FullGame = {
@@ -131,7 +132,13 @@ export async function timeloss(
         onClockIds,
         now,
       ));
-    if (Array.isArray(game.toMove)) {
+    if (isArenaGame(game)) {
+      const idx = arenaTimedOutPlayerIndex(slice, now);
+      if (idx === null) {
+        throw "Opponent's time isn't up!";
+      }
+      player = idx;
+    } else if (Array.isArray(game.toMove)) {
       let minRemaining = 0;
       let minIndex = -1;
       game.toMove.forEach((p: boolean, i: number) => {
