@@ -269,6 +269,13 @@ provider:
             Fn::Sub: arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule-group/abstractplay-arena-${self:provider.stage}
         - Effect: Allow
           Action:
+            - cloudwatch:PutMetricData
+          Resource: "*"
+          Condition:
+            StringEquals:
+              cloudwatch:namespace: AbstractPlay/Arena
+        - Effect: Allow
+          Action:
             - iam:PassRole
           Resource:
             Fn::GetAtt:

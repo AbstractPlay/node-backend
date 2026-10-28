@@ -37,6 +37,8 @@ import { isArenaMoveOutOfTime } from './arenaOutOfTime.js';
 import { ARENA_CLOCK_GRACE_MS } from './constants.js';
 import { deleteArenaFlagForGame, rescheduleArenaFlagForGame } from './rescheduleArenaFlag.js';
 import { finishArenaTableOnGameEnd } from './table/tableMutations.js';
+import { publishArenaMoveMetrics } from './arenaMoveMetrics.js';
+import { getArenaTimeControl } from './timeControls.js';
 import {
   applyMove,
   applySimultaneousMove,
@@ -163,6 +165,10 @@ export async function submitArenaMove(
       gameId: pars.id,
       arenaTcId: game.arenaTcId,
       moveReceivedAt,
+      ootRejected: true,
+    });
+    await publishArenaMoveMetrics({
+      arenaTcId: game.arenaTcId,
       ootRejected: true,
     });
     return formatReturnError(
@@ -336,20 +342,27 @@ export async function submitArenaMove(
   await wsBroadcast('game', { meta: pars.metaGame, id: pars.id }, [userid]);
 
   const submitter = game.players.find((p) => p.id === userid);
+  const processingMs = clockCommittedAt - moveReceivedAt;
   logArenaMoveTiming({
     metaGame: pars.metaGame,
     gameId: pars.id,
     arenaTcId: game.arenaTcId,
+    tier: game.arenaTcId ? getArenaTimeControl(game.arenaTcId)?.tier : undefined,
     userId: userid,
     moveReceivedAt,
     gameLoadedAt,
     engineDoneAt,
     clockCommittedAt,
-    processingMs: clockCommittedAt - moveReceivedAt,
+    processingMs,
     timeUsedMs: moveReceivedAt - prevLastMoveTime,
     bankAfterMs: submitter?.time,
     clockGeneration: game.clockGeneration,
     moveSentAt: pars.moveSentAt,
+    ootRejected: false,
+  });
+  await publishArenaMoveMetrics({
+    arenaTcId: game.arenaTcId,
+    processingMs,
     ootRejected: false,
   });
 
