@@ -1,3 +1,9 @@
+export type ArenaClockSnapshot = {
+    startSec: number;
+    incSec: number;
+    maxSec: number;
+};
+
 export type GameRec = {
     pk: string;
     sk: string;
@@ -15,5 +21,8 @@ export type GameRec = {
     event?: string;
     ladderId?: string;
     variants?: string[];
+    playMode?: 'arena' | 'correspondence' | string;
+    arenaTcId?: string;
+    arenaClock?: ArenaClockSnapshot;
     [key: string]: any;
 }
