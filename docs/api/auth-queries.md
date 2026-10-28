@@ -210,6 +210,7 @@ Lobby tables and quick match (2-player Fischer clocks). **`GAME.id = tableId`** 
 | `accept_arena_seat_swap` | Accept swap (clears ready) | `tableId` |
 | `join_arena_queue` | Quick match queue | `metaGame`, `arenaTcId`, optional `variants` |
 | `leave_arena_queue` | Leave queue | `metaGame`, `arenaTcId`, optional `variants` |
+| `submit_arena_feedback` | Post-game soak survey (players, after end; idempotent) | `metaGame`, `gameId`, Likert 1–5, `unfairFlag`, `queueAgain`, optional `comment` |
 
 Pre-launch chat uses **`submit_comment`** with `id = tableId` (same `GAMECOMMENTS` row as the live game). Spectators may kibitz before launch and after arena game end; during live play only seated players may chat.
 

@@ -12,8 +12,10 @@ import {
   handleProposeArenaSeatSwap,
   handleSetArenaReady,
 } from '../../../lib/arena/arenaTableHandlers.js';
+import { submitArenaFeedback } from '../../../lib/arena/submitArenaFeedback.js';
 
 export const arenaAuthRoutes: Record<string, AuthRouteHandler> = {
+  submit_arena_feedback: bindAuth(submitArenaFeedback),
   create_arena_table: bindAuth(handleCreateArenaTable),
   join_arena_table: bindAuth(handleJoinArenaTable),
   leave_arena_table: bindAuth(handleLeaveArenaTable),

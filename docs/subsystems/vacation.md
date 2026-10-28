@@ -106,6 +106,12 @@ Challenge **settings** modals (start/inc/max/hard) and “last activity” timestamp
 
 ---
 
+## Realtime Arena (exception)
+
+**Arena games opt out of vacation pause entirely.** `playMode === 'arena'` uses `getVacationWindow` ? `null` in clock math; arena payloads do not set correspondence `clockPaused`. **`join_arena_queue`** and arena play are **not** blocked because the user is on correspondence vacation. Correspondence games on the dashboard still pause as today. See [Realtime Arena](/backend/subsystems/arena/).
+
+---
+
 ## Regression guard
 
 From node-backend root:

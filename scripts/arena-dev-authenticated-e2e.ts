@@ -205,6 +205,16 @@ async function main() {
       moveNumber: 1,
     });
     assert(after.ok, !after.ok ? after.message : '');
+    const fb = await authQueryAsPlayer(manifest, P1, 'submit_arena_feedback', {
+      metaGame: META,
+      gameId: tableId,
+      clockFairness: 4,
+      responsiveness: 4,
+      tcFit: 4,
+      unfairFlag: 'na',
+      queueAgain: 'yes',
+    });
+    assert(fb.ok, !fb.ok ? fb.message : '');
   }));
 
   results.push(await step('S4: dashboard excludes arena', async () => {

@@ -20,6 +20,8 @@ When a game completes, the completion bit becomes `1` and summary rows are writt
 5. **Abandoned** — `abandoned` handles resign/abandon flows.
 6. **Completed** — archived to `COMPLETEDGAMES#*` indexes; removed from active lists after the user has seen the result.
 
+**Realtime Arena** uses the same `GAME` row shape but a separate move RPC (**`submit_arena_move`**), Fischer **`arenaClock`**, EventBridge Scheduler timeouts, and **`playMode: 'arena'`**. Arena games are not listed on **`me_dashboard`**. See [Realtime Arena](/backend/subsystems/arena/).
+
 ## Key queries
 
 | Query | Endpoint | Purpose |
