@@ -25,12 +25,12 @@ const fixture = JSON.parse(
 };
 
 describe('batchRatingGameLabel', () => {
-  it('labels no variants', () => {
-    assert.equal(batchRatingGameLabel('Chess', []), 'Chess (no variants)');
+  it('labels no variants with meta UID', () => {
+    assert.equal(batchRatingGameLabel('amoeba', []), 'amoeba (no variants)');
   });
 
   it('labels sorted variant UIDs', () => {
-    assert.equal(batchRatingGameLabel('Go', ['handicap', '9x9']), 'Go (9x9|handicap)');
+    assert.equal(batchRatingGameLabel('go', ['handicap', '9x9']), 'go (9x9|handicap)');
   });
 });
 
@@ -44,14 +44,20 @@ describe('defaultGlickoPrior', () => {
 });
 
 describe('lookupBatchRating', () => {
-  it('finds an existing row', () => {
-    const row = lookupBatchRating(fixture.highest, 'Chess', [], 'alice');
+  it('finds an existing row by meta UID', () => {
+    const row = lookupBatchRating(fixture.highest, 'amoeba', [], 'alice');
     assert.equal(row.user, 'alice');
     assert.equal(row.glicko?.ratingLow, 1200);
   });
 
+  it('canonicalizes implicit variant defaults for lookup (amazons #setup)', () => {
+    const row = lookupBatchRating(fixture.highest, 'amazons', [], 'alice');
+    assert.equal(row.game, 'amazons (#setup)');
+    assert.equal(row.glicko?.ratingLow, 1270);
+  });
+
   it('returns prior for missing user', () => {
-    const row = lookupBatchRating(fixture.highest, 'Chess', [], 'unknown');
+    const row = lookupBatchRating(fixture.highest, 'amoeba', [], 'unknown');
     assert.equal(row.glicko?.rating, 1200);
     assert.equal(row.glicko?.ratingLow, 500);
   });
@@ -59,7 +65,7 @@ describe('lookupBatchRating', () => {
 
 describe('compareBatchRatings', () => {
   it('sorts by ratingLow descending', () => {
-    const sorted = [...fixture.highest.filter((r) => r.game === 'Chess (no variants)')].sort(
+    const sorted = [...fixture.highest.filter((r) => r.game === 'amoeba (no variants)')].sort(
       compareBatchRatings,
     );
     assert.equal(sorted[0]?.user, 'alice');
@@ -74,7 +80,7 @@ describe('assignTournamentPlayerRatings', () => {
       { playerid: 'alice' },
       { playerid: 'unknown' },
     ];
-    assignTournamentPlayerRatings(players, fixture.highest, 'Chess', []);
+    assignTournamentPlayerRatings(players, fixture.highest, 'amoeba', []);
     players.sort((a, b) => b.rating! - a.rating!);
     assert.deepEqual(
       players.map((p) => p.playerid),

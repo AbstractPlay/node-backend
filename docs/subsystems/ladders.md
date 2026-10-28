@@ -84,6 +84,7 @@ Set `ABSTRACT_PLAY_TABLE` (or use `--stage` where supported). Prefer `scripts/` 
 |--------|---------|
 | `npx tsx scripts/reconcile-ladder-active-counts.ts --dry-run` | Compare/fix `activeLadderGameCount` vs open ladder games (`--live`, optional `--ladderId`) |
 | `npm run backfill-ladder-by-user -- --stage dev [--live]` | Rebuild `LADDERBYUSER#` from active `LADDERPLAYER` rows |
+| `npm run backfill-ladder-join-seeds -- --stage dev` (`--dry-run` / `--live`, optional `--ladderId`) | Fix join `startingPoints` / Glicko seed snapshot from `_summary-ratings` (meta UID game keys) |
 | `npm run replay-ladder-member -- <ladderId> <userid>` | Replay Δ from `startingPoints` + settled games; exit 2 on mismatch (decay excluded) |
 | `npx tsx scripts/audit-ladder-snapshot.ts <ladderId>` | Read-only health snapshot (members, pool, drift) |
 

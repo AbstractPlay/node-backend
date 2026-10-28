@@ -1,4 +1,4 @@
-import { gameinfo, variantUidsForBatchRating } from '@abstractplay/gameslib';
+import { archiveVariantDefsForMetaUid, gameinfo, variantUidsForBatchRating } from '@abstractplay/gameslib';
 
 export const GLICKO_RATING_START = 1200;
 export const GLICKO_RD_START = 350;
@@ -39,13 +39,13 @@ function toGlickoStats(rating: number, rd: number, volatility: number, n: number
   };
 }
 
-/** Display name + variant UIDs → summarize `highest[].game` key. */
-export function batchRatingGameLabel(displayName: string, variants: string[]): string {
+/** Meta UID + canonical variant UIDs → summarize `highest[].game` key (matches crons). */
+export function batchRatingGameLabel(metaUid: string, variants: string[]): string {
   if (variants.length === 0) {
-    return `${displayName} (no variants)`;
+    return `${metaUid} (no variants)`;
   }
   const sorted = [...variants].sort();
-  return `${displayName} (${sorted.join('|')})`;
+  return `${metaUid} (${sorted.join('|')})`;
 }
 
 export function defaultGlickoPrior(): GlickoStats {
@@ -68,18 +68,18 @@ function resolveMetaUid(metaUidOrDisplayName: string): string {
 
 export function lookupBatchRating(
   highest: UserGameRating[],
-  displayName: string,
+  metaUidOrName: string,
   variants: string[],
   userId: string,
   playerCount = 2,
 ): UserGameRating {
-  const metaUid = resolveMetaUid(displayName);
-  const defs = gameinfo.get(metaUid)?.variants;
+  const metaUid = resolveMetaUid(metaUidOrName);
+  const defs = gameinfo.get(metaUid)?.variants ?? archiveVariantDefsForMetaUid(metaUid);
   const canonical =
     defs !== undefined && defs.length > 0
       ? variantUidsForBatchRating(metaUid, playerCount, variants)
       : variants;
-  const game = batchRatingGameLabel(displayName, canonical);
+  const game = batchRatingGameLabel(metaUid, canonical);
   const row = highest.find((r) => r.user === userId && r.game === game);
   if (row !== undefined) {
     return row;
@@ -106,11 +106,11 @@ export type TournamentSeedPlayer = {
 export function assignTournamentPlayerRatings(
   players: TournamentSeedPlayer[],
   highest: UserGameRating[],
-  displayName: string,
+  metaUid: string,
   variants: string[],
 ): void {
   for (const player of players) {
-    const row = lookupBatchRating(highest, displayName, variants, player.playerid);
+    const row = lookupBatchRating(highest, metaUid, variants, player.playerid);
     player.rating = glickoConservativeSortKey(row);
     player.score = 0;
   }

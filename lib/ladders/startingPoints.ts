@@ -1,6 +1,4 @@
-import { gameinfo } from '@abstractplay/gameslib';
 import {
-  batchRatingGameLabel,
   GLICKO_PRIOR_RATING_LOW,
   lookupBatchRating,
 } from '../batchRatings.js';
@@ -24,14 +22,12 @@ export async function resolveLadderJoinSeed(
   userid: string,
   ladderStatus: LadderStatus,
 ): Promise<JoinSeedSnapshot> {
-  const info = gameinfo.get(metaGame);
-  const displayName = info?.name ?? metaGame;
   const highest = await loadSummaryRatingsHighest();
-  const row = lookupBatchRating(highest, displayName, variants, userid);
+  const row = lookupBatchRating(highest, metaGame, variants, userid);
   const ratingLow = row.glicko?.ratingLow;
   const now = Date.now();
   if (ratingLow !== undefined && row.glicko !== undefined && row.glicko.n > 0) {
-    const label = batchRatingGameLabel(displayName, variants);
+    const label = row.game;
     return {
       points: ratingLow,
       startingPoints: ratingLow,
