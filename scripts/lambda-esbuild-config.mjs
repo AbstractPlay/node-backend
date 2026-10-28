@@ -21,6 +21,7 @@ export const LAMBDA_HANDLER_ENTRIES = [
   "api/testBot.ts",
   "utils/bot-outbound.ts",
   "utils/game-projector.ts",
+  "api/arenaFlagWorker.ts",
   "api/sockets/connectHandler.ts",
   "api/sockets/disconnectHandler.ts",
   "api/sockets/authHandler.ts",
