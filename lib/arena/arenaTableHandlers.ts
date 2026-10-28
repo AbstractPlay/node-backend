@@ -1,3 +1,4 @@
+import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { ddbDocClient } from '../ddb.js';
 import { formatReturnError, headers } from '../api/http.js';
 import { getArenaTable } from './table/store.js';
@@ -23,7 +24,20 @@ function tableName(): string {
   return name;
 }
 
-function serializeTable(table: ArenaTableRecord, viewerId: string) {
+async function loadTableComments(tableId: string) {
+  const data = await ddbDocClient.send(new GetCommand({
+    TableName: tableName(),
+    Key: { pk: 'GAMECOMMENTS', sk: tableId },
+  }));
+  const raw = data.Item?.comments;
+  return Array.isArray(raw) ? raw : [];
+}
+
+function serializeTable(
+  table: ArenaTableRecord,
+  viewerId: string,
+  comments: unknown[],
+) {
   return {
     tableId: table.tableId,
     state: table.state,
@@ -43,6 +57,7 @@ function serializeTable(table: ArenaTableRecord, viewerId: string) {
     createdAt: table.createdAt,
     updatedAt: table.updatedAt,
     gameStartedAt: table.gameStartedAt,
+    comments,
     viewer: {
       seated: isSeatedOnTable(table, viewerId),
       isHost: table.hostId === viewerId,
@@ -121,7 +136,8 @@ export async function handleGetArenaTable(userid: string, pars: { tableId?: stri
   if (table === undefined) {
     return formatReturnError('Arena table not found.');
   }
-  return jsonOk(serializeTable(table, userid));
+  const comments = await loadTableComments(pars.tableId);
+  return jsonOk(serializeTable(table, userid, comments));
 }
 
 export async function handleSetArenaReady(
