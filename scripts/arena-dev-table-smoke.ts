@@ -78,9 +78,9 @@ async function main() {
   results.push(await step(`${HOST} get_arena_table — seated`, async () => {
     const r = await authQueryAsPlayer(manifest, HOST, 'get_arena_table', { tableId });
     assert(r.ok, !r.ok ? r.message : 'get_arena_table failed');
-    const data = r.data as { table?: { state?: string; seats?: { userId?: string }[] } };
-    assert(data.table?.state === 'seated', `state=${data.table?.state}`);
-    const ids = (data.table?.seats ?? []).map((s) => s.userId).filter(Boolean);
+    const data = r.data as { state?: string; seats?: { userId?: string }[] };
+    assert(data.state === 'seated', `state=${data.state}`);
+    const ids = (data.seats ?? []).map((s) => s.userId).filter(Boolean);
     assert(ids.length === 2, `expected 2 seats, got ${ids.length}`);
   }));
 
