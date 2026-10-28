@@ -32,7 +32,7 @@ describe('loadSummaryRatingsHighest', () => {
   it('returns cached highest rows for tournament seeding', async () => {
     const highest = await loadSummaryRatingsHighest();
     const players: TournamentSeedPlayer[] = [{ playerid: 'bob' }, { playerid: 'alice' }];
-    assignTournamentPlayerRatings(players, highest, 'Chess', []);
+    assignTournamentPlayerRatings(players, highest, 'amoeba', []);
     players.sort((a, b) => b.rating! - a.rating!);
     assert.equal(players[0]?.playerid, 'alice');
     assert.equal(players[0]?.rating, 1200);
