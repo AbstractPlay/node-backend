@@ -30,6 +30,7 @@ import {
   prepareVacationWindowsForPlayerIds,
 } from '../vacation/persist.js';
 import { isArenaGame } from '../gamePlayMode.js';
+import { finishArenaTableOnGameEnd } from '../arena/table/tableMutations.js';
 
 type FullGame = {
   pk: string;
@@ -275,5 +276,12 @@ export async function timeloss(
     inAppSettingsMapFromUsers(players),
   ));
   await Promise.all(work);
+  if (isArenaGame(game)) {
+    await finishArenaTableOnGameEnd(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      game.id,
+    );
+  }
   return game;
 }

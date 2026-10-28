@@ -136,7 +136,9 @@ See [Player blocking](/backend/subsystems/player-blocking/).
 | `start_solo_game` | Start a 1-player solo run (`rated: false`; optional `challengeSeed`, server assigns if omitted) | `metaGame`, optional `variants`, `challengeSeed`, clock fields |
 | `standing_challenges` | Open challenges (filters blocked issuers) | `metaGame` |
 | `all_standing_challenges` | All open standing challenges site-wide (filters blocked issuers) | � |
-| `submit_move` | Play a move | `metaGame`, `id`, `move`, � |
+| `submit_move` | Play a move | `metaGame`, `id`, `move`, … |
+| `submit_arena_move` | Play a move on a live **arena** game (`playMode: 'arena'`) | `metaGame`, `id`, `move`, `cbit` (`0`) |
+| `create_arena_dev_game` | **Dev only** — start unrated arena game without table flow | `metaGame`, `arenaTcId`, `opponentId` |
 | `timeloss` | Report time loss | game ids |
 | `abandoned` | Mark game abandoned | game ids |
 | `invoke_pie` | Pie rule: reverse player order (not available when `teachingMode` on game) | game ids |
@@ -191,6 +193,25 @@ Player-created continuous delta ladders (one canonical ladder per meta + variant
 | `submit_ladder_comment` | Ladder hub chat (active members) | `ladderId`, `comment` |
 
 `me_dashboard` adds **`ladderMemberships`** (active only; each row includes `ladderStatus`, `viewerInPool`, `poolJoinEligible`), **`currentLadderGames`**, and **`ladderId`** on each active game row when set on the game.
+
+## Realtime arena (tables)
+
+Lobby tables and quick match (2-player Fischer clocks). **`GAME.id = tableId`** when play starts. Arena games are excluded from `me_dashboard`. Public **`list_arena_tables`** on the unauthenticated `query` endpoint.
+
+| Query | Purpose | Key `pars` |
+|-------|---------|------------|
+| `create_arena_table` | Host a table | `metaGame`, `arenaTcId`, optional `variants`, `open` (default true), `inviteUserId` when closed |
+| `join_arena_table` | Take seat 2 (open or invited) | `tableId` |
+| `leave_arena_table` | Leave lobby (host cancel abandons) | `tableId` |
+| `cancel_arena_table` | Host abandon before launch | `tableId` |
+| `get_arena_table` | Lobby state + `viewer` | `tableId` |
+| `set_arena_ready` | Ready toggle; launches when both ready | `tableId`, `ready` |
+| `propose_arena_seat_swap` | Request swap (clears ready) | `tableId` |
+| `accept_arena_seat_swap` | Accept swap (clears ready) | `tableId` |
+| `join_arena_queue` | Quick match queue | `metaGame`, `arenaTcId`, optional `variants` |
+| `leave_arena_queue` | Leave queue | `metaGame`, `arenaTcId`, optional `variants` |
+
+Pre-launch chat uses **`submit_comment`** with `id = tableId` (same `GAMECOMMENTS` row as the live game). Spectators may kibitz before launch and after arena game end; during live play only seated players may chat.
 
 ## Organizer events
 

@@ -36,6 +36,7 @@ import { applyArenaMoveClock } from './applyArenaMoveClock.js';
 import { isArenaMoveOutOfTime } from './arenaOutOfTime.js';
 import { ARENA_CLOCK_GRACE_MS } from './constants.js';
 import { deleteArenaFlagForGame, rescheduleArenaFlagForGame } from './rescheduleArenaFlag.js';
+import { finishArenaTableOnGameEnd } from './table/tableMutations.js';
 import {
   applyMove,
   applySimultaneousMove,
@@ -307,6 +308,14 @@ export async function submitArenaMove(
   ));
 
   await Promise.all(list);
+
+  if (game.gameEnded !== undefined && isArenaGame(game)) {
+    await finishArenaTableOnGameEnd(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      game.id,
+    );
+  }
 
   const clockCommittedAt = Date.now();
 

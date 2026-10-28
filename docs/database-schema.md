@@ -14,6 +14,9 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 - **Game comments** � chat for a game
   - pk: `GAMECOMMENTS`
   - sk: `<gameid>`
+  - Arena: created at table create with `sk = tableId` (same as `GAME.id` after launch)
+
+- **Arena table** � lobby session (`ARENATABLE` / `ARENAINDEX#` / `ARENAUSER` / `ARENAQUEUE#` � see auth-queries Realtime arena)
 
 - **Tournament chat** � public log per tournament (survives archive)
   - pk: `TOURNAMENTCOMMENTS`
