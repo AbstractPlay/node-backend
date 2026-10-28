@@ -8,7 +8,7 @@
 import { parseArgs } from 'node:util';
 import { Amplify } from 'aws-amplify';
 import { signIn, fetchAuthSession } from 'aws-amplify/auth';
-import { createArenaDevGame } from '../lib/arena/createArenaDevGame.js';
+import { createArenaDevGame } from '../lib/arena/createArenaDevGame.ts';
 
 const { values } = parseArgs({
   options: {
@@ -65,7 +65,11 @@ async function main() {
     tcId: values.tcId ?? 'blitz_5_3',
     opponentId: opponent,
   });
-  console.log(JSON.stringify(res, null, 2));
+  if (res.statusCode !== 200) {
+    console.error(typeof res.body === 'string' ? res.body : res);
+    process.exit(1);
+  }
+  console.log(JSON.stringify(JSON.parse(res.body), null, 2));
 }
 
 main().catch((e) => {
