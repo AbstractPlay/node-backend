@@ -13,7 +13,10 @@ import {
 import { DEV_AUTH_QUERY_URL } from '../lib/test/devStageConfig.js';
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { ddbDocClient } from '../lib/ddb.js';
-import { runArenaFlagTimelossE2e } from '../lib/test/arenaFlagTimelossE2e.js';
+import {
+  runArenaFlagTimelossE2e,
+  runArenaParticipantTimelossCheckE2e,
+} from '../lib/test/arenaFlagTimelossE2e.js';
 
 const OPEN_URL =
   process.env.AP_PUBLIC_QUERY_URL
@@ -227,6 +230,12 @@ async function main() {
     for (const k of ['myMove', 'waiting', 'currentGames'] as const) {
       assert(!(data[k] ?? []).some((g) => g.id === tableId), k);
     }
+  }));
+
+  results.push(await step('S1: participant timeloss(check) without scheduler', async () => {
+    const { gameId, winnerSeats } = await runArenaParticipantTimelossCheckE2e({ manifest });
+    assert(gameId, 'gameId');
+    assert(winnerSeats.length > 0, 'no winner');
   }));
 
   results.push(await step('S1: scheduler flag → timeloss (AWS DDB)', async () => {

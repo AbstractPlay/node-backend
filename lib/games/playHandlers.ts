@@ -1277,7 +1277,7 @@ export async function checkForTimeloss(userid: string, pars: { id: string, metaG
   }
   catch (error) {
     // eslint-disable-next-line no-constant-condition
-    if (error === "Nobody's time is up!" || error === "Opponent's time isn't up!" || "Game is already over!") {
+    if (error === "Nobody's time is up!" || error === "Opponent's time isn't up!" || error === 'Game is already over!') {
       return {
         statusCode: 200,
         body: "not_a_timeloss",

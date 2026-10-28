@@ -27,6 +27,15 @@ export type ArenaFlagTimelossOptions = {
   pollTimeoutMs?: number;
 };
 
+export type PatchedArenaTimelossGame = {
+  gameId: string;
+  metaGame: string;
+  onClockPlayerKey: string;
+  onClockPlayerIndex: number;
+  expectedWinnerSeat: number;
+  fireAtMs: number;
+};
+
 type GameRow = {
   pk: string;
   sk: string;
@@ -86,10 +95,30 @@ async function resolveSchedulerArns(stage: string): Promise<{
   };
 }
 
-/** S1: patch short bank, reschedule flag, assert worker timeloss + dashboard exclusion. */
-export async function runArenaFlagTimelossE2e(
+function resolveOnClockPlayerKey(
+  manifest: DevTestPlayersManifest,
+  hostKey: string,
+  opponentKey: string,
+  game: GameRow,
+): string {
+  const clockIdx = onClockPlayerIndex(game.toMove);
+  const onClockUserId = game.players[clockIdx]?.id;
+  if (manifest.players[hostKey]?.userId === onClockUserId) {
+    return hostKey;
+  }
+  if (manifest.players[opponentKey]?.userId === onClockUserId) {
+    return opponentKey;
+  }
+  throw new Error(`on-clock user ${onClockUserId} not in manifest keys`);
+}
+
+/**
+ * Create dev arena game, patch a short bank on the on-clock player, refresh lastMoveTime.
+ * Does not reschedule EventBridge (use runArenaFlagTimelossE2e for scheduler path).
+ */
+export async function patchArenaDevGameForTimeloss(
   opts: ArenaFlagTimelossOptions,
-): Promise<{ gameId: string; metaGame: string; winnerSeats: number[] }> {
+): Promise<PatchedArenaTimelossGame> {
   const hostKey = opts.hostKey ?? 't1';
   const opponentKey = opts.opponentKey ?? 't2';
   const metaGame = opts.metaGame ?? 'hex';
@@ -97,7 +126,6 @@ export async function runArenaFlagTimelossE2e(
   const stage = opts.stage ?? process.env.WEBSOCKET_STAGE ?? 'dev';
   const tableName = opts.tableName ?? process.env.ABSTRACT_PLAY_TABLE ?? `abstract-play-${stage}`;
   const patchBankMs = opts.patchBankMs ?? Number.parseInt(process.env.AP_ARENA_FLAG_BANK_MS ?? '800', 10);
-  const pollTimeoutMs = opts.pollTimeoutMs ?? 120_000;
 
   process.env.ABSTRACT_PLAY_TABLE = tableName;
   process.env.WEBSOCKET_STAGE = stage;
@@ -159,17 +187,123 @@ export async function runArenaFlagTimelossE2e(
     throw new Error('nominalArenaFlagAtMs returned null after patch');
   }
 
+  const onClockPlayerKey = resolveOnClockPlayerKey(
+    opts.manifest,
+    hostKey,
+    opponentKey,
+    game,
+  );
+
+  return {
+    gameId,
+    metaGame: meta,
+    onClockPlayerKey,
+    onClockPlayerIndex: clockIdx,
+    expectedWinnerSeat,
+    fireAtMs: nominal + ARENA_CLOCK_GRACE_MS,
+  };
+}
+
+/** Participant timeloss(check) without scheduler — mirrors front play-shell poll backup. */
+export async function runArenaParticipantTimelossCheckE2e(
+  opts: ArenaFlagTimelossOptions,
+): Promise<{ gameId: string; metaGame: string; winnerSeats: number[] }> {
+  const pollTimeoutMs = opts.pollTimeoutMs ?? 60_000;
+  const patched = await patchArenaDevGameForTimeloss(opts);
+  const { gameId, metaGame, onClockPlayerKey, expectedWinnerSeat, fireAtMs } = patched;
+
+  const waitMs = Math.max(0, fireAtMs + 500 - Date.now());
+  if (waitMs > 0) {
+    await sleep(waitMs);
+  }
+
+  const tl = await authQueryAsPlayer(opts.manifest, onClockPlayerKey, 'timeloss', {
+    id: gameId,
+    metaGame,
+  });
+  if (!tl.ok) {
+    throw new Error(tl.message);
+  }
+  const body = tl.data;
+  if (body === 'not_a_timeloss') {
+    throw new Error('timeloss(check) returned not_a_timeloss after clock expiry');
+  }
+
+  const deadline = Date.now() + pollTimeoutMs;
+  let winnerSeats: number[] = [];
+  while (Date.now() < deadline) {
+    const r = await authQueryAsPlayer(opts.manifest, onClockPlayerKey, 'get_game', {
+      id: gameId,
+      metaGame,
+      cbit: 0,
+    });
+    if (!r.ok) {
+      throw new Error(r.message);
+    }
+    const g = (r.data as { game?: {
+      toMove?: string;
+      gameEnded?: number;
+      winner?: number[];
+    } }).game;
+    if (g && (g.toMove === '' || g.toMove == null || g.gameEnded !== undefined)) {
+      winnerSeats = g.winner ?? [];
+      if (!winnerSeats.includes(expectedWinnerSeat)) {
+        throw new Error(
+          `timeloss winner expected seat ${expectedWinnerSeat}, got ${JSON.stringify(winnerSeats)}`,
+        );
+      }
+      break;
+    }
+    await sleep(1500);
+  }
+  if (winnerSeats.length === 0) {
+    throw new Error('Game did not end after participant timeloss(check)');
+  }
+
+  return { gameId, metaGame, winnerSeats };
+}
+
+/** S1: patch short bank, reschedule flag, assert worker timeloss + dashboard exclusion. */
+export async function runArenaFlagTimelossE2e(
+  opts: ArenaFlagTimelossOptions,
+): Promise<{ gameId: string; metaGame: string; winnerSeats: number[] }> {
+  const hostKey = opts.hostKey ?? 't1';
+  const opponentKey = opts.opponentKey ?? 't2';
+  const stage = opts.stage ?? process.env.WEBSOCKET_STAGE ?? 'dev';
+  const pollTimeoutMs = opts.pollTimeoutMs ?? 120_000;
+
+  const patched = await patchArenaDevGameForTimeloss(opts);
+  const { gameId, metaGame, expectedWinnerSeat, fireAtMs } = patched;
+
+  const sk = `${metaGame}#0#${gameId}`;
+  const tableName = process.env.ABSTRACT_PLAY_TABLE ?? `abstract-play-${stage}`;
+  const getRes = await ddbDocClient.send(new GetCommand({
+    TableName: tableName,
+    Key: { pk: 'GAME', sk },
+  }));
+  const game = hydrateGameState(getRes!.Item as GameRow) as GameRow;
+  const lastMoveTime = game.lastMoveTime;
+  const nextGen = game.clockGeneration ?? 1;
+
+  const nominal = nominalArenaFlagAtMs({
+    players: game.players,
+    toMove: game.toMove,
+    lastMoveTime,
+  });
+  if (nominal === null) {
+    throw new Error('nominalArenaFlagAtMs returned null after patch');
+  }
+
   const { workerArn, schedulerRoleArn } = await resolveSchedulerArns(stage);
   const scheduler = new SchedulerClient({ region: REGION });
   await upsertArenaFlagSchedule({
     stage,
     workerArn,
     schedulerRoleArn,
-    payload: { metaGame: meta, gameId, clockGeneration: nextGen },
+    payload: { metaGame, gameId, clockGeneration: nextGen },
     nominalFlagAtMs: nominal,
   }, scheduler);
 
-  const fireAtMs = nominal + ARENA_CLOCK_GRACE_MS;
   const deadline = Date.now() + pollTimeoutMs;
   let winnerSeats: number[] = [];
   while (Date.now() < deadline) {
@@ -179,7 +313,7 @@ export async function runArenaFlagTimelossE2e(
     }
     const r = await authQueryAsPlayer(opts.manifest, hostKey, 'get_game', {
       id: gameId,
-      metaGame: meta,
+      metaGame,
       cbit: 0,
     });
     if (!r.ok) {
@@ -223,5 +357,5 @@ export async function runArenaFlagTimelossE2e(
     throw new Error(`arena game ${gameId} still on me_dashboard after timeloss`);
   }
 
-  return { gameId, metaGame: meta, winnerSeats };
+  return { gameId, metaGame, winnerSeats };
 }

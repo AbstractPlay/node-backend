@@ -2,8 +2,13 @@
 /**
  * Authenticated arena UI E2E on play.dev (Cognito cookies from refresh tokens).
  *
+ * End-of-game coverage: table flow still ends via API resign for stability; a dedicated
+ * step patches a short arena bank (AWS) and asserts the **play shell** shows game over
+ * from client timeloss polling — the path that was missing when only spectator refresh
+ * and scheduler E2E ran.
+ *
  *   npx playwright install chromium
- *   npm run arena-dev-browser-e2e
+ *   AWS_PROFILE=AbstractPlayDev npm run arena-dev-browser-e2e
  */
 import { chromium, type Page } from 'playwright';
 import {
@@ -15,6 +20,7 @@ import {
   buildAmplifyCookieInjectionScript,
   cognitoSessionForPlayer,
 } from '../lib/test/cognitoBrowserSession.js';
+import { patchArenaDevGameForTimeloss } from '../lib/test/arenaFlagTimelossE2e.js';
 
 const ORIGIN = process.env.AP_DEV_FRONT_ORIGIN ?? 'https://play.dev.abstractplay.com';
 const META = process.env.AP_ARENA_SMOKE_META ?? 'hex';
@@ -318,6 +324,26 @@ async function main() {
     if (!/resign|Resign/i.test(text)) {
       throw new Error('play shell missing resign');
     }
+  });
+
+  await runStep('UI participant clock expiry → game over (timeloss poll)', async () => {
+    const patched = await patchArenaDevGameForTimeloss({
+      manifest,
+      metaGame: META,
+      tcId: TC,
+      hostKey: P1,
+      opponentKey: P2,
+    });
+    await injectSession(page, patched.onClockPlayerKey);
+    await page.goto(
+      `${ORIGIN}/arena/play/${patched.metaGame}/${patched.gameId}`,
+      { waitUntil: 'networkidle' },
+    );
+    const waitMs = Math.max(0, patched.fireAtMs + 3000 - Date.now());
+    if (waitMs > 0) {
+      await page.waitForTimeout(waitMs);
+    }
+    await page.getByText(/The game has ended/i).waitFor({ timeout: 30_000 });
   });
 
   await runStep('API t1 resign ends game', async () => {
