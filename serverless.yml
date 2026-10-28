@@ -746,6 +746,15 @@ functions:
     timeout: 120
     description: Abstract Play queries that need authorization.
     logRetentionInDays: 30
+    environment:
+      ARENA_FLAG_WORKER_ARN:
+        Fn::GetAtt:
+          - ArenaFlagWorkerLambdaFunction
+          - Arn
+      ARENA_SCHEDULER_ROLE_ARN:
+        Fn::GetAtt:
+          - ArenaSchedulerExecutionRole
+          - Arn
     events:
       - http:
           path: authQuery

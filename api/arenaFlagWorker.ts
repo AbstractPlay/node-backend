@@ -1,13 +1,24 @@
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { ddbDocClient } from '../lib/ddb.js';
+import { hydrateGameState } from '../lib/gameState.js';
+import { isArenaGame } from '../lib/gamePlayMode.js';
 import {
   parseArenaFlagPayload,
   shouldSkipArenaFlagWorker,
 } from '../lib/arena/flagPayload.js';
+import { arenaTimedOutPlayerIndex } from '../lib/arena/arenaOutOfTime.js';
+import { deleteArenaFlagForGame } from '../lib/arena/rescheduleArenaFlag.js';
+import { timeloss } from '../lib/games/timeloss.js';
 
-type GameClockRow = {
+type GameRow = {
   pk: string;
   sk: string;
+  id: string;
+  metaGame: string;
+  state: string;
+  players: { id: string; time?: number }[];
+  toMove: string | boolean[];
+  lastMoveTime: number;
   playMode?: string;
   clockGeneration?: number;
 };
@@ -45,7 +56,7 @@ export async function handler(rawEvent: unknown): Promise<void> {
     return;
   }
 
-  let game: GameClockRow | undefined;
+  let game: GameRow | undefined;
   try {
     const data = await ddbDocClient.send(new GetCommand({
       TableName: tableName,
@@ -54,7 +65,9 @@ export async function handler(rawEvent: unknown): Promise<void> {
         sk: `${payload.metaGame}#0#${payload.gameId}`,
       },
     }));
-    game = data.Item as GameClockRow | undefined;
+    game = data.Item
+      ? hydrateGameState(data.Item as GameRow) as GameRow
+      : undefined;
   } catch (err) {
     console.log(JSON.stringify({
       arenaFlagWorker: 'error',
@@ -76,9 +89,40 @@ export async function handler(rawEvent: unknown): Promise<void> {
     return;
   }
 
+  if (!game || !isArenaGame(game)) {
+    console.log(JSON.stringify({
+      arenaFlagWorker: 'noop',
+      reason: 'not_arena_game',
+      payload,
+    }));
+    return;
+  }
+
+  const now = Date.now();
+  const timedOutIndex = arenaTimedOutPlayerIndex(
+    {
+      players: game.players,
+      toMove: game.toMove,
+      lastMoveTime: game.lastMoveTime,
+    },
+    now,
+  );
+
+  if (timedOutIndex === null) {
+    console.log(JSON.stringify({
+      arenaFlagWorker: 'noop',
+      reason: 'not_flagged_yet',
+      payload,
+    }));
+    return;
+  }
+
+  await timeloss(false, timedOutIndex, payload.gameId, payload.metaGame, now);
+  await deleteArenaFlagForGame(payload.gameId);
+
   console.log(JSON.stringify({
-    arenaFlagWorker: 'ready',
+    arenaFlagWorker: 'timeloss',
     payload,
-    note: 'S0/S1 spike — timeloss not wired until arena kernel',
+    timedOutIndex,
   }));
 }
