@@ -19,8 +19,7 @@ describe('recordLadder', () => {
 
   it('ladderEventLabelForGame uses game meta when present', () => {
     const label = ladderEventLabelForGame([ladder], LADDER_ID, 'amazons', []);
-    expect(label.startsWith('Ladder: ')).toBe(true);
-    expect(label).toContain('Amazons');
+    expect(label).toMatch(/^Amazons ladder/);
   });
 
   it('ladderEventLabelForGame falls back when meta is missing', () => {
