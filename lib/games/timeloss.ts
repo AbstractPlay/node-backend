@@ -29,6 +29,7 @@ import {
   getVacationWindowFromMap,
   prepareVacationWindowsForPlayerIds,
 } from '../vacation/persist.js';
+import { isArenaGame } from '../gamePlayMode.js';
 
 type FullGame = {
   pk: string;
@@ -49,6 +50,7 @@ type FullGame = {
   rated?: boolean;
   gameStarted?: number;
   matchLeg?: number;
+  playMode?: string;
   clockStart?: number;
   clockInc?: number;
   clockMax?: number;
@@ -120,13 +122,14 @@ export async function timeloss(
       lastMoveTime: game.lastMoveTime,
     };
     const onClockIds = collectOnClockPlayerIds(slice);
-    const vacationWindows = await prepareVacationWindowsForPlayerIds(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      onClockIds,
-      now,
-    );
-    const getVacationWindow = getVacationWindowFromMap(vacationWindows);
+    const getVacationWindow = isArenaGame(game)
+      ? () => null
+      : getVacationWindowFromMap(await prepareVacationWindowsForPlayerIds(
+        ddbDocClient,
+        process.env.ABSTRACT_PLAY_TABLE!,
+        onClockIds,
+        now,
+      ));
     if (Array.isArray(game.toMove)) {
       let minRemaining = 0;
       let minIndex = -1;

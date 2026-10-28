@@ -9,6 +9,7 @@ import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { GameFactory } from '@abstractplay/gameslib';
 import type { DynamoDBRecord } from 'aws-lambda';
 import { decompressGameState } from './gameState.js';
+import { isArenaGame } from './gamePlayMode.js';
 import { isBotId } from './participants.js';
 import { deleteUserGameOverlay } from './userGameOverlay.js';
 
@@ -30,6 +31,7 @@ export type GameRecord = {
   variants?: string[];
   commented?: number;
   ladderId?: string;
+  playMode?: string;
   state: string;
 };
 
@@ -465,6 +467,10 @@ export async function processGameStreamRecord(
   }
   if (!Array.isArray(game.players)) {
     console.warn(`Skipping GAME stream record ${game.sk}: missing or invalid players`);
+    return;
+  }
+
+  if (isArenaGame(game)) {
     return;
   }
 

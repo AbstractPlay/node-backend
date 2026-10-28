@@ -38,6 +38,7 @@ import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } 
 import { adminDeleteGame } from '../adminDeleteGame.js';
 import { filterExplorationTreeForSave, type ExplorationTreeNode } from '../explorationMoves.js';
 import { tournamentPlaySupported } from '../tournamentGame.js';
+import { isArenaGame } from '../gamePlayMode.js';
 import {
   shouldWriteGameOpenOverlay,
 } from '../dashboardGames.js';
@@ -186,6 +187,10 @@ type FullGame = {
   teachingUndo?: import('./teachingMode.js').TeachingUndo;
   teachingPlyStart?: import('./teachingMode.js').TeachingPlyStart;
   commented?: number; // 0 or missing: no comments or post game variations, 1: has in-game comments (note this does NOT get updated for post-game comments/variations)
+  playMode?: 'arena' | 'correspondence';
+  arenaTcId?: string;
+  arenaClock?: { startSec: number; incSec: number; maxSec: number };
+  clockGeneration?: number;
 }
 
 type Comment = GameComment & {
@@ -392,6 +397,11 @@ export async function submitMove(userid: string, pars: {
   }
   try {
     const game = hydrateGameState(data.Item as FullGame);
+    if (isArenaGame(game)) {
+      return formatReturnError(
+        `Use submit_arena_move for live arena games (${gameRefLabel(pars.metaGame, pars.id)}).`,
+      );
+    }
     console.log("got game in submitMove:");
     console.log(game);
     const flagsEarly = structuralFlags(game.metaGame);
@@ -822,7 +832,7 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
   return Promise.all(work);
 }
 
-function resign(userid: any, engine: GameBase, game: FullGame) {
+export function resign(userid: any, engine: GameBase, game: FullGame) {
   const player = game.players.findIndex((p: { id: any; }) => p.id === userid);
   if (player === undefined)
     throw new Error(`${userid} isn't playing in this game!`);
@@ -844,7 +854,7 @@ function resign(userid: any, engine: GameBase, game: FullGame) {
   }
 }
 
-function timeout(
+export function timeout(
   userid: string,
   engine: GameBase | GameBaseSimultaneous,
   game: FullGame,
@@ -920,7 +930,7 @@ function timeout(
   }
 }
 
-function drawaccepted(userid: string, engine: GameBase, game: FullGame, simultaneous: boolean) {
+export function drawaccepted(userid: string, engine: GameBase, game: FullGame, simultaneous: boolean) {
   if ((!simultaneous && game.players[parseInt(game.toMove as string)].id !== userid) || (simultaneous && !game.players.some((p: User, i: number) => game.toMove[i] && p.id === userid))) {
     throw new Error('It is not your turn!');
   }
@@ -1279,7 +1289,7 @@ export async function checkForTimeloss(userid: string, pars: { id: string, metaG
   }
 }
 
-function applySimultaneousMove(userid: string, move: string, engine: GameBaseSimultaneous, game: FullGame) {
+export function applySimultaneousMove(userid: string, move: string, engine: GameBaseSimultaneous, game: FullGame) {
   const partialMove = game.partialMove;
   const moves = partialMove === undefined ? game.players.map(() => '') : partialMove.split(',');
   let cnt = 0;
@@ -1370,7 +1380,7 @@ function findForcedMove(engine: GameBase, flags: string[]): string {
   return forcedMove;
 }
 
-function applyMove(
+export function applyMove(
   userid: string,
   move: string,
   moveNumber: number,
