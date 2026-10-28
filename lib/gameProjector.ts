@@ -32,6 +32,8 @@ export type GameRecord = {
   commented?: number;
   ladderId?: string;
   playMode?: string;
+  arenaTcId?: string;
+  arenaClock?: { startSec: number; incSec: number; maxSec: number };
   state: string;
 };
 
@@ -84,6 +86,11 @@ export function toCompletedSummary(game: GameRecord, numMoves: number) {
     variants: game.variants,
     commented: game.commented,
     toMove: game.toMove,
+    ...(game.playMode === 'arena' ? {
+      playMode: 'arena' as const,
+      ...(game.arenaTcId ? { arenaTcId: game.arenaTcId } : {}),
+      ...(game.arenaClock ? { arenaClock: game.arenaClock } : {}),
+    } : {}),
   };
 }
 

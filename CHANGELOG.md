@@ -12,6 +12,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 ### Added
 
 - **Realtime Arena (kernel, dev):** `playMode: 'arena'` games with Fischer ms clocks (`arenaClock`, `arenaTcId`), EventBridge Scheduler flag worker, `submit_arena_move` / `create_arena_dev_game`, public `list_arena_time_controls`; arena excluded from correspondence dashboard projection and `submit_move`. Tables/lobby UI and prod front still pending (S3–S4).
+- **Records (arena):** Completed arena `GAME` dump rows stamp `header.site.playMode`, `arenaTcId`, and `arenaClock` on archived JSON (`records` cron); requires `@abstractplay/recranks` with optional site fields.
 - **Continuous Delta Ladder:** Player-created correspondence ladders (kernel, pool, challenges, hub chat, `watchLadders`); `ladderJoin` / `ladderLeave` / `ladderPointsChange` / `ladderChat` / `ladderDecay` in-app notifications; daily crons `ladder-decay` and `ladder-reconcile-counts` (ops S3 `ladders/reconcile/*`); `records` `event/{ladderId}.json`; ops `scripts/reconcile-ladder-active-counts.ts`, `backfill-ladder-by-user`, `replay-ladder-member`; docs [subsystems/ladders](/backend/subsystems/ladders/). Enable prod UI by removing `VITE_LADDER_UI_DISABLED` on the front deploy.
 - **Ladders:** `npm run backfill-ladder-join-seeds` — recompute join `startingPoints` from `_summary-ratings` after lookup key fix.
 

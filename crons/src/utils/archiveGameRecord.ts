@@ -120,6 +120,10 @@ export function genRecordFromArchiveStub(
         });
     }
 
+    applyArenaSiteFieldsToRecord(rec, gdata);
+
+    applyArenaSiteFieldsToRecord(rec, gdata);
+
     return rec;
 }
 
@@ -128,6 +132,28 @@ export type RecordBuildContext = {
     event: string | null;
     round: string | null;
 };
+
+/** Copy arena GAME attributes onto `header.site` (correspondence rows omit playMode). */
+export function applyArenaSiteFieldsToRecord(
+    rec: APGameRecord,
+    gdata: Pick<GameRec, "playMode" | "arenaTcId" | "arenaClock">,
+): void {
+    if (gdata.playMode !== "arena") {
+        return;
+    }
+    rec.header.site.playMode = "arena";
+    if (typeof gdata.arenaTcId === "string" && gdata.arenaTcId.length > 0) {
+        rec.header.site.arenaTcId = gdata.arenaTcId;
+    }
+    if (gdata.arenaClock !== undefined) {
+        const { startSec, incSec, maxSec } = gdata.arenaClock;
+        rec.header.site.arenaClock = { startSec, incSec, maxSec };
+    }
+}
+
+function stampArenaFromGameRec(rec: APGameRecord, gdata: GameRec): void {
+    applyArenaSiteFieldsToRecord(rec, gdata);
+}
 
 export function buildGameRecordForDumpRow(
     gdata: GameRec,
@@ -189,6 +215,7 @@ export function buildGameRecordForDumpRow(
         if (gdata.pieInvoked === true) {
             rec.header.pied = true;
         }
+        stampArenaFromGameRec(rec, gdata);
         return rec;
     }
 
