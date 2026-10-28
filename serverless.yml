@@ -264,6 +264,11 @@ provider:
             Fn::Sub: arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/abstractplay-arena-${self:provider.stage}/*
         - Effect: Allow
           Action:
+            - scheduler:CreateScheduleGroup
+          Resource:
+            Fn::Sub: arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule-group/abstractplay-arena-${self:provider.stage}
+        - Effect: Allow
+          Action:
             - iam:PassRole
           Resource:
             Fn::GetAtt:
@@ -645,12 +650,6 @@ resources:
     #     DefaultRouteSettings:
     #       DataTraceEnabled: false
     #       LoggingLevel: ERROR
-
-    ArenaSchedulerGroup:
-      Type: AWS::Scheduler::ScheduleGroup
-      Properties:
-        Name: abstractplay-arena-${self:provider.stage}
-        Tags: ${self:custom.apCostAllocationCfnTags}
 
     ArenaSchedulerExecutionRole:
       Type: AWS::IAM::Role

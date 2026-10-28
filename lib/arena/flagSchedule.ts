@@ -1,5 +1,6 @@
 import {
   CreateScheduleCommand,
+  CreateScheduleGroupCommand,
   DeleteScheduleCommand,
   ResourceNotFoundException,
   SchedulerClient,
@@ -71,11 +72,30 @@ function buildScheduleParams(
   };
 }
 
+/** Idempotent — group is not CloudFormation-managed (avoids CI scheduler IAM on deploy). */
+export async function ensureArenaSchedulerGroup(
+  stage: string,
+  client: SchedulerClient = new SchedulerClient({}),
+): Promise<void> {
+  const Name = arenaSchedulerGroupName(stage);
+  try {
+    await client.send(new CreateScheduleGroupCommand({ Name }));
+  } catch (err) {
+    const errName = err instanceof Error ? err.name : '';
+    const msg = err instanceof Error ? err.message : String(err);
+    if (errName === 'ConflictException' || msg.includes('already exists')) {
+      return;
+    }
+    throw err;
+  }
+}
+
 export async function upsertArenaFlagSchedule(
   input: UpsertArenaFlagScheduleInput,
   client: SchedulerClient = new SchedulerClient({}),
 ): Promise<void> {
   const groupName = arenaSchedulerGroupName(input.stage);
+  await ensureArenaSchedulerGroup(input.stage, client);
   const scheduleName = arenaFlagScheduleName(input.payload.gameId);
   const scheduleAtMs = computeArenaFlagScheduleAtMs(
     input.nominalFlagAtMs,
