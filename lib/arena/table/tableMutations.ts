@@ -340,6 +340,12 @@ export async function proposeArenaSeatSwapRecord(
   if (!isSeatedOnTable(table, userId)) {
     return { error: 'You are not seated at this table.' };
   }
+  if (table.swapProposalUserId && table.swapProposalUserId !== userId) {
+    return { error: 'Respond to your opponent’s seat swap offer first.' };
+  }
+  if (table.swapProposalUserId === userId) {
+    return { error: 'You already offered a seat swap.' };
+  }
   const prev = cloneTable(table);
   table.swapProposalUserId = userId;
   table.seats.forEach((s) => { s.ready = false; });
@@ -371,6 +377,33 @@ export async function acceptArenaSeatSwapRecord(
     s.ready = false;
   }
   table.seats.sort((a, b) => a.seatIndex - b.seatIndex);
+  table.swapProposalUserId = undefined;
+  const next = withUpdated(table, Date.now());
+  await putArenaTable(client, tableName, next);
+  await syncArenaIndexOnTableWrite(client, tableName, prev, next);
+  return { ok: true };
+}
+
+export async function rejectArenaSeatSwapRecord(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  tableId: string,
+): Promise<{ ok: true } | { error: string }> {
+  const table = await getArenaTable(client, tableName, tableId);
+  if (table === undefined || table.state !== 'seated') {
+    return { error: 'Seat swap is not available.' };
+  }
+  if (!table.swapProposalUserId) {
+    return { error: 'No pending seat swap.' };
+  }
+  if (table.swapProposalUserId === userId) {
+    return { error: 'Waiting for your opponent to accept or decline the swap.' };
+  }
+  if (!isSeatedOnTable(table, userId)) {
+    return { error: 'You are not seated at this table.' };
+  }
+  const prev = cloneTable(table);
   table.swapProposalUserId = undefined;
   const next = withUpdated(table, Date.now());
   await putArenaTable(client, tableName, next);
