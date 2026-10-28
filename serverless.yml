@@ -191,6 +191,15 @@ provider:
           - '.amazonaws.com/'
           - ${self:provider.stage}
           - '/botQuery'
+    ARENA_SCHEDULER_GROUP: abstractplay-arena-${self:provider.stage}
+    ARENA_SCHEDULER_ROLE_ARN:
+      Fn::GetAtt:
+        - ArenaSchedulerExecutionRole
+        - Arn
+    ARENA_FLAG_WORKER_ARN:
+      Fn::GetAtt:
+        - ArenaFlagWorkerLambdaFunction
+        - Arn
   iam:
     role:
       statements:
@@ -253,6 +262,24 @@ provider:
           Resource:
             - ${self:custom.stageConfig.dev.botpool}
             - ${self:custom.stageConfig.prod.botpool}
+        - Effect: Allow
+          Action:
+            - scheduler:CreateSchedule
+            - scheduler:UpdateSchedule
+            - scheduler:DeleteSchedule
+            - scheduler:GetSchedule
+          Resource:
+            Fn::Sub: arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/abstractplay-arena-${self:provider.stage}/*
+        - Effect: Allow
+          Action:
+            - iam:PassRole
+          Resource:
+            Fn::GetAtt:
+              - ArenaSchedulerExecutionRole
+              - Arn
+          Condition:
+            StringEquals:
+              iam:PassedToService: scheduler.amazonaws.com
 
 resources:
   Parameters:
@@ -627,6 +654,45 @@ resources:
     #       DataTraceEnabled: false
     #       LoggingLevel: ERROR
 
+    ArenaSchedulerGroup:
+      Type: AWS::Scheduler::ScheduleGroup
+      Properties:
+        Name: abstractplay-arena-${self:provider.stage}
+        Tags: ${self:custom.apCostAllocationCfnTags}
+
+    ArenaSchedulerExecutionRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: scheduler.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: InvokeArenaFlagWorker
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action: lambda:InvokeFunction
+                  Resource:
+                    Fn::GetAtt:
+                      - ArenaFlagWorkerLambdaFunction
+                      - Arn
+        Tags: ${self:custom.apCostAllocationCfnTags}
+
+    ArenaFlagWorkerSchedulePermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName:
+          Ref: ArenaFlagWorkerLambdaFunction
+        Action: lambda:InvokeFunction
+        Principal: scheduler.amazonaws.com
+        SourceArn:
+          Fn::Sub: arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/abstractplay-arena-${self:provider.stage}/*
+
   Outputs:
     OpsAlertsTopicArn:
       Condition: OpsAlertsEnabled
@@ -667,6 +733,22 @@ resources:
             - ${self:provider.stage}
       Export:
         Name: ${self:service}-${self:provider.stage}-WebsocketApiUrl
+    ArenaFlagWorkerArn:
+      Description: Lambda target for arena EventBridge Scheduler flag one-shots
+      Value:
+        Fn::GetAtt:
+          - ArenaFlagWorkerLambdaFunction
+          - Arn
+      Export:
+        Name: ${self:service}-${self:provider.stage}-ArenaFlagWorkerArn
+    ArenaSchedulerRoleArn:
+      Description: IAM role passed to EventBridge Scheduler to invoke arenaFlagWorker
+      Value:
+        Fn::GetAtt:
+          - ArenaSchedulerExecutionRole
+          - Arn
+      Export:
+        Name: ${self:service}-${self:provider.stage}-ArenaSchedulerRoleArn
 
 functions:
   authQuery:
@@ -745,6 +827,13 @@ functions:
     logRetentionInDays: 30
     # Stream trigger is defined in resources.GameProjectorEventSourceMapping (conditional)
     # so the table can gain StreamSpecification before StreamArn is referenced.
+
+  arenaFlagWorker:
+    handler: api/arenaFlagWorker.handler
+    description: EventBridge Scheduler target for arena clock flags
+    timeout: 30
+    memorySize: 256
+    logRetentionInDays: 30
 
   # websocket functions
   # wsAuthorizer:
