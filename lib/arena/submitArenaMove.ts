@@ -379,6 +379,11 @@ export async function submitArenaMove(
     ootRejected: false,
   });
 
+  if (game.gameEnded === undefined && game.toMove) {
+    (game as ArenaFullGame & { clockDisplayServerTime?: number }).clockDisplayServerTime =
+      clockCommittedAt;
+  }
+
   return {
     statusCode: 200,
     body: JSON.stringify(game),
