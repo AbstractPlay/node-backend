@@ -37,6 +37,8 @@ type FullGame = {
   playMode?: string;
   arenaTcId?: string;
   arenaClock?: { startSec: number; incSec: number; maxSec: number };
+  arenaClockStartAt?: number;
+  arenaPlayReady?: string[];
 };
 
 export async function game(
@@ -172,7 +174,8 @@ export async function game(
           {
             players: loaded.players,
             toMove: loaded.toMove,
-            lastMoveTime: loaded.lastMoveTime,
+            lastMoveTime: loaded.lastMoveTime ?? 0,
+            arenaClockStartAt: loaded.arenaClockStartAt,
           },
           displayNow,
         );

@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { createArenaGame } from '../createArenaGame.js';
+import { broadcastArenaLaunch } from '../arenaSyncStart.js';
 import { getArenaTimeControl } from '../timeControls.js';
 import {
   createArenaTableCommentsRow,
@@ -283,6 +284,12 @@ export async function launchArenaTableIfReady(
     playerIds,
     variants: table.variants.length > 0 ? table.variants : undefined,
     now,
+  });
+
+  await broadcastArenaLaunch({
+    metaGame: table.metaGame,
+    gameId: table.tableId,
+    playerIds,
   });
 
   table.state = 'playing';

@@ -21,6 +21,7 @@ type GameRow = {
   lastMoveTime: number;
   playMode?: string;
   clockGeneration?: number;
+  arenaClockStartAt?: number;
 };
 
 function parseWorkerEvent(raw: unknown): unknown {
@@ -93,6 +94,7 @@ export async function handler(rawEvent: unknown): Promise<void> {
           players: game.players,
           toMove: game.toMove,
           lastMoveTime: game.lastMoveTime,
+          arenaClockStartAt: game.arenaClockStartAt,
         },
         now,
       );
@@ -156,6 +158,7 @@ export async function handler(rawEvent: unknown): Promise<void> {
       players: game.players,
       toMove: game.toMove,
       lastMoveTime: game.lastMoveTime,
+      arenaClockStartAt: game.arenaClockStartAt,
     },
     now,
   );

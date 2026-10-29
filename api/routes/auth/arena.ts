@@ -12,6 +12,7 @@ import {
   handleProposeArenaSeatSwap,
   handleRejectArenaSeatSwap,
   handleSetArenaReady,
+  handleArenaPlayReady,
 } from '../../../lib/arena/arenaTableHandlers.js';
 import { submitArenaFeedback } from '../../../lib/arena/submitArenaFeedback.js';
 
@@ -23,6 +24,7 @@ export const arenaAuthRoutes: Record<string, AuthRouteHandler> = {
   cancel_arena_table: bindAuth(handleCancelArenaTable),
   get_arena_table: bindAuth(handleGetArenaTable),
   set_arena_ready: bindAuth(handleSetArenaReady),
+  arena_play_ready: bindAuth(handleArenaPlayReady),
   propose_arena_seat_swap: bindAuth(handleProposeArenaSeatSwap),
   accept_arena_seat_swap: bindAuth(handleAcceptArenaSeatSwap),
   reject_arena_seat_swap: bindAuth(handleRejectArenaSeatSwap),

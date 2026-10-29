@@ -72,4 +72,14 @@ describe('shouldDeliverWsMessage', () => {
       false,
     );
   });
+
+  it('delivers arena_launch and arena_sync only to the target user', () => {
+    const a = conn({ userId: 'user-a' });
+    const b = conn({ userId: 'user-b', sk: 'conn-2' });
+    const payload = { userId: 'user-a', metaGame: 'go', gameId: 'g1' };
+    assert.equal(shouldDeliverWsMessage('arena_launch', a, payload), true);
+    assert.equal(shouldDeliverWsMessage('arena_launch', b, payload), false);
+    assert.equal(shouldDeliverWsMessage('arena_sync', a, payload), true);
+    assert.equal(shouldDeliverWsMessage('arena_sync', b, payload), false);
+  });
 });

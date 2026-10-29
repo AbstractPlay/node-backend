@@ -3,23 +3,23 @@ import {
   remainingBankMs,
   type ClockGameSlice,
 } from '../clockElapsed.js';
+import {
+  arenaClockSliceForElapsed,
+  type ArenaClockFields,
+} from './arenaEffectiveClock.js';
 
-export function enrichArenaGameClockDisplay<T extends ClockGameSlice>(
+export function enrichArenaGameClockDisplay<T extends ArenaClockFields>(
   game: T,
   now: number,
 ): T & { clockDisplayServerTime: number; players: (T['players'][number] & { effectiveRemainingMs?: number })[] } {
-  const slice: ClockGameSlice = {
-    players: game.players,
-    toMove: game.toMove,
-    lastMoveTime: game.lastMoveTime,
-  };
+  const slice = arenaClockSliceForElapsed(game, now);
   const players = game.players.map((p, i) => {
     if (!isPlayerOnClock(slice, i)) {
       return { ...p };
     }
     const effectiveRemainingMs = remainingBankMs(
       p.time ?? 0,
-      game.lastMoveTime,
+      slice.lastMoveTime,
       now,
       p.id,
       slice,

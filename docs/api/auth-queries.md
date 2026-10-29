@@ -206,6 +206,7 @@ Lobby tables and quick match (2-player Fischer clocks). **`GAME.id = tableId`** 
 | `cancel_arena_table` | Host abandon before launch | `tableId` |
 | `get_arena_table` | Lobby state + `viewer` | `tableId` |
 | `set_arena_ready` | Ready toggle; launches when both ready | `tableId`, `ready` |
+| `arena_play_ready` | Player ping after play board rendered; starts 3s countdown when both seated players have pinged | `metaGame`, `id` (game id = table id) |
 | `propose_arena_seat_swap` | Request swap (clears ready) | `tableId` |
 | `accept_arena_seat_swap` | Accept swap (clears ready) | `tableId` |
 | `reject_arena_seat_swap` | Decline a pending swap offer | `tableId` |
