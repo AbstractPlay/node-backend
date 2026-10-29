@@ -12,6 +12,8 @@ import {
   collectPlayerIdsFromGame,
 } from '../vacation/load.js';
 import { enrichLiveGameClockDisplay } from '../vacation/clockDisplay.js';
+import { isArenaGame } from '../gamePlayMode.js';
+import { enrichArenaGameClockDisplay } from '../arena/enrichArenaClockDisplay.js';
 import {
   getPlayerVacationFlagsFromMap,
   getVacationWindowFromMap,
@@ -32,6 +34,11 @@ type FullGame = {
   clockDisplayServerTime?: number;
   variants?: string[];
   note?: string;
+  playMode?: string;
+  arenaTcId?: string;
+  arenaClock?: { startSec: number; incSec: number; maxSec: number };
+  arenaClockStartAt?: number;
+  arenaPlayReady?: string[];
 };
 
 export async function game(
@@ -97,7 +104,7 @@ export async function game(
     }
     let activeGameNow: number | undefined;
     let vacationState: Awaited<ReturnType<typeof prepareVacationPlayerStateForPlayerIds>> | undefined;
-    if ((pars.cbit === 0 || pars.cbit === '0') && loaded.toMove && loaded.toMove !== '') {
+    if ((pars.cbit === 0 || pars.cbit === '0') && loaded.toMove && loaded.toMove !== '' && !isArenaGame(loaded)) {
       const tableName = process.env.ABSTRACT_PLAY_TABLE!;
       activeGameNow = Date.now();
       const now = activeGameNow;
@@ -162,27 +169,41 @@ export async function game(
       && loaded.toMove !== ''
     ) {
       const displayNow = activeGameNow ?? Date.now();
-      if (vacationState === undefined) {
-        const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-        vacationState = await prepareVacationPlayerStateForPlayerIds(
-          ddbDocClient,
-          tableName,
-          collectPlayerIdsFromGame(loaded),
+      if (isArenaGame(loaded)) {
+        const withClock = enrichArenaGameClockDisplay(
+          {
+            players: loaded.players,
+            toMove: loaded.toMove,
+            lastMoveTime: loaded.lastMoveTime ?? 0,
+            arenaClockStartAt: loaded.arenaClockStartAt,
+          },
           displayNow,
         );
+        loaded.players = withClock.players;
+        loaded.clockDisplayServerTime = withClock.clockDisplayServerTime;
+      } else {
+        if (vacationState === undefined) {
+          const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+          vacationState = await prepareVacationPlayerStateForPlayerIds(
+            ddbDocClient,
+            tableName,
+            collectPlayerIdsFromGame(loaded),
+            displayNow,
+          );
+        }
+        const withClock = enrichLiveGameClockDisplay(
+          {
+            players: loaded.players,
+            toMove: loaded.toMove,
+            lastMoveTime: loaded.lastMoveTime,
+          },
+          displayNow,
+          getVacationWindowFromMap(vacationState.windows),
+          getPlayerVacationFlagsFromMap(vacationState.flags),
+        );
+        loaded.players = withClock.players;
+        loaded.clockDisplayServerTime = withClock.clockDisplayServerTime;
       }
-      const withClock = enrichLiveGameClockDisplay(
-        {
-          players: loaded.players,
-          toMove: loaded.toMove,
-          lastMoveTime: loaded.lastMoveTime,
-        },
-        displayNow,
-        getVacationWindowFromMap(vacationState.windows),
-        getPlayerVacationFlagsFromMap(vacationState.flags),
-      );
-      loaded.players = withClock.players;
-      loaded.clockDisplayServerTime = withClock.clockDisplayServerTime;
     }
     if (userid !== undefined && userid !== null && userid !== '') {
       await setSeenTime(userid, pars.id);

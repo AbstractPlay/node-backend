@@ -32,6 +32,8 @@ import {
   standingChallenges,
   userNames,
 } from '../../lib/public/index.js';
+import { listArenaTimeControlsPublic } from '../../lib/arena/listTimeControlsPublic.js';
+import { listArenaTablesPublic } from '../../lib/arena/arenaTableHandlers.js';
 
 export const publicRoutes: Record<string, PublicRouteHandler> = {
   user_names: () => userNames(),
@@ -48,6 +50,8 @@ export const publicRoutes: Record<string, PublicRouteHandler> = {
   get_tournament: (pars) => getTournament(pars),
   get_ladder: (pars) => getLadder(pars),
   get_ladders: (pars) => getLadders(pars),
+  list_arena_time_controls: () => listArenaTimeControlsPublic(),
+  list_arena_tables: (pars) => listArenaTablesPublic(pars ?? {}),
   archive_tournaments: () => archiveTournaments(),
   get_event: (pars) => eventGetEvent(pars),
   get_events: () => eventGetEvents(),

@@ -4,6 +4,7 @@ import type { PartialClaims } from '../../../lib/api/types.js';
 import { analyticsAuthRoutes } from './analytics.js';
 import { announcementsAuthRoutes } from './announcements.js';
 import { vacationAuthRoutes } from './vacation.js';
+import { arenaAuthRoutes } from './arena.js';
 import { botsAuthRoutes } from './bots.js';
 import { challengesAuthRoutes } from './challenges.js';
 import { coreAuthRoutes } from './core.js';
@@ -26,6 +27,7 @@ export const authRoutes: Record<string, import('../../../lib/api/routeTypes.js')
   ...socialAuthRoutes,
   ...challengesAuthRoutes,
   ...gamesAuthRoutes,
+  ...arenaAuthRoutes,
   ...tournamentsAuthRoutes,
   ...laddersAuthRoutes,
   ...eventsAuthRoutes,

@@ -53,6 +53,25 @@ describe('toCurrentSummary', () => {
     assert.deepEqual(summary.variants, ['v1']);
     assert.equal(summary.numMoves, 12);
   });
+
+  it('includes playMode for arena games', () => {
+    const summary = toCurrentSummary({
+      pk: 'GAME',
+      sk: 'abande#0#t1',
+      id: 't1',
+      metaGame: 'abande',
+      numPlayers: 2,
+      players: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
+      clockHard: false,
+      toMove: '0',
+      lastMoveTime: 100,
+      state: '{}',
+      playMode: 'arena',
+      arenaTcId: 'blitz5',
+    });
+    assert.equal(summary.playMode, 'arena');
+    assert.equal(summary.arenaTcId, 'blitz5');
+  });
 });
 
 describe('shouldKeepCompletedGame', () => {

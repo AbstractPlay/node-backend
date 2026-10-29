@@ -28,10 +28,14 @@ import {
   updateNote,
 } from '../../../lib/games/adminHandlers.js';
 import { bindAuth } from './shared.js';
+import { submitArenaMove } from '../../../lib/arena/submitArenaMove.js';
+import { createArenaDevGame } from '../../../lib/arena/createArenaDevGame.js';
 
 export const gamesAuthRoutes: Record<string, AuthRouteHandler> = {
   start_solo_game: bindAuth(startSoloGame),
   submit_move: bindAuth(submitMove),
+  submit_arena_move: bindAuth(submitArenaMove),
+  create_arena_dev_game: bindAuth(createArenaDevGame),
   timeloss: bindAuth(checkForTimeloss),
   abandoned: bindAuth(checkForAbandonedGame),
   invoke_pie: bindAuth(invokePie),

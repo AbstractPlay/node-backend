@@ -7,10 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Entries below are grouped by theme and approximate ship window; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-10-28
+## [1.0.0-ci] - 2026-10-29
 
 ### Added
 
+- **Realtime Arena:** Live unrated two-player Fischer games (`playMode: 'arena'`, ms `arenaClock`, catalog `arenaTcId`) via `submit_arena_move` and EventBridge Scheduler timeloss; open or invite-only closed tables (no matchmaking queue). Public `list_arena_time_controls` and `list_arena_tables`; auth lobby (`ARENATABLE`, table chat, variants on create); synchronized start and `arena_sync` WebSocket; post-game soak `submit_arena_feedback` (`ARENAFB#`); ops scripts and CloudWatch `AbstractPlay/Arena` metrics; `records` stamps arena fields on completed JSON. Docs [Realtime Arena](/backend/subsystems/arena/).
 - **Continuous Delta Ladder:** Player-created correspondence ladders (kernel, pool, challenges, hub chat, `watchLadders`); `ladderJoin` / `ladderLeave` / `ladderPointsChange` / `ladderChat` / `ladderDecay` in-app notifications; daily crons `ladder-decay` and `ladder-reconcile-counts` (ops S3 `ladders/reconcile/*`); `records` `event/{ladderId}.json`; ops `scripts/reconcile-ladder-active-counts.ts`, `backfill-ladder-by-user`, `replay-ladder-member`; docs [subsystems/ladders](/backend/subsystems/ladders/). Enable prod UI by removing `VITE_LADDER_UI_DISABLED` on the front deploy.
 - **Ladders:** `npm run backfill-ladder-join-seeds` — recompute join `startingPoints` from `_summary-ratings` after lookup key fix.
 
@@ -20,6 +21,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Ops:** `.gitattributes` no longer uses `merge=ours` on root `package.json` (avoids stale npm `scripts` after develop→main); pin manifests unchanged.
 - **Ops:** Game projector SQS DLQ and DLQ CloudWatch alarm deploy on **prod** only (dev stack no longer creates `abstractplay-game-projector-dlq-dev`).
 - **Ladders:** `displayName` uses gameslib `expandVariantLabels` (same variant copy as the front ladder hub), e.g. `Exxit ladder (…)` instead of `(no variants)` or raw UIDs.
+- **Game links:** `playMode: 'arena'` on completed/current open-API game summaries, player mark summaries, and arena game-end (and start) in-app notifications so the front can link to `/arena/play` without relying on `/move` redirects.
 
 ### Fixed
 

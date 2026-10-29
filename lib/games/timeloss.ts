@@ -29,6 +29,10 @@ import {
   getVacationWindowFromMap,
   prepareVacationWindowsForPlayerIds,
 } from '../vacation/persist.js';
+import { isArenaGame } from '../gamePlayMode.js';
+import { arenaTimedOutPlayerIndex } from '../arena/arenaOutOfTime.js';
+import { finishArenaTableOnGameEnd } from '../arena/table/tableMutations.js';
+import { wsBroadcast } from '../wsBroadcast.js';
 
 type FullGame = {
   pk: string;
@@ -49,11 +53,13 @@ type FullGame = {
   rated?: boolean;
   gameStarted?: number;
   matchLeg?: number;
+  playMode?: string;
   clockStart?: number;
   clockInc?: number;
   clockMax?: number;
   gameEnded?: number;
   numMoves?: number;
+  arenaClockStartAt?: number;
 };
 
 type Game = {
@@ -72,7 +78,7 @@ type Game = {
 };
 
 function toNotificationGame(
-  game: Pick<FullGame, 'id' | 'metaGame' | 'variants' | 'players' | 'winner'>,
+  game: Pick<FullGame, 'id' | 'metaGame' | 'variants' | 'players' | 'winner' | 'playMode'>,
   scores?: ReturnType<typeof collectGameEndScoresFromEngine>,
 ) {
   return {
@@ -82,6 +88,7 @@ function toNotificationGame(
     players: game.players.map(p => ({ id: p.id, name: p.name })),
     winner: game.winner,
     ...(scores !== undefined && scores.length > 0 ? { scores } : {}),
+    ...(game.playMode === 'arena' ? { playMode: 'arena' as const } : {}),
   };
 }
 
@@ -107,6 +114,9 @@ export async function timeloss(
     throw new Error(`Unable to get game ${metaGame}, ${gameid} from table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
   if (!data.Item) {
+    if (check) {
+      throw 'Game is already over!';
+    }
     throw new Error(`No game ${metaGame}, ${gameid} found in table ${process.env.ABSTRACT_PLAY_TABLE}`);
   }
 
@@ -120,14 +130,29 @@ export async function timeloss(
       lastMoveTime: game.lastMoveTime,
     };
     const onClockIds = collectOnClockPlayerIds(slice);
-    const vacationWindows = await prepareVacationWindowsForPlayerIds(
-      ddbDocClient,
-      process.env.ABSTRACT_PLAY_TABLE!,
-      onClockIds,
-      now,
-    );
-    const getVacationWindow = getVacationWindowFromMap(vacationWindows);
-    if (Array.isArray(game.toMove)) {
+    const getVacationWindow = isArenaGame(game)
+      ? () => null
+      : getVacationWindowFromMap(await prepareVacationWindowsForPlayerIds(
+        ddbDocClient,
+        process.env.ABSTRACT_PLAY_TABLE!,
+        onClockIds,
+        now,
+      ));
+    if (isArenaGame(game)) {
+      const idx = arenaTimedOutPlayerIndex(
+        {
+          players: game.players,
+          toMove: game.toMove,
+          lastMoveTime: game.lastMoveTime,
+          arenaClockStartAt: game.arenaClockStartAt,
+        },
+        now,
+      );
+      if (idx === null) {
+        throw "Opponent's time isn't up!";
+      }
+      player = idx;
+    } else if (Array.isArray(game.toMove)) {
       let minRemaining = 0;
       let minIndex = -1;
       game.toMove.forEach((p: boolean, i: number) => {
@@ -272,5 +297,22 @@ export async function timeloss(
     inAppSettingsMapFromUsers(players),
   ));
   await Promise.all(work);
+  if (isArenaGame(game)) {
+    await finishArenaTableOnGameEnd(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      game.id,
+    );
+  }
+  try {
+    await wsBroadcast('game', { meta: game.metaGame, id: game.id });
+  } catch (err) {
+    console.log(JSON.stringify({
+      timeloss: 'ws_broadcast_failed',
+      metaGame: game.metaGame,
+      gameId: game.id,
+      message: err instanceof Error ? err.message : String(err),
+    }));
+  }
   return game;
 }

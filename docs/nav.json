@@ -19,6 +19,7 @@
   { "slug": "subsystems/challenges" },
   { "slug": "subsystems/tournaments" },
   { "slug": "subsystems/ladders", "title": "Continuous delta ladders" },
+  { "slug": "subsystems/arena", "title": "Realtime Arena" },
   { "slug": "subsystems/events" },
   { "slug": "subsystems/bots" },
   { "slug": "subsystems/websockets" },

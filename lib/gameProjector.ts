@@ -9,6 +9,7 @@ import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { GameFactory } from '@abstractplay/gameslib';
 import type { DynamoDBRecord } from 'aws-lambda';
 import { decompressGameState } from './gameState.js';
+import { isArenaGame } from './gamePlayMode.js';
 import { isBotId } from './participants.js';
 import { deleteUserGameOverlay } from './userGameOverlay.js';
 
@@ -30,6 +31,9 @@ export type GameRecord = {
   variants?: string[];
   commented?: number;
   ladderId?: string;
+  playMode?: string;
+  arenaTcId?: string;
+  arenaClock?: { startSec: number; incSec: number; maxSec: number };
   state: string;
 };
 
@@ -64,6 +68,11 @@ export function toCurrentSummary(game: GameRecord) {
     gameStarted: game.gameStarted,
     numMoves: resolveNumMoves(game),
     ...(game.ladderId ? { ladderId: game.ladderId } : {}),
+    ...(game.playMode === 'arena' ? {
+      playMode: 'arena' as const,
+      ...(game.arenaTcId ? { arenaTcId: game.arenaTcId } : {}),
+      ...(game.arenaClock ? { arenaClock: game.arenaClock } : {}),
+    } : {}),
   };
 }
 
@@ -82,6 +91,11 @@ export function toCompletedSummary(game: GameRecord, numMoves: number) {
     variants: game.variants,
     commented: game.commented,
     toMove: game.toMove,
+    ...(game.playMode === 'arena' ? {
+      playMode: 'arena' as const,
+      ...(game.arenaTcId ? { arenaTcId: game.arenaTcId } : {}),
+      ...(game.arenaClock ? { arenaClock: game.arenaClock } : {}),
+    } : {}),
   };
 }
 
@@ -465,6 +479,10 @@ export async function processGameStreamRecord(
   }
   if (!Array.isArray(game.players)) {
     console.warn(`Skipping GAME stream record ${game.sk}: missing or invalid players`);
+    return;
+  }
+
+  if (isArenaGame(game)) {
     return;
   }
 
