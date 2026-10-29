@@ -7,7 +7,7 @@ import {
   shouldSkipArenaFlagWorker,
 } from '../lib/arena/flagPayload.js';
 import { arenaTimedOutPlayerIndex } from '../lib/arena/arenaOutOfTime.js';
-import { deleteArenaFlagForGame } from '../lib/arena/rescheduleArenaFlag.js';
+import { deleteArenaFlagForGame, rescheduleArenaFlagForGame } from '../lib/arena/rescheduleArenaFlag.js';
 import { timeloss } from '../lib/games/timeloss.js';
 
 type GameRow = {
@@ -110,10 +110,28 @@ export async function handler(rawEvent: unknown): Promise<void> {
 
   if (timedOutIndex === null) {
     console.log(JSON.stringify({
-      arenaFlagWorker: 'noop',
+      arenaFlagWorker: 'rearm',
       reason: 'not_flagged_yet',
       payload,
     }));
+    try {
+      await rescheduleArenaFlagForGame({
+        id: game.id,
+        metaGame: game.metaGame,
+        clockGeneration: game.clockGeneration,
+        players: game.players,
+        toMove: game.toMove,
+        lastMoveTime: game.lastMoveTime,
+      });
+    } catch (err) {
+      console.log(JSON.stringify({
+        arenaFlagWorker: 'error',
+        reason: 'rearm_failed',
+        payload,
+        message: err instanceof Error ? err.message : String(err),
+      }));
+      throw err;
+    }
     return;
   }
 
