@@ -10,7 +10,6 @@ import { realPingBot } from '../bots/realPingBot.js';
 import { updateWatcherSummaries, type GameMarkSummary } from '../playerGameMarks.js';
 import {
   applyArenaInvokePieClock,
-  refundArenaPieOpponentThinkTime,
 } from './applyArenaInvokePieClock.js';
 import { rescheduleArenaFlagForGame } from './rescheduleArenaFlag.js';
 
@@ -69,7 +68,7 @@ export async function handleArenaInvokePie(
 
   const pieEven = flagSetIncludes(flags, 'pie-even');
 
-  let { players: clockedPlayers, timeUsedMs } = applyArenaInvokePieClock({
+  const { players: clockedPlayers } = applyArenaInvokePieClock({
     moveReceivedAt,
     prevLastMoveTime,
     invokerId: userid,
@@ -78,14 +77,8 @@ export async function handleArenaInvokePie(
     arenaClock: game.arenaClock,
   });
 
-  if (!pieEven) {
-    clockedPlayers = refundArenaPieOpponentThinkTime(
-      clockedPlayers,
-      opponentBeforeSwap.id,
-      timeUsedMs,
-      game.arenaClock,
-    );
-  }
+  // No correspondence-style opponent refund: arena advances lastMoveTime (like a move).
+  // Only the invoker receives think-time debit + Fischer increment on their bank.
 
   const timeById = new Map(clockedPlayers.map((p) => [p.id, p.time]));
   game.players = [...game.players]

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyArenaInvokePieClock,
-  refundArenaPieOpponentThinkTime,
 } from '../../lib/arena/applyArenaInvokePieClock.js';
 
 const tc = { startSec: 300, incSec: 3, maxSec: 300 };
@@ -26,10 +25,10 @@ describe('applyArenaInvokePieClock', () => {
     expect(players[1]!.time).toBe(300_000);
   });
 
-  it('refunds opponent think time for non–pie-even parity', () => {
+  it('does not change opponent bank (arena pie — no correspondence refund)', () => {
     const prevLast = 0;
     const moveReceivedAt = 8_000;
-    const { players, timeUsedMs } = applyArenaInvokePieClock({
+    const { players } = applyArenaInvokePieClock({
       moveReceivedAt,
       prevLastMoveTime: prevLast,
       invokerId: 'a',
@@ -40,13 +39,7 @@ describe('applyArenaInvokePieClock', () => {
       toMove: '0',
       arenaClock: tc,
     });
-    const refunded = refundArenaPieOpponentThinkTime(
-      players,
-      'b',
-      timeUsedMs,
-      tc,
-    );
-    expect(refunded[1]!.time).toBe(290_000 + 8_000);
+    expect(players[1]!.time).toBe(290_000);
   });
 
   it('keeps each player bank on their record when seats are reversed', () => {
