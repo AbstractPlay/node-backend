@@ -36,8 +36,18 @@ describe('arenaEffectiveClock', () => {
     assert.equal(arenaClockTickOrigin({ ...base, arenaClockStartAt: startAt }, now), startAt);
   });
 
-  it('uses wall now as tick origin when countdown not scheduled', () => {
+  it('uses persisted lastMoveTime when synchronized start is not scheduled', () => {
     const now = 500_000;
-    assert.equal(arenaClockTickOrigin({ ...base }, now), now);
+    const game = { ...base, lastMoveTime: 123_456 };
+    assert.equal(arenaClockTickOrigin(game, now), 123_456);
+  });
+
+  it('uses lastMoveTime after synchronized start (not arenaClockStartAt)', () => {
+    const startAt = 1_000_000;
+    const lastMove = 1_050_000;
+    const now = 1_060_000;
+    const game = { ...base, arenaClockStartAt: startAt, lastMoveTime: lastMove };
+    assert.equal(arenaClockTickOrigin(game, now), lastMove);
+    assert.equal(arenaClockSliceForElapsed(game, now).lastMoveTime, lastMove);
   });
 });

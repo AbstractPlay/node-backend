@@ -59,6 +59,7 @@ type FullGame = {
   clockMax?: number;
   gameEnded?: number;
   numMoves?: number;
+  arenaClockStartAt?: number;
 };
 
 type Game = {
@@ -137,7 +138,15 @@ export async function timeloss(
         now,
       ));
     if (isArenaGame(game)) {
-      const idx = arenaTimedOutPlayerIndex(slice, now);
+      const idx = arenaTimedOutPlayerIndex(
+        {
+          players: game.players,
+          toMove: game.toMove,
+          lastMoveTime: game.lastMoveTime,
+          arenaClockStartAt: game.arenaClockStartAt,
+        },
+        now,
+      );
       if (idx === null) {
         throw "Opponent's time isn't up!";
       }
