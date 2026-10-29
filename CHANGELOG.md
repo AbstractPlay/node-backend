@@ -26,6 +26,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 ### Fixed
 
 - **Ladders:** Join seed lookup uses meta-game UID and `variantUidsForBatchRating` (same keys as summarize / Glicko), not display titles or raw empty variant lists on games with variant groups.
+- **WebSockets:** `messageHandler` delivers `arena_launch`, `arena_sync`, and `ladder` verbs (were dropped as unsupported after arena/ladder fan-out shipped).
 
 ## [1.0.0-ci] - 2026-10-24
 

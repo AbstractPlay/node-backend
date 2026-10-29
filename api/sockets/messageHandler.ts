@@ -9,7 +9,17 @@ import {
 } from "../../lib/wsMessageDelivery.js";
 import { postToMany } from "../../lib/wsPost.js";
 
-const SUPPORTED_VERBS = ["chat", "game", "test", "connections", "notification", "tournament"];
+const SUPPORTED_VERBS = [
+  "chat",
+  "game",
+  "test",
+  "connections",
+  "notification",
+  "tournament",
+  "ladder",
+  "arena_launch",
+  "arena_sync",
+];
 
 type MsgBody = {
   domainName: string;
