@@ -65,19 +65,3 @@ export function applyArenaInvokePieClock(
 
   return { players, timeUsedMs };
 }
-
-/** Non–pie-even: opponent refund while board state unchanged (correspondence parity). */
-export function refundArenaPieOpponentThinkTime(
-  players: { id: string; time?: number }[],
-  opponentId: string,
-  timeUsedMs: number,
-  arenaClock: ArenaClockSnapshot,
-): { id: string; time?: number }[] {
-  const next = players.map((p) => ({ ...p, time: p.time ?? 0 }));
-  const opponent = next.find((p) => p.id === opponentId);
-  if (!opponent) {
-    throw new Error('Opponent not in game');
-  }
-  opponent.time = clampBank(opponent.time + timeUsedMs, arenaClock);
-  return next;
-}
