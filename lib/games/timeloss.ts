@@ -32,6 +32,7 @@ import {
 import { isArenaGame } from '../gamePlayMode.js';
 import { arenaTimedOutPlayerIndex } from '../arena/arenaOutOfTime.js';
 import { finishArenaTableOnGameEnd } from '../arena/table/tableMutations.js';
+import { wsBroadcast } from '../wsBroadcast.js';
 
 type FullGame = {
   pk: string;
@@ -292,6 +293,16 @@ export async function timeloss(
       process.env.ABSTRACT_PLAY_TABLE!,
       game.id,
     );
+  }
+  try {
+    await wsBroadcast('game', { meta: game.metaGame, id: game.id });
+  } catch (err) {
+    console.log(JSON.stringify({
+      timeloss: 'ws_broadcast_failed',
+      metaGame: game.metaGame,
+      gameId: game.id,
+      message: err instanceof Error ? err.message : String(err),
+    }));
   }
   return game;
 }
