@@ -5,9 +5,7 @@ import {
   handleCancelArenaTable,
   handleCreateArenaTable,
   handleGetArenaTable,
-  handleJoinArenaQueue,
   handleJoinArenaTable,
-  handleLeaveArenaQueue,
   handleLeaveArenaTable,
   handleProposeArenaSeatSwap,
   handleRejectArenaSeatSwap,
@@ -28,6 +26,4 @@ export const arenaAuthRoutes: Record<string, AuthRouteHandler> = {
   propose_arena_seat_swap: bindAuth(handleProposeArenaSeatSwap),
   accept_arena_seat_swap: bindAuth(handleAcceptArenaSeatSwap),
   reject_arena_seat_swap: bindAuth(handleRejectArenaSeatSwap),
-  join_arena_queue: bindAuth(handleJoinArenaQueue),
-  leave_arena_queue: bindAuth(handleLeaveArenaQueue),
 };

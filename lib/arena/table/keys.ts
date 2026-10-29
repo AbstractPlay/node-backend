@@ -16,13 +16,3 @@ export function arenaIndexSk(updatedAtMs: number, tableId: string): string {
 export function arenaUserSk(userId: string): string {
   return userId;
 }
-
-/** Queue partition key for quick match (meta + tc + variants). */
-export function arenaQueuePk(metaGame: string, arenaTcId: string, variants: string[]): string {
-  const v = [...variants].sort().join(',');
-  return `ARENAQUEUE#${metaGame}#${arenaTcId}#${v}`;
-}
-
-export function arenaQueueSk(userId: string): string {
-  return userId;
-}

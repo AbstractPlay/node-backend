@@ -63,17 +63,6 @@ async function getArenaTable(
   return r.data as ArenaTableView;
 }
 
-async function leaveQueueBoth(
-  manifest: Awaited<ReturnType<typeof loadDevTestPlayersManifest>>,
-): Promise<void> {
-  for (const player of [P1, P2]) {
-    await authQueryAsPlayer(manifest, player, 'leave_arena_queue', {
-      metaGame: META_GAME,
-      arenaTcId: TC_ID,
-    });
-  }
-}
-
 async function cancelAsHost(
   manifest: Awaited<ReturnType<typeof loadDevTestPlayersManifest>>,
   tableId: string,
@@ -163,42 +152,6 @@ async function main() {
       await cancelAsHost(manifest, swapTableId!);
     }));
   }
-
-  // --- Quick match queue ---
-  await leaveQueueBoth(manifest);
-  let queueTableId: string | undefined;
-  results.push(await step('queue: first join waits', async () => {
-    const r = await authQueryAsPlayer(manifest, P1, 'join_arena_queue', {
-      metaGame: META_GAME,
-      arenaTcId: TC_ID,
-    });
-    assert(r.ok, !r.ok ? r.message : JSON.stringify(r));
-    const data = r.data as { matched?: boolean; queued?: boolean };
-    assert(data.matched === false && data.queued === true, JSON.stringify(data));
-  }));
-
-  results.push(await step('queue: second join matches → seated table', async () => {
-    const r = await authQueryAsPlayer(manifest, P2, 'join_arena_queue', {
-      metaGame: META_GAME,
-      arenaTcId: TC_ID,
-    });
-    assert(r.ok, !r.ok ? r.message : JSON.stringify(r));
-    const data = r.data as { matched?: boolean; tableId?: string };
-    assert(data.matched === true && data.tableId, JSON.stringify(data));
-    queueTableId = data.tableId;
-    const t = await getArenaTable(manifest, P1, queueTableId!);
-    assert(t.state === 'seated', `state=${t.state}`);
-    const ids = (t.seats ?? []).map((s) => s.userId).filter(Boolean);
-    assert(ids.length === 2, `expected 2 seats, got ${ids.length}`);
-  }));
-
-  if (queueTableId) {
-    results.push(await step('queue: cleanup cancel', async () => {
-      await cancelAsHost(manifest, queueTableId!);
-    }));
-  }
-
-  await leaveQueueBoth(manifest);
 
   const failed = results.filter((r) => !r.ok);
   for (const r of results) {

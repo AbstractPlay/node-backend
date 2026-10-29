@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arenaIndexSk, arenaQueuePk } from '../../lib/arena/table/keys.js';
+import { arenaIndexSk } from '../../lib/arena/table/keys.js';
 import { indexStateForTable } from '../../lib/arena/table/indexSync.js';
 import type { ArenaTableRecord } from '../../lib/arena/table/types.js';
 import { ARENA_TABLE_PK } from '../../lib/arena/table/constants.js';
@@ -9,12 +9,6 @@ describe('arena table keys', () => {
     const older = arenaIndexSk(1_000, 'same-id');
     const newer = arenaIndexSk(2_000, 'same-id');
     expect(newer < older).toBe(true);
-  });
-
-  it('arenaQueuePk includes sorted variants', () => {
-    expect(arenaQueuePk('hex', 'blitz_5_3', ['b', 'a'])).toBe(
-      arenaQueuePk('hex', 'blitz_5_3', ['a', 'b']),
-    );
   });
 });
 

@@ -196,7 +196,7 @@ Player-created continuous delta ladders (one canonical ladder per meta + variant
 
 ## Realtime arena (tables)
 
-Lobby tables and quick match (2-player Fischer clocks). **`GAME.id = tableId`** when play starts. Arena games are excluded from `me_dashboard`. Public **`list_arena_tables`** on the unauthenticated `query` endpoint.
+Lobby tables (2-player Fischer clocks). **`GAME.id = tableId`** when play starts. Arena games are excluded from `me_dashboard`. Public **`list_arena_tables`** on the unauthenticated `query` endpoint.
 
 | Query | Purpose | Key `pars` |
 |-------|---------|------------|
@@ -210,8 +210,6 @@ Lobby tables and quick match (2-player Fischer clocks). **`GAME.id = tableId`** 
 | `propose_arena_seat_swap` | Request swap (clears ready) | `tableId` |
 | `accept_arena_seat_swap` | Accept swap (clears ready) | `tableId` |
 | `reject_arena_seat_swap` | Decline a pending swap offer | `tableId` |
-| `join_arena_queue` | Quick match queue | `metaGame`, `arenaTcId`, optional `variants` |
-| `leave_arena_queue` | Leave queue | `metaGame`, `arenaTcId`, optional `variants` |
 | `submit_arena_feedback` | Post-game soak survey (players, after end; idempotent) | `metaGame`, `gameId`, Likert 1–5, `unfairFlag`, `queueAgain`, optional `comment` |
 
 Pre-launch chat uses **`submit_comment`** with `id = tableId` (same `GAMECOMMENTS` row as the live game). Spectators may kibitz before launch and after arena game end; during live play only seated players may chat.
