@@ -41,6 +41,7 @@
     "backfill-wishlist-bgg-images": "tsx scripts/backfill-wishlist-bgg-images.mjs",
     "backfill-blank-user-names": "tsx scripts/backfill-blank-user-names.mjs",
     "backfill-orb-game-variants": "tsx scripts/backfill-orb-game-variants.mjs",
+    "backfill-arena-completed-index": "tsx scripts/backfill-arena-completed-index.mjs",
     "backfill-guerrilla-match-stack": "tsx scripts/backfill-guerrilla-match-stack.mjs",
     "dedupe-completed-game-indexes": "tsx scripts/dedupe-completed-game-indexes.mjs",
     "backfill-tournament-by-user": "tsx scripts/backfill-tournament-by-user.mjs",
