@@ -1,6 +1,6 @@
 # Realtime Arena
 
-Live **2-player Fischer** games: lobby tables, quick match, and **`submit_arena_move`** with EventBridge Scheduler timeouts. Correspondence challenges, ladder games, and dashboard timeout sweeps are unchanged.
+Live **2-player Fischer** games: open and closed lobby tables, and **`submit_arena_move`** with EventBridge Scheduler timeouts. Correspondence challenges, ladder games, and dashboard timeout sweeps are unchanged.
 
 ## Product rules (v1)
 
@@ -9,7 +9,7 @@ Live **2-player Fischer** games: lobby tables, quick match, and **`submit_arena_
 | Eligibility | Meta-games with `playercounts` including **2** only |
 | Ratings | All arena games **`unrated: true`** until rated v2 |
 | Dashboard | Arena **excluded** from `me_dashboard` |
-| Vacation | Correspondence vacation **does not pause** arena clocks; queue/play allowed during vacation |
+| Vacation | Correspondence vacation **does not pause** arena clocks; arena play allowed during vacation |
 | Game id | **`tableId === GAME.id`** when play launches (stable URL + chat) |
 | Clock | Server **`moveReceivedAt`** at handler entry; grace **`ARENA_CLOCK_GRACE_MS`** (750ms) |
 | Start sync | **`arena_launch`** WS to both players; **`arena_play_ready`** when play UI rendered; **3s** countdown (`arenaClockStartAt`) before Fischer time runs |
@@ -23,7 +23,6 @@ See [Vacation mode](/backend/subsystems/vacation/) for the correspondence vs are
 | `ARENATABLE` | `tableId` | Lobby state, seats, ready, swap |
 | `ARENAINDEX#<state>` | inverted time + `tableId` | Public listing (`waiting` / `seated` / `playing`) |
 | `ARENAUSER` | `userId` | One active arena table/game per user |
-| `ARENAQUEUE#…` | `userId` | Quick-match waiters |
 | `GAME` | `<meta>#0#<tableId>` | Live play (`playMode: 'arena'`, `arenaTcId`, `arenaClock`) |
 | `GAMECOMMENTS` | `<tableId>` | Lobby + in-game + post-game chat thread |
 | `ARENAFB#<userId>` | `<metaGame>#<gameId>` | Optional post-game feedback (soak) |
@@ -32,7 +31,7 @@ Details: [Database schema](/backend/database-schema/) (Games section).
 
 ## API
 
-Public **`list_arena_time_controls`**, **`list_arena_tables`**. Auth table/queue RPCs and **`submit_arena_move`** are documented in [Auth queries — Realtime arena](/backend/api/auth-queries/#realtime-arena-tables).
+Public **`list_arena_time_controls`**, **`list_arena_tables`**. Auth table RPCs and **`submit_arena_move`** are documented in [Auth queries — Realtime arena](/backend/api/auth-queries/#realtime-arena-tables).
 
 Post-game soak feedback: **`submit_arena_feedback`** (players only, after `gameEnded`; idempotent per user/game).
 

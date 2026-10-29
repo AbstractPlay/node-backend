@@ -13,7 +13,6 @@ import {
   rejectArenaSeatSwapRecord,
   setArenaReadyRecord,
 } from './table/tableMutations.js';
-import { joinArenaQueueRecord, leaveArenaQueueRecord } from './table/queue.js';
 import { listArenaTablesFromIndex } from './table/listTables.js';
 import { recordArenaPlayReady } from './arenaSyncStart.js';
 import type { ArenaTableRecord } from './table/types.js';
@@ -220,42 +219,6 @@ export async function handleRejectArenaSeatSwap(userid: string, pars: { tableId?
   if ('error' in result) {
     return formatReturnError(result.error);
   }
-  return jsonOk({ ok: true });
-}
-
-export async function handleJoinArenaQueue(
-  userid: string,
-  pars: { metaGame?: string; arenaTcId?: string; variants?: string[] },
-) {
-  if (!pars.metaGame || !pars.arenaTcId) {
-    return formatReturnError('metaGame and arenaTcId are required.');
-  }
-  const result = await joinArenaQueueRecord(ddbDocClient, tableName(), userid, {
-    metaGame: pars.metaGame,
-    arenaTcId: pars.arenaTcId,
-    variants: pars.variants,
-  });
-  if ('error' in result) {
-    return formatReturnError(result.error);
-  }
-  if (result.matched) {
-    return jsonOk({ matched: true, tableId: result.tableId });
-  }
-  return jsonOk({ matched: false, queued: true });
-}
-
-export async function handleLeaveArenaQueue(
-  userid: string,
-  pars: { metaGame?: string; arenaTcId?: string; variants?: string[] },
-) {
-  if (!pars.metaGame || !pars.arenaTcId) {
-    return formatReturnError('metaGame and arenaTcId are required.');
-  }
-  await leaveArenaQueueRecord(ddbDocClient, tableName(), userid, {
-    metaGame: pars.metaGame,
-    arenaTcId: pars.arenaTcId,
-    variants: pars.variants,
-  });
   return jsonOk({ ok: true });
 }
 

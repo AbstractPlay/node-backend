@@ -149,18 +149,6 @@ async function main() {
     await cancelAsHost(manifest, swapId!, P1);
   }));
 
-  results.push(await step('S3: join_arena_queue pairs', async () => {
-    for (const p of [P1, P2]) {
-      await authQueryAsPlayer(manifest, p, 'leave_arena_queue', { metaGame: META, arenaTcId: TC });
-    }
-    const q1 = await authQueryAsPlayer(manifest, P1, 'join_arena_queue', { metaGame: META, arenaTcId: TC });
-    assert(q1.ok && (q1.data as { matched?: boolean }).matched === false, '');
-    const q2 = await authQueryAsPlayer(manifest, P2, 'join_arena_queue', { metaGame: META, arenaTcId: TC });
-    assert(q2.ok && (q2.data as { matched?: boolean }).matched === true, '');
-    const qTable = (q2.data as { tableId?: string }).tableId!;
-    await cancelAsHost(manifest, qTable, P1);
-  }));
-
   let tableId: string | undefined;
   results.push(await step('S4: table lobby → launch → play → end', async () => {
     await postPublic('list_arena_time_controls');

@@ -72,17 +72,6 @@ async function fetchListedArenaTables(pars: { metaGame?: string; limit?: number 
   return body.tables ?? [];
 }
 
-async function leaveQueueBoth(
-  manifest: Awaited<ReturnType<typeof loadDevTestPlayersManifest>>,
-) {
-  for (const key of [P1, P2]) {
-    await authQueryAsPlayer(manifest, key, 'leave_arena_queue', {
-      metaGame: META,
-      arenaTcId: TC,
-    });
-  }
-}
-
 async function cancelTableAsHost(
   manifest: Awaited<ReturnType<typeof loadDevTestPlayersManifest>>,
   tableId: string,
@@ -131,7 +120,6 @@ async function ensurePlayersFreeForArena(
   const p1Id = manifest.players[P1]?.userId;
   const p2Id = manifest.players[P2]?.userId;
   for (let pass = 0; pass < 3; pass++) {
-    await leaveQueueBoth(manifest);
     const tables = await fetchListedArenaTables({ limit: 100 });
     let acted = false;
     for (const row of tables) {
@@ -266,31 +254,6 @@ async function assertArenaGameEnded(
   assert(done.ok, !done.ok ? done.message : 'no completed game after resign');
 }
 
-async function waitForQuickMatchTableId(
-  manifest: Awaited<ReturnType<typeof loadDevTestPlayersManifest>>,
-  page2: Page,
-  timeoutMs = 35_000,
-): Promise<string> {
-  const p1Id = manifest.players[P1]?.userId;
-  const p2Id = manifest.players[P2]?.userId;
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const fromUrl = tableIdFromUrl(page2.url());
-    if (fromUrl) {
-      return fromUrl;
-    }
-    const tables = await fetchListedArenaTables({ metaGame: META, limit: 50 });
-    for (const row of tables) {
-      const ids = row.seatUserIds ?? [];
-      if (p1Id && p2Id && ids.includes(p1Id) && ids.includes(p2Id)) {
-        return row.tableId;
-      }
-    }
-    await page2.waitForTimeout(500);
-  }
-  throw new Error('quick match tableId');
-}
-
 async function postLobbyComment(page: Page, text: string) {
   const area = page.locator('#enterAComment');
   await area.waitFor({ state: 'visible', timeout: 15_000 });
@@ -298,11 +261,11 @@ async function postLobbyComment(page: Page, text: string) {
   await page.getByRole('button', { name: 'Comment', exact: true }).click();
 }
 
-/** Landing requires an explicit game pick before create / quick match (front gameChosen gate). */
+/** Landing requires an explicit game pick before create table (front gameChosen gate). */
 async function prepareArenaLandingActions(page: Page, metaGame: string) {
-  const quickMatch = page.getByRole('button', { name: 'Quick match' });
-  await quickMatch.waitFor({ state: 'visible', timeout: 20_000 });
-  if (await quickMatch.isEnabled()) {
+  const createOpen = page.getByRole('button', { name: 'Create open table' });
+  await createOpen.waitFor({ state: 'visible', timeout: 20_000 });
+  if (await createOpen.isEnabled()) {
     return;
   }
   await page.locator('#arena-meta-picker').click();
@@ -315,8 +278,8 @@ async function prepareArenaLandingActions(page: Page, metaGame: string) {
   await page.waitForFunction(
     () => {
       const buttons = Array.from(document.querySelectorAll('button'));
-      const qm = buttons.find((b) => b.textContent?.includes('Quick match'));
-      return qm instanceof HTMLButtonElement && !qm.disabled;
+      const btn = buttons.find((b) => b.textContent?.includes('Create open table'));
+      return btn instanceof HTMLButtonElement && !btn.disabled;
     },
     undefined,
     { timeout: 25_000 },
@@ -354,34 +317,6 @@ async function main() {
     await assertLoggedIn(page);
     await page.getByRole('heading', { name: 'Arena' }).waitFor();
     await prepareArenaLandingActions(page, META);
-  });
-
-  await runStep('UI quick match (t1 queue + t2 queue → table)', async () => {
-    const ctx2 = await browser.newContext();
-    const page2 = await ctx2.newPage();
-    let qTable: string | undefined;
-    try {
-      await leaveQueueBoth(manifest);
-      await page.goto(`${ORIGIN}/arena`, { waitUntil: 'networkidle' });
-      await injectSession(page2, P2);
-      await assertLoggedIn(page2);
-      await page2.goto(`${ORIGIN}/arena`, { waitUntil: 'networkidle' });
-      await prepareArenaLandingActions(page, META);
-      await prepareArenaLandingActions(page2, META);
-      const qm = page.getByRole('button', { name: 'Quick match' });
-      const qm2 = page2.getByRole('button', { name: 'Quick match' });
-      await qm.click();
-      await page.waitForTimeout(800);
-      await qm2.click();
-      qTable = await waitForQuickMatchTableId(manifest, page2);
-      assert(qTable, 'quick match tableId');
-    } finally {
-      if (qTable) {
-        await releaseTableForPlayers(manifest, qTable);
-      }
-      await ensurePlayersFreeForArena(manifest);
-      await ctx2.close();
-    }
   });
 
   await runStep('UI create open table → lobby', async () => {
