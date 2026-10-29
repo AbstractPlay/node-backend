@@ -293,6 +293,7 @@ export async function submitArenaMove(
         variants: engine.variants,
         players: game.players.map((p) => ({ id: p.id, name: p.name })),
         winner: game.winner,
+        playMode: 'arena',
         ...(endScores && endScores.length > 0 ? { scores: endScores } : {}),
       },
       inAppSettingsMapFromUsers(players),
@@ -317,6 +318,7 @@ export async function submitArenaMove(
     gameEnded: game.gameEnded,
     winner: game.winner,
     toMove: game.toMove,
+    ...(isArenaGame(game) ? { playMode: 'arena' as const } : {}),
   } as GameMarkSummary;
 
   list.push(updateWatcherSummaries(
