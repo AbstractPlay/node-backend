@@ -34,6 +34,7 @@ export type ArenaTableListItem = {
   arenaTcId: string;
   open: boolean;
   hostId: string;
+  inviteUserId?: string;
   seatUserIds: string[];
   updatedAt: number;
   gameStartedAt?: number;

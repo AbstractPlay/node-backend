@@ -186,6 +186,7 @@ export async function handleArenaPlayReady(
     ok: true,
     waitingForOpponent: false,
     arenaClockStartAt: result.arenaClockStartAt,
+    serverTime: result.serverTime,
   });
 }
 
