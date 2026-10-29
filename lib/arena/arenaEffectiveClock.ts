@@ -13,11 +13,16 @@ export function isArenaCompetitiveClockLive(
 }
 
 /**
- * Origin for elapsed-time math: frozen before countdown ends, then `arenaClockStartAt`.
+ * Origin for elapsed-time math: frozen at `arenaClockStartAt` before countdown ends,
+ * then the persisted `lastMoveTime` for Fischer ticks after each move.
  */
 export function arenaClockTickOrigin(game: ArenaClockFields, nowMs: number): number {
-  if (game.arenaClockStartAt !== undefined) {
-    return game.arenaClockStartAt;
+  const startAt = game.arenaClockStartAt;
+  if (startAt !== undefined && nowMs < startAt) {
+    return startAt;
+  }
+  if (game.lastMoveTime !== undefined && game.lastMoveTime !== null) {
+    return game.lastMoveTime;
   }
   return nowMs;
 }
