@@ -30,6 +30,21 @@ export function computeArenaFlagScheduleAtMs(
   return nominalFlagAtMs + graceMs;
 }
 
+/** When EventBridge fires early, re-arm must not use a past `at()` (one-shots may never run). */
+export const ARENA_FLAG_SCHEDULE_MIN_LEAD_MS = 250;
+
+export function resolveArenaFlagScheduleAtMs(
+  nominalFlagAtMs: number,
+  graceMs: number = ARENA_CLOCK_GRACE_MS,
+  nowMs: number = Date.now(),
+): number {
+  const intended = computeArenaFlagScheduleAtMs(nominalFlagAtMs, graceMs);
+  if (intended > nowMs) {
+    return intended;
+  }
+  return nowMs + ARENA_FLAG_SCHEDULE_MIN_LEAD_MS;
+}
+
 export type UpsertArenaFlagScheduleInput = {
   stage: string;
   workerArn: string;
@@ -38,6 +53,8 @@ export type UpsertArenaFlagScheduleInput = {
   /** Wall time when server would treat bank as zero (before grace). */
   nominalFlagAtMs: number;
   graceMs?: number;
+  /** Reference "now" for overdue re-arm (defaults to Date.now()). */
+  scheduleNowMs?: number;
 };
 
 export type ArenaFlagScheduleDeps = {
@@ -97,9 +114,10 @@ export async function upsertArenaFlagSchedule(
   const groupName = arenaSchedulerGroupName(input.stage);
   await ensureArenaSchedulerGroup(input.stage, client);
   const scheduleName = arenaFlagScheduleName(input.payload.gameId);
-  const scheduleAtMs = computeArenaFlagScheduleAtMs(
+  const scheduleAtMs = resolveArenaFlagScheduleAtMs(
     input.nominalFlagAtMs,
     input.graceMs,
+    input.scheduleNowMs,
   );
   const deps: ArenaFlagScheduleDeps = {
     client,

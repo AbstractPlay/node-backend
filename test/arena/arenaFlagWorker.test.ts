@@ -72,14 +72,17 @@ describe('arenaFlagWorker', () => {
     const { handler } = await import('../../api/arenaFlagWorker.js');
     await handler(JSON.stringify(payload));
 
-    expect(rescheduleArenaFlagForGame).toHaveBeenCalledWith({
-      id: liveGame.id,
-      metaGame: liveGame.metaGame,
-      clockGeneration: liveGame.clockGeneration,
-      players: liveGame.players,
-      toMove: liveGame.toMove,
-      lastMoveTime: liveGame.lastMoveTime,
-    });
+    expect(rescheduleArenaFlagForGame).toHaveBeenCalledWith(
+      {
+        id: liveGame.id,
+        metaGame: liveGame.metaGame,
+        clockGeneration: liveGame.clockGeneration,
+        players: liveGame.players,
+        toMove: liveGame.toMove,
+        lastMoveTime: liveGame.lastMoveTime,
+      },
+      expect.any(Number),
+    );
     expect(timeloss).not.toHaveBeenCalled();
   });
 

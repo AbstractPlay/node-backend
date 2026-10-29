@@ -80,6 +80,58 @@ export async function handler(rawEvent: unknown): Promise<void> {
 
   const skip = shouldSkipArenaFlagWorker(payload, game ?? null);
   if (skip.skip) {
+    if (
+      skip.reason === 'stale_generation'
+      && game
+      && isArenaGame(game)
+      && game.toMove !== ''
+      && game.toMove !== undefined
+    ) {
+      const now = Date.now();
+      const timedOutIndex = arenaTimedOutPlayerIndex(
+        {
+          players: game.players,
+          toMove: game.toMove,
+          lastMoveTime: game.lastMoveTime,
+        },
+        now,
+      );
+      if (timedOutIndex !== null) {
+        await timeloss(false, timedOutIndex, game.id, game.metaGame, now);
+        await deleteArenaFlagForGame(game.id);
+        console.log(JSON.stringify({
+          arenaFlagWorker: 'timeloss',
+          reason: 'stale_generation_overdue',
+          payload,
+          timedOutIndex,
+        }));
+        return;
+      }
+      try {
+        await rescheduleArenaFlagForGame({
+          id: game.id,
+          metaGame: game.metaGame,
+          clockGeneration: game.clockGeneration,
+          players: game.players,
+          toMove: game.toMove,
+          lastMoveTime: game.lastMoveTime,
+        }, now);
+        console.log(JSON.stringify({
+          arenaFlagWorker: 'rearm',
+          reason: 'stale_generation',
+          payload,
+        }));
+      } catch (err) {
+        console.log(JSON.stringify({
+          arenaFlagWorker: 'error',
+          reason: 'stale_rearm_failed',
+          payload,
+          message: err instanceof Error ? err.message : String(err),
+        }));
+        throw err;
+      }
+      return;
+    }
     console.log(JSON.stringify({
       arenaFlagWorker: 'noop',
       reason: skip.reason,
@@ -122,7 +174,7 @@ export async function handler(rawEvent: unknown): Promise<void> {
         players: game.players,
         toMove: game.toMove,
         lastMoveTime: game.lastMoveTime,
-      });
+      }, now);
     } catch (err) {
       console.log(JSON.stringify({
         arenaFlagWorker: 'error',
