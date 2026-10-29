@@ -15,6 +15,7 @@ import {
 } from './table/tableMutations.js';
 import { joinArenaQueueRecord, leaveArenaQueueRecord } from './table/queue.js';
 import { listArenaTablesFromIndex } from './table/listTables.js';
+import { recordArenaPlayReady } from './arenaSyncStart.js';
 import type { ArenaTableRecord } from './table/types.js';
 
 function tableName(): string {
@@ -159,6 +160,33 @@ export async function handleSetArenaReady(
     return formatReturnError(result.error);
   }
   return jsonOk({ ok: true, launched: result.launched === true });
+}
+
+export async function handleArenaPlayReady(
+  userid: string,
+  pars: { metaGame?: string; id?: string },
+) {
+  if (!pars.metaGame || !pars.id) {
+    return formatReturnError('metaGame and id are required.');
+  }
+  const result = await recordArenaPlayReady(
+    ddbDocClient,
+    tableName(),
+    userid,
+    pars.metaGame,
+    pars.id,
+  );
+  if ('error' in result) {
+    return formatReturnError(result.error);
+  }
+  if (result.waitingForOpponent) {
+    return jsonOk({ ok: true, waitingForOpponent: true });
+  }
+  return jsonOk({
+    ok: true,
+    waitingForOpponent: false,
+    arenaClockStartAt: result.arenaClockStartAt,
+  });
 }
 
 export async function handleProposeArenaSeatSwap(userid: string, pars: { tableId?: string }) {

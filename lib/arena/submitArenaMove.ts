@@ -34,6 +34,7 @@ import {
 import { updateWatcherSummaries, type GameMarkSummary } from '../playerGameMarks.js';
 import { applyArenaMoveClock } from './applyArenaMoveClock.js';
 import { isArenaMoveOutOfTime } from './arenaOutOfTime.js';
+import { isArenaCompetitiveClockLive } from './arenaEffectiveClock.js';
 import { ARENA_CLOCK_GRACE_MS } from './constants.js';
 import { deleteArenaFlagForGame, rescheduleArenaFlagForGame } from './rescheduleArenaFlag.js';
 import { finishArenaTableOnGameEnd } from './table/tableMutations.js';
@@ -68,6 +69,8 @@ type ArenaFullGame = {
   variants?: string[];
   noExplore?: boolean;
   gameStarted?: number;
+  arenaClockStartAt?: number;
+  arenaPlayReady?: string[];
   rated?: boolean;
 };
 
@@ -138,6 +141,15 @@ export async function submitArenaMove(
     return formatReturnError('Arena game missing arenaClock.');
   }
 
+  if (
+    pars.move !== 'resign'
+    && pars.move !== 'timeout'
+    && !(pars.move === '' && pars.draw === 'drawaccepted')
+    && !isArenaCompetitiveClockLive(game, moveReceivedAt)
+  ) {
+    return formatReturnError('The game clock has not started yet.');
+  }
+
   const flagsEarly = structuralFlags(game.metaGame);
   const simultaneousEarly = flagSetIncludes(flagsEarly, 'simultaneous');
   if (!simultaneousEarly && isNonSimultaneousGameOver(game)) {
@@ -155,6 +167,7 @@ export async function submitArenaMove(
         players: game.players,
         toMove: game.toMove,
         lastMoveTime: game.lastMoveTime,
+        arenaClockStartAt: game.arenaClockStartAt,
       },
       userid,
       moveReceivedAt,

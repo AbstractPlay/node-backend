@@ -38,6 +38,7 @@ export async function createArenaDevGame(
       tcId: pars.tcId,
       playerIds: [userid, pars.opponentId],
       variants: pars.variants,
+      armCountdownImmediately: true,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

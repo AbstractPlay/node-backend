@@ -12,6 +12,7 @@ Live **2-player Fischer** games: lobby tables, quick match, and **`submit_arena_
 | Vacation | Correspondence vacation **does not pause** arena clocks; queue/play allowed during vacation |
 | Game id | **`tableId === GAME.id`** when play launches (stable URL + chat) |
 | Clock | Server **`moveReceivedAt`** at handler entry; grace **`ARENA_CLOCK_GRACE_MS`** (750ms) |
+| Start sync | **`arena_launch`** WS to both players; **`arena_play_ready`** when play UI rendered; **3s** countdown (`arenaClockStartAt`) before Fischer time runs |
 
 See [Vacation mode](/backend/subsystems/vacation/) for the correspondence vs arena exception.
 
@@ -70,4 +71,4 @@ Completed arena games stamp **`header.site.playMode`**, **`arenaTcId`**, **`aren
 ## Related
 
 - [Games and moves](/backend/subsystems/games-and-moves/) — correspondence vs arena entry
-- [WebSockets](/backend/subsystems/websockets/) — `watchGames` + `game` verb for live play and spectate
+- [WebSockets](/backend/subsystems/websockets/) — `watchGames` + `game` verb for live play and spectate; `arena_launch` / `arena_sync` (user-targeted) for arena start

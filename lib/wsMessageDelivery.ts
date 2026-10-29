@@ -62,6 +62,14 @@ export function shouldDeliverWsMessage(
     return conn.userId === userId;
   }
 
+  if (verb === "arena_launch" || verb === "arena_sync") {
+    const userId = payload?.userId;
+    if (!userId) {
+      return false;
+    }
+    return conn.userId === userId;
+  }
+
   if (verb === "connections") {
     if (payload?.type === "delta" || payload?.type === "snapshot") {
       return wantsPresenceUpdates(conn);

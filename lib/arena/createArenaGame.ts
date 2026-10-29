@@ -5,7 +5,7 @@ import { tournamentPlaySupported } from '../tournamentGame.js';
 import { getPlayers } from '../players/getPlayers.js';
 import type { ArenaClockSnapshot } from '../gamePlayMode.js';
 import { getArenaTimeControl } from './timeControls.js';
-import { rescheduleArenaFlagForGame } from './rescheduleArenaFlag.js';
+import { beginArenaCountdown } from './arenaSyncStart.js';
 
 export type CreateArenaGameParams = {
   client: DynamoDBDocumentClient;
@@ -16,6 +16,8 @@ export type CreateArenaGameParams = {
   playerIds: [string, string];
   variants?: string[];
   now?: number;
+  /** Dev-only: start 3s countdown without play-ready pings. */
+  armCountdownImmediately?: boolean;
 };
 
 export async function createArenaGame(params: CreateArenaGameParams): Promise<{ gameId: string }> {
@@ -86,7 +88,8 @@ export async function createArenaGame(params: CreateArenaGameParams): Promise<{ 
     })),
     state: engine.serialize(),
     toMove: whoseTurn,
-    lastMoveTime: now,
+    lastMoveTime: 0,
+    arenaPlayReady: [],
     gameStarted: now,
     variants: engine.variants,
   };
@@ -97,14 +100,14 @@ export async function createArenaGame(params: CreateArenaGameParams): Promise<{ 
     ConditionExpression: 'attribute_not_exists(pk)',
   }));
 
-  await rescheduleArenaFlagForGame({
-    id: gameId,
-    metaGame,
-    clockGeneration: 1,
-    players: gameItem.players as { id: string; time?: number }[],
-    toMove: whoseTurn,
-    lastMoveTime: now,
-  });
+  if (params.armCountdownImmediately) {
+    await beginArenaCountdown(
+      client,
+      tableName,
+      gameItem as Parameters<typeof beginArenaCountdown>[2],
+      now,
+    );
+  }
 
   return { gameId };
 }
