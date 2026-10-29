@@ -29,6 +29,7 @@ export function indexItemFromTable(table: ArenaTableRecord): Record<string, unkn
     arenaTcId: table.arenaTcId,
     open: table.open,
     hostId: table.hostId,
+    ...(table.inviteUserId ? { inviteUserId: table.inviteUserId } : {}),
     seatUserIds: table.seats.map((s) => s.userId).filter(Boolean),
     updatedAt: table.updatedAt,
     ...(table.gameStartedAt !== undefined ? { gameStartedAt: table.gameStartedAt } : {}),

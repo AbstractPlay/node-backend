@@ -98,7 +98,7 @@ export async function recordArenaPlayReady(
   gameId: string,
 ): Promise<
   | { ok: true; waitingForOpponent: true }
-  | { ok: true; waitingForOpponent: false; arenaClockStartAt: number }
+  | { ok: true; waitingForOpponent: false; arenaClockStartAt: number; serverTime: number }
   | { error: string }
 > {
   const data = await client.send(new GetCommand({
@@ -127,6 +127,7 @@ export async function recordArenaPlayReady(
       ok: true,
       waitingForOpponent: false,
       arenaClockStartAt: game.arenaClockStartAt,
+      serverTime: Date.now(),
     };
   }
 
@@ -147,5 +148,5 @@ export async function recordArenaPlayReady(
 
   const now = Date.now();
   const arenaClockStartAt = await beginArenaCountdown(client, tableName, game, now);
-  return { ok: true, waitingForOpponent: false, arenaClockStartAt };
+  return { ok: true, waitingForOpponent: false, arenaClockStartAt, serverTime: now };
 }
