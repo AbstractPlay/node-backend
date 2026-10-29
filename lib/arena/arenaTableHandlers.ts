@@ -2,7 +2,7 @@ import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { ddbDocClient } from '../ddb.js';
 import { formatReturnError, headers } from '../api/http.js';
 import { getArenaTable } from './table/store.js';
-import { isSeatedOnTable } from './table/eligibility.js';
+import { isSeatedOnTable, seatUserIds } from './table/eligibility.js';
 import {
   acceptArenaSeatSwapRecord,
   cancelArenaTableRecord,
@@ -12,10 +12,11 @@ import {
   proposeArenaSeatSwapRecord,
   rejectArenaSeatSwapRecord,
   setArenaReadyRecord,
+  resolveUserArenaTableId,
 } from './table/tableMutations.js';
 import { listArenaTablesFromIndex } from './table/listTables.js';
 import { recordArenaPlayReady } from './arenaSyncStart.js';
-import type { ArenaTableRecord } from './table/types.js';
+import type { ArenaTableListItem, ArenaTableRecord } from './table/types.js';
 
 function tableName(): string {
   const name = process.env.ABSTRACT_PLAY_TABLE;
@@ -127,6 +128,34 @@ export async function handleCancelArenaTable(userid: string, pars: { tableId?: s
     return formatReturnError(result.error);
   }
   return jsonOk({ ok: true });
+}
+
+function tableRecordToListItem(table: ArenaTableRecord): ArenaTableListItem {
+  return {
+    tableId: table.tableId,
+    metaGame: table.metaGame,
+    variants: [...table.variants],
+    arenaTcId: table.arenaTcId,
+    open: table.open,
+    hostId: table.hostId,
+    ...(table.inviteUserId ? { inviteUserId: table.inviteUserId } : {}),
+    seatUserIds: seatUserIds(table),
+    updatedAt: table.updatedAt,
+    ...(table.gameStartedAt !== undefined ? { gameStartedAt: table.gameStartedAt } : {}),
+    state: table.indexState,
+  };
+}
+
+export async function handleGetMyArenaTable(userid: string) {
+  const tableId = await resolveUserArenaTableId(ddbDocClient, tableName(), userid);
+  if (tableId === undefined) {
+    return jsonOk({ table: null });
+  }
+  const table = await getArenaTable(ddbDocClient, tableName(), tableId);
+  if (table === undefined) {
+    return jsonOk({ table: null });
+  }
+  return jsonOk({ table: tableRecordToListItem(table) });
 }
 
 export async function handleGetArenaTable(userid: string, pars: { tableId?: string }) {

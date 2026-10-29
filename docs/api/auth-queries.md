@@ -205,6 +205,7 @@ Lobby tables (2-player Fischer clocks). **`GAME.id = tableId`** when play starts
 | `leave_arena_table` | Leave lobby (host cancel abandons) | `tableId` |
 | `cancel_arena_table` | Host abandon before launch | `tableId` |
 | `get_arena_table` | Lobby state + `viewer` | `tableId` |
+| `get_my_arena_table` | Caller's seated table from `ARENAUSER`, or `{ table: null }` | — |
 | `set_arena_ready` | Ready toggle; launches when both ready | `tableId`, `ready` |
 | `arena_play_ready` | Player ping after play board rendered; starts 3s countdown when both seated players have pinged | `metaGame`, `id` (game id = table id) |
 | `propose_arena_seat_swap` | Request swap (clears ready) | `tableId` |
