@@ -38,6 +38,7 @@ import { isArenaCompetitiveClockLive } from './arenaEffectiveClock.js';
 import { ARENA_CLOCK_GRACE_MS } from './constants.js';
 import { deleteArenaFlagForGame, rescheduleArenaFlagForGame } from './rescheduleArenaFlag.js';
 import { finishArenaTableOnGameEnd } from './table/tableMutations.js';
+import { indexArenaCompletedGame, type GameRecord } from '../gameProjector.js';
 import { publishArenaMoveMetrics } from './arenaMoveMetrics.js';
 import { getArenaTimeControl } from './timeControls.js';
 import {
@@ -331,6 +332,11 @@ export async function submitArenaMove(
   await Promise.all(list);
 
   if (game.gameEnded !== undefined && isArenaGame(game)) {
+    await indexArenaCompletedGame(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      game as GameRecord,
+    );
     await finishArenaTableOnGameEnd(
       ddbDocClient,
       process.env.ABSTRACT_PLAY_TABLE!,

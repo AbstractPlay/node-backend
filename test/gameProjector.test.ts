@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { DynamoDBRecord } from 'aws-lambda';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import {
+  indexArenaCompletedGame,
   parseGameSk,
   processGameStreamRecord,
   resolveNumMoves,
@@ -147,6 +148,39 @@ describe('resolveNumMoves', () => {
       state: '{}',
       numMoves: 7,
     }), 7);
+  });
+});
+
+describe('indexArenaCompletedGame', () => {
+  it('writes COMPLETEDGAMES rows for finished arena games', async () => {
+    const puts: Array<{ pk?: string; sk?: string; playMode?: string }> = [];
+    const docClient = {
+      send: async (command: { input?: { Item?: { pk?: string; sk?: string; playMode?: string } } }) => {
+        if (command.input?.Item) {
+          puts.push(command.input.Item);
+        }
+      },
+    } as unknown as DynamoDBDocumentClient;
+
+    await indexArenaCompletedGame(docClient, 'table', {
+      pk: 'GAME',
+      sk: 'abande#0#table-1',
+      id: 'table-1',
+      metaGame: 'abande',
+      numPlayers: 2,
+      players: [{ id: 'u1', name: 'A' }, { id: 'u2', name: 'B' }],
+      clockHard: false,
+      toMove: '',
+      lastMoveTime: 500,
+      gameEnded: 500,
+      state: '{}',
+      playMode: 'arena',
+      numMoves: 4,
+    });
+
+    assert.ok(puts.some(item => item.pk === 'COMPLETEDGAMES' && item.sk === '500#table-1'));
+    assert.ok(puts.some(item => item.pk === 'COMPLETEDGAMES#abande' && item.sk === '500#table-1'));
+    assert.ok(puts.some(item => item.playMode === 'arena'));
   });
 });
 
