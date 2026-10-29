@@ -39,6 +39,7 @@ import { adminDeleteGame } from '../adminDeleteGame.js';
 import { filterExplorationTreeForSave, type ExplorationTreeNode } from '../explorationMoves.js';
 import { tournamentPlaySupported } from '../tournamentGame.js';
 import { isArenaGame } from '../gamePlayMode.js';
+import { handleArenaInvokePie } from '../arena/invokePieArena.js';
 import {
   shouldWriteGameOpenOverlay,
 } from '../dashboardGames.js';
@@ -1025,6 +1026,29 @@ export async function invokePie(userid: string, pars: { id: string, metaGame: st
           `This game does not support switching seats (${gameRefLabel(pars.metaGame, pars.id)}).`,
         );
       }
+
+      if (isArenaGame(game)) {
+        const arenaResult = await handleArenaInvokePie(
+          userid,
+          pars,
+          game,
+          engine,
+          [...flags],
+        );
+        if (arenaResult.statusCode === 200) {
+          const playerIDs = game.players.map((p: { id: string }) => p.id);
+          const players = await getPlayers(playerIDs);
+          const thisPlayer = players.find((p) => p.id === userid)!;
+          await submitComment("", {
+            id: game.id,
+            metaGame: pars.metaGame,
+            comment: `${thisPlayer.name} elected to switch seats. As a result, the game record for ply 1 has been retroactively changed to look as if ${thisPlayer.name} made that move.`,
+            moveNumber: 2,
+          });
+        }
+        return arenaResult;
+      }
+
       const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
 
       const player = game.players.find(p => p.id === userid);

@@ -29,6 +29,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Ladders:** Join seed lookup uses meta-game UID and `variantUidsForBatchRating` (same keys as summarize / Glicko), not display titles or raw empty variant lists on games with variant groups.
 - **WebSockets:** `messageHandler` delivers `arena_launch`, `arena_sync`, and `ladder` verbs (were dropped as unsupported after arena/ladder fan-out shipped).
 - **Recent completed games:** finished arena games are written to the global `COMPLETEDGAMES` index (`recent_completed_games` / `/recent-games`); the stream projector still skips arena for `CURRENTGAMES` dashboard rows. Ops: `npm run backfill-arena-completed-index -- --stage dev|prod [--metaGame uid] [--dry-run|--apply]`.
+- **Arena:** `invoke_pie` on live arena games no longer applies correspondence `clockInc`/`clockMax` hour fields (which zeroed Fischer banks); arena pie debits think time from `arenaClock`, keeps each player’s ms bank on their record through seat swap, reschedules timeloss, and broadcasts like `submit_arena_move`.
 
 ## [1.0.0-ci] - 2026-10-24
 
