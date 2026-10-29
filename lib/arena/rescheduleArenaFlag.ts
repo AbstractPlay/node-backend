@@ -28,6 +28,7 @@ function requireEnv(name: string): string {
 
 export async function rescheduleArenaFlagForGame(
   game: ArenaGameScheduleSlice,
+  scheduleNowMs: number = Date.now(),
 ): Promise<void> {
   const stage = stageFromEnv();
   const workerArn = requireEnv('ARENA_FLAG_WORKER_ARN');
@@ -57,6 +58,7 @@ export async function rescheduleArenaFlagForGame(
     schedulerRoleArn,
     payload,
     nominalFlagAtMs: nominal,
+    scheduleNowMs,
   });
 }
 
