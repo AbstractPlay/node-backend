@@ -30,6 +30,7 @@ export type GameMarkSummary = {
   lastChat?: number;
   variants?: string[];
   commented?: number;
+  playMode?: string;
 };
 
 export type RepresentativeEntry = GameMarkSummary & {
@@ -62,6 +63,7 @@ export type GameMarkSource = {
   state?: string;
   commented?: number;
   variants?: string[];
+  playMode?: string;
 };
 
 export type LoadedGameForMark = {
@@ -208,6 +210,9 @@ export function buildGameSummary(source: GameMarkSource): GameMarkSummary {
   }
   if (source.commented !== undefined) {
     summary.commented = source.commented;
+  }
+  if (source.playMode === 'arena') {
+    summary.playMode = 'arena';
   }
   const completed = isCompletedToMove(source.toMove);
   if (!completed) {

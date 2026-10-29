@@ -68,6 +68,11 @@ export function toCurrentSummary(game: GameRecord) {
     gameStarted: game.gameStarted,
     numMoves: resolveNumMoves(game),
     ...(game.ladderId ? { ladderId: game.ladderId } : {}),
+    ...(game.playMode === 'arena' ? {
+      playMode: 'arena' as const,
+      ...(game.arenaTcId ? { arenaTcId: game.arenaTcId } : {}),
+      ...(game.arenaClock ? { arenaClock: game.arenaClock } : {}),
+    } : {}),
   };
 }
 

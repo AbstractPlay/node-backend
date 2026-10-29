@@ -21,6 +21,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Ops:** `.gitattributes` no longer uses `merge=ours` on root `package.json` (avoids stale npm `scripts` after develop→main); pin manifests unchanged.
 - **Ops:** Game projector SQS DLQ and DLQ CloudWatch alarm deploy on **prod** only (dev stack no longer creates `abstractplay-game-projector-dlq-dev`).
 - **Ladders:** `displayName` uses gameslib `expandVariantLabels` (same variant copy as the front ladder hub), e.g. `Exxit ladder (…)` instead of `(no variants)` or raw UIDs.
+- **Game links:** `playMode: 'arena'` on completed/current open-API game summaries, player mark summaries, and arena game-end (and start) in-app notifications so the front can link to `/arena/play` without relying on `/move` redirects.
 
 ### Fixed
 

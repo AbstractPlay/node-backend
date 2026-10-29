@@ -143,6 +143,7 @@ export type NotificationBody =
     variants: string[];
     opponentId: string;
     opponentName: string;
+    playMode?: 'arena';
   }
   | {
     type: 'gameEnd';
@@ -153,6 +154,7 @@ export type NotificationBody =
     opponentId?: string;
     opponentName?: string;
     scores?: NotificationScore[];
+    playMode?: 'arena';
   }
   | {
     type: 'ratingChange';
@@ -410,6 +412,7 @@ export type NotificationGame = {
   players: NotificationGamePlayer[];
   winner?: number[];
   scores?: NotificationScore[];
+  playMode?: 'arena';
 };
 
 export function notificationPk(userId: string): string {
@@ -752,6 +755,7 @@ export async function enqueueGameStartNotifications(
       variants,
       opponentId: opponent.id,
       opponentName: opponent.name,
+      ...(game.playMode === 'arena' ? { playMode: 'arena' as const } : {}),
     }, {
       userSettings: userSettingsFromMap(settingsByUserId, player.id),
     });
@@ -776,6 +780,7 @@ export async function enqueueGameEndNotifications(
       metaGame: game.metaGame,
       variants,
       result: gameEndResult(game, player.id),
+      ...(game.playMode === 'arena' ? { playMode: 'arena' as const } : {}),
       ...(opponent !== undefined
         ? { opponentId: opponent.id, opponentName: opponent.name }
         : {}),

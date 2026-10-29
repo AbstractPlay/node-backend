@@ -39,6 +39,7 @@ type FullGame = {
   gameStarted?: number;
   commented?: number;
   variants?: string[];
+  playMode?: string;
 };
 
 export async function userNames() {
@@ -143,7 +144,8 @@ export async function games(pars: { metaGame: string, type: string; }) {
         }
         return {
           "id": g.id, "metaGame": g.metaGame, "players": g.players, "toMove": g.toMove, "gameStarted": g.gameStarted,
-          "numMoves": state.stack.length - 1, "variants": state.variants, "commented": g.commented || 0
+          "numMoves": state.stack.length - 1, "variants": state.variants, "commented": g.commented || 0,
+          ...(g.playMode === 'arena' ? { playMode: 'arena' as const } : {}),
         }
       });
       const tableName = process.env.ABSTRACT_PLAY_TABLE!;
@@ -161,7 +163,7 @@ export async function games(pars: { metaGame: string, type: string; }) {
   } else if (pars.type === "completed") {
     try {
       const tableName = process.env.ABSTRACT_PLAY_TABLE!;
-      const items: Array<{ id: string; commented?: number }> = [];
+      const items: Array<Record<string, unknown>> = [];
       let lastEvaluatedKey: Record<string, unknown> | undefined;
       do {
         const gamesData = await ddbDocClient.send(
@@ -172,11 +174,14 @@ export async function games(pars: { metaGame: string, type: string; }) {
             ExpressionAttributeNames: { "#pk": "pk" },
             ExclusiveStartKey: lastEvaluatedKey,
           }));
-        items.push(...((gamesData.Items ?? []) as Array<{ id: string; commented?: number }>));
+        for (const item of gamesData.Items ?? []) {
+          const { pk: _pk, sk: _sk, ...summary } = item as Record<string, unknown>;
+          items.push(summary);
+        }
         lastEvaluatedKey = gamesData.LastEvaluatedKey as Record<string, unknown> | undefined;
       } while (lastEvaluatedKey);
 
-      await sanitizeInGameCommentedFlags(ddbDocClient, tableName, items);
+      await sanitizeInGameCommentedFlags(ddbDocClient, tableName, items as Array<{ id: string; commented?: number }>);
       return {
         statusCode: 200,
         body: JSON.stringify(items),

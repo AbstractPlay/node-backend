@@ -209,7 +209,7 @@ type Exploration = {
 };
 
 function toNotificationGame(
-  game: Pick<FullGame, 'id' | 'metaGame' | 'variants' | 'players' | 'winner'>,
+  game: Pick<FullGame, 'id' | 'metaGame' | 'variants' | 'players' | 'winner' | 'playMode'>,
   scores?: NotificationScore[],
 ): NotificationGame {
   return {
@@ -219,6 +219,7 @@ function toNotificationGame(
     players: game.players.map(p => ({ id: p.id, name: p.name })),
     winner: game.winner,
     ...(scores !== undefined && scores.length > 0 ? { scores } : {}),
+    ...(game.playMode === 'arena' ? { playMode: 'arena' as const } : {}),
   };
 }
 
