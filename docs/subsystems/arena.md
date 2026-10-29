@@ -47,6 +47,8 @@ Dedicated **`submit_arena_move`** (not `submit_move`):
 
 Structured logs: JSON line **`arenaMoveTiming`** per move. CloudWatch metrics (namespace **`AbstractPlay/Arena`**): **`ArenaMoveProcessingMs`**, **`ArenaMoveOotReject`** (dimensions `tier`, `stage`).
 
+Games with a **`pie`** / **`pie-even`** flag use auth **`invoke_pie`** for in-game seat switch (not lobby seat swap). Arena pie applies **`applyArenaInvokePieClock`** (ms Fischer from **`game.lastMoveTime`**, no vacation), swaps seat order while **banks stay on each player id**, optionally refunds opponent think time (non–`pie-even`), bumps **`clockGeneration`**, and reschedules the timeloss flag—correspondence **`clockInc`/`clockMax` hours are not used**.
+
 ## Front
 
 Routes: **`/arena`**, **`/arena/table/:meta/:id`**, **`/arena/play/:meta/:id`**, **`/arena/watch/:meta/:id`**. Landing polls **`list_arena_tables`**. Play uses live Fischer display and optional post-game feedback modal.
