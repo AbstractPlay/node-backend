@@ -122,6 +122,27 @@ export function shouldKeepCompletedGame(game: GameRecord, numMoves: number): boo
   return numMoves > game.numPlayers;
 }
 
+/**
+ * Arena games are excluded from stream CURRENTGAMES projection but should appear on
+ * `recent_completed_games` / COMPLETEDGAMES once finished (normal or timeloss).
+ */
+export async function indexArenaCompletedGame(
+  docClient: DynamoDBDocumentClient,
+  tableName: string,
+  game: GameRecord,
+): Promise<void> {
+  if (!isArenaGame(game) || game.gameEnded === undefined) {
+    return;
+  }
+  const numMoves = resolveNumMoves(game);
+  if (!shouldKeepCompletedGame(game, numMoves)) {
+    return;
+  }
+  const summary = toCompletedSummary(game, numMoves);
+  await putCompletedGameIndexes(docClient, tableName, game, summary);
+  await adjustShardedCounts(docClient, tableName, game.metaGame, { completedgames: 1 });
+}
+
 function unmarshallImage(image: unknown): GameRecord | undefined {
   if (!image || typeof image !== 'object') {
     return undefined;

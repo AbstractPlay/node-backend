@@ -32,6 +32,7 @@ import {
 import { isArenaGame } from '../gamePlayMode.js';
 import { arenaTimedOutPlayerIndex } from '../arena/arenaOutOfTime.js';
 import { finishArenaTableOnGameEnd } from '../arena/table/tableMutations.js';
+import { indexArenaCompletedGame, type GameRecord } from '../gameProjector.js';
 import { wsBroadcast } from '../wsBroadcast.js';
 
 type FullGame = {
@@ -298,6 +299,11 @@ export async function timeloss(
   ));
   await Promise.all(work);
   if (isArenaGame(game)) {
+    await indexArenaCompletedGame(
+      ddbDocClient,
+      process.env.ABSTRACT_PLAY_TABLE!,
+      game as GameRecord,
+    );
     await finishArenaTableOnGameEnd(
       ddbDocClient,
       process.env.ABSTRACT_PLAY_TABLE!,

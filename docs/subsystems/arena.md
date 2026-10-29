@@ -65,7 +65,7 @@ Routes: **`/arena`**, **`/arena/table/:meta/:id`**, **`/arena/play/:meta/:id`**,
 
 ## Records
 
-Completed arena games stamp **`header.site.playMode`**, **`arenaTcId`**, **`arenaClock`** on archived JSON ([records cron](/crons/pipeline/)). Glicko ignores unrated arena games until rated v2 split.
+Completed arena games stamp **`header.site.playMode`**, **`arenaTcId`**, **`arenaClock`** on archived JSON ([records cron](/crons/pipeline/)). Glicko ignores unrated arena games until rated v2 split. Finished arena games also appear in **`recent_completed_games`** (`COMPLETEDGAMES` index) when they meet the usual move-count keep rules (same as correspondence).
 
 ## Related
 
