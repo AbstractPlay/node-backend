@@ -43,7 +43,7 @@ Dedicated **`submit_arena_move`** (not `submit_move`):
 2. Out-of-time check at receipt + grace.
 3. Shared gameslib **`applyMove`** / simultaneous path.
 4. **`applyArenaMoveClock`** (Fischer ms, automove increments, no vacation).
-5. Reschedule **EventBridge Scheduler** → **`arenaFlagWorker`** → **`timeloss`**.
+5. Reschedule **EventBridge Scheduler** → **`arenaFlagWorker`** → **`timeloss`**. If the worker runs before **`ARENA_CLOCK_GRACE_MS`** has elapsed (`not_flagged_yet`), it **re-arms** the same one-shot schedule from current clock state so the game still ends without a client `timeloss` call.
 
 Structured logs: JSON line **`arenaMoveTiming`** per move. CloudWatch metrics (namespace **`AbstractPlay/Arena`**): **`ArenaMoveProcessingMs`**, **`ArenaMoveOotReject`** (dimensions `tier`, `stage`).
 
