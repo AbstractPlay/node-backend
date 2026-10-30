@@ -31,6 +31,8 @@
     "generate-announcements-rss": "tsx scripts/generate-announcements-rss.mjs",
     "verify-division-standings": "tsx scripts/verify-division-standings.mjs",
     "analyze-ladder-calibration": "tsx scripts/analyze-ladder-calibration.mjs",
+    "list-abandoned-account-candidates": "tsx scripts/list-abandoned-account-candidates.mjs",
+    "abandoned-account-deletion": "tsx scripts/abandoned-account-deletion.mjs",
     "analyze-ladder-delta-monte-carlo": "tsx scripts/analyze-ladder-delta-monte-carlo.mjs",
     "report-bgg-wishlist-users": "tsx scripts/report-bgg-wishlist-users.mjs",
     "report-discord-feedback-users": "tsx scripts/report-discord-feedback-users.mjs",

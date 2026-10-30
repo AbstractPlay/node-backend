@@ -12,7 +12,7 @@ Live **2-player Fischer** games: open and closed lobby tables, and **`submit_are
 | Vacation | Correspondence vacation **does not pause** arena clocks; arena play allowed during vacation |
 | Game id | **`tableId === GAME.id`** when play launches (stable URL + chat) |
 | Clock | Server **`moveReceivedAt`** at handler entry; grace **`ARENA_CLOCK_GRACE_MS`** (750ms) |
-| Start sync | **`arena_launch`** WS to both players; **`arena_play_ready`** when play UI rendered; **3s** countdown (`arenaClockStartAt`) before Fischer time runs |
+| Start sync | **`arena_launch`** WS to both players; **`arena_play_ready`** when play UI rendered; **3s** countdown (`arenaClockStartAt`) before Fischer time runs; **`arena_play_stand_down`** on play leave / WS disconnect during sync window; **`abort_arena_launch_sync`** returns table to lobby when stuck (0 moves, clock not live) |
 | Lobby activity | **`arena_table`** WS to seated opponents on join, leave, or ready-up (`event`, `actorUserId`, table ids) |
 
 See [Vacation mode](/backend/subsystems/vacation/) for the correspondence vs arena exception.

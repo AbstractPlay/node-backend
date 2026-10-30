@@ -39,6 +39,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - sk: `<userid>`
   - fields include `publicRivalries` (boolean, default false) � opt in to public rivalries table
   - `cleaned` (boolean, optional) � set by [dashboard cruft cleanup](/crons/dashboard-cruft-cleanup/) for inactive users; cleared on `me_dashboard` login
+  - Full account removal (inactive ≥ 1 year, no game rows): [abandoned account deletion](/crons/abandoned-account-deletion/) deletes `USER` / `USERS` and Cognito (distinct from `cleaned`)
   - `dashboardMaintAt` (number, optional) � lease timestamp for per-user dashboard maintenance lock (`me_dashboard` prune/timeout sweep)
   - **Retired (Phase 5):** `games[]`, `gamesUpdate` � removed from all USER records in prod (Aug 2025)
   - **Vacation (correspondence):** optional `vacationQuotaYear`, `vacationPauseMsUsed` (ms charged in current UTC quota year), `vacationStartsAt`, `vacationEndsAt`, `vacationOpenEnded`, `vacationStintStartedAt` � at most one stint; see [Vacation mode](/backend/subsystems/vacation/)
