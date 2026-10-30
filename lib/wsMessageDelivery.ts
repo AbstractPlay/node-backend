@@ -62,7 +62,11 @@ export function shouldDeliverWsMessage(
     return conn.userId === userId;
   }
 
-  if (verb === "arena_launch" || verb === "arena_sync") {
+  if (
+    verb === "arena_launch"
+    || verb === "arena_sync"
+    || verb === "arena_table"
+  ) {
     const userId = payload?.userId;
     if (!userId) {
       return false;

@@ -35,6 +35,27 @@ When an in-app notification is created ([`createNotification`](../../lib/notific
 
 Delivery uses [`shouldDeliverWsMessage`](../../lib/wsMessageDelivery.ts): all open connections for that `userId`. Clients debounce and call `list_notifications`; the payload is intentionally minimal.
 
+## Arena lobby activity
+
+On join, leave, cancel, or ready-up, the arena table handlers broadcast **`arena_table`** to each seated player except the actor:
+
+```json
+{
+  "verb": "arena_table",
+  "payload": {
+    "userId": "<recipient>",
+    "tableId": "<uuid>",
+    "metaGame": "<game>",
+    "tableState": "open|seated|…",
+    "seatUserIds": ["…", "…"],
+    "event": "join|leave|ready",
+    "actorUserId": "<who acted>"
+  }
+}
+```
+
+Delivery matches **`arena_launch`**: only connections whose `userId` equals `payload.userId`. The front shows a toast (and may reload the lobby) when the user is not already on that table route.
+
 ## Presence
 
 Join/leave events from subscribe/disconnect go to `PresenceCoalesceQueue` (2s batching window). [`presenceBroadcaster`](../../api/sockets/presenceBroadcaster.ts) merges the batch, increments `wsMeta` / `presenceSeq`, and broadcasts a **delta** to connections with `wantsPresence !== false`.
