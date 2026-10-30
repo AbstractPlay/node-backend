@@ -29,6 +29,10 @@ import {
   type MetaGameCounts,
 } from '../metaGameBootstrap.js';
 import { hasRegisteredDisplayName } from '../userDisplayName.js';
+import {
+  filterActiveUserDirectoryRows,
+  parseUserNamesAllFlag,
+} from '../playerActivityWindow.js';
 
 type FullGame = {
   metaGame: string;
@@ -42,10 +46,11 @@ type FullGame = {
   playMode?: string;
 };
 
-export async function userNames() {
+export async function userNames(pars?: { all?: unknown }) {
+  const includeAll = parseUserNamesAllFlag(pars?.all);
   // Bots are listed from the stage's DynamoDB table (abstract-play-dev vs abstract-play-prod).
   // Bot Cognito credentials are also per-stage; dev tokens cannot call prod botQuery.
-  console.log("userNames: Scanning users.");
+  console.log(`userNames: Scanning users (all=${includeAll}).`);
   try {
     const [data, botData, adminData] = await Promise.all([
       ddbDocClient.send(
@@ -77,12 +82,14 @@ export async function userNames() {
     ]);
     const adminIds = new Set((adminData.Items ?? []).map((user) => String(user.sk)));
 
-    const users = (data.Items ?? []).filter(
+    const registered = (data.Items ?? []).filter(
       u => u.sk !== 'SkQfHAjeDxs8eeEnScuYA' && hasRegisteredDisplayName(u.name),
     );
     if ((data.Items?.length ?? 0) === 0) {
       throw new Error("Found no users?");
     }
+
+    const users = filterActiveUserDirectoryRows(registered, { all: includeAll });
 
     const userResults = users.map(u => ({
       id: u.sk,

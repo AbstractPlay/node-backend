@@ -36,7 +36,7 @@ import { listArenaTimeControlsPublic } from '../../lib/arena/listTimeControlsPub
 import { listArenaTablesPublic } from '../../lib/arena/arenaTableHandlers.js';
 
 export const publicRoutes: Record<string, PublicRouteHandler> = {
-  user_names: () => userNames(),
+  user_names: (pars) => userNames(pars),
   challenge_details: (pars) => challengeDetails(pars),
   standing_challenges: (pars) => standingChallenges(pars),
   all_standing_challenges: () => allStandingChallenges(),
