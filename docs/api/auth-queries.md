@@ -208,6 +208,8 @@ Lobby tables (2-player Fischer clocks). **`GAME.id = tableId`** when play starts
 | `get_my_arena_table` | Caller's seated table from `ARENAUSER`, or `{ table: null }` | — |
 | `set_arena_ready` | Ready toggle; launches when both ready | `tableId`, `ready` |
 | `arena_play_ready` | Player ping after play board rendered; starts 3s countdown when both seated players have pinged | `metaGame`, `id` (game id = table id) |
+| `arena_play_stand_down` | Remove caller's play-ready ping during launch sync (leave play page or disconnect); clears countdown if armed but Fischer not live | `metaGame`, `id` |
+| `abort_arena_launch_sync` | Either seated player rolls back half-started launch to lobby (no moves, competitive clock not live); deletes `#0#` game, table `seated`, both unready | `tableId` |
 | `propose_arena_seat_swap` | Request swap (clears ready) | `tableId` |
 | `accept_arena_seat_swap` | Accept swap (clears ready) | `tableId` |
 | `reject_arena_seat_swap` | Decline a pending swap offer | `tableId` |

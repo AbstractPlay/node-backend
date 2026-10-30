@@ -26,6 +26,11 @@ custom:
     dev: "records.abstractplay.com"
   dumpbucket: "abstractplay-db-dump"
   opsbucket: "private-ops-153672715141-us-east-1-an"
+  stageConfig:
+    dev:
+      userpoolId: us-east-1_2zrzbEjoU
+    prod:
+      userpoolId: us-east-1_YCjgSZHJm
   renderBucketName: "thumbnails-prerender-${self:provider.stage}"
   rendererCdnUrl: "https://renderer.dev.abstractplay.com/APRender.min.js"
   esbuild:
@@ -117,6 +122,7 @@ provider:
             - ses:SendEmail
             - ses:SendRawEmail
             - cloudwatch:PutMetricData
+            - cognito-idp:AdminDeleteUser
           Resource: "*"
         - Effect: "Allow"
           Action:
@@ -259,6 +265,25 @@ functions:
           enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
           # 3am UTC daily (after dumpdb export; uses latest completed ION dump for candidates)
           schedule: cron(0 3 * * ? *)
+
+  abandoned-account-deletion:
+    handler: src/functions/abandoned-account-deletion.handler
+    description: Delete long-inactive accounts with no game participation (S3 dump candidates + live confirm)
+    timeout: 900
+    memorySize: 1024
+    logRetentionInDays: 30
+    environment:
+      ABANDONED_ACCOUNT_DELETE_ENABLED: 'false'
+      ABANDONED_ACCOUNT_DELETE_DRY_RUN: 'true'
+      ABANDONED_ACCOUNT_DELETE_BATCH_SIZE: 25
+      ABANDONED_ACCOUNT_INACTIVE_MS: 31536000000
+      USERPOOL_ID: ${self:custom.stageConfig.${self:provider.stage}.userpoolId}
+    events:
+      - eventBridge:
+          name: abstractplay-${self:provider.stage}-abandoned-account-deletion
+          description: Daily abandoned full account deletion (batched)
+          enabled: ${self:custom.scheduleEnabled.${self:provider.stage}}
+          schedule: cron(30 3 * * ? *)
 
   records-rec-analytics:
     handler: src/functions/records-rec-analytics.handler

@@ -13,6 +13,12 @@ import {
 import { gunzipSync, strFromU8 } from 'fflate';
 import { load as loadIon } from 'ion-js';
 import type { BasicRec } from '../types/index.js';
+import {
+  createAbandonedAccountDumpCollector,
+  finalizeAbandonedAccountDumpCandidates,
+  processAbandonedAccountDumpItem,
+  type AbandonedAccountDumpResult,
+} from '@backend/lib/abandonedAccountDumpCandidates.js';
 
 export const DUMP_BUCKET = 'abstractplay-db-dump';
 
@@ -121,3 +127,24 @@ export async function collectUserCandidatesFromDump(
 
   return [...candidates];
 }
+
+export async function collectAbandonedAccountDeletionCandidatesFromDump(
+  s3: S3Client,
+  allContents: _Object[],
+  uid: string,
+  inactiveBeforeMs: number,
+  opts?: { trackOpenChallengeDefer?: boolean },
+): Promise<AbandonedAccountDumpResult> {
+  const state = createAbandonedAccountDumpCollector();
+  const dataFiles = dumpDataFilesForUid(allContents, uid);
+
+  for (const file of dataFiles) {
+    await forEachIonItem(s3, file, item => {
+      processAbandonedAccountDumpItem(state, item);
+    });
+  }
+
+  return finalizeAbandonedAccountDumpCandidates(state, inactiveBeforeMs, opts);
+}
+
+export type { AbandonedAccountDumpResult, AbandonedAccountDumpCandidate } from '@backend/lib/abandonedAccountDumpCandidates.js';
