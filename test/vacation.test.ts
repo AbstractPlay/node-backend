@@ -111,6 +111,17 @@ describe('vacation resolve', () => {
     });
     assert.equal(isVacationStintLive(f, T0 + HOUR), true);
   });
+
+  it('snapshot subtracts in-progress stint from quota remaining', () => {
+    const f = fields({
+      vacationStartsAt: T0,
+      vacationStintStartedAt: T0,
+      vacationOpenEnded: true,
+    });
+    const snap = buildVacationSnapshot(f, T0 + 3 * 24 * HOUR);
+    assert.equal(snap.vacationQuotaMsRemaining, VACATION_QUOTA_MS - 3 * 24 * HOUR);
+    assert.equal(snap.vacationBlocksRemaining, (VACATION_QUOTA_MS - 3 * 24 * HOUR) / VACATION_BLOCK_MS);
+  });
 });
 
 describe('vacation finalize plans', () => {

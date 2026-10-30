@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Entries below are grouped by theme and approximate ship window; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-10-29
+## [1.0.0-ci] - 2026-10-30
 
 ### Added
 
@@ -30,6 +30,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **WebSockets:** `messageHandler` delivers `arena_launch`, `arena_sync`, `arena_table`, and `ladder` verbs (were dropped as unsupported after arena/ladder fan-out shipped).
 - **Recent completed games:** finished arena games are written to the global `COMPLETEDGAMES` index (`recent_completed_games` / `/recent-games`); the stream projector still skips arena for `CURRENTGAMES` dashboard rows. Ops: `npm run backfill-arena-completed-index -- --stage dev|prod [--metaGame uid] [--dry-run|--apply]`.
 - **Arena:** `invoke_pie` on live arena games no longer applies correspondence `clockInc`/`clockMax` hour fields (which zeroed Fischer banks); arena pie debits think time and adds Fischer increment on the **invoker** only, keeps opponent banks unchanged, keeps each player’s ms bank on their record through seat swap, reschedules timeloss, and broadcasts like `submit_arena_move`.
+- **Vacation:** `player_about` / `me_*` vacation snapshots now subtract in-progress stint pause from `vacationQuotaMsRemaining` and block counts (profile chips and settings quota line match live open-ended use).
 
 ## [1.0.0-ci] - 2026-10-24
 
