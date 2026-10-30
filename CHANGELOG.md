@@ -11,7 +11,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Added
 
-- **Realtime Arena:** Live unrated two-player Fischer games (`playMode: 'arena'`, ms `arenaClock`, catalog `arenaTcId`) via `submit_arena_move` and EventBridge Scheduler timeloss; open or invite-only closed tables (no matchmaking queue). Public `list_arena_time_controls` and `list_arena_tables`; auth lobby (`ARENATABLE`, table chat, variants on create); synchronized start and `arena_sync` WebSocket; post-game soak `submit_arena_feedback` (`ARENAFB#`); ops scripts and CloudWatch `AbstractPlay/Arena` metrics; `records` stamps arena fields on completed JSON. Docs [Realtime Arena](/backend/subsystems/arena/).
+- **Realtime Arena:** Live unrated two-player Fischer games (`playMode: 'arena'`, ms `arenaClock`, catalog `arenaTcId`) via `submit_arena_move` and EventBridge Scheduler timeloss; open or invite-only closed tables (no matchmaking queue). Public `list_arena_time_controls` and `list_arena_tables`; auth lobby (`ARENATABLE`, table chat, variants on create); synchronized start and `arena_sync` WebSocket; **`arena_table`** WebSocket to seated opponents on join, leave, and ready-up; post-game soak `submit_arena_feedback` (`ARENAFB#`); ops scripts and CloudWatch `AbstractPlay/Arena` metrics; `records` stamps arena fields on completed JSON. Docs [Realtime Arena](/backend/subsystems/arena/).
 - **Continuous Delta Ladder:** Player-created correspondence ladders (kernel, pool, challenges, hub chat, `watchLadders`); `ladderJoin` / `ladderLeave` / `ladderPointsChange` / `ladderChat` / `ladderDecay` in-app notifications; daily crons `ladder-decay` and `ladder-reconcile-counts` (ops S3 `ladders/reconcile/*`); `records` `event/{ladderId}.json`; ops `scripts/reconcile-ladder-active-counts.ts`, `backfill-ladder-by-user`, `replay-ladder-member`; docs [subsystems/ladders](/backend/subsystems/ladders/). Enable prod UI by removing `VITE_LADDER_UI_DISABLED` on the front deploy.
 - **Ladders:** `npm run backfill-ladder-join-seeds` — recompute join `startingPoints` from `_summary-ratings` after lookup key fix.
 
@@ -27,7 +27,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 ### Fixed
 
 - **Ladders:** Join seed lookup uses meta-game UID and `variantUidsForBatchRating` (same keys as summarize / Glicko), not display titles or raw empty variant lists on games with variant groups.
-- **WebSockets:** `messageHandler` delivers `arena_launch`, `arena_sync`, and `ladder` verbs (were dropped as unsupported after arena/ladder fan-out shipped).
+- **WebSockets:** `messageHandler` delivers `arena_launch`, `arena_sync`, `arena_table`, and `ladder` verbs (were dropped as unsupported after arena/ladder fan-out shipped).
 - **Recent completed games:** finished arena games are written to the global `COMPLETEDGAMES` index (`recent_completed_games` / `/recent-games`); the stream projector still skips arena for `CURRENTGAMES` dashboard rows. Ops: `npm run backfill-arena-completed-index -- --stage dev|prod [--metaGame uid] [--dry-run|--apply]`.
 - **Arena:** `invoke_pie` on live arena games no longer applies correspondence `clockInc`/`clockMax` hour fields (which zeroed Fischer banks); arena pie debits think time and adds Fischer increment on the **invoker** only, keeps opponent banks unchanged, keeps each player’s ms bank on their record through seat swap, reschedules timeloss, and broadcasts like `submit_arena_move`.
 

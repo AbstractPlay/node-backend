@@ -2,6 +2,7 @@ import { v4 as uuid } from 'uuid';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { createArenaGame } from '../createArenaGame.js';
 import { broadcastArenaLaunch } from '../arenaSyncStart.js';
+import { broadcastArenaTableActivity } from '../arenaTableActivityWs.js';
 import { getArenaTimeControl } from '../timeControls.js';
 import {
   createArenaTableCommentsRow,
@@ -179,6 +180,7 @@ export async function joinArenaTableRecord(
     await deleteArenaUserSlot(client, tableName, userId).catch(() => undefined);
     return { error: err instanceof Error ? err.message : String(err) };
   }
+  await broadcastArenaTableActivity(next, 'join', userId);
   return { ok: true };
 }
 
@@ -215,6 +217,7 @@ export async function leaveArenaTableRecord(
     return { error: 'Cannot leave during live play.' };
   }
   if (userId === table.hostId) {
+    await broadcastArenaTableActivity(table, 'leave', userId);
     await abandonArenaTableRecord(client, tableName, table);
     return { ok: true };
   }
@@ -232,6 +235,7 @@ export async function leaveArenaTableRecord(
   await deleteArenaUserSlot(client, tableName, userId);
   await putArenaTable(client, tableName, next);
   await syncArenaIndexOnTableWrite(client, tableName, prev, next);
+  await broadcastArenaTableActivity(next, 'leave', userId);
   return { ok: true };
 }
 
@@ -251,6 +255,7 @@ export async function cancelArenaTableRecord(
   if (table.state === 'playing' || table.state === 'launching') {
     return { error: 'Cannot cancel after launch.' };
   }
+  await broadcastArenaTableActivity(table, 'leave', userId);
   await abandonArenaTableRecord(client, tableName, table);
   return { ok: true };
 }
@@ -327,6 +332,9 @@ export async function setArenaReadyRecord(
   const next = withUpdated(table, Date.now());
   await putArenaTable(client, tableName, next);
   await syncArenaIndexOnTableWrite(client, tableName, prev, next);
+  if (ready) {
+    await broadcastArenaTableActivity(next, 'ready', userId);
+  }
   if (next.seats.every((s) => s.userId && s.ready)) {
     const launched = await launchArenaTableIfReady(client, tableName, next);
     return { ok: true, launched: launched !== undefined };
