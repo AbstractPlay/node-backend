@@ -16,6 +16,10 @@ import {
 } from './table/tableMutations.js';
 import { listArenaTablesFromIndex } from './table/listTables.js';
 import { recordArenaPlayReady } from './arenaSyncStart.js';
+import {
+  rollbackArenaLaunchToLobby,
+  standDownArenaPlayReady,
+} from './arenaLaunchSync.js';
 import type { ArenaTableListItem, ArenaTableRecord } from './table/types.js';
 
 function tableName(): string {
@@ -216,6 +220,43 @@ export async function handleArenaPlayReady(
     arenaClockStartAt: result.arenaClockStartAt,
     serverTime: result.serverTime,
   });
+}
+
+export async function handleArenaPlayStandDown(
+  userid: string,
+  pars: { metaGame?: string; id?: string },
+) {
+  if (!pars.metaGame || !pars.id) {
+    return formatReturnError('metaGame and id are required.');
+  }
+  const result = await standDownArenaPlayReady(
+    ddbDocClient,
+    userid,
+    pars.metaGame,
+    pars.id,
+  );
+  if ('error' in result) {
+    return formatReturnError(result.error);
+  }
+  return jsonOk({ ok: true });
+}
+
+export async function handleAbortArenaLaunchSync(
+  userid: string,
+  pars: { tableId?: string },
+) {
+  if (!pars.tableId) {
+    return formatReturnError('tableId is required.');
+  }
+  const result = await rollbackArenaLaunchToLobby(
+    ddbDocClient,
+    userid,
+    pars.tableId,
+  );
+  if ('error' in result) {
+    return formatReturnError(result.error);
+  }
+  return jsonOk({ ok: true, metaGame: result.metaGame });
 }
 
 export async function handleProposeArenaSeatSwap(userid: string, pars: { tableId?: string }) {
