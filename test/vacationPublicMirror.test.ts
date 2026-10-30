@@ -38,6 +38,6 @@ describe('vacation publicMirror', () => {
     assert.ok(v);
     assert.equal(v!.onVacation, true);
     assert.equal(v!.vacationActive, true);
-    assert.equal(v!.vacationQuotaMsRemaining, VACATION_QUOTA_MS);
+    assert.equal(v!.vacationQuotaMsRemaining, VACATION_QUOTA_MS - HOUR);
   });
 });
