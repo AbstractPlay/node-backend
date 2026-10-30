@@ -82,4 +82,18 @@ describe('shouldDeliverWsMessage', () => {
     assert.equal(shouldDeliverWsMessage('arena_sync', a, payload), true);
     assert.equal(shouldDeliverWsMessage('arena_sync', b, payload), false);
   });
+
+  it('delivers arena_table only to the target user', () => {
+    const a = conn({ userId: 'user-a' });
+    const b = conn({ userId: 'user-b', sk: 'conn-2' });
+    const payload = {
+      userId: 'user-a',
+      tableId: 't1',
+      metaGame: 'go',
+      event: 'join',
+      actorUserId: 'user-b',
+    };
+    assert.equal(shouldDeliverWsMessage('arena_table', a, payload), true);
+    assert.equal(shouldDeliverWsMessage('arena_table', b, payload), false);
+  });
 });

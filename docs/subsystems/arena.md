@@ -13,6 +13,7 @@ Live **2-player Fischer** games: open and closed lobby tables, and **`submit_are
 | Game id | **`tableId === GAME.id`** when play launches (stable URL + chat) |
 | Clock | Server **`moveReceivedAt`** at handler entry; grace **`ARENA_CLOCK_GRACE_MS`** (750ms) |
 | Start sync | **`arena_launch`** WS to both players; **`arena_play_ready`** when play UI rendered; **3s** countdown (`arenaClockStartAt`) before Fischer time runs |
+| Lobby activity | **`arena_table`** WS to seated opponents on join, leave, or ready-up (`event`, `actorUserId`, table ids) |
 
 See [Vacation mode](/backend/subsystems/vacation/) for the correspondence vs arena exception.
 
@@ -72,4 +73,4 @@ Completed arena games stamp **`header.site.playMode`**, **`arenaTcId`**, **`aren
 ## Related
 
 - [Games and moves](/backend/subsystems/games-and-moves/) — correspondence vs arena entry
-- [WebSockets](/backend/subsystems/websockets/) — `watchGames` + `game` verb for live play and spectate; `arena_launch` / `arena_sync` (user-targeted) for arena start
+- [WebSockets](/backend/subsystems/websockets/) — `watchGames` + `game` verb for live play and spectate; `arena_launch` / `arena_sync` / `arena_table` (user-targeted) for arena start and lobby activity

@@ -19,6 +19,7 @@ const SUPPORTED_VERBS = [
   "ladder",
   "arena_launch",
   "arena_sync",
+  "arena_table",
 ];
 
 type MsgBody = {
