@@ -17,6 +17,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Changed
 
+- **`user_names`:** Default response lists humans active within the past 30 days (green/yellow activity) plus all bots; pass `pars.all: true` for the full registered directory.
 - **Ops:** Durable CLI tooling moved from `bin/` to `scripts/`; `bin/` is gitignored local scratch (calibration JSON, experiments).
 - **Ops:** `.gitattributes` no longer uses `merge=ours` on root `package.json` (avoids stale npm `scripts` after develop→main); pin manifests unchanged.
 - **Ops:** Game projector SQS DLQ and DLQ CloudWatch alarm deploy on **prod** only (dev stack no longer creates `abstractplay-game-projector-dlq-dev`).
