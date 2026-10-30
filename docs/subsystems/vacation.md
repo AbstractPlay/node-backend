@@ -48,7 +48,7 @@ See [Public queries](/backend/api/public-queries/) (`user_names`, `player_about`
 | `update_vacation` | same |
 | `stop_vacation` | same |
 
-Success body: `{ vacation: VacationSnapshot }`. Validation failures return **400** with `{ message: "<code>" }` (`vacation_stint_active`, `vacation_no_quota`, `vacation_invalid_range`, etc.).
+Success body: `{ vacation: VacationSnapshot }`. Validation failures return **400** with `{ message: "<code>" }` (`vacation_stint_active`, `vacation_no_quota`, `vacation_invalid_range`, etc.). Snapshot **`vacationQuotaMsRemaining`** / **`vacationBlocksRemaining`** subtract pause time already consumed by a **live** stint (same ms that `stop_vacation` would charge); persisted **`vacationPauseMsUsed`** updates only on stop/finalize.
 
 ---
 

@@ -18,6 +18,19 @@ export function remainingQuotaMs(fields: VacationUserFields, now: number): numbe
   return Math.max(0, VACATION_QUOTA_MS - used);
 }
 
+/** Booked quota minus pause ms already consumed by a live stint (not yet persisted). */
+export function effectiveRemainingQuotaMs(fields: VacationUserFields, now: number): number {
+  const booked = remainingQuotaMs(fields, now);
+  if (!isVacationStintLive(fields, now)) {
+    return booked;
+  }
+  const pauseStart = stintPauseStart(fields, now);
+  if (pauseStart === null) {
+    return booked;
+  }
+  return Math.max(0, booked - computeStintPauseMs(pauseStart, now));
+}
+
 export function hasVacationStint(fields: VacationUserFields): boolean {
   return fields.vacationStartsAt !== undefined && fields.vacationStartsAt !== null;
 }
@@ -111,7 +124,7 @@ export function shouldAutoFinalizeStint(fields: VacationUserFields, now: number)
 export function buildVacationSnapshot(fields: VacationUserFields, now: number): VacationSnapshot {
   const year = utcQuotaYear(now);
   const used = normalizedPauseMsUsed(fields, now);
-  const remaining = remainingQuotaMs(fields, now);
+  const remaining = effectiveRemainingQuotaMs(fields, now);
   return {
     vacationPauseMsUsed: used,
     vacationQuotaMsRemaining: remaining,
