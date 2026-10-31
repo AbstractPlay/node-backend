@@ -8,6 +8,7 @@ import {
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { GameFactory } from '@abstractplay/gameslib';
 import type { DynamoDBRecord } from 'aws-lambda';
+import { gameEndFieldsFromState } from './gameEndMeta.js';
 import { decompressGameState } from './gameState.js';
 import { isArenaGame } from './gamePlayMode.js';
 import { isBotId } from './participants.js';
@@ -81,6 +82,7 @@ export function toCurrentSummary(game: GameRecord) {
 }
 
 export function toCompletedSummary(game: GameRecord, numMoves: number) {
+  const endFields = gameEndFieldsFromState(game.metaGame, game.state);
   return {
     id: game.id,
     metaGame: game.metaGame,
@@ -95,6 +97,7 @@ export function toCompletedSummary(game: GameRecord, numMoves: number) {
     variants: game.variants,
     commented: game.commented,
     toMove: game.toMove,
+    ...(endFields ?? {}),
     ...(game.playMode === 'arena' ? {
       playMode: 'arena' as const,
       ...(game.arenaTcId ? { arenaTcId: game.arenaTcId } : {}),
@@ -327,6 +330,20 @@ export async function purgeCompletedGameDashboardIndexes(
 
 export function completedGameIndexSk(lastMoveTime: number, gameId: string): string {
   return `${lastMoveTime}#${gameId}`;
+}
+
+/** Re-write COMPLETEDGAMES* summary rows from a completed GAME record (e.g. backfill). */
+export async function refreshCompletedGameIndexes(
+  docClient: DynamoDBDocumentClient,
+  tableName: string,
+  game: GameRecord,
+): Promise<void> {
+  const numMoves = resolveNumMoves(game);
+  if (!shouldKeepCompletedGame(game, numMoves)) {
+    return;
+  }
+  const summary = toCompletedSummary(game, numMoves);
+  await putCompletedGameIndexes(docClient, tableName, game, summary);
 }
 
 async function putCompletedGameIndexes(
