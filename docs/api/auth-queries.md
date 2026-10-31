@@ -192,7 +192,7 @@ Player-created continuous delta ladders (one canonical ladder per meta + variant
 | `respond_ladder_challenge` | Accept/decline ladder challenge (accept uses `createLadderGame`; cap failure leaves challenge pending) | `id`, `metaGame`, `response`, optional `comment` |
 | `submit_ladder_comment` | Ladder hub chat (active members) | `ladderId`, `comment` |
 
-`me_dashboard` adds **`ladderMemberships`** (active only; each row includes `ladderStatus`, `viewerInPool`, `poolJoinEligible`), **`currentLadderGames`**, and **`ladderId`** on each active game row when set on the game.
+`me_dashboard` adds **`ladderMemberships`** (active only; each row includes `ladderStatus`, `viewerInPool`, `poolJoinEligible`), **`currentLadderGames`**, and **`ladderId`**, **`tournament`**, and **`event`** on each active game row when set on the game.
 
 ## Realtime arena (tables)
 

@@ -36,6 +36,8 @@ export type DashboardGame = {
   commented?: number;
   note?: string;
   ladderId?: string;
+  tournament?: string;
+  event?: string;
 };
 
 export type CurrentGameIndexRow = {
@@ -52,6 +54,8 @@ export type CurrentGameIndexRow = {
   gameStarted?: number;
   numMoves?: number;
   ladderId?: string;
+  tournament?: string;
+  event?: string;
 };
 
 export function isActiveDashboardGame(game: { toMove?: string | boolean[] | null }): boolean {
@@ -75,6 +79,12 @@ export function currentRowToGame(row: CurrentGameIndexRow): DashboardGame {
   }
   if (row.ladderId !== undefined) {
     game.ladderId = row.ladderId;
+  }
+  if (row.tournament !== undefined) {
+    game.tournament = row.tournament;
+  }
+  if (row.event !== undefined) {
+    game.event = row.event;
   }
   return game;
 }
