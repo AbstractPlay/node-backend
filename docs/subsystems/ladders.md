@@ -38,7 +38,7 @@ See [Database schema](/backend/database-schema/) (Ladders section). Main familie
 2. **Join / leave** — `join_ladder` / `leave_ladder`. Rejoin after `left` keeps prior points. Leave blocked while `activeLadderGameCount > 0`.
 3. **Play** — `join_ladder_pool`, `new_ladder_challenge` + `respond_ladder_challenge`, or pool pairing creates rated games via `createLadderGame`.
 4. **Settle** — On win/loss/draw end, `runLadderGameEndHook` updates points (draw: no Δ), decrements active counts, enqueues `ladderPointsChange` when Δ ≠ 0.
-5. **Decay** — Daily `ladder-decay` cron applies inactivity decay and `ladderDecay` notifications.
+5. **Decay** — Daily `ladder-decay` cron applies inactivity decay and `ladderDecay` notifications on **`active`** ladders only (not `forming` or `suspended`, where matchmaking is closed).
 
 ## Point deltas
 

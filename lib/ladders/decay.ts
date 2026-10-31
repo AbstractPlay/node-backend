@@ -21,10 +21,14 @@ export function computeDecayPoints(points: number, decayRatePerDay: number): num
   return Math.max(0, Math.floor(points * (1 - decayRatePerDay)));
 }
 
+export function ladderAcceptsInactivityDecay(ladder: Pick<LadderRecord, 'status'>): boolean {
+  return ladder.status === 'active';
+}
+
 export type LadderDecayRunResult = {
   playersRead: number;
   decayApplied: number;
-  skippedForming: number;
+  skippedLadderNotActive: number;
   skippedVacation: number;
   skippedNotIdle: number;
   skippedHasActiveGames: number;
@@ -63,8 +67,8 @@ function isDecayCandidate(
   now: number,
   dayStart: number,
 ): { ok: true } | { ok: false; reason: keyof LadderDecayRunResult } {
-  if (ladder.status === 'forming') {
-    return { ok: false, reason: 'skippedForming' };
+  if (!ladderAcceptsInactivityDecay(ladder)) {
+    return { ok: false, reason: 'skippedLadderNotActive' };
   }
   if ((player.activeLadderGameCount ?? 0) > 0) {
     return { ok: false, reason: 'skippedHasActiveGames' };
@@ -115,7 +119,7 @@ export async function runLadderDecayPass(
   const result: LadderDecayRunResult = {
     playersRead: 0,
     decayApplied: 0,
-    skippedForming: 0,
+    skippedLadderNotActive: 0,
     skippedVacation: 0,
     skippedNotIdle: 0,
     skippedHasActiveGames: 0,

@@ -272,6 +272,8 @@ functions:
     timeout: 900
     memorySize: 1024
     logRetentionInDays: 30
+    layers:
+      - !Ref AbstractplayGameslibLambdaLayer
     environment:
       ABANDONED_ACCOUNT_DELETE_ENABLED: 'false'
       ABANDONED_ACCOUNT_DELETE_DRY_RUN: 'true'
