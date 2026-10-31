@@ -11,6 +11,10 @@ import {
   toCompletedSummary,
   toCurrentSummary,
 } from '../lib/gameProjector.js';
+import { GameFactory } from '@abstractplay/gameslib';
+
+const HEX_START =
+  '{"game":"hex","numplayers":2,"variants":["size-11"],"gameover":false,"winner":[],"stack":[{"_version":"20240101","_results":[],"_timestamp":"2026-01-01T00:00:00.000Z","currplayer":1,"board":{"dataType":"Map","value":[]},"connPath":[]}]}';
 
 vi.mock('../lib/participants.js', () => ({
   isBotId: vi.fn(async () => false),
@@ -151,6 +155,27 @@ describe('toCompletedSummary', () => {
     assert.equal(summary.numMoves, 5);
     assert.equal(summary.commented, 1);
     assert.deepEqual(summary.winner, [1]);
+  });
+
+  it('includes gameEndKind from engine state', () => {
+    const engine = GameFactory('hex', HEX_START);
+    assert.ok(engine);
+    engine.timeout(2);
+    const summary = toCompletedSummary({
+      pk: 'GAME',
+      sk: 'hex#1#g1',
+      id: 'g1',
+      metaGame: 'hex',
+      numPlayers: 2,
+      players: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
+      clockHard: false,
+      toMove: '',
+      lastMoveTime: 200,
+      state: engine.serialize(),
+      winner: [1],
+    }, 3);
+    assert.equal(summary.gameEndKind, 'timeout');
+    assert.equal(summary.gameEndPlayer, 2);
   });
 });
 
