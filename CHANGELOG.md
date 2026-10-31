@@ -15,6 +15,8 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Continuous Delta Ladder:** Player-created correspondence ladders (kernel, pool, challenges, hub chat, `watchLadders`); `ladderJoin` / `ladderLeave` / `ladderPointsChange` / `ladderChat` / `ladderDecay` in-app notifications; daily crons `ladder-decay` and `ladder-reconcile-counts` (ops S3 `ladders/reconcile/*`); `records` `event/{ladderId}.json`; ops `scripts/reconcile-ladder-active-counts.ts`, `backfill-ladder-by-user`, `replay-ladder-member`; docs [subsystems/ladders](/backend/subsystems/ladders/). Enable prod UI by removing `VITE_LADDER_UI_DISABLED` on the front deploy.
 - **Ladders:** `npm run backfill-ladder-join-seeds` — recompute join `startingPoints` from `_summary-ratings` after lookup key fix.
 - **Completed games index:** `COMPLETEDGAMES*` summary rows include optional `gameEndKind`, `gameEndPlayer`, and `eogReason` (derived when the stream projector writes completed indexes); ops script `scripts/backfill-completed-game-end-meta.mjs` refreshes legacy rows.
+- **Ops:** `npm run analyze-completed-game-index-coverage` — classify completed `GAME` rows vs global `COMPLETEDGAMES` (DynamoDB or local ION dump; not records S3 JSON).
+- **Ops:** `npm run backfill-correspondence-completed-index` — plan/apply historical correspondence `COMPLETEDGAMES*` from ION dump; `npm run update-meta-game-counts` — admin recount of `METAGAMES#` sharded counts.
 
 ### Changed
 
