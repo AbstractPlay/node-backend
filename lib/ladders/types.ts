@@ -25,7 +25,7 @@ export const DEFAULT_LADDER_TUNING: LadderTuning = {
   paceThresholdHours: 12,
   paceMultiplierMax: 1.15,
   maxConcurrentLadderGames: 7,
-  rematchCooldownDays: 7,
+  rematchCooldownDays: 3,
   decayAfterDaysNoActiveLadderGames: 30,
   decayRatePerDay: 0.005,
   challengeReachPercent: 20,
