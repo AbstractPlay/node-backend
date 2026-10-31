@@ -11,7 +11,7 @@ import {
 } from './pairHistory.js';
 import { isPointsWithinReach } from './reach.js';
 import { rankLadderMembers } from './rank.js';
-import type { LadderPlayerRecord, LadderRecord, LadderTuning } from './types.js';
+import { DEFAULT_LADDER_TUNING, type LadderPlayerRecord, type LadderRecord, type LadderTuning } from './types.js';
 
 export type LadderEligibilityReject =
   | 'ladder_not_found'
@@ -96,7 +96,11 @@ export async function assertRematchAllowed(
   now: number,
 ): Promise<LadderEligibilityReject | null> {
   const last = await getLadderPairLastPlayedAt(client, tableName, ladderId, userA, userB);
-  if (isWithinRematchCooldown(last, tuning.rematchCooldownDays, now)) {
+  const rematchCooldownDays = Math.min(
+    tuning.rematchCooldownDays,
+    DEFAULT_LADDER_TUNING.rematchCooldownDays,
+  );
+  if (isWithinRematchCooldown(last, rematchCooldownDays, now)) {
     return 'rematch_cooldown';
   }
   return null;

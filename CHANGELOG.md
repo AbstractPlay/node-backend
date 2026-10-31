@@ -22,6 +22,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Ops:** `.gitattributes` no longer uses `merge=ours` on root `package.json` (avoids stale npm `scripts` after develop→main); pin manifests unchanged.
 - **Ops:** Game projector SQS DLQ and DLQ CloudWatch alarm deploy on **prod** only (dev stack no longer creates `abstractplay-game-projector-dlq-dev`).
 - **Ladders:** `displayName` uses gameslib `expandVariantLabels` (same variant copy as the front ladder hub), e.g. `Exxit ladder (…)` instead of `(no variants)` or raw UIDs.
+- **Ladders:** Default rematch cooldown between the same two members reduced from seven days to three (applies to existing ladders via platform default cap).
 - **Game links:** `playMode: 'arena'` on completed/current open-API game summaries, player mark summaries, and arena game-end (and start) in-app notifications so the front can link to `/arena/play` without relying on `/move` redirects.
 - **Arena:** Auth query `get_my_arena_table` (`ARENAUSER`) for the landing UI one-table-per-player guard.
 - **Ops:** `npm run list-abandoned-account-candidates` — read-only S3 ION dump scan for inactive accounts eligible for deletion (game-participation gate); optional `--out` JSON/CSV. **`abandoned-account-deletion` cron** (prod 03:30 UTC, disabled by default) and `npm run abandoned-account-deletion` for manual single-user purge. See [crons/abandoned-account-deletion](/crons/abandoned-account-deletion/).
