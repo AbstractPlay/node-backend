@@ -134,7 +134,10 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 - **Current games by player** � per-player active game summaries (stream-maintained; Phase 3 reads from here)
   - pk: `CURRENTGAMES#<userid>`
   - sk: `<gameid>`
-  - summary fields mirror dashboard `Game` objects (`id`, `metaGame`, `players`, `toMove`, `lastMoveTime`, `numMoves`, etc.)
+  - summary fields mirror dashboard `Game` objects (`id`, `metaGame`, `players`, `toMove`, `lastMoveTime`, `numMoves`, `gameStarted`, `gameEnded`, `winner`, `commented`, etc.)
+  - optional **`gameEndKind`**: `normal` | `resign` | `timeout` | `abandoned` | `draw` (derived from completed engine state when the index row is written)
+  - optional **`gameEndPlayer`**: 1-based seat for `resign` or `timeout`
+  - optional **`eogReason`**: engine `{ type: "eog", reason }` code when `gameEndKind` is `normal` (localized on the client via apresults)
 
 - **Recent completed games by player** � moved to **Retired** below
 
