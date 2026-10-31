@@ -279,7 +279,7 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - sk: `<ladderId>`
   - `comments[]`
 
-`CHALLENGE` rows may include `ladderId` (and optional `reachOverride: nearest_anyway`). `GAME` rows may include `ladderId` (rated ladder games). `CURRENTGAMES#` summaries project `ladderId` when present.
+`CHALLENGE` rows may include `ladderId` (and optional `reachOverride: nearest_anyway`). `GAME` rows may include `ladderId` (rated ladder games), `tournament`, or `event`. `CURRENTGAMES#` summaries project `ladderId`, `tournament`, and `event` when present.
 
 ## Organized events
 

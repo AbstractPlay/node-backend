@@ -26,6 +26,18 @@ test('isActiveDashboardGame treats empty toMove as completed', () => {
   assert.equal(isActiveDashboardGame({ toMove: null }), false);
 });
 
+test('currentRowToGame copies ladder, tournament, and event refs', () => {
+  const game = currentRowToGame({
+    ...activeRow,
+    ladderId: 'l1',
+    tournament: 'go#t1',
+    event: 'e1',
+  });
+  assert.equal(game.ladderId, 'l1');
+  assert.equal(game.tournament, 'go#t1');
+  assert.equal(game.event, 'e1');
+});
+
 test('currentRowToGame uses sk as id', () => {
   const game = currentRowToGame(activeRow);
   assert.equal(game.id, 'g-active');
