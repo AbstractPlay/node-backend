@@ -34,8 +34,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Arena:** `invoke_pie` on live arena games no longer applies correspondence `clockInc`/`clockMax` hour fields (which zeroed Fischer banks); arena pie debits think time and adds Fischer increment on the **invoker** only, keeps opponent banks unchanged, keeps each player’s ms bank on their record through seat swap, reschedules timeloss, and broadcasts like `submit_arena_move`.
 - **Vacation:** `player_about` / `me_*` vacation snapshots now subtract in-progress stint pause from `vacationQuotaMsRemaining` and block counts (profile chips and settings quota line match live open-ended use).
 - **Ladders:** Daily inactivity decay skips **`suspended`** ladders as well as **`forming`** (matchmaking closed; cron metric `skippedLadderNotActive`).
-
-## [1.0.0-ci] - 2026-10-24
+- **Dashboard:** `CURRENTGAMES#` summaries now project `tournament` and `event` from `GAME` rows (alongside `ladderId`) so `me_dashboard` games expose tournament and organized-event context.
 
 ### Fixed
 

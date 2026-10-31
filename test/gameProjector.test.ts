@@ -73,6 +73,27 @@ describe('toCurrentSummary', () => {
     assert.equal(summary.playMode, 'arena');
     assert.equal(summary.arenaTcId, 'blitz5');
   });
+
+  it('projects ladder, tournament, and event context', () => {
+    const summary = toCurrentSummary({
+      pk: 'GAME',
+      sk: 'go#0#g1',
+      id: 'g1',
+      metaGame: 'go',
+      numPlayers: 2,
+      players: [{ id: 'p1', name: 'A' }],
+      clockHard: true,
+      toMove: '0',
+      lastMoveTime: 100,
+      state: '{}',
+      ladderId: 'ladder-1',
+      tournament: 'go#tour-1',
+      event: 'org-event-1',
+    });
+    assert.equal(summary.ladderId, 'ladder-1');
+    assert.equal(summary.tournament, 'go#tour-1');
+    assert.equal(summary.event, 'org-event-1');
+  });
 });
 
 describe('shouldKeepCompletedGame', () => {
