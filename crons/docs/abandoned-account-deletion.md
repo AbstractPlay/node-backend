@@ -9,6 +9,7 @@ Daily cron (prod, batched) that **fully deletes** human accounts inactive ≥ 1 
 | **Handler** | [`src/functions/abandoned-account-deletion.ts`](../src/functions/abandoned-account-deletion.ts) |
 | **Schedule** | Daily **03:30 UTC** (prod only) |
 | **Timeout / memory** | 900 s / 1024 MB |
+| **Layer** | `@abstractplay/gameslib` (open-challenge live checks import gameslib) |
 
 ## Eligibility
 

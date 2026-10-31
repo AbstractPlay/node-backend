@@ -7,7 +7,7 @@ Functions that operate on **live DynamoDB** rather than only writing static arti
 **Schedule:** 00:00 and 00:01 UTC daily  
 **Source:** [`src/functions/ladder-decay.ts`](../src/functions/ladder-decay.ts), [`src/functions/ladder-reconcile-counts.ts`](../src/functions/ladder-reconcile-counts.ts)
 
-`ladder-decay` scans all `LADDERPLAYER` rows (Query `pk=LADDERPLAYER`), skips forming ladders, vacation, active ladder games, and members already decayed today, then applies the per-ladder `decayRatePerDay` and sends in-app `ladderDecay` notifications.
+`ladder-decay` scans all `LADDERPLAYER` rows (Query `pk=LADDERPLAYER`), skips non-`active` ladders (`forming`, `suspended`), vacation, active ladder games, and members already decayed today, then applies the per-ladder `decayRatePerDay` and sends in-app `ladderDecay` notifications.
 
 `ladder-reconcile-counts` rebuilds expected open-game counts from unsettled `LADDERGAME` links plus live `GAME` rows, fixes `activeLadderGameCount` on drift, and writes JSON reports to private ops S3 (`ladders/reconcile/daily/YYYY-MM-DD.json`, `latest.json`). See [S3 outputs](/crons/s3-outputs/#private-ops-bucket-private-ops-153672715141-us-east-1-an).
 
