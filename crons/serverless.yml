@@ -276,7 +276,7 @@ functions:
     layers:
       - !Ref AbstractplayGameslibLambdaLayer
     environment:
-      ABANDONED_ACCOUNT_DELETE_ENABLED: 'false'
+      ABANDONED_ACCOUNT_DELETE_ENABLED: 'true'
       ABANDONED_ACCOUNT_DELETE_DRY_RUN: 'true'
       ABANDONED_ACCOUNT_DELETE_BATCH_SIZE: 25
       ABANDONED_ACCOUNT_INACTIVE_MS: 31536000000
