@@ -38,6 +38,7 @@
       "yourturn": "Du bist am Zug",
       "tournament": "Turnier gestartet",
       "tournamentOver": "Turnier beendet",
+      "eventOver": "Event beendet",
       "announcement": "Website-Ankündigung"
     }
   },
@@ -67,6 +68,13 @@
   "TournamentEndNextSignup_other": "Das nächste Turnier dieser Serie kann in {{count}} Tagen beginnen, wenn mindestens {{minSignups}} Spieler registriert sind (aktuell {{signupCount}}). Besuche https://play.abstractplay.com/tournaments, um dich anzumelden oder deine Anmeldung anzupassen.",
   "TournamentEndNextSignupRegistered": "Du bist bereits für das nächste Turnier dieser Serie registriert.",
   "TournamentEndSubject": "Dein {{- metaGame}}-Turnier ist beendet",
+  "EventEndIntro": "Das Event {{- eventName}} ist beendet.",
+  "EventEndWinner_you": "Du hast das Event gewonnen!",
+  "EventEndWinner_other": "{{winnerName}} hat das Event gewonnen.",
+  "EventEndWinners_other": "Gewinner: {{winnerNames}}.",
+  "EventEndWinner_youWithOthers": "Du hast das Event zusammen mit {{others}} gewonnen.",
+  "EventEndLink": "Ergebnisse ansehen: https://play.abstractplay.com/event/{{eventId}}",
+  "EventEndSubject": "Das Event {{- eventName}} ist beendet",
   "TournamentRemoveBody": "Du wurdest aus dem {{- metaGame}}-Turnier entfernt, für das du angemeldet warst, da unklar ist, ob du noch interessiert bist. Wenn du weiterhin teilnehmen möchtest, melde dich bitte erneut unter https://play.abstractplay.com/tournaments an.",
   "TournamentRemoveBodyVariants": "Du wurdest aus dem {{- metaGame}}-Turnier (Varianten: {{variants}}) entfernt, für das du angemeldet warst, da unklar ist, ob du noch interessiert bist. Wenn du weiterhin teilnehmen möchtest, melde dich bitte erneut unter https://play.abstractplay.com/tournaments an.",
   "TournamentRemoveSubject": "Du wurdest aus einem Turnier entfernt"
