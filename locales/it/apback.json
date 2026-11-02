@@ -38,6 +38,7 @@
       "yourturn": "Il tuo turno",
       "tournament": "Torneo iniziato",
       "tournamentOver": "Torneo terminato",
+      "eventOver": "Evento terminato",
       "announcement": "Annuncio del sito"
     }
   },
@@ -67,6 +68,13 @@
   "TournamentEndNextSignup_other": "Il prossimo torneo di questa serie potrebbe iniziare tra {{count}} giorni se sono registrati almeno {{minSignups}} giocatori (ora {{signupCount}}). Visita https://play.abstractplay.com/tournaments per iscriverti o modificare la tua iscrizione.",
   "TournamentEndNextSignupRegistered": "Sei già iscritto al prossimo torneo di questa serie.",
   "TournamentEndSubject": "Il tuo torneo di {{- metaGame}} è terminato",
+  "EventEndIntro": "L'evento {{- eventName}} è terminato.",
+  "EventEndWinner_you": "Hai vinto l'evento!",
+  "EventEndWinner_other": "{{winnerName}} ha vinto l'evento.",
+  "EventEndWinners_other": "Vincitori: {{winnerNames}}.",
+  "EventEndWinner_youWithOthers": "Hai vinto l'evento insieme a {{others}}.",
+  "EventEndLink": "Vedi i risultati: https://play.abstractplay.com/event/{{eventId}}",
+  "EventEndSubject": "L'evento {{- eventName}} è terminato",
   "TournamentRemoveBody": "Sei stato rimosso dal torneo di {{- metaGame}} a cui eri iscritto, poiché non è chiaro se sei ancora interessato. Se desideri ancora partecipare, iscriviti di nuovo su https://play.abstractplay.com/tournaments.",
   "TournamentRemoveBodyVariants": "Sei stato rimosso dal torneo di {{- metaGame}}, varianti: {{variants}} a cui eri iscritto, poiché non è chiaro se sei ancora interessato. Se desideri ancora partecipare, iscriviti di nuovo su https://play.abstractplay.com/tournaments.",
   "TournamentRemoveSubject": "Sei stato rimosso da un torneo"
