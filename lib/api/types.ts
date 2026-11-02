@@ -10,6 +10,7 @@ export type UserSettings = {
       yourturn: boolean;
       tournamentStart: boolean;
       tournamentEnd: boolean;
+      eventEnd: boolean;
     };
     inAppNotifications?: {
       challenges: boolean;
@@ -17,6 +18,7 @@ export type UserSettings = {
       gameEnd: boolean;
       ratingChange: boolean;
       eventInvitation: boolean;
+      eventEnd: boolean;
       completedGameChat: boolean;
       tournamentChat: boolean;
       tournamentStart: boolean;

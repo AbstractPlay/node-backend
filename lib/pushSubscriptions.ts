@@ -22,7 +22,7 @@ export type PushOptions = {
   userId: string;
   title: string;
   body: string;
-  topic: 'yourturn' | 'ended' | 'started' | 'challenges' | 'test' | 'tournament' | 'announcements';
+  topic: 'yourturn' | 'ended' | 'started' | 'challenges' | 'test' | 'tournament' | 'event' | 'announcements';
   url?: string;
 };
 

@@ -233,7 +233,7 @@ Pre-launch chat uses **`submit_comment`** with `id = tableId` (same `GAMECOMMENT
 | `event_update_result` | Record result | `id`, result |
 | `event_update_divisions` | Update divisions | `id`, divisions |
 | `event_create_games` | Create linked games | `id` |
-| `event_close` | Close event | `id` |
+| `event_close` | Close event; notifies registered players (`eventEnd` in-app, email/push when enabled) | `eventid`, `winner` |
 
 ## Bots (owner)
 
