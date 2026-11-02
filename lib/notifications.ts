@@ -21,6 +21,7 @@ export const IN_APP_NOTIFICATION_CATEGORIES = [
   'gameEnd',
   'ratingChange',
   'eventInvitation',
+  'eventEnd',
   'completedGameChat',
   'tournamentChat',
   'ladderChat',
@@ -76,6 +77,8 @@ export function inAppCategoryForBody(body: NotificationBody): InAppNotificationC
       return 'ratingChange';
     case 'eventInvitation':
       return 'eventInvitation';
+    case 'eventEnd':
+      return 'eventEnd';
     case 'completedGameChat':
       return 'completedGameChat';
     case 'tournamentChat':
@@ -215,6 +218,12 @@ export type NotificationBody =
     eventName: string;
     organizerId: string;
     organizerName: string;
+  }
+  | {
+    type: 'eventEnd';
+    eventId: string;
+    eventName: string;
+    winnerNames?: string[];
   }
   | {
     type: 'completedGameChat';

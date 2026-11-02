@@ -215,6 +215,15 @@ describe('inApp notification prefs', () => {
       }),
       'tournamentEnd',
     );
+    assert.equal(
+      inAppCategoryForBody({
+        type: 'eventEnd',
+        eventId: 'evt-1',
+        eventName: 'Spring Open',
+        winnerNames: ['Alice'],
+      }),
+      'eventEnd',
+    );
   });
 });
 
@@ -289,6 +298,22 @@ test('eventInvitation body carries event page link fields', () => {
   assert.equal(item.body.eventName, 'Spring Open');
   assert.equal(item.body.organizerId, 'org-1');
   assert.equal(item.body.organizerName, 'Alice');
+});
+
+test('eventEnd body carries event page link fields and optional winners', () => {
+  const item = buildNotificationItem(USER_ID, {
+    type: 'eventEnd',
+    eventId: 'evt-abc',
+    eventName: 'Spring Open',
+    winnerNames: ['Alice', 'Bob'],
+  });
+  assert.equal(item.body.type, 'eventEnd');
+  if (item.body.type !== 'eventEnd') {
+    return;
+  }
+  assert.equal(item.body.eventId, 'evt-abc');
+  assert.equal(item.body.eventName, 'Spring Open');
+  assert.deepEqual(item.body.winnerNames, ['Alice', 'Bob']);
 });
 
 test('formatNotificationScores accepts numbers and strings', () => {

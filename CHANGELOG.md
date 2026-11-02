@@ -9,6 +9,10 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ## [1.0.0-ci] - 2026-11-02
 
+### Added
+
+- **Organized events:** `event_close` notifies registered players with in-app `eventEnd` notifications and optional email/push (winners and link to `https://play.abstractplay.com/event/{eventId}`); user prefs `eventEnd` / `settings.all.notifications.eventEnd`.
+
 ### Fixed
 
 - **Thumbnails:** `thumbnails-verify` uses ranged `GetObject` for CDN Last-Modified checks (avoids Lambda `HeadObject` 403) and grants `s3:ListBucket` on `thumbnails.abstractplay.com` so missing keys return 404 instead of access denied; thumbnail crons share an S3 client with `WHEN_REQUIRED` checksum settings for Lambda runtime SDK compat.

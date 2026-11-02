@@ -120,8 +120,9 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - sk: `<epochMs>#<random>`
   - fields: `body` (typed JSON object), `expiresAt` (TTL seconds; 180 days on create, tightened to 30 days on first dashboard fetch)
   - no GSI
-  - `body.type` values: `gameStart`, `gameEnd`, `ratingChange`, `challengeIssued`, `challengeDeclined`, `challengeRevoked`, `eventInvitation`, `completedGameChat`, `tournamentChat`
+  - `body.type` values: `gameStart`, `gameEnd`, `ratingChange`, `challengeIssued`, `challengeDeclined`, `challengeRevoked`, `eventInvitation`, `eventEnd`, `completedGameChat`, `tournamentChat`
   - `eventInvitation` is sent when an organizer saves the invite list on a moderated `ORGEVENT` (`event_update_invites`); not used for automated tournaments. Body includes `eventId`, `eventName`, `organizerId`, `organizerName`. Inspect rows with `scripts/dump-dashboard.mjs` `--include-notifications` (read-only; does not refresh TTL)
+  - `eventEnd` is sent when an organizer closes an `ORGEVENT` (`event_close`, first close only). Body includes `eventId`, `eventName`, optional `winnerNames`. Email/push use `settings.all.notifications.eventEnd` (default on). In-app uses category `eventEnd`
 
 - **Announcements** � site news ([subsystem doc](/backend/subsystems/announcements/))
   - pk: `ANNOUNCEMENT`, sk: `<id>` � canonical row (`title`, `body`, `status`, `publishedAt`, `attachmentKeys`, �)

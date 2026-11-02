@@ -32,6 +32,7 @@ import {
   resolveEventInvitationNotifyIds,
   type NotificationGame,
 } from '../notifications.js';
+import { notifyEventClosedParticipants } from './eventCloseNotifications.js';
 
 type FullUser = {
   id: string;
@@ -1304,7 +1305,8 @@ export async function eventClose(userid: string, pars: { eventid: string, winner
   }
   // update event record
   try {
-    if (event.dateEnd === undefined) {
+    const firstClose = event.dateEnd === undefined;
+    if (firstClose) {
       event.dateEnd = Date.now();
     }
     event.winner = pars.winner;
@@ -1313,6 +1315,9 @@ export async function eventClose(userid: string, pars: { eventid: string, winner
       Item: event
     })
     );
+    if (firstClose) {
+      await notifyEventClosedParticipants(event, pars.winner);
+    }
     return {
       statusCode: 200,
       headers
