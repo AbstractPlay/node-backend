@@ -67,6 +67,34 @@
     "src": "The AbstractPlay system.",
     "out": "Das AbstractPlay-System."
   },
+  "EventEndIntro": {
+    "src": "The event {{- eventName}} has ended.",
+    "out": "Das Event {{- eventName}} ist beendet."
+  },
+  "EventEndLink": {
+    "src": "View results: https://play.abstractplay.com/event/{{eventId}}",
+    "out": "Ergebnisse ansehen: https://play.abstractplay.com/event/{{eventId}}"
+  },
+  "EventEndSubject": {
+    "src": "The event {{- eventName}} has ended",
+    "out": "Das Event {{- eventName}} ist beendet"
+  },
+  "EventEndWinner_other": {
+    "src": "{{winnerName}} won the event.",
+    "out": "{{winnerName}} hat das Event gewonnen."
+  },
+  "EventEndWinner_you": {
+    "src": "You won the event!",
+    "out": "Du hast das Event gewonnen!"
+  },
+  "EventEndWinner_youWithOthers": {
+    "src": "You won the event, along with {{others}}.",
+    "out": "Du hast das Event zusammen mit {{others}} gewonnen."
+  },
+  "EventEndWinners_other": {
+    "src": "Winners: {{winnerNames}}.",
+    "out": "Gewinner: {{winnerNames}}."
+  },
   "GameLink": {
     "src": "You can view the game at https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}}.",
     "out": "Du kannst die Partie unter https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}} ansehen."
@@ -122,6 +150,10 @@
   "PUSH.titles.ended": {
     "src": "Game over",
     "out": "Spiel beendet"
+  },
+  "PUSH.titles.eventOver": {
+    "src": "Event ended",
+    "out": "Event beendet"
   },
   "PUSH.titles.participantLeft": {
     "src": "Player left challenge",

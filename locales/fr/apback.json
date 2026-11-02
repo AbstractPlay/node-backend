@@ -38,6 +38,7 @@
       "yourturn": "À votre tour",
       "tournament": "Tournoi commencé",
       "tournamentOver": "Tournoi terminé",
+      "eventOver": "Événement terminé",
       "announcement": "Annonce du site"
     }
   },
@@ -67,6 +68,13 @@
   "TournamentEndNextSignup_other": "Le prochain tournoi de cette série peut commencer dans {{count}} jours si au moins {{minSignups}} joueurs sont inscrits ({{signupCount}} actuellement). Visitez https://play.abstractplay.com/tournaments pour vous inscrire ou modifier votre inscription.",
   "TournamentEndNextSignupRegistered": "Vous êtes déjà inscrit au prochain tournoi de cette série.",
   "TournamentEndSubject": "Votre tournoi de {{- metaGame}} est terminé",
+  "EventEndIntro": "L'événement {{- eventName}} est terminé.",
+  "EventEndWinner_you": "Vous avez remporté l'événement !",
+  "EventEndWinner_other": "{{winnerName}} a remporté l'événement.",
+  "EventEndWinners_other": "Gagnants : {{winnerNames}}.",
+  "EventEndWinner_youWithOthers": "Vous avez remporté l'événement, ainsi que {{others}}.",
+  "EventEndLink": "Voir les résultats : https://play.abstractplay.com/event/{{eventId}}",
+  "EventEndSubject": "L'événement {{- eventName}} est terminé",
   "TournamentRemoveBody": "Votre inscription au tournoi de {{- metaGame}} a été annulée, car ce n'était pas clair si vous étiez toujours interessé. Si vous voulez tout de même participer, merci de vous ré-inscrire ici : https://play.abstractplay.com/tournaments.",
   "TournamentRemoveBodyVariants": "Votre inscription au tournoi de {{- metaGame}}, variantes : {{variants}} a été annulée, car ce n'était pas clair si vous êtiez toujours interessé. Si vous voulez tout de même participer, merci de vous ré-inscrire ici : https://play.abstractplay.com/tournaments.",
   "TournamentRemoveSubject": "Vous avez été retiré d'un tournoi"
