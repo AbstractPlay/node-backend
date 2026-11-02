@@ -132,6 +132,7 @@ provider:
             - "arn:aws:s3:::records.abstractplay.com"
             - "arn:aws:s3:::${self:custom.opsbucket}"
             - "arn:aws:s3:::${self:custom.renderBucketName}"
+            - "arn:aws:s3:::thumbnails.abstractplay.com"
         - Effect: "Allow"
           Action:
             - "s3:GetObject"

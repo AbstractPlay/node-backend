@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, type _Object } from "@aws-sdk/client-s3";
+import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, type _Object } from "@aws-sdk/client-s3";
 import { Handler } from "aws-lambda";
 import { GameFactory, addResource, gameinfo, type APGamesInformation } from "@abstractplay/gameslib";
 import { enApgames, enApresults } from "../utils/gameslibEnLocaleBundles.js";
@@ -13,15 +13,14 @@ import {
     type ThumbnailUploadFailure,
     type ThumbnailGenerationFailure,
 } from "../utils/thumbnailGeneration.js";
-import { THUMB_BUCKET, THUMBNAIL_BROKEN_METAS } from "../utils/thumbnailConfig.js";
+import { createThumbnailS3Client, THUMB_BUCKET, THUMBNAIL_BROKEN_METAS } from "../utils/thumbnailConfig.js";
 import { decompressGameState } from "../utils/gameState.js";
 import { skipCompletedGameWithoutState } from "../utils/completedGameRec.js";
 import i18next from "i18next";
 import type { i18n } from "i18next";
 import type { BasicRec, GameRec } from "types/index.js";
 
-const REGION = "us-east-1";
-const s3 = new S3Client({ region: REGION });
+const s3 = createThumbnailS3Client();
 const DUMP_BUCKET = "abstractplay-db-dump";
 const RENDER_BUCKET = process.env.RENDER_BUCKET;
 const THUMBNAIL_CACHE_CONTROL = "public, max-age=86400";
