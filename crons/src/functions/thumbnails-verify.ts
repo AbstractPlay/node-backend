@@ -1,29 +1,13 @@
-import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { gameinfo, type APGamesInformation } from "@abstractplay/gameslib";
 import type { Handler } from "aws-lambda";
-import { THUMB_BUCKET, THUMBNAIL_BROKEN_METAS } from "../utils/thumbnailConfig.js";
+import { createThumbnailS3Client, THUMB_BUCKET, THUMBNAIL_BROKEN_METAS } from "../utils/thumbnailConfig.js";
 import {
     findThumbnailFreshnessMismatches,
     type ObjectHead,
 } from "../utils/thumbnailFreshness.js";
+import { fetchThumbnailObjectHead } from "../utils/thumbnailObjectHead.js";
 
-const s3 = new S3Client({ region: "us-east-1" });
-
-async function headObject(bucket: string, key: string): Promise<ObjectHead | null> {
-    try {
-        const response = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
-        if (!response.LastModified) {
-            return null;
-        }
-        return { key, lastModified: response.LastModified };
-    } catch (err) {
-        const code = (err as { name?: string }).name;
-        if (code === "NotFound" || code === "NoSuchKey") {
-            return null;
-        }
-        throw err;
-    }
-}
+const s3 = createThumbnailS3Client();
 
 export const handler: Handler = async () => {
     const metas = ([...gameinfo.values()] as APGamesInformation[])
@@ -37,7 +21,7 @@ export const handler: Handler = async () => {
         }
         for (const suffix of [".json", "-light.svg"]) {
             const key = `${meta}${suffix}`;
-            const head = await headObject(THUMB_BUCKET, key);
+            const head = await fetchThumbnailObjectHead(s3, THUMB_BUCKET, key);
             if (head) {
                 heads.set(key, head);
             }

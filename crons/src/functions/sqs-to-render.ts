@@ -1,5 +1,4 @@
 import {
-    S3Client,
     GetObjectCommand,
     PutObjectCommand,
     DeleteObjectCommand,
@@ -10,7 +9,7 @@ import type { SQSHandler } from "aws-lambda";
 import { resolveThumbnailDrawable } from "../utils/thumbnailRenderRep.js";
 import { injectSourceIntoSvg, parseThumbnailJson } from "../utils/thumbnailArtifact.js";
 import { putThumbnailMetric } from "../utils/cloudwatchMetrics.js";
-import { THUMB_BUCKET } from "../utils/thumbnailConfig.js";
+import { createThumbnailS3Client, THUMB_BUCKET } from "../utils/thumbnailConfig.js";
 import { Buffer } from "node:buffer";
 import { customAlphabet } from "nanoid";
 import puppeteer, { type Browser } from "puppeteer-core";
@@ -22,7 +21,7 @@ const genPrefix = customAlphabet(
     5,
 );
 
-const s3 = new S3Client({});
+const s3 = createThumbnailS3Client();
 
 const GOOGLE_FONTS_STYLESHEET =
     "https://fonts.googleapis.com/css2?family=Cardo:wght@400;700&family=Josefin+Sans:wght@400;600;700&display=swap";
