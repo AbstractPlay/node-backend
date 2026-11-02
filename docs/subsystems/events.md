@@ -19,7 +19,7 @@
 3. **Register / withdraw** — `event_register`, `event_withdraw`.
 4. **Update** — name, description, start time, invites, divisions, results.
 5. **Create games** — `event_create_games` links new `GAME` records.
-6. **Close** — `event_close`.
+6. **Close** — `event_close` (registered players receive in-app `eventEnd` notifications and optional email/push with winners and a link to the event page).
 7. **Delete** — `event_delete`.
 
 ## Public reads

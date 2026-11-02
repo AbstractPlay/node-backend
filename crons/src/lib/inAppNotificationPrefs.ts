@@ -4,6 +4,7 @@ export type InAppNotificationCategory =
     | "gameEnd"
     | "ratingChange"
     | "eventInvitation"
+    | "eventEnd"
     | "completedGameChat"
     | "tournamentChat"
     | "tournamentStart"
