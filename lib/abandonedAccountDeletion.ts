@@ -173,11 +173,57 @@ function challengeInvolvesUser(
   return false;
 }
 
+function addChallengeInvolvementFromItem(
+  item: Record<string, unknown>,
+  userIds: Set<string>,
+): void {
+  const challenger = item.challenger;
+  if (challenger && typeof challenger === 'object' && typeof (challenger as { id?: string }).id === 'string') {
+    userIds.add((challenger as { id: string }).id);
+  }
+  const challengees = item.challengees;
+  if (Array.isArray(challengees)) {
+    for (const c of challengees) {
+      if (c && typeof c === 'object' && typeof (c as { id?: string }).id === 'string') {
+        userIds.add((c as { id: string }).id);
+      }
+    }
+  }
+}
+
+/** Load once per cron run; avoids re-querying all open challenges per candidate. */
+export async function buildOpenChallengeInvolvementUserIds(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+): Promise<Set<string>> {
+  const userIds = new Set<string>();
+  const realStandingRows = await queryPartition(client, tableName, 'REALSTANDING');
+  for (const row of realStandingRows) {
+    userIds.add(String(row.sk));
+  }
+  const [standingChallenges, directChallenges] = await Promise.all([
+    queryAllStandingChallenges(client, tableName),
+    queryAllDirectChallenges(client, tableName),
+  ]);
+  for (const item of standingChallenges) {
+    addChallengeInvolvementFromItem(item, userIds);
+  }
+  for (const item of directChallenges) {
+    addChallengeInvolvementFromItem(item, userIds);
+  }
+  return userIds;
+}
+
 export async function userHasOpenChallengeInvolvement(
   client: DynamoDBDocumentClient,
   tableName: string,
   userId: string,
+  preloadedInvolvedUserIds?: Set<string>,
 ): Promise<boolean> {
+  if (preloadedInvolvedUserIds !== undefined) {
+    return preloadedInvolvedUserIds.has(userId);
+  }
+
   const standing = await client.send(new GetCommand({
     TableName: tableName,
     Key: { pk: 'REALSTANDING', sk: userId },
@@ -435,6 +481,7 @@ export async function runAbandonedAccountDeletionForUser(
     userPoolId?: string;
     dryRun?: boolean;
     feedbackTableName?: string;
+    openChallengeInvolvedUserIds?: Set<string>;
   },
 ): Promise<
   | { status: 'deleted'; detach: DetachProgramsStats }
@@ -449,7 +496,12 @@ export async function runAbandonedAccountDeletionForUser(
   if (!eligibility.ok) {
     return { status: 'skipped', reason: eligibility.reason };
   }
-  if (await userHasOpenChallengeInvolvement(client, tableName, userId)) {
+  if (await userHasOpenChallengeInvolvement(
+    client,
+    tableName,
+    userId,
+    opts.openChallengeInvolvedUserIds,
+  )) {
     return { status: 'skipped', reason: 'open_challenge' };
   }
 
