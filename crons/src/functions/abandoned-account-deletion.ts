@@ -6,6 +6,7 @@ import { S3Client } from '@aws-sdk/client-s3';
 import type { Handler } from 'aws-lambda';
 import {
   inactiveBeforeMsFromEnv,
+  buildOpenChallengeInvolvementUserIds,
   runAbandonedAccountDeletionForUser,
 } from '@backend/lib/abandonedAccountDeletion.js';
 import {
@@ -81,6 +82,12 @@ export const handler: Handler = async () => {
     `abandoned-account-deletion: ${dumpResult.candidates.length} dump candidates from export ${uid}`,
   );
 
+  console.log('abandoned-account-deletion: loading open-challenge involvement index (live DDB)');
+  const openChallengeInvolvedUserIds = await buildOpenChallengeInvolvementUserIds(ddb, tableName);
+  console.log(
+    `abandoned-account-deletion: ${openChallengeInvolvedUserIds.size} user ids on open challenges / REALSTANDING`,
+  );
+
   const bumpSkip = (reason: string) => {
     summary.skipped[reason] = (summary.skipped[reason] ?? 0) + 1;
   };
@@ -99,6 +106,7 @@ export const handler: Handler = async () => {
         userPoolId,
         dryRun,
         feedbackTableName: feedbackTable,
+        openChallengeInvolvedUserIds,
       });
 
       if (result.status === 'deleted') {

@@ -271,7 +271,8 @@ functions:
     handler: src/functions/abandoned-account-deletion.handler
     description: Delete long-inactive accounts with no game participation (S3 dump candidates + live confirm)
     timeout: 900
-    memorySize: 1024
+    reservedConcurrency: ${self:custom.batchJobReservedConcurrency}
+    memorySize: 10240
     logRetentionInDays: 30
     layers:
       - !Ref AbstractplayGameslibLambdaLayer
