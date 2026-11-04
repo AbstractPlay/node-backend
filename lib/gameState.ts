@@ -4,6 +4,7 @@ import {
   GameFactory,
   guerrillaStateUsesMatchVariant,
   repairGuerrillaMatchStackJson,
+  repairTableroStackJson,
 } from '@abstractplay/gameslib';
 import { gzipSync, gunzipSync } from 'zlib';
 import { reconcileVariantsInGameState } from './resolveGameVariants.js';
@@ -127,6 +128,23 @@ function reconcileGuerrillaMatchStackJson(
   return didRepair ? repaired : stateJson;
 }
 
+function reconcileTableroStackJson(stateJson: string, metaGame?: string): string {
+  if (metaGame !== undefined && metaGame !== 'tablero') {
+    return stateJson;
+  }
+  let parsed: { game?: string };
+  try {
+    parsed = JSON.parse(stateJson) as { game?: string };
+  } catch {
+    return stateJson;
+  }
+  if (parsed.game !== 'tablero') {
+    return stateJson;
+  }
+  const { stateJson: repaired, repaired: didRepair } = repairTableroStackJson(stateJson);
+  return didRepair ? repaired : stateJson;
+}
+
 export function hydrateGameState<T extends { state: string; variants?: string[]; metaGame?: string }>(record: T): T {
   let state = decompressGameState(record.state);
   let variants = record.variants;
@@ -142,6 +160,7 @@ export function hydrateGameState<T extends { state: string; variants?: string[];
   }
 
   state = reconcileGuerrillaMatchStackJson(state, record.metaGame, variants);
+  state = reconcileTableroStackJson(state, record.metaGame);
 
   if (state === record.state && variants === record.variants) {
     return record;
@@ -154,7 +173,7 @@ export function hydrateGameState<T extends { state: string; variants?: string[];
 }
 
 /** Canonical variant uids from a stored state blob (for ops backfills). */
-export function resolveVariantsForGameRecord(
+export function resolveVariantFieldsForGameRecord(
   metaGame: string,
   storedState: string,
   recordVariants?: string[],
@@ -172,17 +191,84 @@ export function resolveVariantsForGameRecord(
     }
   }
 
-  stateJson = reconcileGuerrillaMatchStackJson(stateJson, metaGame, variants);
-
   return { variants, stateJson };
 }
 
-export function prepareGameStateForStorage<T extends { state: string }>(record: T): T {
-  const compressed = compressGameStateIfNeeded(record.state);
-  if (compressed === record.state) {
+export function resolveVariantsForGameRecord(
+  metaGame: string,
+  storedState: string,
+  recordVariants?: string[],
+): { variants: string[]; stateJson: string } {
+  const { variants, stateJson: variantJson } = resolveVariantFieldsForGameRecord(
+    metaGame,
+    storedState,
+    recordVariants,
+  );
+  const stateJson = reconcileStackRepairsInStateJson(variantJson, metaGame, variants);
+  return { variants, stateJson };
+}
+
+function metaGameFromStorageRecord(record: { metaGame?: string; state: string }): string | undefined {
+  if (record.metaGame !== undefined && record.metaGame.length > 0) {
+    return record.metaGame;
+  }
+  try {
+    const parsed = JSON.parse(decompressGameState(record.state)) as { game?: string };
+    return parsed.game;
+  } catch {
+    return undefined;
+  }
+}
+
+function reconcileStackRepairsInStateJson(
+  stateJson: string,
+  metaGame: string,
+  variants?: string[],
+): string {
+  let next = reconcileGuerrillaMatchStackJson(stateJson, metaGame, variants);
+  next = reconcileTableroStackJson(next, metaGame);
+  return next;
+}
+
+export function numMovesFromStateJson(metaGame: string, stateJson: string): number | undefined {
+  try {
+    const engine = GameFactory(metaGame, stateJson);
+    if (engine) {
+      return engine.stack.length - 1;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+export function prepareGameStateForStorage<
+  T extends { state: string; metaGame?: string; variants?: string[]; numMoves?: number },
+>(record: T): T {
+  const decompressed = decompressGameState(record.state);
+  const metaGame = metaGameFromStorageRecord(record);
+  let stateJson = decompressed;
+  if (metaGame !== undefined) {
+    stateJson = reconcileStackRepairsInStateJson(stateJson, metaGame, record.variants);
+  }
+
+  let next: T = record;
+  if (stateJson !== decompressed) {
+    next = { ...next, state: stateJson };
+  }
+
+  if (metaGame !== undefined) {
+    const stackMoves = numMovesFromStateJson(metaGame, stateJson);
+    if (stackMoves !== undefined && next.numMoves !== stackMoves) {
+      next = { ...next, numMoves: stackMoves };
+    }
+  }
+
+  const compressed = compressGameStateIfNeeded(stateJson);
+  if (compressed === record.state && next.numMoves === record.numMoves) {
     return record;
   }
-  return { ...record, state: compressed };
+  return { ...next, state: compressed };
 }
 
 export function hydratePlaygroundBody<T extends { body: string }>(record: T): T {

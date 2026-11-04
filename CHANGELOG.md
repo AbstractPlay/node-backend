@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Entries below are grouped by theme and approximate ship window; the exact CI build is whichever workflow run last deployed the stage you use.
 
+## [1.0.0-ci] - 2026-11-04
+
+### Fixed
+
+- **Tablero stack repair:** `hydrateGameState` and `prepareGameStateForStorage` heal legacy shared-array and duplicate-`pass` stacks via gameslib `repairTableroStackJson`, sync `numMoves` on write-through, and expose ops `npm run backfill-tablero-stack` (`--scope in-flight|completed|all`, `--dry-run` / `--apply`, audit CSVs).
+
 ## [1.0.0-ci] - 2026-11-02
 
 ### Added
