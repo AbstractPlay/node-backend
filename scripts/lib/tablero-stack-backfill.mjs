@@ -39,6 +39,28 @@ export function classifyVerifyFailureReason(reason) {
   return 'other';
 }
 
+const TIP_MISMATCH_PREFIX = 'tip playfields mismatch after replay';
+
+/** @param {string | undefined} reason */
+export function parseTipMismatchPlayableFields(reason) {
+  if (reason === undefined || !reason.startsWith(TIP_MISMATCH_PREFIX)) {
+    return null;
+  }
+  const open = reason.indexOf('(');
+  if (open === -1) {
+    return [];
+  }
+  const close = reason.indexOf(')', open);
+  if (close === -1) {
+    return [];
+  }
+  return reason
+    .slice(open + 1, close)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 /** True only when the row looks like genuine data loss, not a replay tooling gap. */
 export function isGenuineUnreplayable(reason, repaired, verifyOk) {
   if (verifyOk || repaired) {
@@ -49,10 +71,14 @@ export function isGenuineUnreplayable(reason, repaired, verifyOk) {
     return true;
   }
   if (kind === 'tip_mismatch') {
-    if (!reason.includes('(')) {
-      return true;
+    const fields = parseTipMismatchPlayableFields(reason);
+    if (fields === null) {
+      return false;
     }
-    return reason.includes('board') || reason.includes('pieces');
+    if (fields.length === 0) {
+      return false;
+    }
+    return fields.includes('board') || fields.includes('pieces');
   }
   return false;
 }
