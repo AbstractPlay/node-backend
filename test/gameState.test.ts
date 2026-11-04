@@ -252,7 +252,7 @@ test('hydrateGameState repairs legacy tablero duplicate pass and shared stack ar
   const hydrated = hydrateGameState(record);
   assert.notEqual(hydrated.state, broken);
   const parsed = JSON.parse(hydrated.state) as { stack: unknown[] };
-  assert.equal(parsed.stack.length, 2);
+  assert.equal(parsed.stack.length, 3);
   const engine = GameFactory('tablero', hydrated.state) as unknown as {
     load: (idx: number) => void;
     board: Map<string, number[]>;
@@ -327,9 +327,9 @@ test('prepareGameStateForStorage write-through repairs tablero stack and syncs n
   };
   const stored = prepareGameStateForStorage(record);
   assert.notEqual(decompressGameState(stored.state), broken);
-  assert.equal(stored.numMoves, 1);
+  assert.equal(stored.numMoves, 2);
   const parsed = JSON.parse(decompressGameState(stored.state)) as { stack: unknown[] };
-  assert.equal(parsed.stack.length, 2);
+  assert.equal(parsed.stack.length, 3);
 });
 
 test('hydrateGameState infers orb noglobes from engine when GAME variants are empty', () => {

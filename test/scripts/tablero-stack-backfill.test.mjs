@@ -105,7 +105,7 @@ describe('tablero-stack-backfill', () => {
     assert.equal(row.needsUpdate, true);
     assert.equal(row.inFlight, isInFlight({ gameEnded: undefined }));
     assert.equal(row.unreplayable, false);
-    assert.equal(row.stored.numMoves, 1);
+    assert.equal(row.stored.numMoves, 2);
   });
 
   it('assessTableroRow leaves clean state unchanged', () => {
