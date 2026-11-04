@@ -186,6 +186,152 @@ test('hydrateGameState repairs legacy guerrilla match combined transition stacks
   assert.equal(parsed.stack.length, 3);
 });
 
+test('hydrateGameState repairs legacy tablero duplicate pass and shared stack arrays', () => {
+  const g = GameFactory('tablero', undefined, []) as unknown as {
+    stack: Array<{
+      _version: string;
+      _results: unknown[];
+      _timestamp: Date;
+      currplayer: number;
+      board: Map<string, number[]>;
+      roll: number[];
+      pieces: number[];
+      lastmove?: string;
+    }>;
+    serialize: () => string;
+  };
+  assert.ok(g);
+  const openingC3 = [2, 2];
+  const shared = [2, 2];
+  const dupResults = [
+    { type: 'take', from: 'c3' },
+    { type: 'roll', values: [5, 6] },
+  ];
+  const moveFrame = (overrides: Record<string, unknown>) => ({
+    _version: g.stack[0]!._version,
+    _results: [] as unknown[],
+    _timestamp: new Date(),
+    currplayer: 1,
+    board: new Map<string, number[]>(),
+    roll: [3, 4],
+    pieces: [12, 12],
+    ...overrides,
+  });
+  g.stack = [
+    moveFrame({
+      currplayer: 2,
+      roll: [5, 5],
+      board: new Map([['c3', openingC3]]),
+    }),
+    moveFrame({
+      currplayer: 2,
+      roll: [5, 6],
+      lastmove: '-c3',
+      _results: dupResults,
+      board: new Map([['c3', shared]]),
+      pieces: [12, 13],
+    }),
+    moveFrame({
+      currplayer: 2,
+      roll: [5, 6],
+      lastmove: 'pass',
+      _results: dupResults,
+      board: new Map([['c3', shared]]),
+      pieces: [12, 13],
+    }),
+  ];
+  shared.pop();
+  assert.deepEqual(openingC3, [2, 2]);
+  const broken = g.serialize();
+  const record = {
+    pk: 'GAME',
+    sk: 'tablero#1#test',
+    metaGame: 'tablero',
+    state: broken,
+  };
+  const hydrated = hydrateGameState(record);
+  assert.notEqual(hydrated.state, broken);
+  const parsed = JSON.parse(hydrated.state) as { stack: unknown[] };
+  assert.equal(parsed.stack.length, 2);
+  const engine = GameFactory('tablero', hydrated.state) as unknown as {
+    load: (idx: number) => void;
+    board: Map<string, number[]>;
+  };
+  assert.ok(engine);
+  engine.load(0);
+  assert.deepEqual(engine.board.get('c3'), [2, 2]);
+});
+
+test('prepareGameStateForStorage write-through repairs tablero stack and syncs numMoves', () => {
+  const g = GameFactory('tablero', undefined, []) as unknown as {
+    stack: Array<{
+      _version: string;
+      _results: unknown[];
+      _timestamp: Date;
+      currplayer: number;
+      board: Map<string, number[]>;
+      roll: number[];
+      pieces: number[];
+      lastmove?: string;
+    }>;
+    serialize: () => string;
+  };
+  assert.ok(g);
+  const openingC3 = [2, 2];
+  const shared = [2, 2];
+  const dupResults = [
+    { type: 'take', from: 'c3' },
+    { type: 'roll', values: [5, 6] },
+  ];
+  const moveFrame = (overrides: Record<string, unknown>) => ({
+    _version: g.stack[0]!._version,
+    _results: [] as unknown[],
+    _timestamp: new Date(),
+    currplayer: 1,
+    board: new Map<string, number[]>(),
+    roll: [3, 4],
+    pieces: [12, 12],
+    ...overrides,
+  });
+  g.stack = [
+    moveFrame({
+      currplayer: 2,
+      roll: [5, 5],
+      board: new Map([['c3', openingC3]]),
+    }),
+    moveFrame({
+      currplayer: 2,
+      roll: [5, 6],
+      lastmove: '-c3',
+      _results: dupResults,
+      board: new Map([['c3', shared]]),
+      pieces: [12, 13],
+    }),
+    moveFrame({
+      currplayer: 2,
+      roll: [5, 6],
+      lastmove: 'pass',
+      _results: dupResults,
+      board: new Map([['c3', shared]]),
+      pieces: [12, 13],
+    }),
+  ];
+  shared.pop();
+  const broken = g.serialize();
+  const record = {
+    pk: 'GAME',
+    sk: 'tablero#0#write-through',
+    metaGame: 'tablero',
+    state: broken,
+    numMoves: 2,
+  };
+  const stored = prepareGameStateForStorage(record);
+  assert.notEqual(decompressGameState(stored.state), broken);
+  assert.equal(stored.numMoves, 1);
+  const parsed = JSON.parse(decompressGameState(stored.state)) as { stack: unknown[] };
+  assert.equal(parsed.stack.length, 2);
+});
+
 test('hydrateGameState infers orb noglobes from engine when GAME variants are empty', () => {
   const g = GameFactory('orb', undefined, ['noglobes']);
   assert.ok(g);
