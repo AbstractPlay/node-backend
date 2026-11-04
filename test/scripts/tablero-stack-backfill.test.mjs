@@ -122,7 +122,7 @@ describe('tablero-stack-backfill', () => {
       sk: 'tablero#1#clean',
       metaGame: 'tablero',
       state: clean,
-      numMoves: 1,
+      numMoves: 2,
       gameEnded: Date.now(),
     }, deps);
 
