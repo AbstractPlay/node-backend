@@ -312,13 +312,17 @@ async function queryOrgEventPlayersForUser(
     const result = await client.send(new QueryCommand({
       TableName: tableName,
       KeyConditionExpression: '#pk = :pk',
-      FilterExpression: 'ends_with(#sk, :suffix)',
-      ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
-      ExpressionAttributeValues: { ':pk': 'ORGEVENTPLAYER', ':suffix': suffix },
+      ExpressionAttributeNames: { '#pk': 'pk' },
+      ExpressionAttributeValues: { ':pk': 'ORGEVENTPLAYER' },
       ExclusiveStartKey: lastKey,
     }));
     if (result.Items) {
-      items.push(...result.Items);
+      for (const item of result.Items) {
+        const sk = String(item.sk ?? '');
+        if (sk.endsWith(suffix)) {
+          items.push(item);
+        }
+      }
     }
     lastKey = result.LastEvaluatedKey;
   } while (lastKey);
