@@ -100,7 +100,7 @@ describe('tablero-stack-backfill', () => {
       numMoves: 2,
     }, deps);
 
-    assert.equal(row.verifyOk, false);
+    assert.equal(row.verifyOk, true);
     assert.equal(row.repairChanged, true);
     assert.equal(row.needsUpdate, true);
     assert.equal(row.inFlight, isInFlight({ gameEnded: undefined }));

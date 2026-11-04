@@ -25,6 +25,9 @@ export function classifyVerifyFailureReason(reason) {
   if (reason.startsWith('tip playfields mismatch')) {
     return 'tip_mismatch';
   }
+  if (reason === 'corrected playable tip from replay' || reason === 'stack repaired') {
+    return 'repaired';
+  }
   if (reason === 'MOVES_GAMEOVER') {
     return 'withdrawal_replay';
   }
@@ -162,12 +165,14 @@ export function assessTableroRow(item, deps) {
     /** @type {string[] | undefined} */ (item.variants),
   );
 
-  const verify = verifyTableroStackIntegrity(variantJson);
+  const verifyBefore = verifyTableroStackIntegrity(variantJson);
   const { stateJson: repairedJson, repaired, reason: repairReason } = repairTableroStackJson(variantJson);
 
-  const option4 = !verify.ok && !repaired
+  const option4 = !verifyBefore.ok && !repaired
     ? tryAlternateMoveSource(item)
     : { attempted: false, recovered: false, reason: undefined };
+
+  const verify = repaired ? verifyTableroStackIntegrity(repairedJson) : verifyBefore;
 
   const stateForStorage = repaired ? repairedJson : variantJson;
   const stored = prepareGameStateForStorage({
@@ -182,7 +187,9 @@ export function assessTableroRow(item, deps) {
     || JSON.stringify(variants ?? []) !== JSON.stringify(item.variants ?? [])
     || stored.numMoves !== item.numMoves;
 
-  const reason = repairReason ?? verify.reason ?? option4.reason ?? '';
+  const reason = repaired && verify.ok
+    ? (repairReason ?? 'stack repaired')
+    : (repairReason ?? verifyBefore.reason ?? option4.reason ?? '');
   const failureClass = classifyVerifyFailureReason(reason);
   const unreplayable = isGenuineUnreplayable(reason, repaired, verify.ok);
 
