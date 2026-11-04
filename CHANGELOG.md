@@ -9,14 +9,9 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ## [1.0.0-ci] - 2026-11-04
 
-### Added
-
-- **Ops:** `npm run backfill-tablero-stack` audits and repairs Tablero `GAME` stack corruption in DynamoDB (`--scope in-flight|completed|all`, `--dry-run` / `--apply`; writes audit and unreplayable CSVs).
-
 ### Fixed
 
-- **Games:** `hydrateGameState` repairs legacy Tablero saved stacks (shared board arrays and duplicate `pass` frames after doubles takes) via gameslib `repairTableroStackJson`; `resolveVariantsForGameRecord` applies the same reconciliation for ops scripts.
-- **Games:** `prepareGameStateForStorage` write-through persists Tablero/Guerrilla stack repairs on every `GAME` Put and syncs `numMoves` from the saved stack when duplicate pass rows were merged.
+- **Tablero stack repair:** `hydrateGameState` and `prepareGameStateForStorage` heal legacy shared-array and duplicate-`pass` stacks via gameslib `repairTableroStackJson`, sync `numMoves` on write-through, and expose ops `npm run backfill-tablero-stack` (`--scope in-flight|completed|all`, `--dry-run` / `--apply`, audit CSVs).
 
 ## [1.0.0-ci] - 2026-11-02
 

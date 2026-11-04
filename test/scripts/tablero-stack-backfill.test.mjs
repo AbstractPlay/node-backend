@@ -150,6 +150,7 @@ describe('tablero-stack-backfill', () => {
       isGenuineUnreplayable('Unable to process the various parts of the following move: resign', false, false),
       false,
     );
-    assert.equal(isGenuineUnreplayable('tip playfields mismatch after replay', false, false), true);
+    assert.equal(isGenuineUnreplayable('tip playfields mismatch after replay (board)', false, false), true);
+    assert.equal(isGenuineUnreplayable('tip playfields mismatch after replay (roll, currplayer)', false, false), false);
   });
 });

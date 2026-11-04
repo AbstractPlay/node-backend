@@ -22,7 +22,7 @@ export function classifyVerifyFailureReason(reason) {
   if (reason === 'stack frame mismatch vs replay') {
     return 'history_divergence';
   }
-  if (reason === 'tip playfields mismatch after replay') {
+  if (reason.startsWith('tip playfields mismatch')) {
     return 'tip_mismatch';
   }
   if (reason === 'MOVES_GAMEOVER') {
@@ -45,7 +45,16 @@ export function isGenuineUnreplayable(reason, repaired, verifyOk) {
     return false;
   }
   const kind = classifyVerifyFailureReason(reason);
-  return kind === 'tip_mismatch' || kind === 'deserialize';
+  if (kind === 'deserialize') {
+    return true;
+  }
+  if (kind === 'tip_mismatch') {
+    if (!reason.includes('(')) {
+      return true;
+    }
+    return reason.includes('board') || reason.includes('pieces');
+  }
+  return false;
 }
 
 /**
