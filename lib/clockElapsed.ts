@@ -37,15 +37,14 @@ export type EffectiveElapsedInput = {
   vacationWindow: VacationWindow | null;
 };
 
-export function effectiveElapsedMs(input: EffectiveElapsedInput): number {
-  const { lastMoveTime, endTime, playerId, game, vacationWindow } = input;
+export function thinkTimeMsWithVacationOverlap(
+  lastMoveTime: number,
+  endTime: number,
+  vacationWindow: VacationWindow | null,
+): number {
   const wall = endTime - lastMoveTime;
   if (wall <= 0) {
     return 0;
-  }
-  const idx = playerIndexById(game, playerId);
-  if (idx < 0 || !isPlayerOnClock(game, idx)) {
-    return wall;
   }
   if (vacationWindow === null) {
     return wall;
@@ -57,6 +56,28 @@ export function effectiveElapsedMs(input: EffectiveElapsedInput): number {
     vacationWindow.pauseEnd,
   );
   return wall - pause;
+}
+
+/** Think time charged when a correspondence player completes a turn (move or pie). */
+export function completedTurnThinkTimeMs(
+  lastMoveTime: number,
+  endTime: number,
+  vacationWindow: VacationWindow | null,
+): number {
+  return thinkTimeMsWithVacationOverlap(lastMoveTime, endTime, vacationWindow);
+}
+
+export function effectiveElapsedMs(input: EffectiveElapsedInput): number {
+  const { lastMoveTime, endTime, playerId, game, vacationWindow } = input;
+  const wall = endTime - lastMoveTime;
+  if (wall <= 0) {
+    return 0;
+  }
+  const idx = playerIndexById(game, playerId);
+  if (idx < 0 || !isPlayerOnClock(game, idx)) {
+    return wall;
+  }
+  return thinkTimeMsWithVacationOverlap(lastMoveTime, endTime, vacationWindow);
 }
 
 export function remainingBankMs(

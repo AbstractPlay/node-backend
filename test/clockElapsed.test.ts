@@ -1,13 +1,18 @@
 import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
+  completedTurnThinkTimeMs,
   effectiveElapsedMs,
   isPlayerOnClock,
   overlapMs,
   remainingBankMs,
+  thinkTimeMsWithVacationOverlap,
   wouldTimeOut,
   type ClockGameSlice,
 } from '../lib/clockElapsed.js';
+import {
+  applyCorrespondenceMoveBankMs,
+} from '../lib/games/correspondenceMoveClock.js';
 import type { VacationWindow } from '../lib/vacation/types.js';
 
 const T0 = 1_000_000;
@@ -92,6 +97,85 @@ describe('effectiveElapsedMs', () => {
       vacationWindow: null,
     });
     assert.equal(elapsed, HOUR);
+  });
+
+  it('returns full wall for mover after toMove flipped (live slice only)', () => {
+    const pause: VacationWindow = { pauseStart: T0, pauseEnd: T0 + 24 * HOUR };
+    const wall = 19 * HOUR;
+    const elapsed = effectiveElapsedMs({
+      lastMoveTime: T0,
+      endTime: T0 + wall,
+      playerId: 'alice',
+      game: game({ toMove: '1' }),
+      vacationWindow: pause,
+    });
+    assert.equal(elapsed, wall);
+  });
+});
+
+describe('thinkTimeMsWithVacationOverlap', () => {
+  const pause: VacationWindow = { pauseStart: T0 + HOUR, pauseEnd: T0 + 3 * HOUR };
+
+  it('matches effectiveElapsed for on-clock player', () => {
+    const end = T0 + 4 * HOUR;
+    const shared = thinkTimeMsWithVacationOverlap(T0, end, pause);
+    const live = effectiveElapsedMs({
+      lastMoveTime: T0,
+      endTime: end,
+      playerId: 'alice',
+      game: game(),
+      vacationWindow: pause,
+    });
+    assert.equal(shared, live);
+    assert.equal(shared, 2 * HOUR);
+  });
+});
+
+describe('completedTurnThinkTimeMs', () => {
+  const pause: VacationWindow = { pauseStart: T0, pauseEnd: T0 + 24 * HOUR };
+
+  it('charges zero when vacation covers full turn interval', () => {
+    assert.equal(
+      completedTurnThinkTimeMs(T0, T0 + 19 * HOUR, pause),
+      0,
+    );
+  });
+
+  it('charges partial wall when vacation starts mid-turn', () => {
+    const turnStart = T0 + 2 * HOUR;
+    const pauseMid: VacationWindow = { pauseStart: T0 + HOUR, pauseEnd: T0 + 3 * HOUR };
+    assert.equal(
+      completedTurnThinkTimeMs(turnStart, T0 + 4 * HOUR, pauseMid),
+      HOUR,
+    );
+  });
+
+  it('charges full wall without vacation window', () => {
+    assert.equal(completedTurnThinkTimeMs(T0, T0 + 5 * HOUR, null), 5 * HOUR);
+  });
+});
+
+describe('correspondence move bank (Samraku-style)', () => {
+  const INC = 9 * HOUR;
+  const MAX = 120 * HOUR;
+  const pause: VacationWindow = { pauseStart: T0, pauseEnd: T0 + 48 * HOUR };
+
+  it('9h bank + 9h inc when vacation zeros think time (not soft-OT reset)', () => {
+    const prior = 9 * HOUR;
+    const wall = 19 * HOUR;
+    const charged = completedTurnThinkTimeMs(T0, T0 + wall, pause);
+    assert.equal(charged, 0);
+    const next = applyCorrespondenceMoveBankMs(prior, charged, INC, MAX);
+    assert.equal(next, 18 * HOUR);
+  });
+
+  it('soft OT when wall charged without vacation on low bank', () => {
+    const prior = 9 * HOUR;
+    const wall = 19 * HOUR;
+    const charged = completedTurnThinkTimeMs(T0, T0 + wall, null);
+    assert.equal(charged, wall);
+    const next = applyCorrespondenceMoveBankMs(prior, charged, INC, MAX);
+    assert.equal(next, INC);
   });
 });
 
