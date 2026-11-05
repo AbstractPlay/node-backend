@@ -43,7 +43,7 @@ import { handleArenaInvokePie } from '../arena/invokePieArena.js';
 import {
   shouldWriteGameOpenOverlay,
 } from '../dashboardGames.js';
-import { effectiveElapsedMs, remainingBankMs, wouldTimeOut, type ClockGameSlice } from '../clockElapsed.js';
+import { completedTurnThinkTimeMs, remainingBankMs, wouldTimeOut, type ClockGameSlice } from '../clockElapsed.js';
 import {
   collectOnClockPlayerIds,
 } from '../vacation/load.js';
@@ -503,18 +503,11 @@ export async function submitMove(userid: string, pars: {
       game.players.forEach(p => delete p.draw);
     }
     const timestamp = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
-    const clockSlice: ClockGameSlice = {
-      players: game.players,
-      toMove: game.toMove,
+    const timeUsed = completedTurnThinkTimeMs(
       lastMoveTime,
-    };
-    const timeUsed = effectiveElapsedMs({
-      lastMoveTime,
-      endTime: timestamp,
-      playerId: userid,
-      game: clockSlice,
-      vacationWindow: getVacationWindow(userid),
-    });
+      timestamp,
+      getVacationWindow(userid),
+    );
     // console.log("timeUsed", timeUsed);
     // console.log("player", player);
     if (player.time! - timeUsed < 0)
@@ -1070,17 +1063,11 @@ export async function invokePie(userid: string, pars: { id: string, metaGame: st
       );
       const getPieVacation = getVacationWindowFromMap(pieWindows);
       const timestamp = pieNow;
-      const timeUsed = effectiveElapsedMs({
+      const timeUsed = completedTurnThinkTimeMs(
         lastMoveTime,
-        endTime: timestamp,
-        playerId: userid,
-        game: {
-          players: game.players,
-          toMove: game.toMove,
-          lastMoveTime,
-        },
-        vacationWindow: getPieVacation(userid),
-      });
+        timestamp,
+        getPieVacation(userid),
+      );
       // console.log("timeUsed", timeUsed);
       // console.log("player", player);
       if (player.time! - timeUsed < 0)
