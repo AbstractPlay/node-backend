@@ -4,7 +4,9 @@ Correspondence **vacation** pauses a player’s turn clock across **all** active g
 
 ## Single path for clock state
 
-- **Server authority:** Live remaining time, timeout eligibility, and move `timeUsed` go through [`lib/clockElapsed.ts`](../../lib/clockElapsed.ts) and [`lib/vacation/`](../../lib/vacation/). Production paths do not use ad hoc `bank - (now - lastMoveTime)`.
+- **Server authority:** Live remaining time, timeout eligibility, and move think-time charging go through [`lib/clockElapsed.ts`](../../lib/clockElapsed.ts) and [`lib/vacation/`](../../lib/vacation/). Production paths do not use ad hoc `bank - (now - lastMoveTime)`.
+- **Live countdown** (dashboard, `get_game`, timeloss): `effectiveElapsedMs` — vacation overlap applies only while the player is on `toMove`.
+- **Correspondence move submit / `invoke_pie`:** `completedTurnThinkTimeMs` — vacation overlap on the **completed turn interval** (independent of post-move `toMove`). **Arena** move clock does not use vacation ([Realtime Arena](/backend/subsystems/arena/) exception).
 - **Clients:** Display only. Use server fields (`effectiveRemainingMs`, `clockDisplayServerTime`, `clockPaused`) and a single helper such as `tickDisplayRemaining` — no parallel elapsed math for timeloss or countdown correctness. **`effectiveRemainingMs` may be negative** on soft-clock games so the UI can show how far over time a player is (same as legacy client math); hard-clock timeout still uses server `wouldTimeOut` / timeloss paths. **`clockPaused`** stops the display countdown during vacation but does not block manual timeloss when effective remaining is already negative.
 
 See [Games and moves](/backend/subsystems/games-and-moves/) for lazy timeout collapse (`me_dashboard`, `get_game`, timeout move).
