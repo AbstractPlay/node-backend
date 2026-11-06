@@ -1,18 +1,27 @@
-import { QueryCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  QueryCommand,
+  type DynamoDBDocumentClient,
+} from '@aws-sdk/lib-dynamodb';
 import { ddbDocClient } from './ddb.js';
-export async function getPlayerRelationIds(userId: string, skPrefix: string): Promise<string[]> {
+
+async function queryPlayerRelationIds(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  skPrefix: string,
+): Promise<string[]> {
   const ids: string[] = [];
-  let result = await ddbDocClient.send(
+  let result = await client.send(
     new QueryCommand({
-      TableName: process.env.ABSTRACT_PLAY_TABLE,
-      KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :skPrefix)",
+      TableName: tableName,
+      KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :skPrefix)',
       ExpressionAttributeValues: {
-        ":pk": "PLAYER#" + userId,
-        ":skPrefix": skPrefix,
+        ':pk': `PLAYER#${userId}`,
+        ':skPrefix': skPrefix,
       },
-      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-      ProjectionExpression: "#sk",
-    })
+      ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
+      ProjectionExpression: '#sk',
+    }),
   );
   if (result.Items !== undefined) {
     for (const item of result.Items) {
@@ -21,18 +30,18 @@ export async function getPlayerRelationIds(userId: string, skPrefix: string): Pr
   }
   let last = result.LastEvaluatedKey;
   while (last !== undefined) {
-    result = await ddbDocClient.send(
+    result = await client.send(
       new QueryCommand({
-        TableName: process.env.ABSTRACT_PLAY_TABLE,
-        KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :skPrefix)",
+        TableName: tableName,
+        KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :skPrefix)',
         ExpressionAttributeValues: {
-          ":pk": "PLAYER#" + userId,
-          ":skPrefix": skPrefix,
+          ':pk': `PLAYER#${userId}`,
+          ':skPrefix': skPrefix,
         },
-        ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-        ProjectionExpression: "#sk",
+        ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
+        ProjectionExpression: '#sk',
         ExclusiveStartKey: last,
-      })
+      }),
     );
     if (result.Items !== undefined) {
       for (const item of result.Items) {
@@ -42,4 +51,21 @@ export async function getPlayerRelationIds(userId: string, skPrefix: string): Pr
     last = result.LastEvaluatedKey;
   }
   return ids;
+}
+
+export async function getPlayerRelationIds(userId: string, skPrefix: string): Promise<string[]> {
+  const tableName = process.env.ABSTRACT_PLAY_TABLE;
+  if (!tableName) {
+    throw new Error('ABSTRACT_PLAY_TABLE is not configured.');
+  }
+  return queryPlayerRelationIds(ddbDocClient, tableName, userId, skPrefix);
+}
+
+/** Ops/read-only tools (e.g. dump-dashboard) with their own DynamoDB client and table. */
+export async function listBlockedPlayerIds(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+): Promise<string[]> {
+  return queryPlayerRelationIds(client, tableName, userId, 'BLOCKED#');
 }
