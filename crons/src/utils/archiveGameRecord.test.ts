@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { APGameRecord } from "@abstractplay/recranks";
 import { shouldOmitFromRecords } from "@abstractplay/gameslib";
-import { genRecordFromArchiveStub } from "./archiveGameRecord.js";
+import { applyDynamoTimestampsToArchivedRecord, genRecordFromArchiveStub } from "./archiveGameRecord.js";
 import type { GameRec } from "../types/GameRec.js";
 
 describe("archiveGameRecord", () => {
@@ -46,5 +47,45 @@ describe("archiveGameRecord", () => {
         expect(rec!.header.players).toHaveLength(2);
         expect(rec!.header.players[0]!.result).toBe(Number.POSITIVE_INFINITY);
         expect(rec!.moves.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it("applyDynamoTimestampsToArchivedRecord overwrites date-end from gameEnded", () => {
+        const ended = Date.UTC(2024, 11, 20, 2, 34, 16, 680);
+        const started = Date.UTC(2024, 11, 1, 12, 0, 0, 0);
+        const rec: APGameRecord = {
+            header: {
+                game: { name: "Test", variants: [] },
+                site: { name: "Abstract Play", gameid: "x#tablero:" },
+                "date-start": "2026-01-01T00:00:00.000Z",
+                "date-end": "2026-11-04T22:37:04.181Z",
+                "date-generated": "2026-11-04T22:37:04.181Z",
+                players: [],
+            },
+            moves: [],
+        };
+        const gdata = {
+            gameEnded: ended,
+            gameStarted: started,
+        } as GameRec;
+        applyDynamoTimestampsToArchivedRecord(rec, gdata);
+        expect(rec.header["date-end"]).toBe(new Date(ended).toISOString());
+        expect(rec.header["date-start"]).toBe(new Date(started).toISOString());
+    });
+
+    it("applyDynamoTimestampsToArchivedRecord falls back to lastMoveTime when gameEnded absent", () => {
+        const t = Date.UTC(2024, 5, 1, 10, 0, 0, 0);
+        const rec: APGameRecord = {
+            header: {
+                game: { name: "Test", variants: [] },
+                site: { name: "Abstract Play", gameid: "x#chess:" },
+                "date-start": "2020-01-01T00:00:00.000Z",
+                "date-end": "2030-01-01T00:00:00.000Z",
+                "date-generated": "2030-01-01T00:00:00.000Z",
+                players: [],
+            },
+            moves: [],
+        };
+        applyDynamoTimestampsToArchivedRecord(rec, { lastMoveTime: t } as GameRec);
+        expect(rec.header["date-end"]).toBe(new Date(t).toISOString());
     });
 });
