@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Dated `[1.0.0-ci]` sections are batched **one block per calendar month** (header date is the last update that month); append new bullets under the current month’s section rather than adding a second November/October header. Entries below are grouped by theme; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-11-05
+## [1.0.0-ci] - 2026-11-06
 
 ### Added
 
@@ -15,6 +15,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Fixed
 
+- **Records / stats:** `buildGameRecordForDumpRow` stamps `header["date-end"]` (and `date-start` when present) from the Dynamo `GAME` row’s `gameEnded` / `lastMoveTime` / `gameStarted` after `genRecord`, so published JSON matches canonical completion times even when engine stack timestamps disagree (notably Tablero after stack hydrate/repair).
 - **Vacation:** Correspondence `submit_move` and `invoke_pie` charge completed-turn think time with vacation overlap (`completedTurnThinkTimeMs`), fixing full wall-time debits after `toMove` flips to the opponent (increment unchanged; arena still opts out).
 - **Tablero stack repair:** `hydrateGameState` and `prepareGameStateForStorage` heal legacy shared-array and duplicate-`pass` stacks via gameslib `repairTableroStackJson`, sync `numMoves` on write-through, and expose ops `npm run backfill-tablero-stack` (`--scope in-flight|completed|all`, `--dry-run` / `--apply`, audit CSVs).
 - **Thumbnails:** `thumbnails-verify` uses ranged `GetObject` for CDN Last-Modified checks (avoids Lambda `HeadObject` 403) and grants `s3:ListBucket` on `thumbnails.abstractplay.com` so missing keys return 404 instead of access denied; thumbnail crons share an S3 client with `WHEN_REQUIRED` checksum settings for Lambda runtime SDK compat.

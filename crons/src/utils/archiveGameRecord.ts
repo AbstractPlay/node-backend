@@ -45,6 +45,31 @@ function syntheticMoves(roundCount: number): APGameRecord["moves"] {
     return moves;
 }
 
+function pickCompletionEpochMs(gdata: GameRec): number | undefined {
+    if (typeof gdata.gameEnded === "number" && Number.isFinite(gdata.gameEnded)) {
+        return gdata.gameEnded;
+    }
+    if (typeof gdata.lastMoveTime === "number" && Number.isFinite(gdata.lastMoveTime)) {
+        return gdata.lastMoveTime;
+    }
+    return undefined;
+}
+
+/**
+ * Stamp `date-end` / `date-start` from the Dynamo `GAME` row. `genRecord` derives times from the
+ * deserialized engine stack; after hydration/repair (e.g. Tablero) those timestamps can disagree
+ * with `gameEnded` / `lastMoveTime` on the item — summarize uses `header["date-end"]`, so align it.
+ */
+export function applyDynamoTimestampsToArchivedRecord(rec: APGameRecord, gdata: GameRec): void {
+    const endedMs = pickCompletionEpochMs(gdata);
+    if (endedMs !== undefined) {
+        rec.header["date-end"] = new Date(endedMs).toISOString();
+    }
+    if (typeof gdata.gameStarted === "number" && Number.isFinite(gdata.gameStarted)) {
+        rec.header["date-start"] = new Date(gdata.gameStarted).toISOString();
+    }
+}
+
 /**
  * Build a gamerecord from Dynamo when the engine was removed but retraction policy is `include`.
  */
@@ -120,8 +145,7 @@ export function genRecordFromArchiveStub(
         });
     }
 
-    applyArenaSiteFieldsToRecord(rec, gdata);
-
+    applyDynamoTimestampsToArchivedRecord(rec, gdata);
     applyArenaSiteFieldsToRecord(rec, gdata);
 
     return rec;
@@ -215,6 +239,7 @@ export function buildGameRecordForDumpRow(
         if (gdata.pieInvoked === true) {
             rec.header.pied = true;
         }
+        applyDynamoTimestampsToArchivedRecord(rec, gdata);
         stampArenaFromGameRec(rec, gdata);
         return rec;
     }
