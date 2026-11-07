@@ -1376,6 +1376,82 @@ async function canEditPost(
   return String(meta.authorId) === userId;
 }
 
+function postAttachmentKeyList(meta: Record<string, unknown>): string[] {
+  if (!Array.isArray(meta.attachmentKeys)) {
+    return [];
+  }
+  return meta.attachmentKeys.filter((key): key is string => typeof key === 'string' && key.trim() !== '');
+}
+
+function isWishlistCoverOnlyUpdate(
+  meta: Record<string, unknown>,
+  fields: {
+    title?: string;
+    body?: string;
+    attachmentKeys?: string[];
+    tags?: string[];
+    suggestedTags?: string[];
+  },
+): boolean {
+  if (fields.attachmentKeys === undefined) {
+    return false;
+  }
+  if (String(meta.kind) !== 'wishlist') {
+    return false;
+  }
+  if (fields.tags !== undefined || fields.suggestedTags !== undefined) {
+    return false;
+  }
+  const currentTitle = typeof meta.title === 'string' ? meta.title : '';
+  if (fields.title !== undefined && fields.title !== currentTitle) {
+    return false;
+  }
+  const currentBody = typeof meta.body === 'string' ? meta.body : '';
+  if (fields.body !== undefined && fields.body !== currentBody) {
+    return false;
+  }
+  return true;
+}
+
+function canEditWishlistCover(
+  meta: Record<string, unknown>,
+  fields: {
+    title?: string;
+    body?: string;
+    attachmentKeys?: string[];
+    tags?: string[];
+    suggestedTags?: string[];
+  },
+  isAdmin: boolean,
+): FeedbackResult<Record<string, never>> {
+  if (!isWishlistCoverOnlyUpdate(meta, fields)) {
+    return {
+      ok: false,
+      message: 'only the author or an admin may edit this item.',
+      statusCode: 403,
+    };
+  }
+  const existingKeys = postAttachmentKeyList(meta);
+  if (existingKeys.length === 0) {
+    return { ok: true, data: {} };
+  }
+  if (!isAdmin) {
+    return {
+      ok: false,
+      message: 'only an admin can replace an existing wishlist cover image.',
+      statusCode: 403,
+    };
+  }
+  if (!fields.attachmentKeys || fields.attachmentKeys.length === 0) {
+    return {
+      ok: false,
+      message: 'cannot remove the wishlist cover image.',
+      statusCode: 400,
+    };
+  }
+  return { ok: true, data: {} };
+}
+
 function pushListProjectionFieldUpdates(
   transactItems: Record<string, unknown>[],
   feedbackTable: string,
@@ -1481,8 +1557,14 @@ export async function feedbackUpdate(
   if (metaResult.Item.terminalAt !== undefined) {
     return { ok: false, message: 'cannot edit a closed item.', statusCode: 400 };
   }
-  if (!(await canEditPost(client, userId, metaResult.Item, isAdmin))) {
-    return { ok: false, message: 'only the author or an admin may edit this item.', statusCode: 403 };
+
+  const coverOnlyFields = { title, body, attachmentKeys, tags, suggestedTags };
+  const authorOrAdmin = await canEditPost(client, userId, metaResult.Item, isAdmin);
+  if (!authorOrAdmin) {
+    const coverPermission = canEditWishlistCover(metaResult.Item, coverOnlyFields, isAdmin);
+    if (!coverPermission.ok) {
+      return coverPermission;
+    }
   }
 
   const kind = metaResult.Item.kind as FeedbackKind;
@@ -1509,7 +1591,8 @@ export async function feedbackUpdate(
   const listRemoveParts: string[] = [];
   const transactItems: Record<string, unknown>[] = [];
 
-  if (title !== undefined) {
+  const currentTitle = typeof metaResult.Item.title === 'string' ? metaResult.Item.title : '';
+  if (title !== undefined && title !== currentTitle) {
     metaSetParts.push('title = :title');
     metaValues[':title'] = title;
     listSetParts.push('title = :title');
@@ -1524,14 +1607,15 @@ export async function feedbackUpdate(
           editId,
           editorId: userId,
           field: 'title',
-          previousValue: String(metaResult.Item.title),
+          previousValue: currentTitle,
           newValue: title,
           createdAt: now,
         },
       },
     });
   }
-  if (body !== undefined) {
+  const currentBody = typeof metaResult.Item.body === 'string' ? metaResult.Item.body : '';
+  if (body !== undefined && body !== currentBody) {
     metaSetParts.push('body = :body');
     metaValues[':body'] = body;
     transactItems.push({
@@ -1544,7 +1628,7 @@ export async function feedbackUpdate(
           editId: `${editId}-body`,
           editorId: userId,
           field: 'body',
-          previousValue: typeof metaResult.Item.body === 'string' ? metaResult.Item.body : '',
+          previousValue: currentBody,
           newValue: body,
           createdAt: now,
         },
