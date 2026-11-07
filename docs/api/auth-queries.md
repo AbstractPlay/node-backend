@@ -68,7 +68,7 @@ Mutations return the updated list (`watchedGames`, `highlights`, or `representat
 | `feedback_set_status` | Admin status change | `id`, `status`. Sets `terminalAt` when moving to a terminal status; removes it when reopening to a non-terminal status. Notifies author and subscribers. |
 | `feedback_subscribe` | Watch/unwatch | `id`, `subscribe` (boolean). Returns `{ subscribed }`. |
 | `feedback_reclassify` | Admin reclassify bug ? feature | `id`. Open ? `open`; triaged ? `under_review`; monitoring ? `planned`. Terminal bugs rejected. Returns `{ id, kind, status }`. |
-| `feedback_update` | Edit title/body/tags | `id`, optional `title`, `body`, `tags`, `suggestedTags` (at least one field). Author or admin on non-terminal posts. Writes `EDIT#` audit rows for title/body. |
+| `feedback_update` | Edit title/body/tags/cover | `id`, optional `title`, `body`, `attachmentKeys`, `tags`, `suggestedTags` (at least one field). Author or admin for title/body/tags on non-terminal posts. **Wishlist cover:** any signed-in user may set `attachmentKeys` when the entry has no cover; only admins may replace an existing cover (attachment-only, no other field changes). Writes `EDIT#` audit rows when title/body change. |
 | `feedback_set_admin_fields` | Admin triage fields | `id`, optional `effort`, `priority`, `tags` (bug/feature, works on terminal posts), `clearSuggestedTags`, `reviewerIds`, `wishlistCategory`, `wishlistCategoryNote`. |
 | `feedback_tag_vocab` | Tag vocabulary for boards | Returns `{ tags: [{ id, kinds }] }`. |
 | `feedback_set_tag_vocab` | Admin replace tag vocabulary | `tags`: non-empty array of `{ id, kinds }`. |

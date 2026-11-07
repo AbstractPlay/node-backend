@@ -794,6 +794,84 @@ test('feedbackUpdate allows wishlist author to add cover image', async () => {
   assert.deepEqual(listItem?.attachmentKeys, [`${id}/cover.png`]);
 });
 
+test('feedbackUpdate allows voter to add missing wishlist cover when title is unchanged', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'wishlist',
+    title: 'Azul',
+    gameUrl: 'https://boardgamegeek.com/boardgame/230802/azul',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const stagingKey = `staging/${VOTER_ID}/cover.png`;
+  const updateResult = await feedbackUpdate(client, TABLE, mockS3, VOTER_ID, {
+    id,
+    title: 'Azul',
+    attachmentKeys: [stagingKey],
+  }, false);
+  assert.equal(updateResult.ok, true);
+
+  const meta = store.get(`${postPk(id)}:${metaSk()}`);
+  assert.deepEqual(meta?.attachmentKeys, [`${id}/cover.png`]);
+});
+
+test('feedbackUpdate rejects voter replacing existing wishlist cover', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'wishlist',
+    title: 'Catan',
+    gameUrl: 'https://boardgamegeek.com/boardgame/13/catan',
+    attachmentKeys: [`staging/${USER_ID}/initial.png`],
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const stagingKey = `staging/${VOTER_ID}/cover.png`;
+  const updateResult = await feedbackUpdate(client, TABLE, mockS3, VOTER_ID, {
+    id,
+    title: 'Catan',
+    attachmentKeys: [stagingKey],
+  }, false);
+  assert.equal(updateResult.ok, false);
+  if (updateResult.ok) {
+    return;
+  }
+  assert.match(updateResult.message, /admin can replace/i);
+});
+
+test('feedbackUpdate rejects voter editing wishlist title with attachmentKeys', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+    kind: 'wishlist',
+    title: 'Splendor',
+    gameUrl: 'https://boardgamegeek.com/boardgame/148228/splendor',
+  });
+  assert.equal(createResult.ok, true);
+  if (!createResult.ok) {
+    return;
+  }
+  const id = createResult.data.id;
+  const stagingKey = `staging/${VOTER_ID}/cover.png`;
+  const updateResult = await feedbackUpdate(client, TABLE, mockS3, VOTER_ID, {
+    id,
+    title: 'Splendor (revised)',
+    attachmentKeys: [stagingKey],
+  }, false);
+  assert.equal(updateResult.ok, false);
+  if (updateResult.ok) {
+    return;
+  }
+  assert.match(updateResult.message, /author or an admin/i);
+});
+
 test('feedbackSetAdminFields sets effort on feature post', async () => {
   const store: Store = new Map();
   const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
