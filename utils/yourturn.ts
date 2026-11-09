@@ -13,7 +13,7 @@ import {
   vacationFieldsFromUserItem,
   VACATION_USER_PROJECTION,
 } from '../lib/vacation/load.js';
-import { resolveVacationWindow } from '../lib/vacation/resolve.js';
+import { resolveVacationClockOverlapWindows } from '../lib/vacation/resolve.js';
 
 const REGION = "us-east-1";
 const sesClient = new SESClient({ region: REGION });
@@ -160,7 +160,7 @@ export const handler: Handler = async (event: any, context?: any) => {
                     if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
                         if ( (player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.yourturn) ) {
                             let urgent = 0;
-                            const vacationWindow = resolveVacationWindow(
+                            const vacationWindow = resolveVacationClockOverlapWindows(
                                 vacationFieldsFromUserItem(player as Record<string, unknown>),
                                 Date.now(),
                             );

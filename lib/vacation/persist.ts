@@ -1,9 +1,11 @@
 import { GetCommand, UpdateCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import type { VacationClockInput } from '../clockElapsed.js';
 import { planFinalizeStint } from './finalize.js';
 import { batchGetVacationPlayerState, vacationFieldsFromUserItem, VACATION_USER_PROJECTION } from './load.js';
 import type { PlayerVacationDisplayFlags } from './load.js';
 import { buildVacationSnapshot } from './resolve.js';
 import { syncUsersDirectoryOnVacation } from './publicMirror.js';
+import { appendVacationClockStint, vacationClockStintDynamoValue } from './clockStints.js';
 import type { VacationSnapshot, VacationWindow } from './types.js';
 
 function isConditionalFailure(err: unknown): boolean {
@@ -34,6 +36,14 @@ export async function finalizeVacationIfNeeded(
   if (!plan) {
     return false;
   }
+  const vacationClockStints = vacationClockStintDynamoValue(
+    appendVacationClockStint(
+      fields,
+      plan.clockStintPauseStart,
+      plan.clockStintPauseEnd,
+      now,
+    ),
+  );
   try {
     await client.send(
       new UpdateCommand({
@@ -41,12 +51,13 @@ export async function finalizeVacationIfNeeded(
         Key: { pk: 'USER', sk: userId },
         ConditionExpression: 'vacationStartsAt = :startsAt',
         UpdateExpression:
-          'SET vacationPauseMsUsed = :used, vacationQuotaYear = :year '
+          'SET vacationPauseMsUsed = :used, vacationQuotaYear = :year, vacationClockStints = :stints '
           + 'REMOVE vacationStartsAt, vacationEndsAt, vacationOpenEnded, vacationStintStartedAt',
         ExpressionAttributeValues: {
           ':startsAt': fields.vacationStartsAt,
           ':used': plan.vacationPauseMsUsed,
           ':year': plan.vacationQuotaYear,
+          ':stints': vacationClockStints,
         },
       }),
     );
@@ -96,7 +107,8 @@ export async function prepareVacationPlayerStateForPlayerIds(
   playerIds: string[],
   now: number,
 ): Promise<{
-  windows: Map<string, VacationWindow | null>;
+  overlapWindows: Map<string, VacationWindow[]>;
+  liveWindows: Map<string, VacationWindow | null>;
   flags: Map<string, PlayerVacationDisplayFlags>;
 }> {
   const unique = [...new Set(playerIds)];
@@ -116,15 +128,29 @@ export async function prepareVacationWindowsForPlayerIds(
   tableName: string,
   playerIds: string[],
   now: number,
-): Promise<Map<string, VacationWindow | null>> {
-  const { windows } = await prepareVacationPlayerStateForPlayerIds(client, tableName, playerIds, now);
-  return windows;
+): Promise<Map<string, VacationWindow[]>> {
+  const { overlapWindows } = await prepareVacationPlayerStateForPlayerIds(client, tableName, playerIds, now);
+  return overlapWindows;
 }
 
-export type GetVacationWindowFn = (playerId: string) => VacationWindow | null;
+export type GetVacationWindowFn = (playerId: string) => VacationClockInput;
 
 export function getVacationWindowFromMap(
-  map: Map<string, VacationWindow | null>,
+  map: Map<string, VacationWindow[]>,
 ): GetVacationWindowFn {
+  return (playerId: string) => {
+    const windows = map.get(playerId);
+    if (!windows || windows.length === 0) {
+      return null;
+    }
+    return windows;
+  };
+}
+
+export type GetLiveVacationWindowFn = (playerId: string) => VacationWindow | null;
+
+export function getLiveVacationWindowFromMap(
+  map: Map<string, VacationWindow | null>,
+): GetLiveVacationWindowFn {
   return (playerId: string) => map.get(playerId) ?? null;
 }

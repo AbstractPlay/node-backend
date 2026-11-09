@@ -19,6 +19,8 @@ export type PlanFinalizeStintResult = {
   vacationPauseMsUsed: number;
   vacationQuotaYear: number;
   chargeMs: number;
+  clockStintPauseStart: number;
+  clockStintPauseEnd: number;
   clearStintFields: true;
 };
 
@@ -65,6 +67,8 @@ export function planFinalizeStint(
     vacationPauseMsUsed: applyChargeToUsed(fields, pauseStart, chargeMs),
     vacationQuotaYear: quotaYearForCharge(pauseStart),
     chargeMs,
+    clockStintPauseStart: pauseStart,
+    clockStintPauseEnd: finalizeAt,
     clearStintFields: true,
   };
 }
@@ -86,6 +90,8 @@ export function planStopVacation(
     vacationPauseMsUsed: applyChargeToUsed(fields, pauseStart, chargeMs),
     vacationQuotaYear: quotaYearForCharge(pauseStart),
     chargeMs,
+    clockStintPauseStart: pauseStart,
+    clockStintPauseEnd: now,
     clearStintFields: true,
   };
 }

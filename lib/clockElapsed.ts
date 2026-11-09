@@ -29,31 +29,72 @@ export function playerIndexById(game: ClockGameSlice, playerId: string): number 
   return game.players.findIndex(p => p.id === playerId);
 }
 
+export type VacationClockInput = VacationWindow | VacationWindow[] | null;
+
+export function vacationWindowsList(vacation: VacationClockInput | undefined): VacationWindow[] {
+  if (vacation === null || vacation === undefined) {
+    return [];
+  }
+  return Array.isArray(vacation) ? vacation : [vacation];
+}
+
+/** Merged overlap of vacation pause intervals with [intervalStart, intervalEnd]. */
+export function vacationPauseMsInInterval(
+  intervalStart: number,
+  intervalEnd: number,
+  windows: VacationWindow[],
+): number {
+  if (intervalEnd <= intervalStart || windows.length === 0) {
+    return 0;
+  }
+  const clipped = windows
+    .map(w => ({
+      start: Math.max(w.pauseStart, intervalStart),
+      end: Math.min(w.pauseEnd, intervalEnd),
+    }))
+    .filter(w => w.end > w.start)
+    .sort((a, b) => a.start - b.start);
+  let total = 0;
+  let curStart = -1;
+  let curEnd = -1;
+  for (const w of clipped) {
+    if (curEnd < 0 || w.start > curEnd) {
+      if (curEnd >= 0) {
+        total += curEnd - curStart;
+      }
+      curStart = w.start;
+      curEnd = w.end;
+    } else {
+      curEnd = Math.max(curEnd, w.end);
+    }
+  }
+  if (curEnd >= 0) {
+    total += curEnd - curStart;
+  }
+  return total;
+}
+
 export type EffectiveElapsedInput = {
   lastMoveTime: number;
   endTime: number;
   playerId: string;
   game: ClockGameSlice;
-  vacationWindow: VacationWindow | null;
+  vacationWindow: VacationClockInput;
 };
 
 export function thinkTimeMsWithVacationOverlap(
   lastMoveTime: number,
   endTime: number,
-  vacationWindow: VacationWindow | null,
+  vacationWindow: VacationClockInput,
 ): number {
   const wall = endTime - lastMoveTime;
   if (wall <= 0) {
     return 0;
   }
-  if (vacationWindow === null) {
-    return wall;
-  }
-  const pause = overlapMs(
+  const pause = vacationPauseMsInInterval(
     lastMoveTime,
     endTime,
-    vacationWindow.pauseStart,
-    vacationWindow.pauseEnd,
+    vacationWindowsList(vacationWindow),
   );
   return wall - pause;
 }
@@ -62,7 +103,7 @@ export function thinkTimeMsWithVacationOverlap(
 export function completedTurnThinkTimeMs(
   lastMoveTime: number,
   endTime: number,
-  vacationWindow: VacationWindow | null,
+  vacationWindow: VacationClockInput,
 ): number {
   return thinkTimeMsWithVacationOverlap(lastMoveTime, endTime, vacationWindow);
 }
@@ -86,7 +127,7 @@ export function remainingBankMs(
   endTime: number,
   playerId: string,
   game: ClockGameSlice,
-  vacationWindow: VacationWindow | null,
+  vacationWindow: VacationClockInput,
 ): number {
   const elapsed = effectiveElapsedMs({
     lastMoveTime,
@@ -104,7 +145,7 @@ export type WouldTimeOutInput = {
   now: number;
   playerId: string;
   game: ClockGameSlice;
-  vacationWindow: VacationWindow | null;
+  vacationWindow: VacationClockInput;
 };
 
 export function wouldTimeOut(input: WouldTimeOutInput): boolean {

@@ -27,7 +27,7 @@ Policy gate: [`lib/vacation/policy.ts`](../../lib/vacation/policy.ts) (`vacation
 
 ## Storage and sync
 
-**Authoritative stint** lives on the private **`USER`** row (`vacationStartsAt`, `vacationEndsAt`, `vacationOpenEnded`, `vacationStintStartedAt`, `vacationPauseMsUsed`, `vacationQuotaYear`). Writes go through [`lib/vacation/mutations.ts`](../../lib/vacation/mutations.ts); lazy end-of-stint / quota rollover via [`lib/vacation/persist.ts`](../../lib/vacation/persist.ts) (`finalizeVacationIfNeeded`).
+**Authoritative stint** lives on the private **`USER`** row (`vacationStartsAt`, `vacationEndsAt`, `vacationOpenEnded`, `vacationStintStartedAt`, `vacationPauseMsUsed`, `vacationQuotaYear`, `vacationClockStints`). Writes go through [`lib/vacation/mutations.ts`](../../lib/vacation/mutations.ts); lazy end-of-stint / quota rollover via [`lib/vacation/persist.ts`](../../lib/vacation/persist.ts) (`finalizeVacationIfNeeded`). On stop/finalize, live stint fields are cleared and `{ pauseStart, pauseEnd }` is appended to **`vacationClockStints`** so think-time math still subtracts pause after vacation ends (`resolveVacationClockOverlapWindows`); live **`clockPaused`** uses only the active stint (`resolveLiveVacationWindow`).
 
 **Public directory mirror:** When a stint is **live** (`isVacationStintLive`), [`lib/vacation/publicMirror.ts`](../../lib/vacation/publicMirror.ts) sets `USERS.onVacation = true`; otherwise it **REMOVE**s the attribute. Scheduled-but-not-started stints do **not** set the mirror. Sync runs after successful schedule/update/stop, after finalize writes, and when [`player_about`](../../lib/public/players.ts) loads a human profile (keeps directory aligned on profile views).
 
