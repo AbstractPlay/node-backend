@@ -25,6 +25,7 @@
     "check:clock-derivation": "node scripts/check-clock-derivation.mjs",
     "report-vacation-stop-clock-incident": "tsx scripts/report-vacation-stop-clock-incident.mjs",
     "backfill-vacation-clock-stints": "tsx scripts/backfill-vacation-clock-stints.mjs",
+    "verify-inflight-vacation-clocks": "tsx scripts/verify-inflight-vacation-clocks.mjs",
     "reopen-vacation-false-timeouts": "tsx scripts/reopen-vacation-false-timeouts.mjs",
     "set-game-rating-exclusions": "tsx scripts/set-game-rating-exclusions.mjs",
     "merge-weblate-branch": "node scripts/merge-weblate-branch.mjs",
