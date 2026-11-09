@@ -89,6 +89,16 @@ Success body: `{ vacation: VacationSnapshot }`. Validation failures return **400
 
 Tests: `test/vacation.test.ts`, `test/clockElapsed.test.ts`, `test/vacationMutations.test.ts`, `test/vacationPublicMirror.test.ts`, `test/gameTimeout.test.ts` (vacation case).
 
+### Ops: backfill clock stints after a pre-fix stop
+
+If a player ended vacation before `vacationClockStints` shipped, their USER row has quota charged (`vacationPauseMsUsed`) but no clock history; in-flight games show full wall elapsed until rectified.
+
+1. Deploy the overlap fix (reads `vacationClockStints`).
+2. `npm run backfill-vacation-clock-stints -- --stage prod --from-csv vacation-stop-clock-incidents.csv --dry-run`
+3. Confirm planned `{ pauseStart, pauseEnd }` per user, then `--apply`.
+
+`--discover` lists other USER rows with material `vacationPauseMsUsed` and no stints (not on vacation). Manual stints: `--userId` + `--pause-end-ms` (stop time) and `--pause-start-ms` (`end ? vacationPauseMsUsed`).
+
 ---
 
 ## Front (apfront)
