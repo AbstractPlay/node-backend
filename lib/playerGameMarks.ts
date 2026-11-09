@@ -12,7 +12,7 @@ import { gameRecordSk, isGameParticipant, type GameForCommentAuth } from './comm
 import { decompressGameState } from './gameState.js';
 import { shouldKeepCompletedGame, type GameRecord } from './gameProjector.js';
 
-export type GameMarkPlayer = { id: string; name: string; time?: number };
+export type GameMarkPlayer = { id: string; name: string; time?: number; skipRating?: boolean };
 
 export type GameMarkSummary = {
   id: string;

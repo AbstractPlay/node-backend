@@ -16,6 +16,7 @@ export type GameRec = {
         name: string;
         id: string;
         time: number;
+        skipRating?: boolean;
     }[];
     tournament?: string;
     event?: string;

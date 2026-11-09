@@ -81,7 +81,7 @@ export function genRecordFromArchiveStub(
         event?: string;
         round?: string;
         unrated?: boolean;
-        players: { uid: string; name: string; isai?: boolean }[];
+        players: { uid: string; name: string; isai?: boolean; skipRating?: boolean }[];
     },
 ): APGameRecord | undefined {
     const meta = archiveMetadataFor(gdata.metaGame);
@@ -142,6 +142,7 @@ export function genRecordFromArchiveStub(
             is_ai: opts.players[i]!.isai,
             score: 0,
             result: playerResultForSeat(seat, parsed.winner),
+            ...(opts.players[i]!.skipRating === true ? { skipRating: true as const } : {}),
         });
     }
 
@@ -177,6 +178,19 @@ export function applyArenaSiteFieldsToRecord(
 
 function stampArenaFromGameRec(rec: APGameRecord, gdata: GameRec): void {
     applyArenaSiteFieldsToRecord(rec, gdata);
+}
+
+/** Copy per-seat `skipRating` from Dynamo GAME.players onto archived header.players (seating order). */
+export function stampSkipRatingFromGameRec(rec: APGameRecord, gdata: GameRec): void {
+    const n = Math.min(rec.header.players.length, gdata.players.length);
+    for (let i = 0; i < n; i += 1) {
+        const arch = rec.header.players[i]!;
+        if (gdata.players[i]?.skipRating === true) {
+            arch.skipRating = true;
+        } else if (arch.skipRating === true && gdata.players[i]?.skipRating !== true) {
+            delete arch.skipRating;
+        }
+    }
 }
 
 export function buildGameRecordForDumpRow(
@@ -220,6 +234,7 @@ export function buildGameRecordForDumpRow(
             isai: ctx.registeredBots.has(p.id) || ctx.registeredBots.has(canonicalId)
                 ? true
                 : undefined,
+            skipRating: p.skipRating === true ? true : undefined,
         };
     });
 
@@ -241,6 +256,7 @@ export function buildGameRecordForDumpRow(
         }
         applyDynamoTimestampsToArchivedRecord(rec, gdata);
         stampArenaFromGameRec(rec, gdata);
+        stampSkipRatingFromGameRec(rec, gdata);
         return rec;
     }
 
@@ -256,5 +272,6 @@ export function buildGameRecordForDumpRow(
             `Unable to create archive stub record for ${gdata.metaGame} game ${gdata.id}`,
         );
     }
+    stampSkipRatingFromGameRec(stub, gdata);
     return stub;
 }

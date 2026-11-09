@@ -258,6 +258,7 @@ Post�Phase 5 the dashboard is **index-only** (`CURRENTGAMES#`, `USERGAME#`). L
 |-------|---------|------------|
 | `update_meta_game_counts` | Recompute sharded `METAGAMES#<metaGame>/COUNTS` from live queries | � |
 | `delete_games` | Hard-delete game records and all related dashboard / spectator / exploration rows | `metaGame`, `cbit` (`0` active / `1` completed), `gameids` (comma-separated) |
+| `admin_set_game_rating_exclusions` | Set `players[].skipRating` on a completed rated game (asymmetric rating opt-out) | `metaGame`, `gameId`, `userIds` (array or comma-separated); optional `clear: true` to remove flags |
 | `set_game_state` | Replace in-progress game state (`GAME` only; stream refreshes `CURRENTGAMES#`) | `id`, `metaGame`, `newState` |
 | `test_push` | Send test push notification | � |
 | `test_async` | Async test hook | varies |

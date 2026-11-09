@@ -16,6 +16,7 @@ import {
 import { hydrateGameState, prepareGameStateForStorage } from '../gameState.js';
 import { isArenaGame } from '../gamePlayMode.js';
 import { updateWatcherSummaries, type GameMarkSummary } from '../playerGameMarks.js';
+import { playersWithoutSkipRating } from './gameRatingExclusion.js';
 
 export type ReopenSalvageTier =
   | 'casual'
@@ -193,6 +194,7 @@ export function assessReopenFalseTimeout(
     toMove: toMoveForTimedOutSeat(rewound.timedOutSeat, hydrated),
     lastMoveTime: rewound.lastMoveTime,
     numMoves: rewound.numMoves,
+    players: playersWithoutSkipRating(hydrated.players),
   };
   delete (active as { winner?: number[] }).winner;
   delete (active as { gameEnded?: number }).gameEnded;
