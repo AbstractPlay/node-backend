@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { APGameRecord } from "@abstractplay/recranks";
 import { shouldOmitFromRecords } from "@abstractplay/gameslib";
-import { applyDynamoTimestampsToArchivedRecord, genRecordFromArchiveStub } from "./archiveGameRecord.js";
+import {
+    applyDynamoTimestampsToArchivedRecord,
+    genRecordFromArchiveStub,
+    stampSkipRatingFromGameRec,
+} from "./archiveGameRecord.js";
 import type { GameRec } from "../types/GameRec.js";
 
 describe("archiveGameRecord", () => {
@@ -70,6 +74,44 @@ describe("archiveGameRecord", () => {
         applyDynamoTimestampsToArchivedRecord(rec, gdata);
         expect(rec.header["date-end"]).toBe(new Date(ended).toISOString());
         expect(rec.header["date-start"]).toBe(new Date(started).toISOString());
+    });
+
+    it("stampSkipRatingFromGameRec copies per-seat flags", () => {
+        const gdata: GameRec = {
+            pk: "GAME",
+            sk: "GAME#binar#1#abc",
+            id: "abc",
+            metaGame: "binar",
+            state: JSON.stringify({
+                game: "binar",
+                gameover: true,
+                winner: [2],
+                numplayers: 2,
+                variants: ["partisan"],
+                stack: [
+                    { _timestamp: "2024-01-01T00:00:00.000Z" },
+                    { _timestamp: "2024-01-02T00:00:00.000Z" },
+                    { _timestamp: "2024-01-03T00:00:00.000Z" },
+                    { _timestamp: "2024-01-04T00:00:00.000Z" },
+                ],
+            }),
+            players: [
+                { id: "p1", name: "Alice", time: 1, skipRating: true },
+                { id: "p2", name: "Bob", time: 2 },
+            ],
+        };
+
+        const rec = genRecordFromArchiveStub(gdata, ["partisan"], {
+            uid: "abc|binar|partisan",
+            players: [
+                { uid: "p1", name: "Alice" },
+                { uid: "p2", name: "Bob" },
+            ],
+        });
+        expect(rec).toBeDefined();
+        stampSkipRatingFromGameRec(rec!, gdata);
+        expect(rec!.header.players[0]!.skipRating).toBe(true);
+        expect(rec!.header.players[1]!.skipRating).toBeUndefined();
     });
 
     it("applyDynamoTimestampsToArchivedRecord falls back to lastMoveTime when gameEnded absent", () => {

@@ -15,6 +15,7 @@ import { hasCurrentGameRow } from '../dashboardGames.js';
 import { upsertUserGameOverlay } from '../userGameOverlay.js';
 import { setWatchedSeen } from '../playerGameMarks.js';
 import { updateCompletedGameCommentedFlag } from '../recentCompletedGames.js';
+import { setGameRatingExclusions } from './gameRatingExclusion.js';
 
 type FullUser = {
   id: string;
@@ -102,6 +103,66 @@ export async function deleteGames(userId: string, pars: { metaGame: string, cbit
   catch (error) {
     logGetItemError(error);
     return formatReturnError(`Unable to delete games ${pars.gameids}. Error: ${error}`);
+  }
+}
+
+export async function adminSetGameRatingExclusions(
+  userId: string,
+  pars: {
+    metaGame: string;
+    gameId: string;
+    userIds: string[] | string;
+    clear?: boolean;
+  },
+) {
+  try {
+    const user = await ddbDocClient.send(new GetCommand({
+      TableName: process.env.ABSTRACT_PLAY_TABLE,
+      Key: { pk: 'USER', sk: userId },
+    }));
+    if (user.Item === undefined || user.Item.admin !== true) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({}),
+        headers,
+      };
+    }
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`Unable to get user ${userId}. Error: ${error}`);
+  }
+
+  const tableName = process.env.ABSTRACT_PLAY_TABLE!;
+  const rawIds = pars.userIds;
+  const userIds = Array.isArray(rawIds)
+    ? rawIds.map(String)
+    : String(rawIds).split(',').map(s => s.trim()).filter(s => s.length > 0);
+
+  try {
+    const outcome = await setGameRatingExclusions(
+      ddbDocClient,
+      tableName,
+      pars.metaGame,
+      pars.gameId,
+      userIds,
+      { clear: pars.clear === true },
+    );
+    if (!outcome.ok) {
+      return formatReturnError(outcome.reason);
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        gameId: pars.gameId,
+        metaGame: pars.metaGame,
+        changedUserIds: outcome.changedUserIds,
+        players: outcome.game.players,
+      }),
+      headers,
+    };
+  } catch (error) {
+    logGetItemError(error);
+    return formatReturnError(`admin_set_game_rating_exclusions failed: ${error}`);
   }
 }
 

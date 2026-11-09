@@ -20,7 +20,7 @@ export type GameRecord = {
   id: string;
   metaGame: string;
   numPlayers: number;
-  players: { id: string; name: string; time?: number }[];
+  players: { id: string; name: string; time?: number; skipRating?: boolean }[];
   clockHard: boolean;
   noExplore?: boolean;
   toMove: string | boolean[];
