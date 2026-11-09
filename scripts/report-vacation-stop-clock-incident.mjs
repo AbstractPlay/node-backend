@@ -17,6 +17,8 @@ import {
   GetCommand,
   ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { GameFactory } from '@abstractplay/gameslib';
 import { hydrateGameState } from '../lib/gameState.ts';
 import { deriveGameEndMeta } from '../lib/gameEndMeta.ts';
@@ -50,6 +52,7 @@ Options:
   --userId <uuid>      Only games where this player timed out
   --min-pause-hours N  Minimum inferred vacation ms to consider (default: 1)
   --relaxed            Also list timeouts where wall time exceeded bank and loser has vacation quota used (manual triage)
+  --debug              Log rejection counts to stderr (why rows were skipped)
   --out <path>         Write CSV to path (default: stdout table)
   --help, -h           Show this help
 `);
@@ -63,6 +66,7 @@ function parseArgs(argv) {
   let minPauseMs = MIN_PAUSE_MS;
   let outPath;
   let relaxed = false;
+  let debug = false;
 
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -78,6 +82,8 @@ function parseArgs(argv) {
       outPath = argv[++i];
     } else if (arg === '--relaxed') {
       relaxed = true;
+    } else if (arg === '--debug') {
+      debug = true;
     } else if (arg === '--help' || arg === '-h') {
       usage();
     } else {
@@ -91,7 +97,7 @@ function parseArgs(argv) {
     usage();
   }
 
-  return { stage, since, userId, minPauseMs, outPath, relaxed };
+  return { stage, since, userId, minPauseMs, outPath, relaxed, debug };
 }
 
 async function scanCompletedGamesSince(docClient, tableName, sinceMs) {
@@ -154,11 +160,17 @@ function turnIntervalFromState(metaGame, state) {
   }
 }
 
+/** COMPLETEDGAMES / deriveGameEndMeta use 1-based seats (see docs/database-schema.md). */
 function timedOutPlayerIndex(game, meta) {
-  if (meta?.gameEndKind === 'timeout' && typeof meta.gameEndPlayer === 'number') {
-    return meta.gameEndPlayer;
+  if (meta?.gameEndKind !== 'timeout' || typeof meta.gameEndPlayer !== 'number') {
+    return undefined;
   }
-  return undefined;
+  const seat = meta.gameEndPlayer;
+  const idx = seat - 1;
+  if (idx < 0 || idx >= game.players.length) {
+    return undefined;
+  }
+  return idx;
 }
 
 function csvEscape(value) {
@@ -170,7 +182,7 @@ function csvEscape(value) {
 }
 
 async function main() {
-  const { stage, since, userId, minPauseMs, outPath, relaxed } = parseArgs(process.argv);
+  const { stage, since, userId, minPauseMs, outPath, relaxed, debug } = parseArgs(process.argv);
   const { profile, table } = STAGES[stage];
 
   const docClient = DynamoDBDocumentClient.from(new DynamoDBClient({
@@ -184,6 +196,15 @@ async function main() {
   const rows = [];
   let scanned = 0;
   let timeoutGames = 0;
+  const rejects = {
+    noInterval: 0,
+    noTimeoutMeta: 0,
+    noLoserSeat: 0,
+    userFilter: 0,
+    noVacationPause: 0,
+    wallNotOverBank: 0,
+    notConfident: 0,
+  };
 
   for (const raw of games) {
     scanned += 1;
@@ -193,6 +214,7 @@ async function main() {
     }
     const interval = turnIntervalFromState(game.metaGame, game.state);
     if (!interval) {
+      rejects.noInterval += 1;
       continue;
     }
     if (isArenaGame(game)) {
@@ -201,16 +223,19 @@ async function main() {
 
     const meta = deriveGameEndMeta(game.metaGame, game.state);
     if (meta?.gameEndKind !== 'timeout') {
+      rejects.noTimeoutMeta += 1;
       continue;
     }
     timeoutGames += 1;
 
     const loserIdx = timedOutPlayerIndex(game, meta);
     if (loserIdx === undefined || !game.players[loserIdx]) {
+      rejects.noLoserSeat += 1;
       continue;
     }
     const loser = game.players[loserIdx];
     if (userId && loser.id !== userId) {
+      rejects.userFilter += 1;
       continue;
     }
 
@@ -229,12 +254,14 @@ async function main() {
     const stintSource = recorded.length > 0 ? 'recorded' : 'inferred_quota';
     const pauseMsCharged = stintWindows.reduce((max, s) => Math.max(max, s.pauseEnd - s.pauseStart), 0);
     if (pauseMsCharged < minPauseMs) {
+      rejects.noVacationPause += 1;
       continue;
     }
 
     const bank = loser.time ?? 0;
     const wallThink = gameEnded - lastMoveTime;
     if (wallThink <= bank) {
+      rejects.wallNotOverBank += 1;
       continue;
     }
 
@@ -245,6 +272,7 @@ async function main() {
     );
     const confident = fairThink <= bank;
     if (!confident && !relaxed) {
+      rejects.notConfident += 1;
       continue;
     }
 
@@ -253,6 +281,7 @@ async function main() {
       gameId: game.id,
       metaGame: game.metaGame,
       clockHard: game.clockHard === true,
+      timedOutSeat: meta.gameEndPlayer,
       loserId: loser.id,
       loserName: loser.name ?? '',
       bankMs: bank,
@@ -272,6 +301,7 @@ async function main() {
     'gameId',
     'metaGame',
     'clockHard',
+    'timedOutSeat',
     'loserId',
     'loserName',
     'bankMs',
@@ -291,8 +321,11 @@ async function main() {
   const body = `${lines.join('\n')}\n`;
   if (outPath) {
     const { writeFile } = await import('node:fs/promises');
-    await writeFile(outPath, body, 'utf8');
-    console.error(`Wrote ${rows.length} rows to ${outPath}`);
+    const resolvedOut = path.isAbsolute(outPath)
+      ? outPath
+      : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', outPath);
+    await writeFile(resolvedOut, body, 'utf8');
+    console.error(`Wrote ${rows.length} rows to ${resolvedOut}`);
   } else {
     process.stdout.write(body);
   }
@@ -301,6 +334,9 @@ async function main() {
     `Done: scanned ${scanned} completed games, ${timeoutGames} timeouts, `
     + `${rows.length} likely vacation-stop clock incidents`,
   );
+  if (debug) {
+    console.error('Rejection counts (among completed items with gameEnded filter):', rejects);
+  }
 }
 
 await main();
