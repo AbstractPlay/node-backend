@@ -67,7 +67,9 @@ function createMockDocClient(store: Map<string, StoreItem>) {
                     ? 'vacationPauseMsUsed'
                     : k === ':year'
                       ? 'vacationQuotaYear'
-                      : k === ':true'
+                      : k === ':stints'
+                        ? 'vacationClockStints'
+                        : k === ':true'
                         ? 'onVacation'
                         : null;
             if (field) {
@@ -183,6 +185,9 @@ describe('vacation mutations', () => {
     assert.equal(item.vacationStartsAt, undefined);
     assert.equal(item.vacationPauseMsUsed, 3 * HOUR);
     assert.equal(item.vacationQuotaYear, 2026);
+    assert.deepEqual(item.vacationClockStints, [
+      { pauseStart: T0, pauseEnd: T0 + 3 * HOUR },
+    ]);
   });
 
   it('updates scheduled end before start', async () => {

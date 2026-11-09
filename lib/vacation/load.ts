@@ -1,7 +1,13 @@
 import { GetCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { DashboardGame } from '../dashboardGames.js';
 import type { ClockGameSlice } from '../clockElapsed.js';
-import { resolveVacationWindow, isVacationScheduled, isVacationStintLive } from './resolve.js';
+import {
+  resolveLiveVacationWindow,
+  resolveVacationClockOverlapWindows,
+  isVacationScheduled,
+  isVacationStintLive,
+} from './resolve.js';
+import { vacationClockStintsFromItem } from './clockStints.js';
 import type { VacationUserFields, VacationWindow } from './types.js';
 
 export type PlayerVacationDisplayFlags = {
@@ -34,7 +40,8 @@ export function collectPlayerIdsFromGames(games: DashboardGame[]): string[] {
 }
 
 export type VacationPlayerState = {
-  windows: Map<string, VacationWindow | null>;
+  overlapWindows: Map<string, VacationWindow[]>;
+  liveWindows: Map<string, VacationWindow | null>;
   flags: Map<string, PlayerVacationDisplayFlags>;
 };
 
@@ -44,7 +51,8 @@ export async function batchGetVacationPlayerState(
   playerIds: string[],
   now: number,
 ): Promise<VacationPlayerState> {
-  const windows = new Map<string, VacationWindow | null>();
+  const overlapWindows = new Map<string, VacationWindow[]>();
+  const liveWindows = new Map<string, VacationWindow | null>();
   const flags = new Map<string, PlayerVacationDisplayFlags>();
   const unique = [...new Set(playerIds)];
   await Promise.all(unique.map(async (id) => {
@@ -58,10 +66,11 @@ export async function batchGetVacationPlayerState(
     const fields = data.Item
       ? vacationFieldsFromUserItem(data.Item as Record<string, unknown>)
       : {};
-    windows.set(id, resolveVacationWindow(fields, now));
+    overlapWindows.set(id, resolveVacationClockOverlapWindows(fields, now));
+    liveWindows.set(id, resolveLiveVacationWindow(fields, now));
     flags.set(id, playerVacationDisplayFlags(fields, now));
   }));
-  return { windows, flags };
+  return { overlapWindows, liveWindows, flags };
 }
 
 export async function batchGetVacationWindows(
@@ -69,9 +78,9 @@ export async function batchGetVacationWindows(
   tableName: string,
   playerIds: string[],
   now: number,
-): Promise<Map<string, VacationWindow | null>> {
-  const { windows } = await batchGetVacationPlayerState(client, tableName, playerIds, now);
-  return windows;
+): Promise<Map<string, VacationWindow[]>> {
+  const { overlapWindows } = await batchGetVacationPlayerState(client, tableName, playerIds, now);
+  return overlapWindows;
 }
 
 export const VACATION_USER_PROJECTION = [
@@ -81,6 +90,7 @@ export const VACATION_USER_PROJECTION = [
   'vacationEndsAt',
   'vacationOpenEnded',
   'vacationStintStartedAt',
+  'vacationClockStints',
 ].join(', ');
 
 export function vacationFieldsFromUserItem(item: Record<string, unknown>): VacationUserFields {
@@ -91,6 +101,7 @@ export function vacationFieldsFromUserItem(item: Record<string, unknown>): Vacat
     vacationEndsAt: item.vacationEndsAt as number | undefined,
     vacationOpenEnded: item.vacationOpenEnded as boolean | undefined,
     vacationStintStartedAt: item.vacationStintStartedAt as number | undefined,
+    vacationClockStints: vacationClockStintsFromItem(item),
   };
 }
 

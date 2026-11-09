@@ -23,6 +23,7 @@
     "prune-locales": "node scripts/locale-prune.mjs locales/en/apback.json",
     "check-weblate-branch": "node scripts/check-weblate-branch.mjs",
     "check:clock-derivation": "node scripts/check-clock-derivation.mjs",
+    "report-vacation-stop-clock-incident": "tsx scripts/report-vacation-stop-clock-incident.mjs",
     "merge-weblate-branch": "node scripts/merge-weblate-branch.mjs",
     "dump-dashboard": "tsx scripts/dump-dashboard.mjs",
     "import-bgg-wishlist": "tsx scripts/import-bgg-wishlist.mjs",

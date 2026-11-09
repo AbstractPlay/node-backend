@@ -15,6 +15,7 @@ import { enrichLiveGameClockDisplay } from '../vacation/clockDisplay.js';
 import { isArenaGame } from '../gamePlayMode.js';
 import { enrichArenaGameClockDisplay } from '../arena/enrichArenaClockDisplay.js';
 import {
+  getLiveVacationWindowFromMap,
   getPlayerVacationFlagsFromMap,
   getVacationWindowFromMap,
   prepareVacationPlayerStateForPlayerIds,
@@ -133,7 +134,7 @@ export async function game(
         tableName,
         timeloss,
         now: () => now,
-        getVacationWindow: getVacationWindowFromMap(vacationState.windows),
+        getVacationWindow: getVacationWindowFromMap(vacationState.overlapWindows),
       });
       if (timeoutResult.processed) {
         const refreshed = await ddbDocClient.send(
@@ -198,8 +199,9 @@ export async function game(
             lastMoveTime: loaded.lastMoveTime,
           },
           displayNow,
-          getVacationWindowFromMap(vacationState.windows),
+          getVacationWindowFromMap(vacationState.overlapWindows),
           getPlayerVacationFlagsFromMap(vacationState.flags),
+          getLiveVacationWindowFromMap(vacationState.liveWindows),
         );
         loaded.players = withClock.players;
         loaded.clockDisplayServerTime = withClock.clockDisplayServerTime;

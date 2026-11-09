@@ -15,10 +15,14 @@ describe('vacation clockDisplay', () => {
       toMove: '0',
       lastMoveTime: T0,
     };
-    const enriched = enrichClockGameSlice(game, T0 + 10_000, () => ({
-      pauseStart: T0,
-      pauseEnd: T0 + HOUR,
-    }));
+    const livePause = { pauseStart: T0, pauseEnd: T0 + HOUR };
+    const enriched = enrichClockGameSlice(
+      game,
+      T0 + 10_000,
+      () => livePause,
+      () => ({ onVacation: false, vacationScheduled: false }),
+      () => livePause,
+    );
     assert.equal(enriched.clockDisplayServerTime, T0 + 10_000);
     assert.equal(enriched.players[0]!.effectiveRemainingMs, 60_000);
     assert.equal(enriched.players[0]!.clockPaused, true);

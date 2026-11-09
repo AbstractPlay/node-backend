@@ -1,4 +1,5 @@
 import { GetCommand, UpdateCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { appendVacationClockStint, vacationClockStintDynamoValue } from './clockStints.js';
 import { planCancelScheduled, planStopVacation } from './finalize.js';
 import { finalizeVacationIfNeeded } from './persist.js';
 import { buildVacationSnapshot } from './resolve.js';
@@ -279,6 +280,15 @@ export async function stopVacation(
     return failure('vacation_nothing_to_stop');
   }
 
+  const vacationClockStints = vacationClockStintDynamoValue(
+    appendVacationClockStint(
+      fields,
+      stop.clockStintPauseStart,
+      stop.clockStintPauseEnd,
+      now,
+    ),
+  );
+
   try {
     await client.send(
       new UpdateCommand({
@@ -286,12 +296,13 @@ export async function stopVacation(
         Key: { pk: 'USER', sk: userId },
         ConditionExpression: 'vacationStartsAt = :startsAt',
         UpdateExpression:
-          'SET vacationPauseMsUsed = :used, vacationQuotaYear = :year '
+          'SET vacationPauseMsUsed = :used, vacationQuotaYear = :year, vacationClockStints = :stints '
           + 'REMOVE vacationStartsAt, vacationEndsAt, vacationOpenEnded, vacationStintStartedAt',
         ExpressionAttributeValues: {
           ':startsAt': fields.vacationStartsAt,
           ':used': stop.vacationPauseMsUsed,
           ':year': stop.vacationQuotaYear,
+          ':stints': vacationClockStints,
         },
       }),
     );

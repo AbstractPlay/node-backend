@@ -4,6 +4,7 @@ import { collectPlayerIdsFromGames } from './load.js';
 import { enrichDashboardGamesClockDisplay } from './clockDisplay.js';
 import {
   getPlayerVacationFlagsFromMap,
+  getLiveVacationWindowFromMap,
   getVacationWindowFromMap,
   prepareVacationPlayerStateForPlayerIds,
 } from './persist.js';
@@ -16,7 +17,7 @@ export async function attachDashboardGamesClockDisplay(
   now: number,
 ): Promise<DashboardGame[]> {
   const playerIds = collectPlayerIdsFromGames(games);
-  const { windows, flags } = await prepareVacationPlayerStateForPlayerIds(
+  const { overlapWindows, liveWindows, flags } = await prepareVacationPlayerStateForPlayerIds(
     client,
     tableName,
     playerIds,
@@ -25,7 +26,8 @@ export async function attachDashboardGamesClockDisplay(
   return enrichDashboardGamesClockDisplay(
     games,
     now,
-    getVacationWindowFromMap(windows),
+    getVacationWindowFromMap(overlapWindows),
     getPlayerVacationFlagsFromMap(flags),
+    getLiveVacationWindowFromMap(liveWindows),
   );
 }

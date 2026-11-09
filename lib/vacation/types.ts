@@ -1,3 +1,8 @@
+export type VacationClockStint = {
+  pauseStart: number;
+  pauseEnd: number;
+};
+
 export type VacationUserFields = {
   vacationQuotaYear?: number;
   vacationPauseMsUsed?: number;
@@ -5,6 +10,8 @@ export type VacationUserFields = {
   vacationEndsAt?: number;
   vacationOpenEnded?: boolean;
   vacationStintStartedAt?: number;
+  /** Ended stints still credited when computing think time after vacation stops. */
+  vacationClockStints?: VacationClockStint[];
 };
 
 export type VacationWindow = {

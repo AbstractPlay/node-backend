@@ -179,6 +179,30 @@ describe('correspondence move bank (Samraku-style)', () => {
   });
 });
 
+describe('ended vacation stints', () => {
+  const endedStint: VacationWindow[] = [
+    { pauseStart: T0 + HOUR, pauseEnd: T0 + 10 * HOUR },
+  ];
+
+  it('subtracts ended stint after vacation stops (no live window)', () => {
+    const elapsed = thinkTimeMsWithVacationOverlap(
+      T0,
+      T0 + 12 * HOUR,
+      endedStint,
+    );
+    assert.equal(elapsed, 3 * HOUR);
+  });
+
+  it('does not double-count overlapping ended stints', () => {
+    const windows: VacationWindow[] = [
+      { pauseStart: T0, pauseEnd: T0 + 2 * HOUR },
+      { pauseStart: T0 + HOUR, pauseEnd: T0 + 3 * HOUR },
+    ];
+    const elapsed = thinkTimeMsWithVacationOverlap(T0, T0 + 4 * HOUR, windows);
+    assert.equal(elapsed, HOUR);
+  });
+});
+
 describe('wouldTimeOut', () => {
   it('is false when vacation covers elapsed wall overtime', () => {
     const g = game({ lastMoveTime: T0 });
