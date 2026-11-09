@@ -17,6 +17,8 @@ export {
   isVacationScheduled,
   normalizedPauseMsUsed,
   remainingQuotaMs,
+  resolveLiveVacationWindow,
+  resolveVacationClockOverlapWindows,
   resolveVacationWindow,
   shouldAutoFinalizeStint,
   stintPauseEnd,
@@ -53,10 +55,11 @@ export {
 export {
   readVacationSnapshot,
   finalizeVacationIfNeeded,
+  getLiveVacationWindowFromMap,
   getVacationWindowFromMap,
   prepareVacationWindowsForPlayerIds,
 } from './persist.js';
-export type { GetVacationWindowFn } from './persist.js';
+export type { GetLiveVacationWindowFn, GetVacationWindowFn } from './persist.js';
 export {
   scheduleVacation,
   stopVacation,

@@ -5,7 +5,7 @@ import {
 } from '../clockElapsed.js';
 import type { DashboardGame } from '../dashboardGames.js';
 import type { PlayerVacationDisplayFlags } from './load.js';
-import type { GetVacationWindowFn } from './persist.js';
+import type { GetLiveVacationWindowFn, GetVacationWindowFn } from './persist.js';
 import type { VacationWindow } from './types.js';
 
 export type PlayerClockDisplayFields = {
@@ -35,7 +35,8 @@ function playerDisplayFields(
   game: ClockGameSlice,
   playerIndex: number,
   now: number,
-  getVacationWindow: GetVacationWindowFn,
+  getVacationClockOverlap: GetVacationWindowFn,
+  getLiveVacationWindow: GetLiveVacationWindowFn,
 ): Pick<PlayerClockDisplayFields, 'effectiveRemainingMs' | 'clockPaused'> | undefined {
   if (!isPlayerOnClock(game, playerIndex)) {
     return undefined;
@@ -45,28 +46,31 @@ function playerDisplayFields(
     return undefined;
   }
   const bank = player.time ?? 0;
-  const window = getVacationWindow(player.id);
   const effectiveRemainingMs = remainingBankMs(
     bank,
     game.lastMoveTime,
     now,
     player.id,
     game,
-    window,
+    getVacationClockOverlap(player.id),
   );
+  const liveWindow = getLiveVacationWindow(player.id);
   return {
     effectiveRemainingMs,
-    clockPaused: isClockPaused(now, window),
+    clockPaused: isClockPaused(now, liveWindow),
   };
 }
 
 export type GetPlayerVacationFlagsFn = (playerId: string) => PlayerVacationDisplayFlags;
 
+const NO_LIVE_VACATION: GetLiveVacationWindowFn = () => null;
+
 export function enrichClockGameSlice<T extends ClockGameSlice>(
   game: T,
   now: number,
-  getVacationWindow: GetVacationWindowFn,
+  getVacationClockOverlap: GetVacationWindowFn,
   getPlayerVacationFlags: GetPlayerVacationFlagsFn = () => EMPTY_VACATION_FLAGS,
+  getLiveVacationWindow: GetLiveVacationWindowFn = NO_LIVE_VACATION,
 ): T & GameClockDisplayFields & {
   players: (T['players'][number] & PlayerClockDisplayFields)[];
 } {
@@ -77,7 +81,13 @@ export function enrichClockGameSlice<T extends ClockGameSlice>(
   };
   const players = game.players.map((p, i) => {
     const vacation = getPlayerVacationFlags(p.id);
-    const display = playerDisplayFields(slice, i, now, getVacationWindow);
+    const display = playerDisplayFields(
+      slice,
+      i,
+      now,
+      getVacationClockOverlap,
+      getLiveVacationWindow,
+    );
     return {
       ...p,
       onVacation: vacation.onVacation,
@@ -95,14 +105,21 @@ export function enrichClockGameSlice<T extends ClockGameSlice>(
 export function enrichDashboardGamesClockDisplay(
   games: DashboardGame[],
   now: number,
-  getVacationWindow: GetVacationWindowFn,
+  getVacationClockOverlap: GetVacationWindowFn,
   getPlayerVacationFlags: GetPlayerVacationFlagsFn = () => EMPTY_VACATION_FLAGS,
+  getLiveVacationWindow: GetLiveVacationWindowFn = NO_LIVE_VACATION,
 ): DashboardGame[] {
   return games.map((game) => {
     if (!game.lastMoveTime || game.toMove === '' || game.toMove === undefined) {
       return game;
     }
-    return enrichClockGameSlice(game, now, getVacationWindow, getPlayerVacationFlags);
+    return enrichClockGameSlice(
+      game,
+      now,
+      getVacationClockOverlap,
+      getPlayerVacationFlags,
+      getLiveVacationWindow,
+    );
   });
 }
 
@@ -114,8 +131,9 @@ export type GameWithPlayersAndClock = ClockGameSlice & {
 export function enrichLiveGameClockDisplay<G extends GameWithPlayersAndClock>(
   game: G,
   now: number,
-  getVacationWindow: GetVacationWindowFn,
+  getVacationClockOverlap: GetVacationWindowFn,
   getPlayerVacationFlags: GetPlayerVacationFlagsFn = () => EMPTY_VACATION_FLAGS,
+  getLiveVacationWindow: GetLiveVacationWindowFn = NO_LIVE_VACATION,
 ): G & GameClockDisplayFields & {
   players: (G['players'][number] & PlayerClockDisplayFields)[];
 } {
@@ -134,8 +152,9 @@ export function enrichLiveGameClockDisplay<G extends GameWithPlayersAndClock>(
       lastMoveTime: game.lastMoveTime,
     },
     now,
-    getVacationWindow,
+    getVacationClockOverlap,
     getPlayerVacationFlags,
+    getLiveVacationWindow,
   ) as G & GameClockDisplayFields & {
     players: (G['players'][number] & PlayerClockDisplayFields)[];
   };

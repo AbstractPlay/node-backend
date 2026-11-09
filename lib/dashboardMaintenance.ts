@@ -13,6 +13,7 @@ import {
 } from './vacation/clockDisplay.js';
 import {
   getPlayerVacationFlagsFromMap,
+  getLiveVacationWindowFromMap,
   getVacationWindowFromMap,
   prepareVacationPlayerStateForPlayerIds,
 } from './vacation/persist.js';
@@ -85,7 +86,7 @@ export async function runDashboardMaintenance(
   }
 
   const playerIds = collectPlayerIdsFromGames(games);
-  const { windows, flags } = await prepareVacationPlayerStateForPlayerIds(
+  const { overlapWindows, liveWindows, flags } = await prepareVacationPlayerStateForPlayerIds(
     client,
     tableName,
     playerIds,
@@ -98,14 +99,15 @@ export async function runDashboardMaintenance(
     timeloss: deps.timeloss,
     now: () => now,
     log: deps.log,
-    getVacationWindow: getVacationWindowFromMap(windows),
+    getVacationWindow: getVacationWindowFromMap(overlapWindows),
   });
 
   const gamesWithClockDisplay = enrichDashboardGamesClockDisplay(
     maintainedGames,
     now,
-    getVacationWindowFromMap(windows),
+    getVacationWindowFromMap(overlapWindows),
     getPlayerVacationFlagsFromMap(flags),
+    getLiveVacationWindowFromMap(liveWindows),
   );
 
   return {

@@ -1,3 +1,4 @@
+import { endedStintsToWindows } from './clockStints.js';
 import { VACATION_BLOCK_MS, VACATION_QUOTA_MS } from './constants.js';
 import type { VacationSnapshot, VacationUserFields, VacationWindow } from './types.js';
 
@@ -66,7 +67,7 @@ export function stintPauseEnd(fields: VacationUserFields, now: number, pauseStar
   return endsAt;
 }
 
-export function resolveVacationWindow(fields: VacationUserFields, now: number): VacationWindow | null {
+export function resolveLiveVacationWindow(fields: VacationUserFields, now: number): VacationWindow | null {
   const pauseStart = stintPauseStart(fields, now);
   if (pauseStart === null) {
     return null;
@@ -76,6 +77,37 @@ export function resolveVacationWindow(fields: VacationUserFields, now: number): 
     return null;
   }
   if (now < pauseStart || now >= pauseEnd) {
+    return null;
+  }
+  return { pauseStart, pauseEnd };
+}
+
+/** @deprecated Use resolveLiveVacationWindow for display; resolveVacationClockOverlapWindows for clocks. */
+export function resolveVacationWindow(fields: VacationUserFields, now: number): VacationWindow | null {
+  return resolveLiveVacationWindow(fields, now);
+}
+
+/** Vacation pause intervals credited against think time (live stint plus ended stints). */
+export function resolveVacationClockOverlapWindows(
+  fields: VacationUserFields,
+  now: number,
+): VacationWindow[] {
+  const windows: VacationWindow[] = endedStintsToWindows(fields.vacationClockStints ?? []);
+  const live = resolveLiveVacationWindowForClock(fields, now);
+  if (live !== null) {
+    windows.push(live);
+  }
+  return windows;
+}
+
+/** Live stint window for clock overlap (uses cap end, not “must contain now”). */
+function resolveLiveVacationWindowForClock(fields: VacationUserFields, now: number): VacationWindow | null {
+  const pauseStart = stintPauseStart(fields, now);
+  if (pauseStart === null) {
+    return null;
+  }
+  const pauseEnd = stintPauseEnd(fields, now, pauseStart);
+  if (pauseEnd === null || pauseStart >= pauseEnd) {
     return null;
   }
   return { pauseStart, pauseEnd };

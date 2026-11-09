@@ -5,7 +5,7 @@ import {
   wouldTimeOut,
   type ClockGameSlice,
 } from './clockElapsed.js';
-import type { VacationWindow } from './vacation/types.js';
+import type { VacationClockInput } from './clockElapsed.js';
 
 export type TimelossFn = (
   check: boolean,
@@ -15,7 +15,7 @@ export type TimelossFn = (
   timestamp: number,
 ) => Promise<unknown>;
 
-export type GetVacationWindowFn = (playerId: string) => VacationWindow | null;
+export type GetVacationWindowFn = (playerId: string) => VacationClockInput;
 
 export type GameTimeoutDeps = {
   client: DynamoDBDocumentClient;
@@ -46,7 +46,7 @@ function clockSlice(game: DashboardGame): ClockGameSlice {
   };
 }
 
-function vacationFor(deps: GameTimeoutDeps, playerId: string): VacationWindow | null {
+function vacationFor(deps: GameTimeoutDeps, playerId: string): VacationClockInput {
   return deps.getVacationWindow?.(playerId) ?? null;
 }
 

@@ -11,6 +11,7 @@ import {
   computeStintPauseMs,
   isVacationStintLive,
   remainingQuotaMs,
+  resolveVacationClockOverlapWindows,
   resolveVacationWindow,
   shouldAutoFinalizeStint,
   utcQuotaYear,
@@ -121,6 +122,28 @@ describe('vacation resolve', () => {
     const snap = buildVacationSnapshot(f, T0 + 3 * 24 * HOUR);
     assert.equal(snap.vacationQuotaMsRemaining, VACATION_QUOTA_MS - 3 * 24 * HOUR);
     assert.equal(snap.vacationBlocksRemaining, (VACATION_QUOTA_MS - 3 * 24 * HOUR) / VACATION_BLOCK_MS);
+  });
+});
+
+describe('resolveVacationClockOverlapWindows', () => {
+  it('includes ended stint history when live stint is absent', () => {
+    const f = fields({
+      vacationClockStints: [{ pauseStart: T0, pauseEnd: T0 + 5 * HOUR }],
+    });
+    const w = resolveVacationClockOverlapWindows(f, T0 + 10 * HOUR);
+    assert.equal(w.length, 1);
+    assert.deepEqual(w[0], { pauseStart: T0, pauseEnd: T0 + 5 * HOUR });
+  });
+
+  it('includes live stint and ended stints', () => {
+    const f = fields({
+      vacationStartsAt: T0,
+      vacationStintStartedAt: T0,
+      vacationOpenEnded: true,
+      vacationClockStints: [{ pauseStart: T0 - 5 * HOUR, pauseEnd: T0 - HOUR }],
+    });
+    const w = resolveVacationClockOverlapWindows(f, T0 + HOUR);
+    assert.equal(w.length, 2);
   });
 });
 
