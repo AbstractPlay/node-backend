@@ -34,6 +34,7 @@ export type GameRecord = {
   ladderId?: string;
   tournament?: string;
   event?: string;
+  rated?: boolean;
   playMode?: string;
   arenaTcId?: string;
   arenaClock?: { startSec: number; incSec: number; maxSec: number };
@@ -412,6 +413,15 @@ async function handleActiveGameInsert(
   const playerIds = await humanPlayerIds(game.players);
   await putCurrentGamesForPlayers(docClient, tableName, game, playerIds);
   await adjustShardedCounts(docClient, tableName, game.metaGame, { currentgames: 1 });
+}
+
+/** Ops/tooling: restore CURRENTGAMES after moving a game from #1# back to #0#. */
+export async function restoreActiveGameDashboardIndexes(
+  docClient: DynamoDBDocumentClient,
+  tableName: string,
+  game: GameRecord,
+): Promise<void> {
+  await handleActiveGameInsert(docClient, tableName, game);
 }
 
 async function handleActiveGameModify(
