@@ -1,5 +1,6 @@
 import type { AuthRouteHandler } from '../../../lib/api/routeTypes.js';
 import {
+  adminSetGameRatingExclusions,
   deleteGames,
   fixGames,
   onetimeFix,
@@ -18,4 +19,5 @@ export const coreAuthRoutes: Record<string, AuthRouteHandler> = {
   fix_games: bindAuth(fixGames),
   test_async: bindAuth(testAsync),
   delete_games: bindAuth(deleteGames),
+  admin_set_game_rating_exclusions: bindAuth(adminSetGameRatingExclusions),
 };
