@@ -2,11 +2,11 @@
  * @typedef {{ stateJson: string; changed: boolean; from?: string; to?: string; reason?: string }} ChameleonEogPatchResult
  */
 
-import { ChameleonGame, replacer, reviver } from '@abstractplay/gameslib';
+import { GameFactory, replacer, reviver } from '@abstractplay/gameslib';
 
 /**
- * If the terminal stack frame's `eog.reason` disagrees with {@link ChameleonGame.expectedEogOutcome},
- * patch only that result entry (winners unchanged).
+ * If the terminal stack frame's `eog.reason` disagrees with a fresh chameleon engine
+ * (`GameFactory` + `expectedEogOutcome` on the tip), patch only that result entry.
  *
  * @param {string} stateJson
  * @returns {ChameleonEogPatchResult}
@@ -34,7 +34,17 @@ export function patchChameleonTerminalEogReason(stateJson) {
     return { stateJson, changed: false, reason: 'no eog result' };
   }
 
-  const engine = new ChameleonGame(state);
+  const engine = GameFactory('chameleon', state);
+  if (engine === undefined) {
+    return { stateJson, changed: false, reason: 'GameFactory(chameleon) failed' };
+  }
+  if (typeof engine.expectedEogOutcome !== 'function') {
+    return {
+      stateJson,
+      changed: false,
+      reason: 'gameslib too old: chameleon engine has no expectedEogOutcome()',
+    };
+  }
   engine.load(-1);
   const expected = engine.expectedEogOutcome();
   if (expected === undefined) {

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
-import { ChameleonGame, replacer, reviver } from '@abstractplay/gameslib';
+import { GameFactory, replacer, reviver } from '@abstractplay/gameslib';
 import { patchChameleonTerminalEogReason } from '../../scripts/lib/chameleon-eog-backfill.mjs';
 
-const g = new ChameleonGame();
+const g = GameFactory('chameleon');
+if (g === undefined) {
+  throw new Error('GameFactory(chameleon) unavailable');
+}
 g.board.clear();
 g.board.set('c5', 'BW');
 g.board.set('e5', 'BW');
