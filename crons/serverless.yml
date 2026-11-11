@@ -31,6 +31,9 @@ custom:
       userpoolId: us-east-1_2zrzbEjoU
     prod:
       userpoolId: us-east-1_YCjgSZHJm
+  abandonedAccountDeleteDryRun:
+    dev: 'true'
+    prod: 'false'
   renderBucketName: "thumbnails-prerender-${self:provider.stage}"
   rendererCdnUrl: "https://renderer.dev.abstractplay.com/APRender.min.js"
   esbuild:
@@ -278,7 +281,7 @@ functions:
       - !Ref AbstractplayGameslibLambdaLayer
     environment:
       ABANDONED_ACCOUNT_DELETE_ENABLED: 'true'
-      ABANDONED_ACCOUNT_DELETE_DRY_RUN: 'true'
+      ABANDONED_ACCOUNT_DELETE_DRY_RUN: ${self:custom.abandonedAccountDeleteDryRun.${self:provider.stage}}
       ABANDONED_ACCOUNT_DELETE_BATCH_SIZE: 25
       ABANDONED_ACCOUNT_INACTIVE_MS: 31536000000
       USERPOOL_ID: ${self:custom.stageConfig.${self:provider.stage}.userpoolId}

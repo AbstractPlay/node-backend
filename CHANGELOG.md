@@ -14,8 +14,13 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Chameleon EOG backfill:** `npm run backfill-chameleon-eog` (`--scope completed`, `--dry-run` / `--apply`) patches terminal `eog.reason` on stored stacks when it disagrees with gameslib `expectedEogOutcome`; logs changed game ids and on `--apply` refreshes `COMPLETEDGAMES*` via `refreshCompletedGameIndexes` (no hydrate-time repair).
 - **Organized events:** `event_close` notifies registered players with in-app `eventEnd` notifications and optional email/push (winners and link to `https://play.abstractplay.com/event/{eventId}`); user prefs `eventEnd` / `settings.all.notifications.eventEnd`.
 
+### Changed
+
+- **Abandoned account deletion (prod crons):** `ABANDONED_ACCOUNT_DELETE_DRY_RUN=false` — nightly batch performs real DynamoDB purge and Cognito removal (25 users/run).
+
 ### Fixed
 
+- **Abandoned account deletion:** Cognito delete locates the subscriber with `ListUsers` on `sub` (player uuid), then `AdminDeleteUser` with the pool sign-in username; DDB display names are not used.
 - **Feedback (wishlist):** `feedback_update` lets any signed-in user attach the first cover image on a live wishlist entry; admins may replace an existing cover via attachment-only updates (matches front wishlist detail upload).
 - **Records / stats:** `buildGameRecordForDumpRow` stamps `header["date-end"]` (and `date-start` when present) from the Dynamo `GAME` row’s `gameEnded` / `lastMoveTime` / `gameStarted` after `genRecord`, so published JSON matches canonical completion times even when engine stack timestamps disagree (notably Tablero after stack hydrate/repair).
 - **Vacation:** Correspondence `submit_move` and `invoke_pie` charge completed-turn think time with vacation overlap (`completedTurnThinkTimeMs`), fixing full wall-time debits after `toMove` flips to the opponent (increment unchanged; arena still opts out).

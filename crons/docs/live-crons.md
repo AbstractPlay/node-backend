@@ -25,7 +25,7 @@ See [Dashboard cruft cleanup](/crons/dashboard-cruft-cleanup/) for full detail.
 **Schedule:** 03:30 UTC daily  
 **Source:** [`src/functions/abandoned-account-deletion.ts`](../src/functions/abandoned-account-deletion.ts)
 
-Deletes inactive ≥ 1 year human accounts with no game participation (S3 dump candidates, live confirm, detach tournament/ladder/org rows, purge DynamoDB, Cognito `AdminDeleteUser`). Disabled by default (`ABANDONED_ACCOUNT_DELETE_ENABLED=false`). Sizing: `npm run list-abandoned-account-candidates -- --download` in node-backend.
+Deletes inactive ≥ 1 year human accounts with no game participation (S3 dump candidates, live confirm, detach tournament/ladder/org rows, purge DynamoDB, Cognito delete). Prod: `ABANDONED_ACCOUNT_DELETE_ENABLED=true`, live delete (`DRY_RUN=false`), batch 25. Sizing: `npm run list-abandoned-account-candidates -- --download` in node-backend.
 
 See [Abandoned account deletion](/crons/abandoned-account-deletion/).
 
