@@ -1,4 +1,4 @@
-import { gameinfo } from '@abstractplay/gameslib';
+import { sessionIsSimultaneous } from '../effectiveGameFlags.js';
 import { enqueueBotOutbound, getToMovePlayerIds, loadGameRecord } from '../botOutbound.js';
 import { isBotId } from '../participants.js';
 
@@ -17,8 +17,10 @@ export async function notifyRegisteredBotsTurn(metaGame: string, gameid: string,
     }
     loaded = item as FullGame;
   }
-  const info = gameinfo.get(metaGame);
-  const simultaneous = info.flags !== undefined && info.flags.includes('simultaneous');
+  const simultaneous = sessionIsSimultaneous(undefined, metaGame, {
+    variants: (loaded as { variants?: string[] }).variants,
+    numplayers: loaded.players.length,
+  });
   const toMoveIds = getToMovePlayerIds(loaded, simultaneous);
   for (const id of toMoveIds) {
     if (await isBotId(id)) {

@@ -16,6 +16,8 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Changed
 
+- **Simultaneous play:** `submit_move`, arena submit, resign/timeout, and `get_game` partial-move masking use gameslib **`sessionIsSimultaneous`** (`getFlags()` / `resolveGameFlags`) instead of static `gameinfo.flags`.
+- **Simultaneous play:** challenge start, arena/ladder/tournament/event game creation, bots, solo, teaching mode, and start-position validation use **`sessionIsSimultaneous`** and shared **`initialToMove`** for opening `toMove`.
 - **Abandoned account deletion (prod crons):** `ABANDONED_ACCOUNT_DELETE_DRY_RUN=false` — nightly batch performs real DynamoDB purge and Cognito removal (25 users/run).
 
 ### Fixed

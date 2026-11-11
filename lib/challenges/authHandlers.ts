@@ -13,7 +13,8 @@ import {
 import i18n from '../i18nInstance.js';
 import { sendCommandWithRetry } from '../api/ddbRetry.js';
 import { localizedGameName } from '../gameDisplayName.js';
-import { effectiveFlags, applyPerspectivePlayerRotations } from '../effectiveGameFlags.js';
+import { effectiveFlags, applyPerspectivePlayerRotations, sessionIsSimultaneous } from '../effectiveGameFlags.js';
+import { initialToMove } from '../games/initialToMove.js';
 import { adjustShardedCounts } from '../gameProjector.js';
 import { hydrateGameState, prepareGameStateForStorage } from '../gameState.js';
 import {
@@ -1244,7 +1245,10 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
         return {
           metaGame: info!.name,
           players: playersFull.filter(p => !p.isBot) as unknown as FullUser[],
-          simultaneous: info!.flags !== undefined && info!.flags.includes('simultaneous'),
+          simultaneous: sessionIsSimultaneous(undefined, challenge.metaGame, {
+            variants: challenge.variants,
+            numplayers: challenge.numPlayers,
+          }),
           gameId,
         };
       } catch (error) {
@@ -1286,11 +1290,7 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
         engine = GameFactory(challenge.metaGame, undefined, variants);
       if (!engine)
         throw new Error(`Unknown metaGame ${challenge.metaGame}`);
-      if (info.flags !== undefined && info.flags.includes('simultaneous')) {
-        whoseTurn = playerIDs.map(() => true);
-      } else if (typeof engine.currplayer === 'number') {
-        whoseTurn = `${engine.currplayer - 1}`;
-      }
+      whoseTurn = initialToMove(engine, challenge.metaGame, playerIDs.length, variants);
       state = engine.serialize();
     }
     console.log(`Variants in the game engine: ${JSON.stringify(engine.variants)}`);
@@ -1350,7 +1350,10 @@ async function acceptChallenge(userid: string, metaGame: string, challengeId: st
       return {
         metaGame: info.name,
         players: playersFull.filter(p => !p.isBot) as unknown as FullUser[],
-        simultaneous: info.flags !== undefined && info.flags.includes('simultaneous'),
+        simultaneous: sessionIsSimultaneous(engine, challenge.metaGame, {
+          variants: engine.variants,
+          numplayers: challenge.numPlayers,
+        }),
         gameId
       };
     }

@@ -12,6 +12,7 @@ import {
 } from '../tournaments/createTournamentPairingGame.js';
 import { prepareGameStateForStorage } from '../gameState.js';
 import { gameinfo, GameFactory } from '@abstractplay/gameslib';
+import { initialToMove } from '../games/initialToMove.js';
 import { enqueueGameStartNotifications } from '../notifications.js';
 import { getLadderRecord } from './ladderStore.js';
 import { ladderGameSk, ladderPlayerSk, ladderSeriesSk } from './keys.js';
@@ -54,10 +55,6 @@ export async function createLadderGame(params: CreateLadderGameParams): Promise<
 
   const gamePlayers = buildTournamentGamePlayers(metaGame, pairingPlayers);
   const info = gameinfo.get(metaGame);
-  let whoseTurn: string | boolean[] = '0';
-  if (info?.flags?.includes('simultaneous')) {
-    whoseTurn = gamePlayers.map(() => true);
-  }
 
   let engine;
   if (info && info.playercounts.length > 1) {
@@ -68,6 +65,7 @@ export async function createLadderGame(params: CreateLadderGameParams): Promise<
   if (!engine) {
     throw new Error(`Unknown metaGame ${metaGame}`);
   }
+  const whoseTurn = initialToMove(engine, metaGame, gamePlayers.length, variants);
   const state = engine.serialize();
   const gameSk = `${metaGame}#0#${gameId}`;
   const seriesKey = ladderSeriesSk(metaGame, variants);

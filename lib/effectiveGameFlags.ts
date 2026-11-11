@@ -1,4 +1,8 @@
-import { gameinfo, type GameBase } from "@abstractplay/gameslib";
+import {
+  gameinfo,
+  sessionIsSimultaneous as sessionIsSimultaneousFromGameslib,
+  type GameBase,
+} from "@abstractplay/gameslib";
 import * as APGames from "@abstractplay/gameslib";
 import { resolveGameVariantUids } from "./resolveGameVariants.js";
 
@@ -58,6 +62,15 @@ export function flagSetIncludes(
   name: string,
 ): boolean {
   return flags !== undefined && Array.isArray(flags) && flags.includes(name);
+}
+
+/** Whether the session uses simultaneous submit routing (effective `simultaneous` flag only). */
+export function sessionIsSimultaneous(
+  engine: GameBase | null | undefined,
+  metaGame: string,
+  context: { variants?: string[]; numplayers?: number } = {},
+): boolean {
+  return sessionIsSimultaneousFromGameslib(engine, metaGame, context);
 }
 
 /** Set per-seat board rotation when perspective (and optionally rotate90) are active. */

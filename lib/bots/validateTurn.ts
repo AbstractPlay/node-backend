@@ -1,4 +1,4 @@
-import { gameinfo } from '@abstractplay/gameslib';
+import { sessionIsSimultaneous } from '../effectiveGameFlags.js';
 import { formatReturnError, headers } from '../api/http.js';
 import type { ApiHandlerResult } from '../api/routeTypes.js';
 import { getToMovePlayerIds, loadGameRecord } from '../botOutbound.js';
@@ -46,8 +46,10 @@ export async function validateBotTurn(
     return { ok: false, response: formatReturnError(`Bot ${botId} is not a player in game ${pars.gameid}`) };
   }
 
-  const info = gameinfo.get(pars.metaGame);
-  const simultaneous = info.flags !== undefined && info.flags.includes('simultaneous');
+  const simultaneous = sessionIsSimultaneous(undefined, pars.metaGame, {
+    variants: game.variants,
+    numplayers: game.players.length,
+  });
   const toMoveIds = getToMovePlayerIds(game, simultaneous);
   if (!toMoveIds.includes(botId)) {
     return {

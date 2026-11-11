@@ -1,5 +1,7 @@
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { gameinfo } from '@abstractplay/gameslib';
+import { sessionIsSimultaneous } from '../effectiveGameFlags.js';
+import { initialToMove } from './initialToMove.js';
 import { ddbDocClient } from '../ddb.js';
 import { headers } from '../api/http.js';
 import type { User } from '../api/types.js';
@@ -76,10 +78,11 @@ export async function startSoloGame(userid: string, pars: {
 
   const clocks = normalizeSoloClocks(pars);
   const now = Date.now();
-  let whoseTurn: string | boolean[] = "0";
-  if (info.flags !== undefined && info.flags.includes('simultaneous')) {
-    whoseTurn = [true];
-  }
+  const simultaneous = sessionIsSimultaneous(built.engine, metaGame, {
+    variants: built.variants,
+    numplayers: 1,
+  });
+  const whoseTurn = initialToMove(built.engine, metaGame, 1, built.variants);
 
   const gamePlayers = [{
     id: player.id,
@@ -129,7 +132,7 @@ export async function startSoloGame(userid: string, pars: {
       metaGame: info.name,
       metaGameUid: metaGame,
       challengeSeed: built.challengeSeed,
-      simultaneous: info.flags !== undefined && info.flags.includes('simultaneous'),
+      simultaneous,
     }),
     headers,
   };
