@@ -1332,7 +1332,7 @@ export async function checkForTimeloss(userid: string, pars: { id: string, metaG
 
 function isEliminatedSeat(engine: GameBase, seat: number): boolean {
   const elim = (engine as { isEliminated?: (n: number) => boolean }).isEliminated;
-  return typeof elim === "function" ? elim(seat) : false;
+  return typeof elim === "function" ? elim.call(engine, seat) : false;
 }
 
 export function applySimultaneousMove(userid: string, move: string, engine: GameBase, game: FullGame) {

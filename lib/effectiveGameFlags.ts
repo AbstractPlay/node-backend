@@ -1,3 +1,7 @@
+/**
+ * Session flags for API handlers. Simultaneous submit/resign/partial-move routing
+ * uses `sessionIsSimultaneous` / `getFlags()` only — not static `gameinfo.flags` or `turnModel()`.
+ */
 import {
   gameinfo,
   sessionIsSimultaneous as sessionIsSimultaneousFromGameslib,
