@@ -5,10 +5,7 @@ import {
   PutCommand,
   type GetCommandOutput,
 } from '@aws-sdk/lib-dynamodb';
-import {
-  GameFactory,
-  GameBaseSimultaneous,
-} from '@abstractplay/gameslib';
+import { GameFactory } from '@abstractplay/gameslib';
 import { ddbDocClient } from '../ddb.js';
 import {
   headers,
@@ -16,7 +13,11 @@ import {
   logGetItemError,
 } from '../api/http.js';
 import { sendCommandWithRetry } from '../api/ddbRetry.js';
-import { effectiveFlags, flagSetIncludes, structuralFlags } from '../effectiveGameFlags.js';
+import {
+  effectiveFlags,
+  flagSetIncludes,
+  sessionIsSimultaneous,
+} from '../effectiveGameFlags.js';
 import {
   hydrateGameState,
   prepareGameStateForStorage,
@@ -151,8 +152,10 @@ export async function submitArenaMove(
     return formatReturnError('The game clock has not started yet.');
   }
 
-  const flagsEarly = structuralFlags(game.metaGame);
-  const simultaneousEarly = flagSetIncludes(flagsEarly, 'simultaneous');
+  const simultaneousEarly = sessionIsSimultaneous(undefined, game.metaGame, {
+    variants: game.variants,
+    numplayers: game.players.length,
+  });
   if (!simultaneousEarly && isNonSimultaneousGameOver(game)) {
     return formatReturnError(
       `This game has ended (${gameRefLabel(pars.metaGame, pars.id)}).`,
@@ -202,8 +205,10 @@ export async function submitArenaMove(
     );
   }
 
-  const flags = structuralFlags(game.metaGame);
-  const simultaneous = flagSetIncludes(flags, 'simultaneous');
+  const simultaneous = sessionIsSimultaneous(engine, game.metaGame, {
+    variants: game.variants,
+    numplayers: game.players.length,
+  });
   const sessionFlags = effectiveFlags(engine, game.metaGame, game.variants);
   const prevLastMoveTime = game.lastMoveTime;
   let autoMovesPerPlayer: number[] = [];
@@ -219,7 +224,7 @@ export async function submitArenaMove(
     } else if (pars.move === '' && pars.draw === 'drawaccepted') {
       drawaccepted(userid, engine, game as any, simultaneous);
     } else if (simultaneous) {
-      applySimultaneousMove(userid, pars.move, engine as GameBaseSimultaneous, game as any);
+      applySimultaneousMove(userid, pars.move, engine, game as any);
     } else {
       const result = applyMove(
         userid,

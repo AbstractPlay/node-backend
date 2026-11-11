@@ -23,6 +23,7 @@ import {
 import type { User } from '../api/types.js';
 import { sendCommandWithRetry } from '../api/ddbRetry.js';
 import { effectiveFlags, applyPerspectivePlayerRotations } from '../effectiveGameFlags.js';
+import { initialToMove } from '../games/initialToMove.js';
 import { hydrateGameState, prepareGameStateForStorage } from '../gameState.js';
 import { getPlayers } from '../players/getPlayers.js';
 import { inAppSettingsMapForUserIds } from '../games/playHandlers.js';
@@ -1152,17 +1153,14 @@ export async function eventCreateGames(userid: string, pars: { eventid: string; 
       // create game record
       const gameId = uuid();
       const playerIDs = [pair.p1.id, pair.p2.id];
-      let whoseTurn: string | boolean[] = "0";
       const info = gameinfo.get(pair.metagame);
-      if (info.flags !== undefined && info.flags.includes('simultaneous')) {
-        whoseTurn = playerIDs.map(() => true);
-      }
       let engine: GameBase | GameBaseSimultaneous;
       if (info.playercounts.length > 1) {
         engine = GameFactory(pair.metagame, 2, pair.variants)!;
       } else {
         engine = GameFactory(pair.metagame, undefined, pair.variants)!;
       }
+      const whoseTurn = initialToMove(engine, pair.metagame, playerIDs.length, pair.variants);
       const state = engine.serialize();
       const now = Date.now();
       const pInvolved = [players.find(p => p.id === pair.p1.id)!, players.find(p => p.id === pair.p2.id)!];

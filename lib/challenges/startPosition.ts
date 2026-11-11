@@ -12,6 +12,8 @@ import {
 } from '../gameState.js';
 import { reconcileVariantsInGameState } from '../resolveGameVariants.js';
 import { validateTeachingChallengeSync } from './teachingModeEligible.js';
+import { sessionIsSimultaneous } from '../effectiveGameFlags.js';
+import { initialToMove } from '../games/initialToMove.js';
 
 export const CHALLENGE_POSITION_PK = 'CHALLENGEPOSITION';
 
@@ -98,8 +100,10 @@ export function validateStartPositionForIssue(
   if (engine.gameover === true) {
     return 'Start position cannot be a finished game.';
   }
-  const info = gameinfo.get(metaGame);
-  if (info?.flags !== undefined && info.flags.includes('simultaneous')) {
+  if (sessionIsSimultaneous(engine, metaGame, {
+    variants: engine.variants,
+    numplayers: numPlayers,
+  })) {
     return 'Start position is not available for simultaneous games.';
   }
   try {
@@ -133,17 +137,12 @@ export function resolveStartFromPosition(
   if (!info) {
     throw new Error(`Unknown metaGame ${metaGame}`);
   }
-  let whoseTurn: string | boolean[] = '0';
-  if (info.flags !== undefined && info.flags.includes('simultaneous')) {
-    const count = typeof engine.numplayers === 'number' ? engine.numplayers : 2;
-    whoseTurn = Array.from({ length: count }, () => true);
-  } else if (typeof engine.currplayer === 'number') {
-    whoseTurn = `${engine.currplayer - 1}`;
-  }
+  const playerCount = typeof engine.numplayers === 'number' ? engine.numplayers : 2;
   const engineVariants =
     engine.variants !== undefined && engine.variants.length > 0
       ? [...engine.variants]
       : (variants ?? []);
+  const whoseTurn = initialToMove(engine, metaGame, playerCount, engineVariants);
   return {
     state: hydrated.state,
     toMove: whoseTurn,

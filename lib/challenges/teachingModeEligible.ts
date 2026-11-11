@@ -1,5 +1,5 @@
 import { gameinfo, GameFactory, type GameBase } from '@abstractplay/gameslib';
-import { flagSetIncludes, structuralFlags } from '../effectiveGameFlags.js';
+import { sessionIsSimultaneous } from '../effectiveGameFlags.js';
 import { isBotId } from '../participants.js';
 
 const ALLOWED_TURN_MODELS = new Set(['sequential', 'sequenced', 'skip-turn']);
@@ -39,18 +39,18 @@ export function validateTeachingChallengeSync(
   if (numPlayers !== 2) {
     return 'Teaching mode is only available for two-player games.';
   }
-  if (flagSetIncludes(structuralFlags(metaGame), 'simultaneous')) {
+  if (sessionIsSimultaneous(undefined, metaGame, { variants, numplayers: numPlayers })) {
     return 'Teaching mode is not available for simultaneous games.';
   }
   const engine = engineForChallenge(metaGame, numPlayers, variants);
   if (!engine) {
     return `Unknown metaGame: ${metaGame}`;
   }
-  const turnModel =
-    typeof engine.turnModel === 'function' ? engine.turnModel() : 'sequential';
-  if (turnModel === 'simultaneous') {
+  if (sessionIsSimultaneous(engine, metaGame, { variants, numplayers: numPlayers })) {
     return 'Teaching mode is not available for simultaneous games.';
   }
+  const turnModel =
+    typeof engine.turnModel === 'function' ? engine.turnModel() : 'sequential';
   if (!ALLOWED_TURN_MODELS.has(turnModel)) {
     return 'Teaching mode is not available for this turn model.';
   }

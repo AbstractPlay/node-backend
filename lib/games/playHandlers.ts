@@ -33,7 +33,11 @@ import {
 import i18n from '../i18nInstance.js';
 import { sendCommandWithRetry } from '../api/ddbRetry.js';
 import { localizedGameName } from '../gameDisplayName.js';
-import { effectiveFlags, flagSetIncludes, structuralFlags } from '../effectiveGameFlags.js';
+import {
+  effectiveFlags,
+  flagSetIncludes,
+  sessionIsSimultaneous,
+} from '../effectiveGameFlags.js';
 import { hydrateGameState, prepareGameStateForStorage, setGameEndedFromEngine } from '../gameState.js';
 import { adminDeleteGame } from '../adminDeleteGame.js';
 import { filterExplorationTreeForSave, type ExplorationTreeNode } from '../explorationMoves.js';
@@ -406,8 +410,10 @@ export async function submitMove(userid: string, pars: {
     }
     console.log("got game in submitMove:");
     console.log(game);
-    const flagsEarly = structuralFlags(game.metaGame);
-    const simultaneousEarly = flagSetIncludes(flagsEarly, "simultaneous");
+    const simultaneousEarly = sessionIsSimultaneous(undefined, game.metaGame, {
+      variants: game.variants,
+      numplayers: game.numPlayers,
+    });
     if (!simultaneousEarly && isNonSimultaneousGameOver(game)) {
       logSubmitMoveFailure('game_ended', userid, pars);
       return formatReturnError(
@@ -445,8 +451,10 @@ export async function submitMove(userid: string, pars: {
       }
     }
 
-    const flags = structuralFlags(game.metaGame);
-    const simultaneous = flagSetIncludes(flags, "simultaneous");
+    const simultaneous = sessionIsSimultaneous(engine, game.metaGame, {
+      variants: game.variants,
+      numplayers: game.numPlayers,
+    });
     const sessionFlags = effectiveFlags(engine, game.metaGame, game.variants);
     const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
     const moveNow = Date.now();
@@ -473,7 +481,7 @@ export async function submitMove(userid: string, pars: {
       } else if (pars.move === "" && pars.draw === "drawaccepted") {
         drawaccepted(userid, engine, game, simultaneous);
       } else if (simultaneous) {
-        applySimultaneousMove(userid, pars.move, engine as GameBaseSimultaneous, game);
+        applySimultaneousMove(userid, pars.move, engine, game);
       } else {
         const result = applyMove(userid, pars.move, currentMoveNumber, engine, game, [...sessionFlags], opponentExploration, pars.exploration);
         autoMoves = result.autoMoves;
@@ -839,10 +847,12 @@ export function resign(userid: any, engine: GameBase, game: FullGame) {
     game.winner = engine.winner;
     game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   } else {
-    const flags = structuralFlags(game.metaGame);
-    const simultaneous = flagSetIncludes(flags, "simultaneous");
+    const simultaneous = sessionIsSimultaneous(engine, game.metaGame, {
+      variants: game.variants,
+      numplayers: game.numPlayers,
+    });
     if (simultaneous) {
-      applySimultaneousMove(userid, "resign", engine as GameBaseSimultaneous, game);
+      applySimultaneousMove(userid, "resign", engine, game);
     } else {
       applyMove(userid, "resign", -1, engine, game, [...effectiveFlags(engine, game.metaGame, game.variants)]);
     }
@@ -915,10 +925,12 @@ export function timeout(
     game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
   } else {
     const loserid = game.players[loser].id;
-    const flags = structuralFlags(game.metaGame);
-    const simultaneous = flagSetIncludes(flags, "simultaneous");
+    const simultaneous = sessionIsSimultaneous(engine, game.metaGame, {
+      variants: game.variants,
+      numplayers: game.numPlayers,
+    });
     if (simultaneous) {
-      applySimultaneousMove(loserid, "timeout", engine as GameBaseSimultaneous, game);
+      applySimultaneousMove(loserid, "timeout", engine, game);
     } else {
       applyMove(loserid, "timeout", -1, engine, game, [...effectiveFlags(engine, game.metaGame, game.variants)]);
     }
@@ -1318,7 +1330,12 @@ export async function checkForTimeloss(userid: string, pars: { id: string, metaG
   }
 }
 
-export function applySimultaneousMove(userid: string, move: string, engine: GameBaseSimultaneous, game: FullGame) {
+function isEliminatedSeat(engine: GameBase, seat: number): boolean {
+  const elim = (engine as { isEliminated?: (n: number) => boolean }).isEliminated;
+  return typeof elim === "function" ? elim(seat) : false;
+}
+
+export function applySimultaneousMove(userid: string, move: string, engine: GameBase, game: FullGame) {
   const partialMove = game.partialMove;
   const moves = partialMove === undefined ? game.players.map(() => '') : partialMove.split(',');
   let cnt = 0;
@@ -1334,7 +1351,7 @@ export function applySimultaneousMove(userid: string, move: string, engine: Game
     }
     // check if current player is eliminated and insert a blank move
     // all simultaneous games should accept the character U+0091 as a blank move for eliminated players
-    if (engine.isEliminated(i + 1)) {
+    if (isEliminatedSeat(engine, i + 1)) {
       moves[i] = '\u0091';
     }
     if (moves[i] !== '')
@@ -1360,7 +1377,7 @@ export function applySimultaneousMove(userid: string, move: string, engine: Game
       game.numMoves = engine.state().stack.length - 1; // stack has an entry for the board before any moves are made
     }
     else {
-      game.toMove = game.players.map((p, i) => !engine.isEliminated(i + 1));
+      game.toMove = game.players.map((p, i) => !isEliminatedSeat(engine, i + 1));
     }
   }
 }

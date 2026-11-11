@@ -58,7 +58,7 @@ Optional **`teachingMode: true`** on **`new_challenge`** (direct and standing). 
 | Rule | Server behaviour |
 |------|------------------|
 | **Two players only** | Rejected when `numPlayers !== 2`. |
-| **Non-simultaneous** | Rejected when the meta-game has the `simultaneous` flag or a simultaneous `turnModel()`. Allowed turn models: `sequential`, `sequenced`, `skip-turn`. |
+| **Non-simultaneous** | Rejected when the effective `simultaneous` flag is set (`getFlags()` / `resolveGameFlags()` for the challenge variants and seat count — not static catalog flags or `turnModel()`). Allowed turn models: `sequential`, `sequenced`, `skip-turn`. |
 | **Unrated** | `rated` is forced to **`false`** on issue even if the client sends `rated: true`. |
 | **No bots** | Rejected when the challenger or any challengee is a bot id. |
 | **Persistence** | Stored on `CHALLENGE` / `STANDINGCHALLENGE#*` rows (and fillable direct projections). Copied to the `GAME` at start as `teachingMode: true` with `rated: false`. |

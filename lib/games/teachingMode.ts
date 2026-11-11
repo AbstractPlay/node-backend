@@ -17,7 +17,7 @@ import {
 import { ddbDocClient } from '../ddb.js';
 import { sendCommandWithRetry } from '../api/ddbRetry.js';
 import { headers, formatReturnError } from '../api/http.js';
-import { flagSetIncludes, structuralFlags } from '../effectiveGameFlags.js';
+import { sessionIsSimultaneous } from '../effectiveGameFlags.js';
 import { hydrateGameState, prepareGameStateForStorage } from '../gameState.js';
 import { updateWatcherSummaries, type GameMarkSummary } from '../playerGameMarks.js';
 import { realPingBot } from '../bots/realPingBot.js';
@@ -324,7 +324,7 @@ export function teachingModeBlocksPie(
 }
 
 export function teachingModePlayGate(
-  game: Pick<TeachingPlayGame, 'teachingMode' | 'numPlayers' | 'metaGame'>,
+  game: Pick<TeachingPlayGame, 'teachingMode' | 'numPlayers' | 'metaGame' | 'variants'>,
 ): string | null {
   if (game.teachingMode !== true) {
     return 'This game is not in teaching mode.';
@@ -332,7 +332,10 @@ export function teachingModePlayGate(
   if (game.numPlayers !== 2) {
     return 'Teaching mode is only for two-player games.';
   }
-  if (flagSetIncludes(structuralFlags(game.metaGame), 'simultaneous')) {
+  if (sessionIsSimultaneous(undefined, game.metaGame, {
+    variants: game.variants,
+    numplayers: game.numPlayers,
+  })) {
     return 'Teaching mode is not available for simultaneous games.';
   }
   return null;

@@ -1,5 +1,6 @@
 import { PutCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { gameinfo, GameFactory } from '@abstractplay/gameslib';
+import { initialToMove } from '../games/initialToMove.js';
 import { prepareGameStateForStorage } from '../gameState.js';
 import { tournamentPlaySupported } from '../tournamentGame.js';
 import { getPlayers } from '../players/getPlayers.js';
@@ -46,16 +47,13 @@ export async function createArenaGame(params: CreateArenaGameParams): Promise<{ 
   }
 
   const info = gameinfo.get(metaGame);
-  let whoseTurn: string | boolean[] = '0';
   const engine = info && info.playercounts.length > 1
     ? GameFactory(metaGame, 2, variants)
     : GameFactory(metaGame, undefined, variants);
   if (!engine) {
     throw new Error(`Unknown metaGame ${metaGame}`);
   }
-  if (info?.flags?.includes('simultaneous')) {
-    whoseTurn = [true, true];
-  }
+  const whoseTurn = initialToMove(engine, metaGame, 2, variants);
 
   const bankMs = tc.startSec * 1000;
   const arenaClock: ArenaClockSnapshot = {

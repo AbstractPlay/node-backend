@@ -1,5 +1,6 @@
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
-import { gameinfo, GameFactory } from '@abstractplay/gameslib';
+import { GameFactory } from '@abstractplay/gameslib';
+import { sessionIsSimultaneous } from '../effectiveGameFlags.js';
 import { ddbDocClient } from '../ddb.js';
 import { headers, formatReturnError, logGetItemError } from '../api/http.js';
 import type { User } from '../api/types.js';
@@ -210,8 +211,11 @@ export async function game(
     if (userid !== undefined && userid !== null && userid !== '') {
       await setSeenTime(userid, pars.id);
     }
-    const flags = gameinfo.get(loaded.metaGame).flags;
-    if (flags !== undefined && flags.includes('simultaneous') && loaded.partialMove !== undefined) {
+    const simultaneous = sessionIsSimultaneous(undefined, loaded.metaGame, {
+      variants: loaded.variants,
+      numplayers: loaded.players.length,
+    });
+    if (simultaneous && loaded.partialMove !== undefined) {
       const players = loaded.players;
       loaded.partialMove = loaded.partialMove.split(',').map((m: string, i: number) => (players[i].id === userid ? m : '')).join(',');
     }

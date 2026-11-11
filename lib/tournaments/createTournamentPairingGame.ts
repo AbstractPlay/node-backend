@@ -1,6 +1,7 @@
 import { PutCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuid } from 'uuid';
 import { gameinfo, GameFactory } from '@abstractplay/gameslib';
+import { initialToMove } from '../games/initialToMove.js';
 import type { User } from '../api/types.js';
 import { prepareGameStateForStorage } from '../gameState.js';
 import { enqueueGameStartNotifications } from '../notifications.js';
@@ -75,10 +76,6 @@ export async function createTournamentPairingGame(
   const info = gameinfo.get(metaGame);
 
   const gamePlayers = buildTournamentGamePlayers(metaGame, players);
-  let whoseTurn: string | boolean[] = '0';
-  if (info?.flags?.includes('simultaneous')) {
-    whoseTurn = gamePlayers.map(() => true);
-  }
 
   let engine;
   if (info.playercounts.length > 1) {
@@ -89,6 +86,7 @@ export async function createTournamentPairingGame(
   if (!engine) {
     throw new Error(`Unknown metaGame ${metaGame}`);
   }
+  const whoseTurn = initialToMove(engine, metaGame, gamePlayers.length, variants);
   const state = engine.serialize();
   const gameSk = `${metaGame}#0#${gameId}`;
   const tgSk = `${tournamentId}#${division.toString()}#${gameId}`;
