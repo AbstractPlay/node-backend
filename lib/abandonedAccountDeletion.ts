@@ -1,6 +1,7 @@
 import {
   AdminDeleteUserCommand,
   CognitoIdentityProviderClient,
+  ListUsersCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import {
   DeleteCommand,
@@ -461,6 +462,11 @@ export async function deleteHumanUserData(
   return { partitionsDeleted };
 }
 
+/**
+ * Remove the Cognito user for `userId` (Cognito `sub`, same as `USER.sk`).
+ * Lookup is by `sub` only. `AdminDeleteUser` needs the pool sign-in `Username`
+ * (chosen at signup); that is unrelated to DynamoDB `USERS.name`.
+ */
 export async function deleteHumanCognitoUser(
   userPoolId: string,
   userId: string,
@@ -470,10 +476,26 @@ export async function deleteHumanCognitoUser(
     return;
   }
   const cognito = new CognitoIdentityProviderClient({ region: 'us-east-1' });
-  await cognito.send(new AdminDeleteUserCommand({
+  const listed = await cognito.send(new ListUsersCommand({
     UserPoolId: userPoolId,
-    Username: userId,
+    Filter: `sub = "${userId}"`,
+    Limit: 1,
   }));
+  const signInUsername = listed.Users?.[0]?.Username;
+  if (signInUsername === undefined) {
+    return;
+  }
+  try {
+    await cognito.send(new AdminDeleteUserCommand({
+      UserPoolId: userPoolId,
+      Username: signInUsername,
+    }));
+  } catch (error) {
+    if (error instanceof Error && error.name === 'UserNotFoundException') {
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function runAbandonedAccountDeletionForUser(
@@ -510,13 +532,14 @@ export async function runAbandonedAccountDeletionForUser(
   }
 
   const dryRun = opts.dryRun ?? false;
+  const userPoolId = opts.userPoolId ?? process.env.USERPOOL_ID;
+
   const detach = await detachUserPrograms(client, tableName, userId, dryRun);
   await deleteHumanUserData(client, tableName, userId, {
     dryRun,
     feedbackTableName: opts.feedbackTableName,
   });
 
-  const userPoolId = opts.userPoolId ?? process.env.USERPOOL_ID;
   if (userPoolId) {
     await deleteHumanCognitoUser(userPoolId, userId, { dryRun });
   } else if (!dryRun) {

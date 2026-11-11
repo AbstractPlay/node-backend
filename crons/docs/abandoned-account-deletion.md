@@ -33,7 +33,7 @@ Same S3 ION export as dashboard cruft (`abstractplay-db-dump`). Shared collector
 | `ABANDONED_ACCOUNT_DELETE_DRY_RUN` | `true` | When `true`, no DDB/Cognito mutations (log skips and would-delete only) |
 | `ABANDONED_ACCOUNT_DELETE_BATCH_SIZE` | `25` | Max users per run |
 | `ABANDONED_ACCOUNT_INACTIVE_MS` | `31536000000` | Inactivity threshold |
-| `USERPOOL_ID` | stage pool id | Cognito `AdminDeleteUser` |
+| `USERPOOL_ID` | stage pool id | Cognito delete (see **Identity** below) |
 | `ABSTRACT_PLAY_TABLE` | `abstract-play-{stage}` | Main table |
 | `FEEDBACK_TABLE` | `abstract-play-feedback-{stage}` | Removes `USER#` index partition |
 
@@ -46,7 +46,17 @@ npm run list-abandoned-account-candidates -- --download
 npm run list-abandoned-account-candidates -- --dump-dir .local/abandoned-account-ion-dump/<exportUid> --out bin/abandoned-account-candidates.json --csv --include-deferred
 ```
 
+## Identity (DynamoDB vs Cognito)
+
+| Identifier | Where | Used by this job |
+|------------|--------|------------------|
+| **Player id / `sub`** | Cognito attribute; `USER.sk`, `USERS.sk` | All eligibility, DDB purge, and **finding** the Cognito user (`ListUsers` filter `sub = "<uuid>"`) |
+| **Cognito sign-in username** | Chosen at account creation (with password) | **`AdminDeleteUser` `Username`** only — from Cognito’s response, not from DynamoDB |
+| **Site display name** | `USERS.name` (changes freely) | Eligibility requires a registered name; **never** used for Cognito API calls |
+
 ## Manual single-user delete
+
+Pass the player id (**Cognito `sub`** / `USER.sk`):
 
 ```bash
 npm run abandoned-account-deletion -- --stage prod --user-id <cognito-sub> --dry-run
