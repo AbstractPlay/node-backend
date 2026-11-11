@@ -30,7 +30,7 @@ Same S3 ION export as dashboard cruft (`abstractplay-db-dump`). Shared collector
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `ABANDONED_ACCOUNT_DELETE_ENABLED` | `true` | Must be `true` to run the job (dump + live path); set `false` to no-op |
-| `ABANDONED_ACCOUNT_DELETE_DRY_RUN` | `true` | When `true`, no DDB/Cognito mutations (log skips and would-delete only) |
+| `ABANDONED_ACCOUNT_DELETE_DRY_RUN` | `true` (dev); **`false` in prod** (`serverless.yml`) | When `true`, no DDB/Cognito mutations (log skips and would-delete only) |
 | `ABANDONED_ACCOUNT_DELETE_BATCH_SIZE` | `25` | Max users per run |
 | `ABANDONED_ACCOUNT_INACTIVE_MS` | `31536000000` | Inactivity threshold |
 | `USERPOOL_ID` | stage pool id | Cognito delete (see **Identity** below) |
@@ -66,8 +66,8 @@ npm run abandoned-account-deletion -- --stage prod --user-id <cognito-sub> --app
 ## Rollout
 
 1. Run list script; review candidate counts.
-2. Deploy with `ABANDONED_ACCOUNT_DELETE_ENABLED=true`, `ABANDONED_ACCOUNT_DELETE_DRY_RUN=true` (current prod default after first healthy runs).
-3. Manual `--apply` on one dev user, then enable prod with small batch.
+2. Soak with `ABANDONED_ACCOUNT_DELETE_DRY_RUN=true`, then set prod to `false` in `serverless.yml` (`abandonedAccountDeleteDryRun.prod`).
+3. Manual `--apply` on a prod candidate before the first live cron batch if desired.
 
 ## Related
 
