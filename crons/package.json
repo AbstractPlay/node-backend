@@ -43,7 +43,7 @@
   },
   "packageManager": "npm@11.6.2",
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-43072210418.0",
+    "@abstractplay/gameslib": "1.0.0-ci-43080725086.0",
     "@abstractplay/recranks": "1.0.0-ci-42691208778.0",
     "@abstractplay/renderer": "1.0.0-ci-41715337313.0",
     "@aws-sdk/client-cloudwatch": "^3.1128.0",
