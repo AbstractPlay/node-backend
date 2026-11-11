@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
-import { ChameleonGame, replacer, reviver } from '@abstractplay/gameslib';
+import { GameFactory } from '@abstractplay/gameslib';
 import { patchChameleonTerminalEogReason } from '../../scripts/lib/chameleon-eog-backfill.mjs';
 
-const g = new ChameleonGame();
+const g = GameFactory('chameleon');
+if (g === undefined) {
+  throw new Error('GameFactory(chameleon) unavailable');
+}
 g.board.clear();
 g.board.set('c5', 'BW');
 g.board.set('e5', 'BW');
@@ -40,8 +43,10 @@ assert.equal(patch.changed, true);
 assert.equal(patch.from, 'annihilation');
 assert.equal(patch.to, 'stalemate');
 
-const after = JSON.parse(patch.stateJson, reviver);
-const eog = after.stack[after.stack.length - 1]._results.find((r) => r.type === 'eog');
+const loaded = GameFactory('chameleon', patch.stateJson);
+assert(loaded !== undefined);
+const tip = loaded.stack[loaded.stack.length - 1];
+const eog = tip._results.find((r) => r.type === 'eog');
 assert.equal(eog.reason, 'stalemate');
 
 console.log('chameleon-eog-backfill.test.mjs: ok');

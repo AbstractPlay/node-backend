@@ -9,6 +9,8 @@
  *   npm run backfill-chameleon-eog -- --stage prod --dry-run --scope completed
  *   npm run backfill-chameleon-eog -- --stage prod --apply --scope completed
  *
+ * (Pass `--` before script flags so npm forwards `--scope`, etc.)
+ *
  * On --apply, also calls refreshCompletedGameIndexes for each patched game id (stream
  * projector ignores state-only MODIFY on completed rows).
  */
