@@ -11,9 +11,10 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
+  GetCommand,
   PutCommand,
-  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { queryPartitionItems } from './lib/ddb-query-partition.mjs';
 import {
   hydrateGameState,
   prepareGameStateForStorage,
@@ -96,31 +97,30 @@ function parseArgs(argv) {
   return { stage, apply, scope, gameId, limit };
 }
 
+const META_GAME = 'tumbleweed';
+
 /** @param {import('@aws-sdk/lib-dynamodb').DynamoDBDocumentClient} docClient */
-async function scanGameRows(docClient, tableName) {
-  const items = [];
-  let lastEvaluatedKey;
+async function queryTumbleweedGames(docClient, tableName) {
+  return queryPartitionItems(docClient, tableName, 'GAME', {
+    filterExpression: '#mg = :mg',
+    expressionAttributeNames: { '#mg': 'metaGame' },
+    expressionAttributeValues: { ':mg': META_GAME },
+  });
+}
 
-  do {
-    const page = await docClient.send(new ScanCommand({
+/** @param {import('@aws-sdk/lib-dynamodb').DynamoDBDocumentClient} docClient */
+async function getTumbleweedGameRows(docClient, tableName, gameId) {
+  const rows = [];
+  for (const cbit of ['0', '1']) {
+    const result = await docClient.send(new GetCommand({
       TableName: tableName,
-      FilterExpression: '#pk = :pk',
-      ExpressionAttributeNames: {
-        '#pk': 'pk',
-      },
-      ExpressionAttributeValues: {
-        ':pk': 'GAME',
-      },
-      ExclusiveStartKey: lastEvaluatedKey,
+      Key: { pk: 'GAME', sk: `${META_GAME}#${cbit}#${gameId}` },
     }));
-
-    for (const item of page.Items ?? []) {
-      items.push(item);
+    if (result.Item !== undefined) {
+      rows.push(result.Item);
     }
-    lastEvaluatedKey = page.LastEvaluatedKey;
-  } while (lastEvaluatedKey);
-
-  return items;
+  }
+  return rows;
 }
 
 async function main() {
@@ -145,8 +145,16 @@ async function main() {
     console.log(`Game id filter: ${gameId}`);
   }
 
-  const games = await scanGameRows(docClient, table);
+  const games = gameId !== undefined
+    ? await getTumbleweedGameRows(docClient, table, gameId)
+    : await queryTumbleweedGames(docClient, table);
+  if (games.length === 0 && gameId !== undefined) {
+    console.warn(`No GAME row found for id ${gameId} (${META_GAME}#0|1#…)`);
+  }
   const fogGames = games.filter((item) => {
+    if (item.metaGame !== undefined && item.metaGame !== META_GAME) {
+      return false;
+    }
     if (!recordUsesFogVariant(item.variants, item.state)) {
       return false;
     }
@@ -155,7 +163,10 @@ async function main() {
     }
     return matchesScope(item, scope);
   });
-  console.log(`Scanned ${games.length} GAME rows; fog variant in scope: ${fogGames.length}`);
+  const loadDesc = gameId !== undefined
+    ? `Loaded ${games.length} row(s) for game id ${gameId}`
+    : `Queried ${games.length} tumbleweed GAME row(s) (pk=GAME partition query; not a full-table scan)`;
+  console.log(`${loadDesc}; fog variant in scope: ${fogGames.length}`);
 
   let needsUpdate = 0;
   let written = 0;

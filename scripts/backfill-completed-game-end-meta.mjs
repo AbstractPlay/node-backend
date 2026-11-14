@@ -13,8 +13,8 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   GetCommand,
-  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { queryPartitionItems } from './lib/ddb-query-partition.mjs';
 import { hydrateGameState } from '../lib/gameState.ts';
 import {
   completedGameIndexSk,
@@ -77,18 +77,10 @@ function parseArgs(argv) {
   return { stage, apply, metaGameFilter };
 }
 
-async function scanCompletedGames(docClient, tableName, metaGameFilter) {
-  const items = [];
-  let lastEvaluatedKey;
-
-  const filterParts = ['#pk = :pk', 'attribute_exists(#ended)'];
-  const names = {
-    '#pk': 'pk',
-    '#ended': 'gameEnded',
-  };
-  const values = {
-    ':pk': 'GAME',
-  };
+async function queryCompletedGames(docClient, tableName, metaGameFilter) {
+  const filterParts = ['attribute_exists(#ended)'];
+  const names = { '#ended': 'gameEnded' };
+  const values = {};
 
   if (metaGameFilter) {
     filterParts.push('#mg = :mg');
@@ -96,25 +88,12 @@ async function scanCompletedGames(docClient, tableName, metaGameFilter) {
     values[':mg'] = metaGameFilter;
   }
 
-  do {
-    const page = await docClient.send(new ScanCommand({
-      TableName: tableName,
-      FilterExpression: filterParts.join(' AND '),
-      ExpressionAttributeNames: names,
-      ExpressionAttributeValues: values,
-      ExclusiveStartKey: lastEvaluatedKey,
-    }));
-
-    for (const item of page.Items ?? []) {
-      const parsed = parseGameSk(String(item.sk ?? ''));
-      if (parsed?.cbit === '1') {
-        items.push(item);
-      }
-    }
-    lastEvaluatedKey = page.LastEvaluatedKey;
-  } while (lastEvaluatedKey);
-
-  return items;
+  const raw = await queryPartitionItems(docClient, tableName, 'GAME', {
+    filterExpression: filterParts.join(' AND '),
+    expressionAttributeNames: names,
+    expressionAttributeValues: values,
+  });
+  return raw.filter((item) => parseGameSk(String(item.sk ?? ''))?.cbit === '1');
 }
 
 async function indexMissingEndMeta(
@@ -151,7 +130,7 @@ async function main() {
     `${apply ? 'APPLY' : 'DRY-RUN'}: backfill completed-game end meta on ${table}${metaGameFilter ? ` (meta ${metaGameFilter})` : ''}`,
   );
 
-  const scanned = await scanCompletedGames(docClient, table, metaGameFilter);
+  const scanned = await queryCompletedGames(docClient, table, metaGameFilter);
   let skippedHasMeta = 0;
   let skippedNoIndex = 0;
   let planned = 0;

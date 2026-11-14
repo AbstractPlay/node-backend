@@ -16,8 +16,8 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   GetCommand,
-  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { queryPartitionItems } from './lib/ddb-query-partition.mjs';
 import { hydrateGameState } from '../lib/gameState.ts';
 import { isArenaGame } from '../lib/gamePlayMode.ts';
 import {
@@ -83,24 +83,10 @@ function parseArgs(argv) {
   return { stage, apply, metaGameFilter };
 }
 
-async function scanFinishedArenaGames(docClient, tableName, metaGameFilter) {
-  const items = [];
-  let lastEvaluatedKey;
-
-  const filterParts = [
-    '#pk = :pk',
-    '#pm = :arena',
-    'attribute_exists(#ended)',
-  ];
-  const names = {
-    '#pk': 'pk',
-    '#pm': 'playMode',
-    '#ended': 'gameEnded',
-  };
-  const values = {
-    ':pk': 'GAME',
-    ':arena': 'arena',
-  };
+async function queryFinishedArenaGames(docClient, tableName, metaGameFilter) {
+  const filterParts = ['#pm = :arena', 'attribute_exists(#ended)'];
+  const names = { '#pm': 'playMode', '#ended': 'gameEnded' };
+  const values = { ':arena': 'arena' };
 
   if (metaGameFilter) {
     filterParts.push('#mg = :mg');
@@ -108,22 +94,11 @@ async function scanFinishedArenaGames(docClient, tableName, metaGameFilter) {
     values[':mg'] = metaGameFilter;
   }
 
-  do {
-    const page = await docClient.send(new ScanCommand({
-      TableName: tableName,
-      FilterExpression: filterParts.join(' AND '),
-      ExpressionAttributeNames: names,
-      ExpressionAttributeValues: values,
-      ExclusiveStartKey: lastEvaluatedKey,
-    }));
-
-    for (const item of page.Items ?? []) {
-      items.push(item);
-    }
-    lastEvaluatedKey = page.LastEvaluatedKey;
-  } while (lastEvaluatedKey);
-
-  return items;
+  return queryPartitionItems(docClient, tableName, 'GAME', {
+    filterExpression: filterParts.join(' AND '),
+    expressionAttributeNames: names,
+    expressionAttributeValues: values,
+  });
 }
 
 /** Prefer completed sk (cbit 1) when both #0# and #1# rows exist for the same id. */
@@ -184,7 +159,7 @@ async function main() {
     `${apply ? 'APPLY' : 'DRY-RUN'}: backfill arena COMPLETEDGAMES on ${table}${metaGameFilter ? ` (meta ${metaGameFilter})` : ''}`,
   );
 
-  const scanned = await scanFinishedArenaGames(docClient, table, metaGameFilter);
+  const scanned = await queryFinishedArenaGames(docClient, table, metaGameFilter);
   const games = dedupeGamesById(scanned);
 
   let skippedNotArena = 0;

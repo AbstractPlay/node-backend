@@ -8,8 +8,8 @@
  *   Not useful for this index audit.
  * - **abstractplay-db-dump ION export** (`--source ion-dump`) — one local pass over pk=GAME
  *   and pk=COMPLETEDGAMES; cheapest for full-table stats after a single download.
- * - **Live DynamoDB** (`--source dynamodb`) — Query global COMPLETEDGAMES (small) + Scan
- *   completed GAME with narrow projection; avoid N× GetItem. Use `--max-games` for a cheap sample.
+ * - **Live DynamoDB** (`--source dynamodb`) — Query global COMPLETEDGAMES (small) + Query
+ *   GAME partition (completed rows, narrow projection); avoid N× GetItem. Use `--max-games` for a cheap sample.
  *
  * Usage:
  *   npx tsx scripts/analyze-completed-game-index-coverage.mjs --stage prod
@@ -24,8 +24,8 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   QueryCommand,
-  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { queryPartitionItems } from './lib/ddb-query-partition.mjs';
 import { isArenaGame } from '../lib/gamePlayMode.ts';
 import {
   completedGameIndexSk,
@@ -341,18 +341,14 @@ async function loadGlobalIndexFromDdb(docClient, tableName) {
   return { globalIndexSkSet, globalIndexByGameId };
 }
 
-async function scanCompletedGamesDdb(docClient, tableName, metaGameFilter, maxGames) {
-  const items = [];
-  let lastEvaluatedKey;
-
-  const filterParts = ['#pk = :pk', 'attribute_exists(#ended)'];
+async function queryCompletedGamesDdb(docClient, tableName, metaGameFilter, maxGames) {
+  const filterParts = ['attribute_exists(#ended)'];
   const names = {
-    '#pk': 'pk',
     '#ended': 'gameEnded',
     '#id': 'id',
     '#sk': 'sk',
   };
-  const values = { ':pk': 'GAME' };
+  const values = {};
 
   if (metaGameFilter) {
     filterParts.push('#mg = :mg');
@@ -372,31 +368,16 @@ async function scanCompletedGamesDdb(docClient, tableName, metaGameFilter, maxGa
     'players',
     'clockHard',
     'toMove',
-  ];
+  ].join(', ');
 
-  do {
-    const page = await docClient.send(new ScanCommand({
-      TableName: tableName,
-      FilterExpression: filterParts.join(' AND '),
-      ExpressionAttributeNames: names,
-      ExpressionAttributeValues: values,
-      ProjectionExpression: projection.join(', '),
-      ExclusiveStartKey: lastEvaluatedKey,
-    }));
-
-    for (const item of page.Items ?? []) {
-      const parsed = parseGameSk(String(item.sk ?? ''));
-      if (parsed?.cbit === '1') {
-        items.push(item);
-        if (maxGames !== undefined && items.length >= maxGames) {
-          return items;
-        }
-      }
-    }
-    lastEvaluatedKey = page.LastEvaluatedKey;
-  } while (lastEvaluatedKey);
-
-  return items;
+  return queryPartitionItems(docClient, tableName, 'GAME', {
+    filterExpression: filterParts.join(' AND '),
+    expressionAttributeNames: names,
+    expressionAttributeValues: values,
+    projectionExpression: projection,
+    maxItems: maxGames,
+    includeItem: (item) => parseGameSk(String(item.sk ?? ''))?.cbit === '1',
+  });
 }
 
 function dedupeCompletedById(rawItems) {
@@ -434,7 +415,7 @@ async function analyzeFromDdb(args) {
   console.log(`  global index rows: ${globalIndexSkSet.size}`);
 
   console.log(`Scanning completed GAME rows (projection only)…`);
-  const scanned = await scanCompletedGamesDdb(
+  const scanned = await queryCompletedGamesDdb(
     docClient,
     table,
     args.metaGameFilter,
