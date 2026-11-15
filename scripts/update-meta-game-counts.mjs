@@ -8,7 +8,8 @@
  *   npx tsx scripts/update-meta-game-counts.mjs --stage prod --discover-admin
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { queryPartitionItems } from './lib/ddb-query-partition.mjs';
 import { updateMetaGameCounts } from '../lib/games/adminHandlers.ts';
 
 const STAGES = {
@@ -59,22 +60,16 @@ async function findAdminUserId(profile, table) {
     region: 'us-east-1',
     profile,
   }));
-  let lastKey;
-  do {
-    const page = await client.send(new ScanCommand({
-      TableName: table,
-      FilterExpression: '#pk = :pk AND #admin = :t',
-      ExpressionAttributeNames: { '#pk': 'pk', '#admin': 'admin' },
-      ExpressionAttributeValues: { ':pk': 'USER', ':t': true },
-      ProjectionExpression: 'sk',
-      ExclusiveStartKey: lastKey,
-    }));
-    const admin = page.Items?.[0];
-    if (admin?.sk) {
-      return String(admin.sk);
-    }
-    lastKey = page.LastEvaluatedKey;
-  } while (lastKey);
+  const admins = await queryPartitionItems(client, table, 'USER', {
+    filterExpression: '#admin = :t',
+    expressionAttributeNames: { '#admin': 'admin' },
+    expressionAttributeValues: { ':t': true },
+    projectionExpression: 'sk',
+    maxItems: 1,
+  });
+  if (admins[0]?.sk) {
+    return String(admins[0].sk);
+  }
   throw new Error('No admin USER row found');
 }
 

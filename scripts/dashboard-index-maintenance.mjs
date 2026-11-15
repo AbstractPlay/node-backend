@@ -21,8 +21,8 @@ import {
   DeleteCommand,
   GetCommand,
   QueryCommand,
-  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { queryPartitionItems } from './lib/ddb-query-partition.mjs';
 
 const STAGES = {
   dev: {
@@ -109,36 +109,25 @@ async function getUserRecord(docClient, tableName, userId) {
   return data.Item;
 }
 
-async function scanAllUserIds(docClient, tableName) {
+async function queryAllUserIds(docClient, tableName) {
   const userIds = [];
-  let lastEvaluatedKey;
-
-  do {
-    const page = await docClient.send(new ScanCommand({
-      TableName: tableName,
-      FilterExpression: '#pk = :pk',
-      ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
-      ExpressionAttributeValues: { ':pk': 'USER' },
-      ProjectionExpression: '#pk, #sk',
-      ExclusiveStartKey: lastEvaluatedKey,
-    }));
-
-    for (const item of page.Items ?? []) {
-      if (item.sk) {
-        userIds.push(item.sk);
+  await queryPartitionItems(docClient, tableName, 'USER', {
+    expressionAttributeNames: { '#sk': 'sk' },
+    projectionExpression: '#pk, #sk',
+    onPage: (page) => {
+      for (const item of page) {
+        if (item.sk) {
+          userIds.push(item.sk);
+        }
       }
-    }
-    lastEvaluatedKey = page.LastEvaluatedKey;
-
-    if (userIds.length > 0 && userIds.length % 500 === 0) {
-      process.stdout.write(`\r  scanned users: ${userIds.length}`);
-    }
-  } while (lastEvaluatedKey);
-
+      if (userIds.length > 0 && userIds.length % 500 === 0) {
+        process.stdout.write(`\r  queried users: ${userIds.length}`);
+      }
+    },
+  });
   if (userIds.length >= 500) {
     process.stdout.write('\n');
   }
-
   return userIds;
 }
 
@@ -218,7 +207,7 @@ async function purgeAllRecentCompleted(docClient, tableName, { dryRun, userId })
     return stats;
   }
 
-  const userIds = await scanAllUserIds(docClient, tableName);
+  const userIds = await queryAllUserIds(docClient, tableName);
   stats.users = userIds.length;
   console.log(`  found ${userIds.length} USER records`);
 
@@ -266,7 +255,7 @@ async function purgeUserGameOrphans(docClient, tableName, { dryRun, userId }) {
     return stats;
   }
 
-  const userIds = await scanAllUserIds(docClient, tableName);
+  const userIds = await queryAllUserIds(docClient, tableName);
   stats.users = userIds.length;
   console.log(`  found ${userIds.length} USER records`);
 

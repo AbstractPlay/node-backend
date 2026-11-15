@@ -18,8 +18,8 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   PutCommand,
-  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { queryPartitionItems } from './lib/ddb-query-partition.mjs';
 import {
   hydrateGameState,
   prepareGameStateForStorage,
@@ -91,32 +91,12 @@ function parseArgs(argv) {
   return { stage, apply, scope };
 }
 
-async function scanChameleonGames(docClient, tableName) {
-  const items = [];
-  let lastEvaluatedKey;
-
-  do {
-    const page = await docClient.send(new ScanCommand({
-      TableName: tableName,
-      FilterExpression: '#pk = :pk AND #mg = :mg',
-      ExpressionAttributeNames: {
-        '#pk': 'pk',
-        '#mg': 'metaGame',
-      },
-      ExpressionAttributeValues: {
-        ':pk': 'GAME',
-        ':mg': META_GAME,
-      },
-      ExclusiveStartKey: lastEvaluatedKey,
-    }));
-
-    for (const item of page.Items ?? []) {
-      items.push(item);
-    }
-    lastEvaluatedKey = page.LastEvaluatedKey;
-  } while (lastEvaluatedKey);
-
-  return items;
+async function queryChameleonGames(docClient, tableName) {
+  return queryPartitionItems(docClient, tableName, 'GAME', {
+    filterExpression: '#mg = :mg',
+    expressionAttributeNames: { '#mg': 'metaGame' },
+    expressionAttributeValues: { ':mg': META_GAME },
+  });
 }
 
 async function main() {
@@ -138,7 +118,7 @@ async function main() {
   console.log(`Scope: ${scope}`);
   console.log(`Mode: ${apply ? 'APPLY' : 'dry-run'}`);
 
-  const games = await scanChameleonGames(docClient, table);
+  const games = await queryChameleonGames(docClient, table);
   const inScope = games.filter((item) => matchesScope(item, scope));
   console.log(`Scanned ${games.length} GAME rows for metaGame=${META_GAME}; in scope: ${inScope.length}`);
 

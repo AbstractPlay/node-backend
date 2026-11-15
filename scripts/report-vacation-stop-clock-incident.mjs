@@ -15,8 +15,8 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   GetCommand,
-  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { queryPartitionItems } from './lib/ddb-query-partition.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GameFactory } from '@abstractplay/gameslib';
@@ -100,35 +100,13 @@ function parseArgs(argv) {
   return { stage, since, userId, minPauseMs, outPath, relaxed, debug };
 }
 
-async function scanCompletedGamesSince(docClient, tableName, sinceMs) {
-  const items = [];
-  let lastEvaluatedKey;
-
-  do {
-    const page = await docClient.send(new ScanCommand({
-      TableName: tableName,
-      FilterExpression: '#pk = :pk AND attribute_exists(#ended) AND #ended >= :since',
-      ExpressionAttributeNames: {
-        '#pk': 'pk',
-        '#ended': 'gameEnded',
-      },
-      ExpressionAttributeValues: {
-        ':pk': 'GAME',
-        ':since': sinceMs,
-      },
-      ExclusiveStartKey: lastEvaluatedKey,
-    }));
-
-    for (const item of page.Items ?? []) {
-      const parsed = parseGameSk(String(item.sk ?? ''));
-      if (parsed?.cbit === '1') {
-        items.push(item);
-      }
-    }
-    lastEvaluatedKey = page.LastEvaluatedKey;
-  } while (lastEvaluatedKey);
-
-  return items;
+async function queryCompletedGamesSince(docClient, tableName, sinceMs) {
+  const raw = await queryPartitionItems(docClient, tableName, 'GAME', {
+    filterExpression: 'attribute_exists(#ended) AND #ended >= :since',
+    expressionAttributeNames: { '#ended': 'gameEnded' },
+    expressionAttributeValues: { ':since': sinceMs },
+  });
+  return raw.filter((item) => parseGameSk(String(item.sk ?? ''))?.cbit === '1');
 }
 
 function stintWindowsForUser(userItem, gameEnded) {
@@ -192,7 +170,7 @@ async function main() {
 
   console.error(`Scanning completed games on ${table} since ${new Date(since).toISOString()}...`);
 
-  const games = await scanCompletedGamesSince(docClient, table, since);
+  const games = await queryCompletedGamesSince(docClient, table, since);
   const rows = [];
   let scanned = 0;
   let timeoutGames = 0;

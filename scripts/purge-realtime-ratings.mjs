@@ -34,6 +34,7 @@ import {
   ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { queryPartitionItems } from './lib/ddb-query-partition.mjs';
 
 const STAGES = {
   dev: {
@@ -249,39 +250,29 @@ async function getUserRecord(docClient, tableName, userId) {
   return data.Item;
 }
 
-async function scanUserIdsWithRatings(docClient, tableName) {
+async function queryUserIdsWithRatings(docClient, tableName) {
   const userIds = [];
-  let lastEvaluatedKey;
-
-  do {
-    const page = await docClient.send(new ScanCommand({
-      TableName: tableName,
-      FilterExpression: '#pk = :pk AND attribute_exists(ratings)',
-      ExpressionAttributeNames: { '#pk': 'pk', '#sk': 'sk' },
-      ExpressionAttributeValues: { ':pk': 'USER' },
-      ProjectionExpression: '#pk, #sk, ratings',
-      ExclusiveStartKey: lastEvaluatedKey,
-    }));
-
-    for (const item of page.Items ?? []) {
-      if (item.sk) {
-        userIds.push({
-          userId: item.sk,
-          ratings: item.ratings,
-        });
+  await queryPartitionItems(docClient, tableName, 'USER', {
+    filterExpression: 'attribute_exists(ratings)',
+    expressionAttributeNames: { '#sk': 'sk' },
+    projectionExpression: '#pk, #sk, ratings',
+    onPage: (page) => {
+      for (const item of page) {
+        if (item.sk) {
+          userIds.push({
+            userId: item.sk,
+            ratings: item.ratings,
+          });
+        }
       }
-    }
-    lastEvaluatedKey = page.LastEvaluatedKey;
-
-    if (userIds.length > 0 && userIds.length % 500 === 0) {
-      process.stdout.write(`\r  scanned USER ratings: ${userIds.length}`);
-    }
-  } while (lastEvaluatedKey);
-
+      if (userIds.length > 0 && userIds.length % 500 === 0) {
+        process.stdout.write(`\r  queried USER ratings: ${userIds.length}`);
+      }
+    },
+  });
   if (userIds.length >= 500) {
     process.stdout.write('\n');
   }
-
   return userIds;
 }
 
@@ -351,7 +342,7 @@ async function stripUserRatings(docClient, tableName, { dryRun, metaGame, userId
     return stats;
   }
 
-  const users = await scanUserIdsWithRatings(docClient, tableName);
+  const users = await queryUserIdsWithRatings(docClient, tableName);
   stats.usersScanned = users.length;
   console.log(`  found ${users.length} USER records with ratings`);
 
