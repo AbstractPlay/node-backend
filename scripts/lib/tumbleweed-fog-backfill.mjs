@@ -1,4 +1,4 @@
-import { repairTumbleweedFogStackJson } from '@abstractplay/gameslib';
+import { repairTumbleweedFogStackJson } from '../../lib/tumbleweedFogRepair.ts';
 import { decompressGameState } from '../../lib/gameState.ts';
 
 /**
