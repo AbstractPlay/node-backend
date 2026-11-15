@@ -533,18 +533,20 @@ export async function runAbandonedAccountDeletionForUser(
 
   const dryRun = opts.dryRun ?? false;
   const userPoolId = opts.userPoolId ?? process.env.USERPOOL_ID;
+  if (!dryRun && !userPoolId) {
+    throw new Error('USERPOOL_ID is required for Cognito deletion');
+  }
+
+  // Cognito first so DDB is not purged when sign-in removal fails (retry-safe).
+  if (userPoolId) {
+    await deleteHumanCognitoUser(userPoolId, userId, { dryRun });
+  }
 
   const detach = await detachUserPrograms(client, tableName, userId, dryRun);
   await deleteHumanUserData(client, tableName, userId, {
     dryRun,
     feedbackTableName: opts.feedbackTableName,
   });
-
-  if (userPoolId) {
-    await deleteHumanCognitoUser(userPoolId, userId, { dryRun });
-  } else if (!dryRun) {
-    throw new Error('USERPOOL_ID is required for Cognito deletion');
-  }
 
   return { status: 'deleted', detach };
 }

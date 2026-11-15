@@ -14,8 +14,8 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   PutCommand,
-  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { queryPartitionItems } from './lib/ddb-query-partition.mjs';
 import {
   repairTableroStackJson,
   verifyTableroStackIntegrity,
@@ -109,32 +109,12 @@ function parseArgs(argv) {
   };
 }
 
-async function scanTableroGames(docClient, tableName) {
-  const items = [];
-  let lastEvaluatedKey;
-
-  do {
-    const page = await docClient.send(new ScanCommand({
-      TableName: tableName,
-      FilterExpression: '#pk = :pk AND #mg = :mg',
-      ExpressionAttributeNames: {
-        '#pk': 'pk',
-        '#mg': 'metaGame',
-      },
-      ExpressionAttributeValues: {
-        ':pk': 'GAME',
-        ':mg': META_GAME,
-      },
-      ExclusiveStartKey: lastEvaluatedKey,
-    }));
-
-    for (const item of page.Items ?? []) {
-      items.push(item);
-    }
-    lastEvaluatedKey = page.LastEvaluatedKey;
-  } while (lastEvaluatedKey);
-
-  return items;
+async function queryTableroGames(docClient, tableName) {
+  return queryPartitionItems(docClient, tableName, 'GAME', {
+    filterExpression: '#mg = :mg',
+    expressionAttributeNames: { '#mg': 'metaGame' },
+    expressionAttributeValues: { ':mg': META_GAME },
+  });
 }
 
 const deps = {
@@ -167,7 +147,7 @@ async function main() {
   console.log(`Audit CSV: ${auditCsv}`);
   console.log(`Unreplayable CSV: ${unreplayableCsv}`);
 
-  const games = await scanTableroGames(docClient, table);
+  const games = await queryTableroGames(docClient, table);
   const inScope = games.filter((item) => matchesScope(item, scope));
   console.log(`Scanned ${games.length} GAME rows for metaGame=${META_GAME}; ${inScope.length} in scope`);
 

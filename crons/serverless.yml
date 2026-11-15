@@ -125,6 +125,7 @@ provider:
             - ses:SendEmail
             - ses:SendRawEmail
             - cloudwatch:PutMetricData
+            - cognito-idp:ListUsers
             - cognito-idp:AdminDeleteUser
           Resource: "*"
         - Effect: "Allow"

@@ -54,6 +54,12 @@ npm run list-abandoned-account-candidates -- --dump-dir .local/abandoned-account
 | **Cognito sign-in username** | Chosen at account creation (with password) | **`AdminDeleteUser` `Username`** only — from Cognito’s response, not from DynamoDB |
 | **Site display name** | `USERS.name` (changes freely) | Eligibility requires a registered name; **never** used for Cognito API calls |
 
+## Apply order (live delete)
+
+Per user, after eligibility: **Cognito** (`ListUsers` on `sub`, then `AdminDeleteUser`) → **detach** tournament/ladder/org rows → **purge** DynamoDB (+ feedback). Cognito runs before DDB so a Cognito/IAM failure does not remove table data while sign-in remains.
+
+Crons Lambda IAM needs `cognito-idp:ListUsers` and `AdminDeleteUser` on the stage user pool.
+
 ## Manual single-user delete
 
 Pass the player id (**Cognito `sub`** / `USER.sk`):

@@ -19,9 +19,9 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   GetCommand,
-  ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { queryPartitionItems } from './lib/ddb-query-partition.mjs';
 import {
   appendVacationClockStint,
   vacationClockStintDynamoValue,
@@ -175,33 +175,24 @@ function parseArgs(argv) {
 }
 
 async function discoverUsersNeedingBackfill(docClient, tableName, minPauseMs) {
+  const candidates = await queryPartitionItems(docClient, tableName, 'USER', {
+    filterExpression: 'vacationPauseMsUsed >= :min',
+    expressionAttributeNames: { '#name': 'name' },
+    expressionAttributeValues: { ':min': minPauseMs },
+    projectionExpression: 'sk, #name, vacationPauseMsUsed, vacationClockStints, vacationStartsAt',
+  });
   const out = [];
-  let lastKey;
-  do {
-    const page = await docClient.send(new ScanCommand({
-      TableName: tableName,
-      FilterExpression: '#pk = :pk AND vacationPauseMsUsed >= :min',
-      ExpressionAttributeNames: { '#pk': 'pk', '#name': 'name' },
-      ExpressionAttributeValues: {
-        ':pk': 'USER',
-        ':min': minPauseMs,
-      },
-      ProjectionExpression: 'sk, #name, vacationPauseMsUsed, vacationClockStints, vacationStartsAt',
-      ExclusiveStartKey: lastKey,
-    }));
-    for (const item of page.Items ?? []) {
-      const stints = vacationClockStintsFromItem(item);
-      if (stints.length > 0 || item.vacationStartsAt !== undefined) {
-        continue;
-      }
-      out.push({
-        userId: item.sk,
-        name: item.name,
-        vacationPauseMsUsed: item.vacationPauseMsUsed,
-      });
+  for (const item of candidates) {
+    const stints = vacationClockStintsFromItem(item);
+    if (stints.length > 0 || item.vacationStartsAt !== undefined) {
+      continue;
     }
-    lastKey = page.LastEvaluatedKey;
-  } while (lastKey);
+    out.push({
+      userId: item.sk,
+      name: item.name,
+      vacationPauseMsUsed: item.vacationPauseMsUsed,
+    });
+  }
   return out;
 }
 

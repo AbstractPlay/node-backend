@@ -52,6 +52,7 @@
     "backfill-guerrilla-match-stack": "tsx scripts/backfill-guerrilla-match-stack.mjs",
     "backfill-tablero-stack": "tsx scripts/backfill-tablero-stack.mjs",
     "backfill-chameleon-eog": "tsx scripts/backfill-chameleon-eog.mjs",
+    "backfill-tumbleweed-fog": "tsx scripts/backfill-tumbleweed-fog-memory.mjs",
     "diagnose-tablero-stack-sample": "tsx scripts/diagnose-tablero-stack-sample.mjs",
     "dedupe-completed-game-indexes": "tsx scripts/dedupe-completed-game-indexes.mjs",
     "analyze-completed-game-index-coverage": "tsx scripts/analyze-completed-game-index-coverage.mjs",
