@@ -6,8 +6,8 @@ Prod and dev user pools are configured in the AWS console / CLI, not in `serverl
 
 | File | Purpose |
 |------|---------|
-| [`scripts/cognito-pool-auth-settings.json`](../../scripts/cognito-pool-auth-settings.json) | Verification (link), forgot-password (code), and admin-invite templates |
-| [`scripts/apply-cognito-pool-auth-settings.mjs`](../../scripts/apply-cognito-pool-auth-settings.mjs) | `DescribeUserPool` + `UpdateUserPool` for `--stage dev\|prod` |
+| `scripts/cognito-pool-auth-settings.json` | Verification (link), forgot-password (code), and admin-invite templates |
+| `scripts/apply-cognito-pool-auth-settings.mjs` | `DescribeUserPool` + `UpdateUserPool` for `--stage dev\|prod` |
 
 ## Apply
 
