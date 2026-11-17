@@ -14,6 +14,7 @@ import {
   UpdateUserPoolCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import {
+  AddPermissionCommand,
   GetFunctionCommand,
   LambdaClient,
 } from '@aws-sdk/client-lambda';
@@ -60,13 +61,49 @@ function parseArgs(argv) {
   return args;
 }
 
-async function resolveFunctionArn(lambda, functionName) {
-  const res = await lambda.send(new GetFunctionCommand({ FunctionName: functionName }));
-  const arn = res.Configuration?.FunctionArn;
-  if (!arn) {
-    throw new Error(`Could not resolve ARN for ${functionName}`);
+async function ensureCognitoInvokePermission(
+  lambda,
+  functionName,
+  functionArn,
+  userPoolArn,
+  stage,
+) {
+  const statementId = `cognito-custom-message-${stage}`.replace(/[^a-zA-Z0-9-_]/g, '-');
+  try {
+    await lambda.send(new AddPermissionCommand({
+      FunctionName: functionName,
+      StatementId: statementId,
+      Action: 'lambda:InvokeFunction',
+      Principal: 'cognito-idp.amazonaws.com',
+      SourceArn: userPoolArn,
+    }));
+    console.log(`Added Lambda invoke permission (${statementId}) for Cognito.`);
+  } catch (err) {
+    if (err?.name === 'ResourceConflictException') {
+      console.log(`Lambda invoke permission already present (${statementId}).`);
+      return;
+    }
+    throw err;
   }
-  return arn;
+}
+
+async function resolveFunctionArn(lambda, functionName) {
+  try {
+    const res = await lambda.send(new GetFunctionCommand({ FunctionName: functionName }));
+    const arn = res.Configuration?.FunctionArn;
+    if (!arn) {
+      throw new Error(`Could not resolve ARN for ${functionName}`);
+    }
+    return arn;
+  } catch (err) {
+    if (err?.name === 'ResourceNotFoundException') {
+      throw new Error(
+        `Lambda ${functionName} not found — deploy the dev stack first (serverless deploy --stage dev), `
+          + 'or pass --function-arn from the AWS console.',
+      );
+    }
+    throw err;
+  }
 }
 
 async function main() {
@@ -86,7 +123,7 @@ async function main() {
     UserPoolId: stageCfg.userPoolId,
   }));
   const pool = described.UserPool;
-  if (!pool) {
+  if (!pool?.Arn) {
     throw new Error(`User pool ${stageCfg.userPoolId} not found`);
   }
 
@@ -103,8 +140,17 @@ async function main() {
 
   if (args.dryRun) {
     console.log('\nDry run — would set LambdaConfig:', JSON.stringify(nextLambdaConfig, null, 2));
+    console.log(`Would add invoke permission for pool ${pool.Arn}`);
     return;
   }
+
+  await ensureCognitoInvokePermission(
+    lambda,
+    stageCfg.functionName,
+    functionArn,
+    pool.Arn,
+    args.stage,
+  );
 
   await cognito.send(new UpdateUserPoolCommand({
     UserPoolId: stageCfg.userPoolId,
