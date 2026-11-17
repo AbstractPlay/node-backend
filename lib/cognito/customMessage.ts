@@ -28,6 +28,32 @@ export type CustomMessageEvent = {
 
 const PLACEHOLDER_CODE = '{####}';
 
+function isPlaceholderToken(value: string): boolean {
+  return value.startsWith('{##') && value.endsWith('##}');
+}
+
+/** Extract verification/reset code from Cognito CustomMessage request (CONFIRM_WITH_LINK often omits real code on codeParameter). */
+export function resolveVerificationCode(
+  request: CustomMessageRequest,
+): string | null {
+  const direct = normalizeCodeParameter(request.codeParameter);
+  if (direct) {
+    return direct;
+  }
+  const link = request.linkParameter?.trim();
+  if (!link || isPlaceholderToken(link)) {
+    return null;
+  }
+  try {
+    const url = new URL(link);
+    const code = url.searchParams.get('confirmation_code')
+      ?? url.searchParams.get('code');
+    return code && code.trim() !== '' ? code.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -96,7 +122,7 @@ export function buildCustomMessageEmail(
   playBaseUrl: string,
 ): { emailSubject: string; emailMessage: string } | null {
   const username = event.userName ?? '';
-  const code = normalizeCodeParameter(event.request.codeParameter);
+  const code = resolveVerificationCode(event.request);
 
   if (triggerSource === 'CustomMessage_SignUp' || triggerSource === 'CustomMessage_ResendCode') {
     if (!code || username === '') {
@@ -164,20 +190,58 @@ export function buildCustomMessageEmail(
   return null;
 }
 
+function buildHostedUiLinkFallback(
+  event: CustomMessageEvent,
+): { emailSubject: string; emailMessage: string } | null {
+  const link = event.request.linkParameter?.trim();
+  if (!link || isPlaceholderToken(link)) {
+    return null;
+  }
+  const safeHref = escapeHtml(link);
+  if (event.triggerSource === 'CustomMessage_ForgotPassword') {
+    return {
+      emailSubject: '[Abstract Play] Password reset',
+      emailMessage: `<p>You requested a password reset for Abstract Play.</p><p><a href="${safeHref}">Reset password</a></p>`,
+    };
+  }
+  if (
+    event.triggerSource === 'CustomMessage_SignUp'
+    || event.triggerSource === 'CustomMessage_ResendCode'
+  ) {
+    return {
+      emailSubject: '[Abstract Play] Verify your email',
+      emailMessage: `<p>Welcome to Abstract Play!</p><p><a href="${safeHref}">Verify email</a></p>`,
+    };
+  }
+  return null;
+}
+
 export function applyCustomMessageResponse(
   event: CustomMessageEvent,
   playBaseUrl: string,
 ): CustomMessageEvent {
+  const response = event.response ?? {};
   const built = buildCustomMessageEmail(event.triggerSource, event, playBaseUrl);
-  if (!built) {
-    return event;
+  if (built) {
+    return {
+      ...event,
+      response: {
+        ...response,
+        emailSubject: built.emailSubject,
+        emailMessage: built.emailMessage,
+      },
+    };
   }
-  return {
-    ...event,
-    response: {
-      ...event.response,
-      emailSubject: built.emailSubject,
-      emailMessage: built.emailMessage,
-    },
-  };
+  const fallback = buildHostedUiLinkFallback(event);
+  if (fallback) {
+    return {
+      ...event,
+      response: {
+        ...response,
+        emailSubject: fallback.emailSubject,
+        emailMessage: fallback.emailMessage,
+      },
+    };
+  }
+  return { ...event, response };
 }

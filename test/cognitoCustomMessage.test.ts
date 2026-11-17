@@ -4,6 +4,7 @@ import {
   applyCustomMessageResponse,
   buildPlayAccountUrl,
   escapeHtml,
+  resolveVerificationCode,
   type CustomMessageEvent,
 } from '../lib/cognito/customMessage.js';
 
@@ -22,6 +23,28 @@ test('buildPlayAccountUrl encodes query params', () => {
     url,
     'https://play.dev.abstractplay.com/account/verify?username=user+name&code=123456',
   );
+});
+
+test('resolveVerificationCode reads confirmation_code from Cognito confirm link', () => {
+  const code = resolveVerificationCode({
+    codeParameter: '{####}',
+    linkParameter:
+      'https://auth.dev.abstractplay.com/confirmUser?client_id=x&user_name=ada&confirmation_code=123456',
+  });
+  assert.equal(code, '123456');
+});
+
+test('SignUp falls back to Hosted UI link when code only in linkParameter placeholders', () => {
+  const cognitoLink =
+    'https://auth.dev.abstractplay.com/confirmUser?client_id=x&user_name=ada&confirmation_code=123456';
+  const event: CustomMessageEvent = {
+    triggerSource: 'CustomMessage_SignUp',
+    userName: 'ada',
+    request: { codeParameter: '{####}', linkParameter: cognitoLink },
+    response: {},
+  };
+  const out = applyCustomMessageResponse(event, PLAY);
+  assert.match(out.response.emailMessage ?? '', /account\/verify/);
 });
 
 test('SignUp email includes play verify link', () => {

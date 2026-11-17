@@ -16,5 +16,25 @@ function playBaseUrlFromEnv(): string {
 }
 
 export async function handler(event: CustomMessageEvent): Promise<CustomMessageEvent> {
-  return applyCustomMessageResponse(event, playBaseUrlFromEnv());
+  try {
+    const normalized: CustomMessageEvent = {
+      ...event,
+      response: event.response ?? {},
+    };
+    return applyCustomMessageResponse(normalized, playBaseUrlFromEnv());
+  } catch (err) {
+    console.error('cognitoCustomMessage failed', err);
+    const fallback = event.request?.linkParameter?.trim();
+    if (fallback && !fallback.startsWith('{##')) {
+      return {
+        ...event,
+        response: {
+          ...(event.response ?? {}),
+          emailSubject: '[Abstract Play]',
+          emailMessage: `<p><a href="${fallback.replace(/&/g, '&amp;').replace(/</g, '&lt;')}">Continue</a></p>`,
+        },
+      };
+    }
+    throw err;
+  }
 }
