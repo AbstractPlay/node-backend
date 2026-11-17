@@ -35,6 +35,8 @@ npm run apply-cognito-custom-message-trigger -- --stage dev --dry-run
 
 3. Create a throwaway user on dev and confirm the verification email contains a **play.dev** `/account/verify` link (not only Cognito’s default hosted link).
 
+The apply script sets **`AutoVerifiedAttributes: email`** when the pool has none (required for `ResendConfirmationCode` and Amplify `resendSignUpCode`). Re-running the script preserves an existing list; avoid bare `update-user-pool` calls that change only one field — Cognito can clear other settings unless you send them in the same request.
+
 Prod: repeat with `--stage prod` after dev Gates B–D are validated. `PLAY_BASE_URL` is set per stage in `serverless.yml` from `siteHost`.
 
 ## Email templates (applied via `UpdateUserPool`)

@@ -132,11 +132,15 @@ async function main() {
     ...existing,
     CustomMessage: functionArn,
   };
+  const autoVerifiedAttributes = pool.AutoVerifiedAttributes?.length
+    ? pool.AutoVerifiedAttributes
+    : ['email'];
 
   console.log(`Stage: ${args.stage}`);
   console.log(`Pool: ${stageCfg.userPoolId}`);
   console.log(`CustomMessage ARN: ${functionArn}`);
   console.log('Current LambdaConfig:', JSON.stringify(existing, null, 2));
+  console.log('AutoVerifiedAttributes:', JSON.stringify(autoVerifiedAttributes));
 
   if (args.dryRun) {
     console.log('\nDry run — would set LambdaConfig:', JSON.stringify(nextLambdaConfig, null, 2));
@@ -155,9 +159,11 @@ async function main() {
   await cognito.send(new UpdateUserPoolCommand({
     UserPoolId: stageCfg.userPoolId,
     LambdaConfig: nextLambdaConfig,
+    // UpdateUserPool omits fields Cognito treats as cleared — keep email verification on.
+    AutoVerifiedAttributes: autoVerifiedAttributes,
   }));
 
-  console.log('\nUpdateUserPool succeeded (Custom message trigger).');
+  console.log('\nUpdateUserPool succeeded (Custom message trigger + auto-verified attributes).');
 }
 
 main().catch((err) => {
