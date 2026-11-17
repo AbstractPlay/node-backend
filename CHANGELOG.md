@@ -7,15 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Dated `[1.0.0-ci]` sections are batched **one block per calendar month** (header date is the last update that month); append new bullets under the current month’s section rather than adding a second November/October header. Entries below are grouped by theme; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-11-15
+## [1.0.0-ci] - 2026-11-17
 
 ### Added
 
+- **Ops:** `npm run audit-cognito-without-ddb` and `npm run purge-cognito-without-ddb` — find Cognito subs with no `USER` row (ION dump + live confirm), then on-demand Cognito delete with default `--dry-run` and per-user live re-check.
 - **Chameleon EOG backfill:** `npm run backfill-chameleon-eog` (`--scope completed`, `--dry-run` / `--apply`) patches terminal `eog.reason` on stored stacks when it disagrees with gameslib `expectedEogOutcome`; logs changed game ids and on `--apply` refreshes `COMPLETEDGAMES*` via `refreshCompletedGameIndexes` (no hydrate-time repair).
 - **Organized events:** `event_close` notifies registered players with in-app `eventEnd` notifications and optional email/push (winners and link to `https://play.abstractplay.com/event/{eventId}`); user prefs `eventEnd` / `settings.all.notifications.eventEnd`.
 
 ### Changed
 
+- **Cognito (ops):** `npm run apply-cognito-pool-auth-settings` — HTML message templates on prod/dev pools (verify link, password-reset code, admin invite); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/). Email sign-in alias remains unavailable until a **new pool** (AWS locks `AliasAttributes` after creation).
 - **Simultaneous play:** `submit_move`, arena submit, resign/timeout, and `get_game` partial-move masking use gameslib **`sessionIsSimultaneous`** (`getFlags()` / `resolveGameFlags`) instead of static `gameinfo.flags`.
 - **Simultaneous play:** challenge start, arena/ladder/tournament/event game creation, bots, solo, teaching mode, and start-position validation use **`sessionIsSimultaneous`** and shared **`initialToMove`** for opening `toMove`.
 - **Abandoned account deletion (prod crons):** `ABANDONED_ACCOUNT_DELETE_DRY_RUN=false` — nightly batch performs real DynamoDB purge and Cognito removal (25 users/run).

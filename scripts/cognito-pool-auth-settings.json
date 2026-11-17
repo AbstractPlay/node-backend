@@ -1,0 +1,16 @@
+{
+  "aliasAttributes": ["email"],
+  "aliasAttributesNote": "AliasAttributes cannot be enabled on an existing user pool (AWS locks sign-in options at creation). The apply script checks AliasAttributes after update. Use only when creating a new pool, or plan pool migration + User Migration Lambda.",
+  "verificationMessageTemplate": {
+    "DefaultEmailOption": "CONFIRM_WITH_LINK",
+    "EmailSubjectByLink": "[Abstract Play] Verify your email",
+    "EmailMessageByLink": "<p>Welcome to Abstract Play!</p><p>Click the link below to verify your email address and finish creating your account:</p><p>{##Verify email##}</p><p>After verifying, sign in at <a href=\"https://play.abstractplay.com\">play.abstractplay.com</a> with the <strong>Abstract Play username</strong> you chose when you registered.</p><p>If you did not create this account, you can ignore this message.</p>",
+    "EmailSubject": "[Abstract Play] Password reset code",
+    "EmailMessage": "<p>You requested a password reset for Abstract Play.</p><p>Your reset code is: <strong>{####}</strong></p><p>On the password reset page at <a href=\"https://auth.abstractplay.com\">auth.abstractplay.com</a>, enter your <strong>username</strong>, this code, and your new password.</p><p>If you did not request a reset, you can ignore this email.</p>"
+  },
+  "inviteMessageTemplate": {
+    "EmailSubject": "[Abstract Play] Your temporary password",
+    "EmailMessage": "<p>Your Abstract Play username is <strong>{username}</strong> and your temporary password is <strong>{####}</strong>.</p><p>Sign in at <a href=\"https://play.abstractplay.com\">play.abstractplay.com</a> with that username, then change your password when prompted.</p>",
+    "SMSMessage": "Your username is {username} and temporary password is {####}."
+  }
+}

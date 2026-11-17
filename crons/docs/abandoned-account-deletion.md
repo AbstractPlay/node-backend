@@ -42,6 +42,15 @@ Same S3 ION export as dashboard cruft (`abstractplay-db-dump`). Shared collector
 From repo root (requires AWS profile with S3 access to `abstractplay-db-dump`; export is large):
 
 ```bash
+npm run download-ion-dump -- --profile AbstractPlayProd
+npm run audit-cognito-without-ddb -- --stage prod --download-dump
+```
+
+`download-ion-dump` caches under `.local/ion-dump/` (gitignored). `audit-cognito-without-ddb` writes Cognito export + confirmed orphan list under `.local/cognito-orphan-audit/`.
+
+**Cognito-only purge (no DDB):** after audit, `npm run purge-cognito-without-ddb -- --stage prod --dry-run` (default) re-checks live `USER`/`BOT`, then `AdminDeleteUser` via `sub` lookup. `--apply` for real deletes. CONFIRMED and UNCONFIRMED from the audit file are both eligible.
+
+```bash
 npm run list-abandoned-account-candidates -- --download
 npm run list-abandoned-account-candidates -- --dump-dir .local/abandoned-account-ion-dump/<exportUid> --out bin/abandoned-account-candidates.json --csv --include-deferred
 ```
