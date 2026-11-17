@@ -41,17 +41,24 @@ export function resolveVerificationCode(
     return direct;
   }
   const link = request.linkParameter?.trim();
-  if (!link || isPlaceholderToken(link)) {
-    return null;
+  if (link && !isPlaceholderToken(link)) {
+    try {
+      const url = new URL(link);
+      const code = url.searchParams.get('confirmation_code')
+        ?? url.searchParams.get('code');
+      if (code && code.trim() !== '') {
+        return code.trim();
+      }
+    } catch {
+      // fall through
+    }
   }
-  try {
-    const url = new URL(link);
-    const code = url.searchParams.get('confirmation_code')
-      ?? url.searchParams.get('code');
-    return code && code.trim() !== '' ? code.trim() : null;
-  } catch {
-    return null;
+  // CONFIRM_WITH_CODE: Cognito passes the literal placeholder; it is substituted when the email is sent.
+  const rawCode = request.codeParameter?.trim();
+  if (rawCode === PLACEHOLDER_CODE) {
+    return PLACEHOLDER_CODE;
   }
+  return null;
 }
 
 export function escapeHtml(text: string): string {
@@ -90,6 +97,42 @@ export function buildPlayAccountUrl(
   return url.toString();
 }
 
+function isCognitoCodePlaceholder(code: string): boolean {
+  return code === PLACEHOLDER_CODE;
+}
+
+function buildPlayDeepLink(
+  playBaseUrl: string,
+  pathname: string,
+  params: Record<string, string>,
+): string {
+  const placeholderKey = Object.entries(params).find(([, value]) => isCognitoCodePlaceholder(value))?.[0];
+  if (placeholderKey) {
+    const base = playBaseUrl.replace(/\/$/, '');
+    const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
+    const pairs = Object.entries(params).map(([key, value]) => {
+      if (isCognitoCodePlaceholder(value)) {
+        return `${encodeURIComponent(key)}={####}`;
+      }
+      return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+    });
+    return `${base}${path}?${pairs.join('&')}`;
+  }
+  return buildPlayAccountUrl(playBaseUrl, pathname, params);
+}
+
+function resolveEventUsername(event: CustomMessageEvent): string {
+  const fromEvent = event.userName?.trim();
+  if (fromEvent) {
+    return fromEvent;
+  }
+  const fromParam = event.request.usernameParameter?.trim();
+  if (fromParam && !isPlaceholderToken(fromParam)) {
+    return fromParam;
+  }
+  return '';
+}
+
 function verificationButtonEmailHtml(opts: {
   intro: string;
   buttonLabel: string;
@@ -121,14 +164,14 @@ export function buildCustomMessageEmail(
   event: CustomMessageEvent,
   playBaseUrl: string,
 ): { emailSubject: string; emailMessage: string } | null {
-  const username = event.userName ?? '';
+  const username = resolveEventUsername(event);
   const code = resolveVerificationCode(event.request);
 
   if (triggerSource === 'CustomMessage_SignUp' || triggerSource === 'CustomMessage_ResendCode') {
     if (!code || username === '') {
       return null;
     }
-    const href = buildPlayAccountUrl(playBaseUrl, '/account/verify', {
+    const href = buildPlayDeepLink(playBaseUrl, '/account/verify', {
       username,
       code,
     });
@@ -149,7 +192,7 @@ export function buildCustomMessageEmail(
     if (!code || username === '') {
       return null;
     }
-    const href = buildPlayAccountUrl(playBaseUrl, '/account/reset-password', {
+    const href = buildPlayDeepLink(playBaseUrl, '/account/reset-password', {
       username,
       code,
     });
@@ -172,7 +215,7 @@ export function buildCustomMessageEmail(
     if (!code) {
       return null;
     }
-    const href = buildPlayAccountUrl(playBaseUrl, '/account/confirm-email', {
+    const href = buildPlayDeepLink(playBaseUrl, '/account/confirm-email', {
       code,
       returnUrl: '/',
     });

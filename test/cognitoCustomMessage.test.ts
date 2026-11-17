@@ -34,6 +34,20 @@ test('resolveVerificationCode reads confirmation_code from Cognito confirm link'
   assert.equal(code, '123456');
 });
 
+test('ResendCode with CONFIRM_WITH_CODE placeholder builds custom email for Cognito substitution', () => {
+  const event: CustomMessageEvent = {
+    triggerSource: 'CustomMessage_ResendCode',
+    userName: 'throwaway',
+    request: { codeParameter: '{####}', linkParameter: null },
+    response: {},
+  };
+  const out = applyCustomMessageResponse(event, PLAY);
+  assert.equal(out.response.emailSubject, '[Abstract Play] Verify your email');
+  assert.match(out.response.emailMessage ?? '', /account\/verify\?/);
+  assert.match(out.response.emailMessage ?? '', /code=\{####\}/);
+  assert.match(out.response.emailMessage ?? '', /\{####\}/);
+});
+
 test('SignUp falls back to Hosted UI link when code only in linkParameter placeholders', () => {
   const cognitoLink =
     'https://auth.dev.abstractplay.com/confirmUser?client_id=x&user_name=ada&confirmation_code=123456';
