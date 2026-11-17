@@ -192,6 +192,7 @@ provider:
           - ${self:provider.stage}
           - '/botQuery'
     ARENA_SCHEDULER_GROUP: abstractplay-arena-${self:provider.stage}
+    PLAY_BASE_URL: https://${self:custom.stageConfig.${self:provider.stage}.siteHost}
   iam:
     role:
       statements:
@@ -823,6 +824,18 @@ functions:
               - BotOutboundQueue
               - Arn
           batchSize: 1
+
+  cognitoCustomMessage:
+    handler: api/cognitoCustomMessage.handler
+    memorySize: 128
+    timeout: 10
+    description: Cognito Custom message trigger — play deep links for verify, reset, and email change
+    logRetentionInDays: 30
+    events:
+      - cognitoUserPool:
+          pool: ${self:custom.stageConfig.${self:provider.stage}.userpoolId}
+          trigger: CustomMessage
+          existing: true
 
   gameProjector:
     handler: utils/game-projector.handler
