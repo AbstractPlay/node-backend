@@ -25,8 +25,8 @@ Managed sign-up, password reset, and settings email change use the **`cognitoCus
 
 **Deploy and wire (dev first):**
 
-1. `serverless deploy --stage dev` (creates/updates the Lambda and may attach the trigger via `cognitoUserPool` event).
-2. If the pool trigger is missing after deploy, run:
+1. `serverless deploy --stage dev` (creates/updates the `cognitoCustomMessage` Lambda only — the pool trigger is **not** attached by Serverless; the `cognitoUserPool` + `existing` CFN resource fails on our pools).
+2. After a successful deploy, run:
 
 ```bash
 npm run apply-cognito-custom-message-trigger -- --stage dev
