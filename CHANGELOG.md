@@ -36,6 +36,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Ratings:** Per-player `players[].skipRating` on completed `GAME` rows; `admin_set_game_rating_exclusions` and `npm run set-game-rating-exclusions` for ops; records archive copies flags into gamerecord JSON (`@abstractplay/recranks` asymmetric rating).
 - **Tablero stack repair:** `hydrateGameState` and `prepareGameStateForStorage` heal legacy shared-array and duplicate-`pass` stacks via gameslib `repairTableroStackJson`, sync `numMoves` on write-through, and expose ops `npm run backfill-tablero-stack` (`--scope in-flight|completed|all`, `--dry-run` / `--apply`, audit CSVs).
 - **Thumbnails:** `thumbnails-verify` uses ranged `GetObject` for CDN Last-Modified checks (avoids Lambda `HeadObject` 403) and grants `s3:ListBucket` on `thumbnails.abstractplay.com` so missing keys return 404 instead of access denied; thumbnail crons share an S3 client with `WHEN_REQUIRED` checksum settings for Lambda runtime SDK compat.
+- **Completed-game end meta:** `deriveGameEndMeta` stores `gameEndPlayer` on normal endings when the engine implements `eogSubjectSeat()` (e.g. Yonkoma crosscut loser).
 
 ## [1.0.0-ci] - 2026-10-31
 
