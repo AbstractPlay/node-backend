@@ -98,6 +98,7 @@ test('UpdateUserAttribute email links to confirm-email', () => {
   const out = applyCustomMessageResponse(event, PLAY);
   assert.match(out.response.emailMessage ?? '', /account\/confirm-email\?/);
   assert.match(out.response.emailMessage ?? '', /111222/);
+  assert.match(out.response.emailMessage ?? '', /returnUrl=.*userSettings/);
 });
 
 test('unknown trigger leaves event unchanged', () => {
