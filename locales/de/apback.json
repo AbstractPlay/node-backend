@@ -77,5 +77,8 @@
   "EventEndSubject": "Das Event {{- eventName}} ist beendet",
   "TournamentRemoveBody": "Du wurdest aus dem {{- metaGame}}-Turnier entfernt, für das du angemeldet warst, da unklar ist, ob du noch interessiert bist. Wenn du weiterhin teilnehmen möchtest, melde dich bitte erneut unter https://play.abstractplay.com/tournaments an.",
   "TournamentRemoveBodyVariants": "Du wurdest aus dem {{- metaGame}}-Turnier (Varianten: {{variants}}) entfernt, für das du angemeldet warst, da unklar ist, ob du noch interessiert bist. Wenn du weiterhin teilnehmen möchtest, melde dich bitte erneut unter https://play.abstractplay.com/tournaments an.",
-  "TournamentRemoveSubject": "Du wurdest aus einem Turnier entfernt"
+  "TournamentRemoveSubject": "Du wurdest aus einem Turnier entfernt",
+  "RemindUsernameSubject": "Abstract Play: Dein Anmeldename",
+  "RemindUsernameBody": "Du hast eine Erinnerung an deinen Abstract Play-Anmeldenamen angefordert.\n\nAnmeldename: {{loginName}}",
+  "RemindUsernameSignInLine": "Melde dich über den unten stehenden Link mit diesem Anmeldenamen an (nicht mit deinem Anzeigenamen auf der Website):"
 }

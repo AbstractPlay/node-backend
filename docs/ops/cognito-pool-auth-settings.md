@@ -19,6 +19,26 @@ npm run apply-cognito-pool-auth-settings -- --stage dev --apply
 
 Requires AWS profile `AbstractPlayProd` or `AbstractPlayDev`. Pool ids: prod `us-east-1_YCjgSZHJm`, dev `us-east-1_2zrzbEjoU`.
 
+## Custom message Lambda (play auth deep links)
+
+Managed sign-up, password reset, and settings email change use the **`cognitoCustomMessage`** function in `serverless.yml` (`api/cognitoCustomMessage.ts`, logic in `lib/cognito/customMessage.ts`). Emails link to `https://play.<stage>/account/...` with click-to-verify URLs.
+
+**Deploy and wire (dev first):**
+
+1. `serverless deploy --stage dev` (creates/updates the `cognitoCustomMessage` Lambda only — the pool trigger is **not** attached by Serverless; the `cognitoUserPool` + `existing` CFN resource fails on our pools).
+2. After a successful deploy, run:
+
+```bash
+npm run apply-cognito-custom-message-trigger -- --stage dev
+npm run apply-cognito-custom-message-trigger -- --stage dev --dry-run
+```
+
+3. Create a throwaway user on dev and confirm the verification email contains a **play.dev** `/account/verify` link (not only Cognito’s default hosted link).
+
+The apply script sets **`AutoVerifiedAttributes: email`** when the pool has none (required for `ResendConfirmationCode` and Amplify `resendSignUpCode`). Re-running the script preserves an existing list; avoid bare `update-user-pool` calls that change only one field — Cognito can clear other settings unless you send them in the same request.
+
+Prod: repeat with `--stage prod` after dev Gates B–D are validated. `PLAY_BASE_URL` is set per stage in `serverless.yml` from `siteHost`.
+
 ## Email templates (applied via `UpdateUserPool`)
 
 - **Sign-up / resend confirmation:** `CONFIRM_WITH_LINK` — `{##Verify email##}` becomes the confirm link.

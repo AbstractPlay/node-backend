@@ -7,10 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Dated `[1.0.0-ci]` sections are batched **one block per calendar month** (header date is the last update that month); append new bullets under the current month’s section rather than adding a second November/October header. Entries below are grouped by theme; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-11-17
+## [1.0.0-ci] - 2026-11-18
 
 ### Added
 
+- **Managed auth (API):** `cognitoCustomMessage` Lambda + `apply-cognito-custom-message-trigger` (play `/account/*` emails including settings **`/account/confirm-email`**, pool ops including `AutoVerifiedAttributes` and `{####}` on code pools), and public **`remind_username`** (rate-limited login-name reminder email); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/).
 - **Ops:** `npm run audit-cognito-without-ddb` and `npm run purge-cognito-without-ddb` — find Cognito subs with no `USER` row (ION dump + live confirm), then on-demand Cognito delete with default `--dry-run` and per-user live re-check.
 - **Chameleon EOG backfill:** `npm run backfill-chameleon-eog` (`--scope completed`, `--dry-run` / `--apply`) patches terminal `eog.reason` on stored stacks when it disagrees with gameslib `expectedEogOutcome`; logs changed game ids and on `--apply` refreshes `COMPLETEDGAMES*` via `refreshCompletedGameIndexes` (no hydrate-time repair).
 - **Organized events:** `event_close` notifies registered players with in-app `eventEnd` notifications and optional email/push (winners and link to `https://play.abstractplay.com/event/{eventId}`); user prefs `eventEnd` / `settings.all.notifications.eventEnd`.
@@ -35,6 +36,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Ratings:** Per-player `players[].skipRating` on completed `GAME` rows; `admin_set_game_rating_exclusions` and `npm run set-game-rating-exclusions` for ops; records archive copies flags into gamerecord JSON (`@abstractplay/recranks` asymmetric rating).
 - **Tablero stack repair:** `hydrateGameState` and `prepareGameStateForStorage` heal legacy shared-array and duplicate-`pass` stacks via gameslib `repairTableroStackJson`, sync `numMoves` on write-through, and expose ops `npm run backfill-tablero-stack` (`--scope in-flight|completed|all`, `--dry-run` / `--apply`, audit CSVs).
 - **Thumbnails:** `thumbnails-verify` uses ranged `GetObject` for CDN Last-Modified checks (avoids Lambda `HeadObject` 403) and grants `s3:ListBucket` on `thumbnails.abstractplay.com` so missing keys return 404 instead of access denied; thumbnail crons share an S3 client with `WHEN_REQUIRED` checksum settings for Lambda runtime SDK compat.
+- **Completed-game end meta:** `deriveGameEndMeta` stores `gameEndPlayer` on normal endings when the engine implements `eogSubjectSeat()` (e.g. Yonkoma crosscut loser).
 
 ## [1.0.0-ci] - 2026-10-31
 

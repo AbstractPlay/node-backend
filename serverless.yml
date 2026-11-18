@@ -192,6 +192,7 @@ provider:
           - ${self:provider.stage}
           - '/botQuery'
     ARENA_SCHEDULER_GROUP: abstractplay-arena-${self:provider.stage}
+    PLAY_BASE_URL: https://${self:custom.stageConfig.${self:provider.stage}.siteHost}
   iam:
     role:
       statements:
@@ -254,6 +255,12 @@ provider:
           Resource:
             - ${self:custom.stageConfig.dev.botpool}
             - ${self:custom.stageConfig.prod.botpool}
+        - Effect: Allow
+          Action:
+            - cognito-idp:ListUsers
+          Resource:
+            - ${self:custom.stageConfig.dev.userpool}
+            - ${self:custom.stageConfig.prod.userpool}
         - Effect: Allow
           Action:
             - scheduler:CreateSchedule
@@ -823,6 +830,14 @@ functions:
               - BotOutboundQueue
               - Arn
           batchSize: 1
+
+  cognitoCustomMessage:
+    handler: api/cognitoCustomMessage.handler
+    memorySize: 128
+    timeout: 10
+    description: Cognito Custom message trigger — play deep links for verify, reset, and email change
+    logRetentionInDays: 30
+    # Pool trigger wired via npm run apply-cognito-custom-message-trigger (Serverless cognitoUserPool+existing fails on our pools).
 
   gameProjector:
     handler: utils/game-projector.handler

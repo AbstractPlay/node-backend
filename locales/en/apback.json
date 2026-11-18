@@ -77,5 +77,8 @@
   "EventEndSubject": "The event {{- eventName}} has ended",
   "TournamentRemoveBody": "You were removed from the {{- metaGame}} tournament you were signed up for, because it is unclear whether you are still interested. If you would still like to participate, please sign up again at https://play.abstractplay.com/tournaments.",
   "TournamentRemoveBodyVariants": "You were removed from the {{- metaGame}}, variants: {{variants}} tournament you were signed up for, because it is unclear whether you are still interested. If you would still like to participate, please sign up again at https://play.abstractplay.com/tournaments.",
-  "TournamentRemoveSubject": "You were removed from a tournament"
+  "TournamentRemoveSubject": "You were removed from a tournament",
+  "RemindUsernameSubject": "Abstract Play: your login name",
+  "RemindUsernameBody": "You asked for a reminder of your Abstract Play login name.\n\nLogin name: {{loginName}}",
+  "RemindUsernameSignInLine": "Sign in at the link below using this login name (not your display name on the site):"
 }

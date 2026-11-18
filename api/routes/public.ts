@@ -34,6 +34,7 @@ import {
 } from '../../lib/public/index.js';
 import { listArenaTimeControlsPublic } from '../../lib/arena/listTimeControlsPublic.js';
 import { listArenaTablesPublic } from '../../lib/arena/arenaTableHandlers.js';
+import { remindUsernameOpen } from '../../lib/auth/remindUsername.js';
 
 export const publicRoutes: Record<string, PublicRouteHandler> = {
   user_names: (pars) => userNames(pars),
@@ -67,6 +68,7 @@ export const publicRoutes: Record<string, PublicRouteHandler> = {
   feedback_history_list: (pars) => feedbackHistoryListOpen(pars),
   announcements_list: (pars) => announcementsListOpen(pars as AnnouncementsListPars),
   announcement_get: (pars) => announcementGetOpen(pars as AnnouncementGetPars),
+  remind_username: (pars) => remindUsernameOpen(pars),
 };
 
 export async function runPublicQuery(

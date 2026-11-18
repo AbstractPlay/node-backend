@@ -183,6 +183,18 @@
     "src": "Your turn",
     "out": "À votre tour"
   },
+  "RemindUsernameBody": {
+    "src": "You asked for a reminder of your Abstract Play login name.\n\nLogin name: {{loginName}}",
+    "out": "Vous avez demandé un rappel de votre identifiant Abstract Play.\n\nIdentifiant : {{loginName}}"
+  },
+  "RemindUsernameSignInLine": {
+    "src": "Sign in at the link below using this login name (not your display name on the site):",
+    "out": "Connectez-vous via le lien ci-dessous en utilisant cet identifiant (et non votre nom d'affichage sur le site) :"
+  },
+  "RemindUsernameSubject": {
+    "src": "Abstract Play: your login name",
+    "out": "Abstract Play : votre nom de connexion"
+  },
   "TournamentCancelBody": {
     "src": "Not enough players signed up for Tournament {{number}} of the {{- metaGame}} series and the tournament had to be cancelled.",
     "out": "Pas assez de joueurs se sont inscrits pour le tournoi {{number}} de la série {{- metaGame}} et le tournoi a dû être annulé."
