@@ -79,5 +79,6 @@
   "TournamentRemoveBodyVariants": "Sei stato rimosso dal torneo di {{- metaGame}}, varianti: {{variants}} a cui eri iscritto, poiché non è chiaro se sei ancora interessato. Se desideri ancora partecipare, iscriviti di nuovo su https://play.abstractplay.com/tournaments.",
   "TournamentRemoveSubject": "Sei stato rimosso da un torneo",
   "RemindUsernameSubject": "Abstract Play: il tuo nome di login",
-  "RemindUsernameBody": "Hai richiesto un promemoria del tuo nome di login per Abstract Play.\n\nNome di login: {{loginName}}\n\nAccedi su {{loginUrl}} utilizzando questo nome di login (non il tuo nome visualizzato sul sito)."
+  "RemindUsernameBody": "Hai richiesto un promemoria del tuo nome utente di Abstract Play.\n\nNome utente: {{loginName}}",
+  "RemindUsernameSignInLine": "Accedi al link sottostante utilizzando questo nome utente (non il tuo nome visualizzato sul sito):"
 }

@@ -184,8 +184,12 @@
     "out": "Du bist am Zug"
   },
   "RemindUsernameBody": {
-    "src": "You asked for a reminder of your Abstract Play login name.\n\nLogin name: {{loginName}}\n\nSign in at {{loginUrl}} using this login name (not your display name on the site).",
-    "out": "Du hast eine Erinnerung an deinen Abstract Play-Anmeldenamen angefordert.\n\nAnmeldename: {{loginName}}\n\nMelde dich unter {{loginUrl}} mit diesem Anmeldenamen an (nicht mit deinem Anzeigenamen auf der Website)."
+    "src": "You asked for a reminder of your Abstract Play login name.\n\nLogin name: {{loginName}}",
+    "out": "Du hast eine Erinnerung an deinen Abstract Play-Anmeldenamen angefordert.\n\nAnmeldename: {{loginName}}"
+  },
+  "RemindUsernameSignInLine": {
+    "src": "Sign in at the link below using this login name (not your display name on the site):",
+    "out": "Melde dich über den unten stehenden Link mit diesem Anmeldenamen an (nicht mit deinem Anzeigenamen auf der Website):"
   },
   "RemindUsernameSubject": {
     "src": "Abstract Play: your login name",
