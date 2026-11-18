@@ -184,8 +184,12 @@
     "out": "Il tuo turno"
   },
   "RemindUsernameBody": {
-    "src": "You asked for a reminder of your Abstract Play login name.\n\nLogin name: {{loginName}}\n\nSign in at {{loginUrl}} using this login name (not your display name on the site).",
-    "out": "Hai richiesto un promemoria del tuo nome di login per Abstract Play.\n\nNome di login: {{loginName}}\n\nAccedi su {{loginUrl}} utilizzando questo nome di login (non il tuo nome visualizzato sul sito)."
+    "src": "You asked for a reminder of your Abstract Play login name.\n\nLogin name: {{loginName}}",
+    "out": "Hai richiesto un promemoria del tuo nome utente di Abstract Play.\n\nNome utente: {{loginName}}"
+  },
+  "RemindUsernameSignInLine": {
+    "src": "Sign in at the link below using this login name (not your display name on the site):",
+    "out": "Accedi al link sottostante utilizzando questo nome utente (non il tuo nome visualizzato sul sito):"
   },
   "RemindUsernameSubject": {
     "src": "Abstract Play: your login name",
