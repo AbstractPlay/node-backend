@@ -2,6 +2,8 @@
 
 ## Email (SES)
 
+Automated mail uses **`noreply@abstractplay.com`** (`lib/sesFromAddress.ts` ? `lib/createSendEmailCommand.ts`; API routes re-export via `lib/api/i18n.ts`). Human contact in copy remains **`support@abstractplay.com`**.
+
 Transactional email is sent via AWS SES for:
 
 - Challenge issued / revoked / accepted

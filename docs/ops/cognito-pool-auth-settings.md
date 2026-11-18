@@ -8,6 +8,7 @@ Prod and dev user pools are configured in the AWS console / CLI, not in `serverl
 |------|---------|
 | `scripts/cognito-pool-auth-settings.json` | Verification (link), forgot-password (code), and admin-invite templates |
 | `scripts/apply-cognito-pool-auth-settings.mjs` | `DescribeUserPool` + `UpdateUserPool` for `--stage dev\|prod` |
+| `scripts/apply-cognito-pool-ses-email.mjs` | Cognito auth email via SES (`DEVELOPER`) — same From as API/crons mail |
 
 ## Apply
 
@@ -38,6 +39,21 @@ npm run apply-cognito-custom-message-trigger -- --stage dev --dry-run
 The apply script sets **`AutoVerifiedAttributes: email`** when the pool has none (required for `ResendConfirmationCode` and Amplify `resendSignUpCode`). Re-running the script preserves an existing list; avoid bare `update-user-pool` calls that change only one field — Cognito can clear other settings unless you send them in the same request.
 
 Prod: repeat with `--stage prod` after dev Gates B–D are validated. `PLAY_BASE_URL` is set per stage in `serverless.yml` from `siteHost`.
+
+## Auth email From (SES, not Cognito default)
+
+Sign-up, reset, and attribute-verify mail uses the **Custom message** Lambda for HTML; the **From** address comes from the user pool **Email configuration**. Default Cognito mail shows `no-reply@verificationemail.com`. To match transactional mail (`noreply@abstractplay.com` from **`lib/sesFromAddress.ts`**, sent via the verified **`abstractplay.com`** SES domain identity):
+
+```bash
+npm run apply-cognito-pool-ses-email -- --stage prod --dry-run
+npm run apply-cognito-pool-ses-email -- --stage prod --apply
+```
+
+`emailConfiguration` in `scripts/cognito-pool-auth-settings.json` is the source of truth for From + SES identity. The script verifies the identity in SES, sets `EmailSendingAccount` to `DEVELOPER`, and **preserves** `LambdaConfig`, `AutoVerifiedAttributes`, and message templates in the same `UpdateUserPool` call.
+
+After apply, send a throwaway `sign-up` or `resend-confirmation-code` and confirm the inbox **From** is `noreply@abstractplay.com`. Allow ~70s for Cognito to pick up the change.
+
+Dev: repeat with `--stage dev`. Run **after** `apply-cognito-custom-message-trigger` (or re-run the trigger script if you applied SES first and need to confirm `CustomMessage` is still set).
 
 ## Email templates (applied via `UpdateUserPool`)
 
