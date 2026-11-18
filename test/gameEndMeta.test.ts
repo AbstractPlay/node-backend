@@ -107,4 +107,27 @@ describe('deriveGameEndMeta', () => {
   it('returns undefined when game is not over', () => {
     assert.equal(deriveGameEndMeta('hex', HEX_START), undefined);
   });
+
+  it('records gameEndPlayer for yonkoma crosscut when eogSubjectSeat is implemented', () => {
+    const engine = GameFactory('yonkoma');
+    assert.ok(engine);
+    const YONKOMA_CROSSCUT =
+      'a1-c3,a10-b9,j10-g7,j1-c8,c3-d4,c8-d9,g7-f8,d9-e8,d4-f6,e8-f7,f8-e9,b9-c10,f6-e7,c10-d9,pass,f7-e8,e7-d8'.split(
+        ',',
+      );
+    for (const m of YONKOMA_CROSSCUT) {
+      engine.move(m);
+    }
+    assert.equal(engine.gameover, true);
+    const meta = deriveGameEndMeta('yonkoma', engine.serialize());
+    if (typeof engine.eogSubjectSeat === 'function') {
+      assert.deepEqual(meta, {
+        gameEndKind: 'normal',
+        eogReason: 'crosscut',
+        gameEndPlayer: 1,
+      });
+    } else {
+      assert.deepEqual(meta, { gameEndKind: 'normal', eogReason: 'crosscut' });
+    }
+  });
 });

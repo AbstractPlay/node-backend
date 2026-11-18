@@ -83,9 +83,16 @@ export function deriveGameEndMeta(metaGame: string, state: string): GameEndMeta 
     }
 
     const eogReason = eogReasonFromResults(results);
-    return eogReason !== undefined
-      ? { gameEndKind: 'normal', eogReason }
-      : { gameEndKind: 'normal' };
+    const subjectSeat =
+      typeof engine.eogSubjectSeat === 'function' ? engine.eogSubjectSeat() : undefined;
+    if (eogReason !== undefined) {
+      return {
+        gameEndKind: 'normal',
+        eogReason,
+        ...(subjectSeat !== undefined ? { gameEndPlayer: subjectSeat } : {}),
+      };
+    }
+    return { gameEndKind: 'normal' };
   } catch {
     return undefined;
   }
