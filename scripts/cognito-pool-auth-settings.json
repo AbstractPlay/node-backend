@@ -1,4 +1,9 @@
 {
+  "emailConfiguration": {
+    "fromEmailAddress": "noreply@abstractplay.com",
+    "fromEmailAddressNote": "Keep in sync with lib/sesFromAddress.ts SES_FROM_ADDRESS",
+    "sesIdentity": "abstractplay.com"
+  },
   "aliasAttributes": ["email"],
   "aliasAttributesNote": "AliasAttributes cannot be enabled on an existing user pool (AWS locks sign-in options at creation). The apply script checks AliasAttributes after update. Use only when creating a new pool, or plan pool migration + User Migration Lambda.",
   "verificationMessageTemplate": {

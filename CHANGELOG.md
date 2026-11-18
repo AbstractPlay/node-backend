@@ -18,7 +18,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Changed
 
-- **Cognito (ops):** `npm run apply-cognito-pool-auth-settings` — HTML message templates on prod/dev pools (verify link, password-reset code, admin invite); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/). Email sign-in alias remains unavailable until a **new pool** (AWS locks `AliasAttributes` after creation).
+- **Cognito (ops):** `npm run apply-cognito-pool-auth-settings` — HTML message templates on prod/dev pools (verify link, password-reset code, admin invite); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/). Email sign-in alias remains unavailable until a **new pool** (AWS locks `AliasAttributes` after creation). **`apply-cognito-pool-ses-email`** sets auth-mail From via SES; **`lib/sesFromAddress.ts`** + **`lib/createSendEmailCommand.ts`** are the single From for Cognito + API/crons mail (`noreply@abstractplay.com`).
 - **Simultaneous play:** `submit_move`, arena submit, resign/timeout, and `get_game` partial-move masking use gameslib **`sessionIsSimultaneous`** (`getFlags()` / `resolveGameFlags`) instead of static `gameinfo.flags`.
 - **Simultaneous play:** challenge start, arena/ladder/tournament/event game creation, bots, solo, teaching mode, and start-position validation use **`sessionIsSimultaneous`** and shared **`initialToMove`** for opening `toMove`.
 - **Abandoned account deletion (prod crons):** `ABANDONED_ACCOUNT_DELETE_DRY_RUN=false` — nightly batch performs real DynamoDB purge and Cognito removal (25 users/run).
@@ -37,6 +37,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Tablero stack repair:** `hydrateGameState` and `prepareGameStateForStorage` heal legacy shared-array and duplicate-`pass` stacks via gameslib `repairTableroStackJson`, sync `numMoves` on write-through, and expose ops `npm run backfill-tablero-stack` (`--scope in-flight|completed|all`, `--dry-run` / `--apply`, audit CSVs).
 - **Thumbnails:** `thumbnails-verify` uses ranged `GetObject` for CDN Last-Modified checks (avoids Lambda `HeadObject` 403) and grants `s3:ListBucket` on `thumbnails.abstractplay.com` so missing keys return 404 instead of access denied; thumbnail crons share an S3 client with `WHEN_REQUIRED` checksum settings for Lambda runtime SDK compat.
 - **Completed-game end meta:** `deriveGameEndMeta` stores `gameEndPlayer` on normal endings when the engine implements `eogSubjectSeat()` (e.g. Yonkoma crosscut loser).
+- **Completed games index (ops):** `backfill-completed-game-end-meta.mjs` accepts `--refresh-gameEndPlayer` to rewrite `COMPLETEDGAMES*` rows that already have `gameEndKind` but lack `gameEndPlayer` (Yonkoma crosscut backfill for `{{player}}` EOG copy).
 
 ## [1.0.0-ci] - 2026-10-31
 
