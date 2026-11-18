@@ -187,6 +187,7 @@ export async function remindUsername(
   }
 
   if (matched.length !== 1) {
+    console.log('remind_username skip', { email, confirmedCount: matched.length });
     return {
       statusCode: 200,
       body: JSON.stringify(UNIFORM_BODY),
@@ -207,15 +208,19 @@ export async function remindUsername(
 
   const playBase = deps.playBaseUrl.replace(/\/$/, '');
   await initi18n('en');
-  const body = i18n.t('RemindUsernameBody', {
-    loginName,
-    loginUrl: `${playBase}/account/login`,
-  });
+  const loginUrl = `${playBase}/account/login`;
+  const body = [
+    i18n.t('RemindUsernameBody', { loginName }),
+    '',
+    i18n.t('RemindUsernameSignInLine'),
+    loginUrl,
+  ].join('\n');
   const subject = i18n.t('RemindUsernameSubject');
   try {
     await sesClient.send(createSendEmailCommand(destEmail, loginName, subject, body));
+    console.log('remind_username sent', { loginName, destEmail });
   } catch (err) {
-    console.error('remind_username send failed', err);
+    console.error('remind_username send failed', { err, loginName, destEmail });
   }
 
   return {

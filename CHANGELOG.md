@@ -11,7 +11,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Added
 
-- **Managed auth (API):** `cognitoCustomMessage` Lambda, `npm run apply-cognito-custom-message-trigger` (play `/account/*` emails, preserves `AutoVerifiedAttributes`), and public **`remind_username`** (rate-limited login-name reminder); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/).
+- **Managed auth (API):** `cognitoCustomMessage` Lambda + `apply-cognito-custom-message-trigger` (play `/account/*` emails, pool ops including `AutoVerifiedAttributes` and `{####}` on code pools), and public **`remind_username`** (rate-limited login-name reminder email); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/).
 - **Ops:** `npm run audit-cognito-without-ddb` and `npm run purge-cognito-without-ddb` — find Cognito subs with no `USER` row (ION dump + live confirm), then on-demand Cognito delete with default `--dry-run` and per-user live re-check.
 - **Chameleon EOG backfill:** `npm run backfill-chameleon-eog` (`--scope completed`, `--dry-run` / `--apply`) patches terminal `eog.reason` on stored stacks when it disagrees with gameslib `expectedEogOutcome`; logs changed game ids and on `--apply` refreshes `COMPLETEDGAMES*` via `refreshCompletedGameIndexes` (no hydrate-time repair).
 - **Organized events:** `event_close` notifies registered players with in-app `eventEnd` notifications and optional email/push (winners and link to `https://play.abstractplay.com/event/{eventId}`); user prefs `eventEnd` / `settings.all.notifications.eventEnd`.
@@ -25,7 +25,6 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Fixed
 
-- **Cognito Custom message:** wire pool via ops script (not Serverless CFN trigger); honour `{####}` on `CONFIRM_WITH_CODE` pools so custom HTML is sent instead of Cognito’s default mail.
 - **Ops scripts (DynamoDB):** shared `scripts/lib/ddb-query-partition.mjs`; GAME/USER backfills and reports use partition `Query` instead of full-table `Scan` (tumbleweed fog, tablero/chameleon/orb/guerrilla stacks, completed-game index tooling, vacation USER discover, arena index backfill, meta-game count admin discover, dashboard user maintenance, USER ratings strip in realtime purge).
 - **Tumbleweed (fog) backfill:** `npm run backfill-tumbleweed-fog` queries the `GAME` partition (`metaGame=tumbleweed`) instead of scanning the whole table; `--game-id` loads via `GetItem`. Uses `lib/tumbleweedFogRepair.ts` (EOG replay) until the pinned `@abstractplay/gameslib` CI build matches gameslib `tumbleweed-fog-repair`.
 - **Abandoned account deletion:** Cognito delete locates the subscriber with `ListUsers` on `sub` (player uuid), then `AdminDeleteUser` with the pool sign-in username; DDB display names are not used.
