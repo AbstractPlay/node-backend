@@ -5,6 +5,7 @@ export const query = async (event: {
   queryStringParameters: any;
   body?: string;
   httpMethod: string;
+  requestContext?: { identity?: { sourceIp?: string } };
 }) => {
   console.log(event);
 
@@ -28,6 +29,11 @@ export const query = async (event: {
   } else {
     pars = event.queryStringParameters;
     queryName = pars?.query;
+  }
+
+  const sourceIp = event.requestContext?.identity?.sourceIp;
+  if (sourceIp && pars && typeof pars === 'object' && !Array.isArray(pars)) {
+    pars = { ...pars, _clientIp: sourceIp };
   }
 
   console.log(pars);

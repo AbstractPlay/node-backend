@@ -77,5 +77,7 @@
   "EventEndSubject": "El evento {{- eventName}} ha finalizado",
   "TournamentRemoveBody": "Fuiste eliminado del torneo de {{- metaGame}} en el que estabas inscrito porque no está claro si todavía estás interesado. Si deseas participar, vuelve a inscribirte en https://play.abstractplay.com/tournaments.",
   "TournamentRemoveBodyVariants": "Fuiste eliminado del torneo de {{- metaGame}}, variantes: {{variants}} en el que estabas inscrito porque no está claro si todavía estás interesado. Si deseas participar, vuelve a inscribirte en https://play.abstractplay.com/tournaments.",
-  "TournamentRemoveSubject": "Fuiste eliminado de un torneo"
+  "TournamentRemoveSubject": "Fuiste eliminado de un torneo",
+  "RemindUsernameSubject": "Abstract Play: tu nombre de inicio de sesión",
+  "RemindUsernameBody": "Solicitaste un recordatorio de tu nombre de inicio de sesión de Abstract Play.\n\nNombre de inicio de sesión: {{loginName}}\n\nInicia sesión en {{loginUrl}} usando este nombre de inicio de sesión (no tu nombre visible en el sitio)."
 }
