@@ -11,7 +11,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Added
 
-- **Managed auth (API):** `cognitoCustomMessage` Lambda + `apply-cognito-custom-message-trigger` (play `/account/*` emails, pool ops including `AutoVerifiedAttributes` and `{####}` on code pools), and public **`remind_username`** (rate-limited login-name reminder email); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/).
+- **Managed auth (API):** `cognitoCustomMessage` Lambda + `apply-cognito-custom-message-trigger` (play `/account/*` emails including settings **`/account/confirm-email`**, pool ops including `AutoVerifiedAttributes` and `{####}` on code pools), and public **`remind_username`** (rate-limited login-name reminder email); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/).
 - **Ops:** `npm run audit-cognito-without-ddb` and `npm run purge-cognito-without-ddb` — find Cognito subs with no `USER` row (ION dump + live confirm), then on-demand Cognito delete with default `--dry-run` and per-user live re-check.
 - **Chameleon EOG backfill:** `npm run backfill-chameleon-eog` (`--scope completed`, `--dry-run` / `--apply`) patches terminal `eog.reason` on stored stacks when it disagrees with gameslib `expectedEogOutcome`; logs changed game ids and on `--apply` refreshes `COMPLETEDGAMES*` via `refreshCompletedGameIndexes` (no hydrate-time repair).
 - **Organized events:** `event_close` notifies registered players with in-app `eventEnd` notifications and optional email/push (winners and link to `https://play.abstractplay.com/event/{eventId}`); user prefs `eventEnd` / `settings.all.notifications.eventEnd`.

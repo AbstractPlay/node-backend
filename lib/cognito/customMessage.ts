@@ -217,7 +217,7 @@ export function buildCustomMessageEmail(
     }
     const href = buildPlayDeepLink(playBaseUrl, '/account/confirm-email', {
       code,
-      returnUrl: '/',
+      returnUrl: '/?userSettings=profile',
     });
     return {
       emailSubject: '[Abstract Play] Verify your email address',
