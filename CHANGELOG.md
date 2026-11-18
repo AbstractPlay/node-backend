@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Dated `[1.0.0-ci]` sections are batched **one block per calendar month** (header date is the last update that month); append new bullets under the current month’s section rather than adding a second November/October header. Entries below are grouped by theme; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-11-17
+## [1.0.0-ci] - 2026-11-18
 
 ### Added
 
-- **Cognito (managed auth):** `cognitoCustomMessage` Lambda + `npm run apply-cognito-custom-message-trigger` — Custom message emails with play `/account/*` click-to-verify links (dev wiring first; see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/)).
+- **Managed auth (API):** `cognitoCustomMessage` Lambda, `npm run apply-cognito-custom-message-trigger` (play `/account/*` emails, preserves `AutoVerifiedAttributes`), and public **`remind_username`** (rate-limited login-name reminder); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/).
 - **Ops:** `npm run audit-cognito-without-ddb` and `npm run purge-cognito-without-ddb` — find Cognito subs with no `USER` row (ION dump + live confirm), then on-demand Cognito delete with default `--dry-run` and per-user live re-check.
 - **Chameleon EOG backfill:** `npm run backfill-chameleon-eog` (`--scope completed`, `--dry-run` / `--apply`) patches terminal `eog.reason` on stored stacks when it disagrees with gameslib `expectedEogOutcome`; logs changed game ids and on `--apply` refreshes `COMPLETEDGAMES*` via `refreshCompletedGameIndexes` (no hydrate-time repair).
 - **Organized events:** `event_close` notifies registered players with in-app `eventEnd` notifications and optional email/push (winners and link to `https://play.abstractplay.com/event/{eventId}`); user prefs `eventEnd` / `settings.all.notifications.eventEnd`.
@@ -19,15 +19,13 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 ### Changed
 
 - **Cognito (ops):** `npm run apply-cognito-pool-auth-settings` — HTML message templates on prod/dev pools (verify link, password-reset code, admin invite); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/). Email sign-in alias remains unavailable until a **new pool** (AWS locks `AliasAttributes` after creation).
-- **Cognito (ops):** `apply-cognito-custom-message-trigger` sets or preserves **`AutoVerifiedAttributes: email`** with the Custom message Lambda so pool updates do not break `ResendConfirmationCode`.
 - **Simultaneous play:** `submit_move`, arena submit, resign/timeout, and `get_game` partial-move masking use gameslib **`sessionIsSimultaneous`** (`getFlags()` / `resolveGameFlags`) instead of static `gameinfo.flags`.
 - **Simultaneous play:** challenge start, arena/ladder/tournament/event game creation, bots, solo, teaching mode, and start-position validation use **`sessionIsSimultaneous`** and shared **`initialToMove`** for opening `toMove`.
 - **Abandoned account deletion (prod crons):** `ABANDONED_ACCOUNT_DELETE_DRY_RUN=false` — nightly batch performs real DynamoDB purge and Cognito removal (25 users/run).
 
 ### Fixed
 
-- **Cognito Custom message:** drop `cognitoUserPool` Serverless event (dev deploy CFN error `Cannot read properties of null (reading 'Id')`); wire pool via `apply-cognito-custom-message-trigger` (includes Cognito `lambda:InvokeFunction` permission).
-- **Cognito Custom message:** honour `{####}` from `CONFIRM_WITH_CODE` pools (dev) so the Lambda returns HTML instead of an empty response and Cognito’s default code email.
+- **Cognito Custom message:** wire pool via ops script (not Serverless CFN trigger); honour `{####}` on `CONFIRM_WITH_CODE` pools so custom HTML is sent instead of Cognito’s default mail.
 - **Ops scripts (DynamoDB):** shared `scripts/lib/ddb-query-partition.mjs`; GAME/USER backfills and reports use partition `Query` instead of full-table `Scan` (tumbleweed fog, tablero/chameleon/orb/guerrilla stacks, completed-game index tooling, vacation USER discover, arena index backfill, meta-game count admin discover, dashboard user maintenance, USER ratings strip in realtime purge).
 - **Tumbleweed (fog) backfill:** `npm run backfill-tumbleweed-fog` queries the `GAME` partition (`metaGame=tumbleweed`) instead of scanning the whole table; `--game-id` loads via `GetItem`. Uses `lib/tumbleweedFogRepair.ts` (EOG replay) until the pinned `@abstractplay/gameslib` CI build matches gameslib `tumbleweed-fog-repair`.
 - **Abandoned account deletion:** Cognito delete locates the subscriber with `ListUsers` on `sub` (player uuid), then `AdminDeleteUser` with the pool sign-in username; DDB display names are not used.

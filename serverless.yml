@@ -257,6 +257,12 @@ provider:
             - ${self:custom.stageConfig.prod.botpool}
         - Effect: Allow
           Action:
+            - cognito-idp:ListUsers
+          Resource:
+            - ${self:custom.stageConfig.dev.userpool}
+            - ${self:custom.stageConfig.prod.userpool}
+        - Effect: Allow
+          Action:
             - scheduler:CreateSchedule
             - scheduler:UpdateSchedule
             - scheduler:DeleteSchedule

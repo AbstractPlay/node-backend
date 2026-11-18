@@ -77,5 +77,7 @@
   "EventEndSubject": "L'événement {{- eventName}} est terminé",
   "TournamentRemoveBody": "Votre inscription au tournoi de {{- metaGame}} a été annulée, car ce n'était pas clair si vous étiez toujours interessé. Si vous voulez tout de même participer, merci de vous ré-inscrire ici : https://play.abstractplay.com/tournaments.",
   "TournamentRemoveBodyVariants": "Votre inscription au tournoi de {{- metaGame}}, variantes : {{variants}} a été annulée, car ce n'était pas clair si vous êtiez toujours interessé. Si vous voulez tout de même participer, merci de vous ré-inscrire ici : https://play.abstractplay.com/tournaments.",
-  "TournamentRemoveSubject": "Vous avez été retiré d'un tournoi"
+  "TournamentRemoveSubject": "Vous avez été retiré d'un tournoi",
+  "RemindUsernameSubject": "Abstract Play : votre nom de connexion",
+  "RemindUsernameBody": "Vous avez demandé un rappel de votre nom de connexion Abstract Play.\n\nNom de connexion : {{loginName}}\n\nConnectez-vous sur {{loginUrl}} en utilisant ce nom de connexion (et non votre nom d'affichage sur le site)."
 }
