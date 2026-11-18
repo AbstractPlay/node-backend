@@ -10,7 +10,8 @@ import {
   changeLanguageForPlayer,
   initApbackI18n,
 } from '@backend/lib/apbackI18n.js';
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import { createSendEmailCommand } from '@backend/lib/createSendEmailCommand.js';
+import { SESClient } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
 import { Handler } from "aws-lambda";
 import { assignTournamentPlayerRatings } from "../lib/batchRatings.js";
@@ -827,31 +828,6 @@ async function startTournament(
     }
   }
   return returnvalue;
-}
-
-export function createSendEmailCommand(toAddress: string, player: any, subject: any, body: string) {
-  console.log("toAddress", toAddress, "player", player, "body", body);
-  const fullbody =  i18n.t("DearPlayer", { player }) + '\r\n\r\n' + body + "\r\n\r\n" + i18n.t("EmailOut");
-  return new SendEmailCommand({
-    Destination: {
-      ToAddresses: [
-        toAddress
-      ],
-    },
-    Message: {
-      Body: {
-        Text: {
-          Charset: "UTF-8",
-          Data: fullbody
-        },
-      },
-      Subject: {
-        Charset: "UTF-8",
-        Data: subject
-      },
-    },
-    Source: "abstractplay@mail.abstractplay.com"
-  });
 }
 
 // Handles errors during GetItem execution. Use recommendations in error messages below to

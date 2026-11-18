@@ -1,5 +1,6 @@
 import { GetCommand, PutCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { SendEmailCommand, SESClient } from '@aws-sdk/client-ses';
+import { SESClient } from '@aws-sdk/client-ses';
+import { createSendEmailCommand } from '@backend/lib/createSendEmailCommand.js';
 import i18n from 'i18next';
 import { localizedGameName } from '@backend/lib/gameDisplayName.js';
 import { isBotId, isValidUserId } from './inactiveChallengeDiscovery.js';
@@ -37,23 +38,6 @@ function uniqueSortKey(now = Date.now()): string {
 function wantsChallengeEmail(settings: InAppNotificationUserSettings | undefined): boolean {
   const notifications = settings?.all?.notifications as { challenges?: boolean } | undefined;
   return notifications === undefined || notifications.challenges !== false;
-}
-
-export function createSendEmailCommand(
-  toAddress: string,
-  player: string,
-  subject: string,
-  body: string,
-) {
-  const fullbody = `${i18n.t('DearPlayer', { player })}\r\n\r\n${body}\r\n\r\n${i18n.t('EmailOut')}`;
-  return new SendEmailCommand({
-    Destination: { ToAddresses: [toAddress] },
-    Message: {
-      Body: { Text: { Charset: 'UTF-8', Data: fullbody } },
-      Subject: { Charset: 'UTF-8', Data: subject },
-    },
-    Source: 'abstractplay@mail.abstractplay.com',
-  });
 }
 
 async function loadNotificationUser(

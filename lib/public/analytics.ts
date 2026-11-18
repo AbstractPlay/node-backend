@@ -13,6 +13,7 @@ import {
 } from '../api/http.js';
 import { feedbackErrorResponse } from '../api/feedbackHttp.js';
 import type { User, UsersData } from '../api/types.js';
+import { SES_FROM_ADDRESS } from '../sesFromAddress.js';
 
 import { logLayoutEvent, type LayoutEventPars } from '../layoutEvents.js';
 import { getPlayers } from '../players/getPlayers.js';
@@ -77,7 +78,7 @@ export async function reportProblem(pars: { error: string }) {
         Data: `AbstractPlay front end error report${process.env.ABSTRACT_PLAY_TABLE?.includes('-dev') ? ' (dev server)' : ''}`
       },
     },
-    Source: "abstractplay@mail.abstractplay.com"
+    Source: SES_FROM_ADDRESS,
   });
   try {
     await sesClient.send(email);
