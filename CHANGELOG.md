@@ -15,6 +15,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Ops:** `npm run audit-cognito-without-ddb` and `npm run purge-cognito-without-ddb` — find Cognito subs with no `USER` row (ION dump + live confirm), then on-demand Cognito delete with default `--dry-run` and per-user live re-check.
 - **Chameleon EOG backfill:** `npm run backfill-chameleon-eog` (`--scope completed`, `--dry-run` / `--apply`) patches terminal `eog.reason` on stored stacks when it disagrees with gameslib `expectedEogOutcome`; logs changed game ids and on `--apply` refreshes `COMPLETEDGAMES*` via `refreshCompletedGameIndexes` (no hydrate-time repair).
 - **Organized events:** `event_close` notifies registered players with in-app `eventEnd` notifications and optional email/push (winners and link to `https://play.abstractplay.com/event/{eventId}`); user prefs `eventEnd` / `settings.all.notifications.eventEnd`.
+- **Email notifications:** signed footer link on game/ops SES mail plus public `unsubscribe_email` and `GET`/`POST` `/unsubscribe-email` (RFC 8058 `List-Unsubscribe` / one-click POST) — no login turns off all email notification prefs; `EMAIL_UNSUBSCRIBE_SECRET` on API and crons; crons import `RestApiBaseUrl` for header URLs.
 
 ### Changed
 

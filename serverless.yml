@@ -197,6 +197,7 @@ provider:
           - '/botQuery'
     ARENA_SCHEDULER_GROUP: abstractplay-arena-${self:provider.stage}
     PLAY_BASE_URL: https://${self:custom.stageConfig.${self:provider.stage}.siteHost}
+    EMAIL_UNSUBSCRIBE_SECRET: ${env:EMAIL_UNSUBSCRIBE_SECRET, file(../apsecrets.yml):email_unsubscribe_secret, ''}
   iam:
     role:
       statements:
@@ -743,6 +744,19 @@ resources:
           Fn::Sub: arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/abstractplay-arena-${self:provider.stage}/*
 
   Outputs:
+    RestApiBaseUrl:
+      Description: HTTPS base URL for the REST API stage (no trailing path)
+      Value:
+        Fn::Join:
+          - ''
+          - - 'https://'
+            - Ref: ApiGatewayRestApi
+            - '.execute-api.'
+            - Ref: AWS::Region
+            - '.amazonaws.com/'
+            - ${self:provider.stage}
+      Export:
+        Name: ${self:service}-${self:provider.stage}-RestApiBaseUrl
     OpsAlertsTopicArn:
       Condition: OpsAlertsEnabled
       Description: SNS topic for ops CloudWatch alarms (email subscription requires one-time confirm)
@@ -859,6 +873,18 @@ functions:
           path: query
           method: post
           cors: true
+  unsubscribeEmailHttp:
+    handler: api/unsubscribeEmailHttp.handler
+    memorySize: 128
+    description: RFC 8058 email List-Unsubscribe one-click (POST) and browser redirect (GET)
+    logRetentionInDays: 30
+    events:
+      - http:
+          path: unsubscribe-email
+          method: get
+      - http:
+          path: unsubscribe-email
+          method: post
   testBot:
     handler: api/testBot.handler
     memorySize: 256

@@ -1,7 +1,8 @@
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand,  } from '@aws-sdk/lib-dynamodb';
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import { SESClient } from '@aws-sdk/client-ses';
+import { sendOutboundSes, type OutboundSesCommand } from '../lib/sesOutbound.js';
 import i18n from '../lib/i18nInstance.js';
 import type { Handler } from "aws-lambda";
 import { createSendEmailCommand, initi18n, changeLanguageForPlayer } from '../lib/api/i18n.js';
@@ -225,13 +226,13 @@ export const handler: Handler = async (event: any, context?: any) => {
                 lastlang = p.language;
                 await changeLanguageForPlayer(p);
             }
-            let comm: SendEmailCommand;
+            let comm: OutboundSesCommand;
             if (urgent > 0) {
-                comm = createSendEmailCommand(p.email, p.name, i18n.t("YourMoveSubjectUrgent"), i18n.t("YourMoveBatchedBodyUrgent", { count: n, urgent }));
+                comm = createSendEmailCommand(p.email, p.name, i18n.t("YourMoveSubjectUrgent"), i18n.t("YourMoveBatchedBodyUrgent", { count: n, urgent }), { userId: p.id });
             } else {
-                comm = createSendEmailCommand(p.email, p.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBatchedBody", { count: n }));
+                comm = createSendEmailCommand(p.email, p.name, i18n.t("YourMoveSubject"), i18n.t("YourMoveBatchedBody", { count: n }), { userId: p.id });
             }
-            work.push(sesClient.send(comm));
+            work.push(sendOutboundSes(sesClient, comm));
         }
         await Promise.all(work);
         console.log("Done!");

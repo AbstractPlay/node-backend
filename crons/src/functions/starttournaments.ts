@@ -11,6 +11,7 @@ import {
   initApbackI18n,
 } from '@backend/lib/apbackI18n.js';
 import { createSendEmailCommand } from '@backend/lib/createSendEmailCommand.js';
+import { sendOutboundSes } from '@backend/lib/sesOutbound.js';
 import { SESClient } from '@aws-sdk/client-ses';
 import i18n from 'i18next';
 import { Handler } from "aws-lambda";
@@ -474,8 +475,8 @@ async function startTournament(
       else
         body = i18n.t("TournamentCancelBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
       if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-        const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentCancelSubject", { "metaGame": metaGameName }), body);
-        work.push(sesClient.send(comm));
+        const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentCancelSubject", { "metaGame": metaGameName }), body, { userId: player.id });
+        work.push(sendOutboundSes(sesClient, comm));
       }
     }
     await Promise.all(work);
@@ -744,9 +745,9 @@ async function startTournament(
             else
                 body = i18n.t("TournamentStartBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
             if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentStartSubject", { "metaGame": metaGameName }), body);
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentStartSubject", { "metaGame": metaGameName }), body, { userId: player.id });
                 try {
-                  await sesClient.send(comm);
+                  await sendOutboundSes(sesClient, comm);
                 } catch (emailErr) {
                   logGetItemError(emailErr);
                   console.log(`Failed to send tournament start email to ${player.email}`);
@@ -818,8 +819,8 @@ async function startTournament(
         else
           body = i18n.t("TournamentRemoveBodyVariants", { "metaGame": metaGameName, "number": tournament.number, "variants": tournament.variants.join(", ") });
         if ( (player.email !== undefined) && (player.email !== null) && (player.email !== "") )  {
-          const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentRemoveSubject", { "metaGame": metaGameName }), body);
-          await sesClient.send(comm);
+          const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentRemoveSubject", { "metaGame": metaGameName }), body, { userId: player.id });
+          await sendOutboundSes(sesClient, comm);
         }
       } catch (error) {
         logGetItemError(error);

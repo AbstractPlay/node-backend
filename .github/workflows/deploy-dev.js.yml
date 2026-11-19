@@ -30,6 +30,7 @@ env:
     # Dev bot pool (us-east-1_kqlqXHDJ5) â€” separate from prod; update secrets after createBot / test-bot client rotation
     TEST_BOT_CLIENT_ID: ${{ secrets.TEST_BOT_CLIENT_ID }}
     TEST_BOT_CLIENT_SECRET: ${{ secrets.TEST_BOT_CLIENT_SECRET }}
+    EMAIL_UNSUBSCRIBE_SECRET: ${{ secrets.EMAIL_UNSUBSCRIBE_SECRET }}
 
 jobs:
   deploy-dev:

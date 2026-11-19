@@ -1,6 +1,7 @@
 import { GetCommand, PutCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { SESClient } from '@aws-sdk/client-ses';
 import { createSendEmailCommand } from '@backend/lib/createSendEmailCommand.js';
+import { sendOutboundSes } from '@backend/lib/sesOutbound.js';
 import i18n from 'i18next';
 import { localizedGameName } from '@backend/lib/gameDisplayName.js';
 import { isBotId, isValidUserId } from './inactiveChallengeDiscovery.js';
@@ -130,11 +131,12 @@ export async function notifyChallengeRevokedAcceptors(
     });
 
     if (player.email !== undefined && player.email !== '' && wantsChallengeEmail(player.settings)) {
-      await sesClient.send(createSendEmailCommand(
+      await sendOutboundSes(sesClient, createSendEmailCommand(
         player.email,
         player.name,
         i18n.t('ChallengeRevokedSubject'),
         localizedBody,
+        { userId: player.id },
       ));
     }
 

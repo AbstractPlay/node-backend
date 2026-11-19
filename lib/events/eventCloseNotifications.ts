@@ -1,6 +1,7 @@
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { ddbDocClient } from '../ddb.js';
 import { sesClient } from '../api/clients.js';
+import { sendOutboundSes } from '../sesOutbound.js';
 import {
   changeLanguageForPlayer,
   createSendEmailCommand,
@@ -97,8 +98,9 @@ export async function notifyEventClosedParticipants(
           player.name,
           i18n.t('EventEndSubject', { eventName: event.name }),
           emailBody,
+          { userId: player.id },
         );
-        await sesClient.send(comm);
+        await sendOutboundSes(sesClient, comm);
       }
       await sendUserPush({
         userId: player.id,
