@@ -19,6 +19,8 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Changed
 
+- **Ops:** CloudWatch log retention — `query` **7** days, `authQuery` **14** days (`serverless.yml`; applies per stage on API deploy).
+- **Ops:** Slim RPC access logs — `query` logs structured `public_query` line (no full API GW event; dev-only `pars` verbose); `authQuery` logs `auth_query` with `sub` + `requestId`.
 - **Ops:** Prod REST API stage throttle **25 RPS / burst 75** (`/*/*`) via `npm run apply-api-gateway-stage-throttle` after API deploy (GitHub Actions prod); limits documented in `serverless.yml` `custom.apiGatewayStageThrottle`.
 - **Ops:** Dev REST API stage throttle **2 RPS / burst 6**; dev `query` / `authQuery` reserved concurrency **10** / **15** (CI apply after dev API deploy).
 - **Ops:** Prod regional **WAFv2** on REST API stage — per-IP rate block **2000 req / 5 min** (`RestApiWebAcl` in API stack; prod only).
