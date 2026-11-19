@@ -4,6 +4,7 @@ import { sesClient, s3Client } from '../api/clients.js';
 import { headers } from '../api/http.js';
 import { feedbackErrorResponse } from '../api/feedbackHttp.js';
 import { changeLanguageForPlayer, createSendEmailCommand } from '../api/i18n.js';
+import { sendOutboundSes } from '../sesOutbound.js';
 import { logGetItemError } from '../api/http.js';
 import { sendUserPush } from '../push/sendUserPush.js';
 import { announcementsSiteUrl } from './siteUrl.js';
@@ -161,8 +162,8 @@ async function notifyAnnouncementPublishedUsers(record: { id: string; title: str
       let emailed = false;
       let pushed = false;
       if (user.email) {
-        const comm = createSendEmailCommand(user.email, user.name ?? user.id, subject, body);
-        await sesClient.send(comm);
+        const comm = createSendEmailCommand(user.email, user.name ?? user.id, subject, body, { userId: user.id });
+        await sendOutboundSes(sesClient, comm);
         emailed = true;
       }
       try {

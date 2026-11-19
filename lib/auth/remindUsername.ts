@@ -9,6 +9,7 @@ import { headers } from '../api/http.js';
 import type { ApiHandlerResult } from '../api/routeTypes.js';
 import { createSendEmailCommand, initi18n } from '../api/i18n.js';
 import { sesClient } from '../api/clients.js';
+import { sendOutboundSes } from '../sesOutbound.js';
 import i18n from '../i18nInstance.js';
 
 export const REMIND_USERNAME_EMAIL_DAILY_LIMIT = 5;
@@ -217,7 +218,7 @@ export async function remindUsername(
   ].join('\n');
   const subject = i18n.t('RemindUsernameSubject');
   try {
-    await sesClient.send(createSendEmailCommand(destEmail, loginName, subject, body));
+    await sendOutboundSes(sesClient, createSendEmailCommand(destEmail, loginName, subject, body));
     console.log('remind_username sent', { loginName, destEmail });
   } catch (err) {
     console.error('remind_username send failed', { err, loginName, destEmail });

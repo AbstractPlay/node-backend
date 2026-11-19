@@ -18,6 +18,7 @@ import {
 import { v4 as uuid } from 'uuid';
 import { ddbDocClient } from '../ddb.js';
 import { sesClient, sqsClient } from '../api/clients.js';
+import { sendOutboundSes } from '../sesOutbound.js';
 import {
   headers,
   formatReturnError,
@@ -814,8 +815,8 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
 
       if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
         if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameEnd)) {
-          const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), body.join(" "));
-          work.push(sesClient.send(comm));
+          const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameOverSubject"), body.join(" "), { userId: player.id });
+          work.push(sendOutboundSes(sesClient, comm));
         } else {
           console.log(`Player ${player.name} (${player.id}) has elected to not receive game end notifications.`);
         }

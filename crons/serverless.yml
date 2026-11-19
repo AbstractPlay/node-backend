@@ -37,6 +37,9 @@ custom:
   abandonedAccountDeleteDryRun:
     dev: 'true'
     prod: 'false'
+  stageSiteHost:
+    dev: play.dev.abstractplay.com
+    prod: play.abstractplay.com
   renderBucketName: "thumbnails-prerender-${self:provider.stage}"
   rendererCdnUrl: "https://renderer.dev.abstractplay.com/APRender.min.js"
   esbuild:
@@ -105,6 +108,10 @@ provider:
     FEEDBACK_ATTACHMENTS_BUCKET: ap-feedback-attachments-${self:provider.stage}
     # Prod records merge legacy AiAi games under the registered bot client id (see recordsPlayerAlias.ts).
     AIAI_BOT_RECORDS_CANONICAL_ID: ${env:AIAI_BOT_RECORDS_CANONICAL_ID, ''}
+    PLAY_BASE_URL: https://${self:custom.stageSiteHost.${self:provider.stage}}
+    EMAIL_UNSUBSCRIBE_SECRET: ${env:EMAIL_UNSUBSCRIBE_SECRET, file(../apsecrets.yml):email_unsubscribe_secret, ''}
+    API_BASE_URL:
+      Fn::ImportValue: abstract-play-${self:provider.stage}-RestApiBaseUrl
   iam:
     role:
       statements:

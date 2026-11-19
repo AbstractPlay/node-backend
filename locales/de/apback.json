@@ -16,6 +16,7 @@
   "AnnouncementBody": "Eine neue Ankündigung wurde veröffentlicht: {{- title}}\n\nLies sie auf der Website: {{- link}}",
   "DearPlayer": "Hallo {{player}}",
   "EmailOut": "Das AbstractPlay-System.",
+  "EmailUnsubscribeFooter": "Klicke hier, um alle E-Mail-Benachrichtigungen zu deaktivieren; kein Login erforderlich.",
   "GameLink": "Du kannst die Partie unter https://play.abstractplay.com/move/{{metaGame}}/0/{{gameId}} ansehen.",
   "GameOverBody": "Deine Partie {{- metaGame}} ist beendet.",
   "GameOverLink": "Für weitere Details, einschließlich eines Partieverlaufs zum Archivieren, besuche bitte https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}.",
