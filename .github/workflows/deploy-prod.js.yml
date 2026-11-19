@@ -131,6 +131,9 @@ jobs:
     - name: Deploy API stack
       run: bash scripts/serverless-deploy.sh prod AbstractPlayProd
 
+    - name: Apply API Gateway stage throttle (prod)
+      run: npm run apply-api-gateway-stage-throttle -- --stage prod
+
     - name: Deploy crons stack
       env:
         AIAI_BOT_RECORDS_CANONICAL_ID: ${{ secrets.AIAI_BOT_ID_PROD }}
