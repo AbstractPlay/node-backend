@@ -82,15 +82,32 @@ Per-stage settings live in `serverless.yml` under `custom.stageConfig`:
 
 Table name: `abstract-play-${stage}`.
 
-## REST API stage throttle (prod)
+## REST API stage throttle
 
-Prod **stage-wide** rate limiting (`/*/*`) is **not** part of the CloudFormation template Serverless generates (same pattern as Cognito pool trigger merges). Limits are declared in [`serverless.yml`](../serverless.yml) under `custom.apiGatewayStageThrottle` and applied after each API deploy.
+**Stage-wide** rate limiting (`/*/*`) is **not** part of the CloudFormation template Serverless generates (same pattern as Cognito pool trigger merges). Limits are declared in [`serverless.yml`](../serverless.yml) under `custom.apiGatewayStageThrottle` and applied after each API deploy (values must match `scripts/apply-api-gateway-stage-throttle.mjs`).
 
-**CI (prod):** [`.github/workflows/deploy-prod.js.yml`](../.github/workflows/deploy-prod.js.yml) runs `npm run apply-api-gateway-stage-throttle -- --stage prod` immediately after `scripts/serverless-deploy.sh prod`.
+| Stage | Rate limit (RPS) | Burst |
+|-------|------------------|-------|
+| **prod** | 25 | 75 |
+| **dev** | 2 | 6 |
 
-**Manual (optional):** `npm run apply-api-gateway-stage-throttle -- --stage prod [--dry-run]`
+Dev also uses lower Lambda caps: `query` reserved concurrency **10**, `authQuery` **15** (prod **50** / **75**).
 
-Dev has no throttle config (script skips).
+**CI:** [deploy-prod](../.github/workflows/deploy-prod.js.yml) and [deploy-dev](../.github/workflows/deploy-dev.js.yml) each run `npm run apply-api-gateway-stage-throttle -- --stage <stage>` immediately after the API stack deploy.
+
+**Manual (optional):** `npm run apply-api-gateway-stage-throttle -- --stage prod|dev [--dry-run]`
+
+## REST API WAF (prod)
+
+Prod associates a regional **AWS WAFv2** Web ACL with the REST API stage via CloudFormation (`resources.RestApiWebAcl` / `RestApiWebAclAssociation`, `IsProdStage` only). Dev is intentionally unwaf?d.
+
+| Rule | Behaviour |
+|------|-----------|
+| **RateLimitPerIp** | Block when a source IP exceeds **2000 requests / 5 minutes** (aggregate on IP) |
+
+Default action is **allow**; only the rate rule blocks. Complements prod stage throttle (global bucket) and per-IP fairness. WebSocket API and Cognito auth traffic are **not** covered by this ACL.
+
+Expect **~$8?10/mo** at current prod request volume (ACL + rule + request metering). Watch **AWS/WAFV2** `BlockedRequests` and API Gateway **403** alongside existing **429** from stage throttle.
 
 ## gameProjector stream (automatic in CI)
 

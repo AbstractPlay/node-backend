@@ -22,15 +22,25 @@ custom:
     dev: false
 
   # Concurrent execution caps (abuse / cost). Empirical prod 30d peaks: query ~13, authQuery ~19.
-  queryReservedConcurrency: 50
-  authQueryReservedConcurrency: 75
+  queryReservedConcurrency:
+    prod: 50
+    dev: 10
+  authQueryReservedConcurrency:
+    prod: 75
+    dev: 15
 
   # REST API stage throttle (*/*). Not in CloudFormation — applied post-deploy via
   # npm run apply-api-gateway-stage-throttle (CI). Prod Nov 2026: ~2 RPS p99; ~15 RPS peak hour.
+  # Dev Nov 2026: ~100 req/day typical; spike days ~1.2k — keep edge far below prod.
   apiGatewayStageThrottle:
     prod:
       rateLimit: 25
       burstLimit: 75
+    dev:
+      rateLimit: 2
+      burstLimit: 6
+
+  # Prod-only REST WAF (resources.RestApiWebAcl): per-IP rate 2000 requests / 5 minutes.
 
   testBotHttpEvents:
     dev:
@@ -750,6 +760,44 @@ resources:
         SourceArn:
           Fn::Sub: arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/abstractplay-arena-${self:provider.stage}/*
 
+    RestApiWebAcl:
+      Type: AWS::WAFv2::WebACL
+      Condition: IsProdStage
+      Properties:
+        Name: ${self:service}-${self:provider.stage}-rest-waf
+        Scope: REGIONAL
+        DefaultAction:
+          Allow: {}
+        Rules:
+          - Name: RateLimitPerIp
+            Priority: 0
+            Statement:
+              RateBasedStatement:
+                Limit: 2000
+                AggregateKeyType: IP
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: RateLimitPerIp
+        VisibilityConfig:
+          SampledRequestsEnabled: true
+          CloudWatchMetricsEnabled: true
+          MetricName: ${self:service}-${self:provider.stage}-rest-waf
+        Tags: ${self:custom.apCostAllocationCfnTags}
+
+    RestApiWebAclAssociation:
+      Type: AWS::WAFv2::WebACLAssociation
+      Condition: IsProdStage
+      Properties:
+        ResourceArn:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}::/restapis/${ApiGatewayRestApi}/stages/${self:provider.stage}
+        WebACLArn:
+          Fn::GetAtt:
+            - RestApiWebAcl
+            - Arn
+
   Outputs:
     RestApiBaseUrl:
       Description: HTTPS base URL for the REST API stage (no trailing path)
@@ -825,7 +873,7 @@ functions:
     handler: api/authQuery.authQuery
     memorySize: 1024
     timeout: 120
-    reservedConcurrency: ${self:custom.authQueryReservedConcurrency}
+    reservedConcurrency: ${self:custom.authQueryReservedConcurrency.${self:provider.stage}}
     description: Abstract Play queries that need authorization.
     logRetentionInDays: 30
     environment:
@@ -868,7 +916,7 @@ functions:
   query:
     handler: api/query.query
     memorySize: 256
-    reservedConcurrency: ${self:custom.queryReservedConcurrency}
+    reservedConcurrency: ${self:custom.queryReservedConcurrency.${self:provider.stage}}
     description: Abstract Play queries that does not need authorization.
     logRetentionInDays: 30
     events:

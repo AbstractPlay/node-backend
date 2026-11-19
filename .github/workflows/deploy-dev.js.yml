@@ -157,6 +157,9 @@ jobs:
     - name: Deploy API stack
       run: bash scripts/serverless-deploy.sh dev AbstractPlayDev
 
+    - name: Apply API Gateway stage throttle (dev)
+      run: npm run apply-api-gateway-stage-throttle -- --stage dev
+
     - name: Deploy crons stack
       run: bash crons/scripts/serverless-deploy.sh dev
 

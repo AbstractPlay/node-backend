@@ -17,13 +17,18 @@ import {
 } from '@aws-sdk/client-api-gateway';
 
 /** @type {Record<string, { restApiName: string, rateLimit: number, burstLimit: number } | null>} */
+/** Keep in sync with serverless.yml custom.apiGatewayStageThrottle */
 const STAGE_THROTTLE = {
   prod: {
     restApiName: 'prod-abstract-play',
     rateLimit: 25,
     burstLimit: 75,
   },
-  dev: null,
+  dev: {
+    restApiName: 'dev-abstract-play',
+    rateLimit: 2,
+    burstLimit: 6,
+  },
 };
 
 const STAGE_PROFILE = {
