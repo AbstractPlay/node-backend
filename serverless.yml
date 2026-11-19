@@ -21,6 +21,10 @@ custom:
     prod: true
     dev: false
 
+  # Concurrent execution caps (abuse / cost). Empirical prod 30d peaks: query ~13, authQuery ~19.
+  queryReservedConcurrency: 50
+  authQueryReservedConcurrency: 75
+
   testBotHttpEvents:
     dev:
       - http:
@@ -758,6 +762,7 @@ functions:
     handler: api/authQuery.authQuery
     memorySize: 1024
     timeout: 120
+    reservedConcurrency: ${self:custom.authQueryReservedConcurrency}
     description: Abstract Play queries that need authorization.
     logRetentionInDays: 30
     environment:
@@ -800,6 +805,7 @@ functions:
   query:
     handler: api/query.query
     memorySize: 256
+    reservedConcurrency: ${self:custom.queryReservedConcurrency}
     description: Abstract Play queries that does not need authorization.
     logRetentionInDays: 30
     events:

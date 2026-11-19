@@ -19,6 +19,9 @@ custom:
     dev: false
   # At most one concurrent run per batch Lambda (overlapping manual + schedule invokes queue/throttle).
   batchJobReservedConcurrency: 1
+  # S3 ObjectCreated fan-out (thumbnails, bulk prerender uploads). Unbounded concurrent peaked ~273 (Nov 2026).
+  s3ToSqsReservedConcurrency: 50
+  sqsToRenderReservedConcurrency: 40
   # node-backend exports abstract-play-${stage}-OpsAlertsTopicArn (abstractplay-ops-alerts-${stage})
   opsAlertsTopicImport: abstract-play-${self:provider.stage}-OpsAlertsTopicArn
   recbucket:
@@ -388,6 +391,7 @@ functions:
     description: Triggered when new objects are written to prerender S3, pushes job info to SQS
     timeout: 30
     memorySize: 512
+    reservedConcurrency: ${self:custom.s3ToSqsReservedConcurrency}
     logRetentionInDays: 7
     environment:
       SQS_URL: !Ref RenderQueue
@@ -404,6 +408,7 @@ functions:
     description: Consumes SQS messages, renders SVG, writes to output bucket, deletes prerender original
     timeout: 300
     memorySize: 2048
+    reservedConcurrency: ${self:custom.sqsToRenderReservedConcurrency}
     logRetentionInDays: 7
     environment:
       RENDER_BUCKET: ${self:custom.renderBucketName}
