@@ -111,6 +111,18 @@ Expect **~$8?10/mo** at current prod request volume (ACL + rule + request meteri
 
 **Deploy IAM:** WAF is created by CloudFormation using the **CI IAM user** (`serverless-GitHub-actions`), not the Lambda execution role in `provider.iam.role`. Attach the account managed policy **`AbstractPlay-WAFHandling`** to that user in IAM (regional WAFv2 including tags). Do not model deploy-user IAM in the API CloudFormation stack ? CI cannot `iam:PutUserPolicy` on itself ([failed deploy 44604408924](https://github.com/AbstractPlay/node-backend/actions/runs/44604408924)).
 
+## Public read rate limits (`query` Lambda)
+
+Per-route, per-IP caps on selected open queries run inside **`runPublicQuery`** before handlers (DynamoDB fixed-window counters in the main table). They sit **under** WAF and stage throttle and return **429** with `{ "message": "Rate limit exceeded." }`.
+
+| Layer | Scope |
+|-------|--------|
+| WAF (prod) | All REST, per IP |
+| Stage throttle | Whole API stage |
+| **Public read limits** | `user_names`, `get_public_exploration`, `recent_completed_games`, `standing_challenges`, `all_standing_challenges` |
+
+Limits and window sizes are defined in [`lib/rateLimit/publicReadLimits.ts`](../lib/rateLimit/publicReadLimits.ts). Dev multiplies prod caps by **10**; set env **`PUBLIC_READ_RATE_LIMITS=0`** on the `query` Lambda to disable (fail-open on DynamoDB errors). CloudWatch: structured `public_query_rate_limited` / `public_read_rate_limit_fail_open` on deny or DDB blip.
+
 ## gameProjector stream (automatic in CI)
 
 The DynamoDB table must have streams enabled **before** CloudFormation can reference `StreamArn`. The stream Lambda trigger is gated by the `enableGameProjectorStream` deploy parameter.
