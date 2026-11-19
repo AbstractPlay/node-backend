@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Dated `[1.0.0-ci]` sections are batched **one block per calendar month** (header date is the last update that month); append new bullets under the current month’s section rather than adding a second November/October header. Entries below are grouped by theme; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-11-18
+## [1.0.0-ci] - 2026-11-19
 
 ### Added
 
@@ -18,6 +18,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Changed
 
+- **Public API:** `report_problem` is a no-op (200 + `Reported`)—no DynamoDB `USERS` scan or admin SES mail; closes abuse/cost exposure while front-end hooks remain until analytics is redesigned.
 - **Cognito (ops):** `npm run apply-cognito-pool-auth-settings` — HTML message templates on prod/dev pools (verify link, password-reset code, admin invite); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/). Email sign-in alias remains unavailable until a **new pool** (AWS locks `AliasAttributes` after creation). **`apply-cognito-pool-ses-email`** sets auth-mail From via SES; **`lib/sesFromAddress.ts`** + **`lib/createSendEmailCommand.ts`** are the single From for Cognito + API/crons mail (`noreply@abstractplay.com`).
 - **Simultaneous play:** `submit_move`, arena submit, resign/timeout, and `get_game` partial-move masking use gameslib **`sessionIsSimultaneous`** (`getFlags()` / `resolveGameFlags`) instead of static `gameinfo.flags`.
 - **Simultaneous play:** challenge start, arena/ladder/tournament/event game creation, bots, solo, teaching mode, and start-position validation use **`sessionIsSimultaneous`** and shared **`initialToMove`** for opening `toMove`.
