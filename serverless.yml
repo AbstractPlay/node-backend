@@ -878,7 +878,7 @@ functions:
     timeout: 120
     reservedConcurrency: ${self:custom.authQueryReservedConcurrency.${self:provider.stage}}
     description: Abstract Play queries that need authorization.
-    logRetentionInDays: 30
+    logRetentionInDays: 14
     environment:
       ARENA_FLAG_WORKER_ARN:
         Fn::GetAtt:
@@ -921,7 +921,7 @@ functions:
     memorySize: 256
     reservedConcurrency: ${self:custom.queryReservedConcurrency.${self:provider.stage}}
     description: Abstract Play queries that does not need authorization.
-    logRetentionInDays: 30
+    logRetentionInDays: 7
     events:
       - http:
           path: query
