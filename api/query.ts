@@ -1,13 +1,16 @@
 import { headers } from '../lib/api/http.js';
+import { logPublicQueryAccess, rpcParsKeyList } from '../lib/api/rpcAccessLog.js';
 import { runPublicQuery } from './routes/public.js';
 
 export const query = async (event: {
   queryStringParameters: any;
   body?: string;
   httpMethod: string;
-  requestContext?: { identity?: { sourceIp?: string } };
+  requestContext?: { requestId?: string; identity?: { sourceIp?: string } };
 }) => {
-  console.log(event);
+  const requestId = event.requestContext?.requestId;
+  const sourceIp = event.requestContext?.identity?.sourceIp;
+  const isDev = process.env.WEBSOCKET_STAGE === 'dev';
 
   let pars: any;
   let queryName: string | undefined;
@@ -18,6 +21,12 @@ export const query = async (event: {
       queryName = bodyData.query;
       pars = bodyData.pars || {};
     } catch {
+      logPublicQueryAccess({
+        httpMethod: event.httpMethod,
+        sourceIp,
+        requestId,
+        error: 'invalid_json',
+      });
       return {
         statusCode: 400,
         body: JSON.stringify({
@@ -31,11 +40,23 @@ export const query = async (event: {
     queryName = pars?.query;
   }
 
-  const sourceIp = event.requestContext?.identity?.sourceIp;
   if (sourceIp && pars && typeof pars === 'object' && !Array.isArray(pars)) {
     pars = { ...pars, _clientIp: sourceIp };
   }
 
-  console.log(pars);
+  logPublicQueryAccess({
+    httpMethod: event.httpMethod,
+    query: queryName,
+    sourceIp,
+    requestId,
+    parsKeys: rpcParsKeyList(pars),
+  });
+
+  if (isDev && pars !== undefined) {
+    console.log(
+      JSON.stringify({ evt: 'public_query_verbose', query: queryName, pars }),
+    );
+  }
+
   return runPublicQuery(queryName, pars);
 };
