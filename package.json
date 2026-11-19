@@ -42,6 +42,7 @@
     "purge-cognito-without-ddb": "tsx scripts/purge-cognito-without-ddb.mjs",
     "apply-cognito-pool-auth-settings": "node scripts/apply-cognito-pool-auth-settings.mjs",
     "apply-cognito-custom-message-trigger": "node scripts/apply-cognito-custom-message-trigger.mjs",
+    "apply-cognito-pre-signup-trigger": "node scripts/apply-cognito-pre-signup-trigger.mjs",
     "apply-cognito-pool-ses-email": "node scripts/apply-cognito-pool-ses-email.mjs",
     "abandoned-account-deletion": "tsx scripts/abandoned-account-deletion.mjs",
     "analyze-ladder-delta-monte-carlo": "tsx scripts/analyze-ladder-delta-monte-carlo.mjs",
@@ -114,7 +115,7 @@
     "crons"
   ],
   "dependencies": {
-    "@abstractplay/gameslib": "1.0.0-ci-44402868960.0",
+    "@abstractplay/gameslib": "1.0.0-ci-44575943961.0",
     "@abstractplay/recranks": "1.0.0-ci-42691185522.0",
     "@abstractplay/renderer": "1.0.0-ci-43630834489.0",
     "@aws-sdk/client-apigatewaymanagementapi": "3.1090.0",
