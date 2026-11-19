@@ -56,7 +56,7 @@ EventBridge cron rules are **enabled only on prod** (`custom.scheduleEnabled.pro
 
 On **prod**, CloudWatch alarms in this stack publish to the SNS topic exported by the API stack (`abstract-play-prod-OpsAlertsTopicArn`). Confirm the ops-alerts email subscription via [node-backend deployment](/backend/deployment/#ops-alerts-email).
 
-Crons alarms include **`records`**, **`summarize`**, **`thumbnails`**, **`thumbnails-verify`**, thumbnail render (`sqs-to-render`, custom `RenderFailure`, render DLQ).
+Crons alarms include **`records`**, **`summarize`**, **`thumbnails`**, **`thumbnails-verify`**, thumbnail render (`sqs-to-render` errors, render DLQ). SES reputation alarms live in the API stack.
 
 ## Documentation site
 

@@ -327,6 +327,10 @@ resources:
       Fn::And:
         - Condition: GameProjectorStreamEnabled
         - Condition: IsProdStage
+    SesReputationAlarmsEnabled:
+      Fn::And:
+        - Condition: OpsAlertsEnabled
+        - Condition: IsProdStage
 
   Resources:
     # One table design
@@ -588,6 +592,44 @@ resources:
         Period: 300
         EvaluationPeriods: 2
         Threshold: 300000
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - !Ref OpsAlertsTopic
+        OKActions:
+          - !Ref OpsAlertsTopic
+
+    SesBounceRateAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: SesReputationAlarmsEnabled
+      Properties:
+        AlarmName: abstractplay-ses-bounce-rate-${self:provider.stage}
+        AlarmDescription: SES account bounce rate high (approaching AWS enforcement)
+        Namespace: AWS/SES
+        MetricName: Reputation.BounceRate
+        Statistic: Maximum
+        Period: 86400
+        EvaluationPeriods: 1
+        Threshold: 0.04
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - !Ref OpsAlertsTopic
+        OKActions:
+          - !Ref OpsAlertsTopic
+
+    SesComplaintRateAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: SesReputationAlarmsEnabled
+      Properties:
+        AlarmName: abstractplay-ses-complaint-rate-${self:provider.stage}
+        AlarmDescription: SES account complaint rate high (approaching AWS enforcement)
+        Namespace: AWS/SES
+        MetricName: Reputation.ComplaintRate
+        Statistic: Maximum
+        Period: 86400
+        EvaluationPeriods: 1
+        Threshold: 0.0005
         ComparisonOperator: GreaterThanThreshold
         TreatMissingData: notBreaching
         AlarmActions:
