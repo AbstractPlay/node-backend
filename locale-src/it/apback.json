@@ -67,6 +67,10 @@
     "src": "The AbstractPlay system.",
     "out": "Il sistema AbstractPlay."
   },
+  "EmailUnsubscribeFooter": {
+    "src": "Click here to turn off all email notifications; no login required.",
+    "out": "Clicca qui per disattivare tutte le notifiche via email; non è necessario effettuare l'accesso."
+  },
   "EventEndIntro": {
     "src": "The event {{- eventName}} has ended.",
     "out": "L'evento {{- eventName}} è terminato."
