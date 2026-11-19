@@ -718,25 +718,6 @@ resources:
         OKActions:
           - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
 
-    ThumbnailRenderFailureAlarm:
-      Type: AWS::CloudWatch::Alarm
-      Condition: OpsAlertsEnabled
-      Properties:
-        AlarmName: abstractplay-crons-thumbnail-render-failure-${self:provider.stage}
-        AlarmDescription: Custom RenderFailure metric from sqs-to-render
-        Namespace: AbstractPlay/Thumbnails
-        MetricName: RenderFailure
-        Statistic: Sum
-        Period: 300
-        EvaluationPeriods: 1
-        Threshold: 1
-        ComparisonOperator: GreaterThanOrEqualToThreshold
-        TreatMissingData: notBreaching
-        AlarmActions:
-          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
-        OKActions:
-          - Fn::ImportValue: ${self:custom.opsAlertsTopicImport}
-
     PlayerSummaryDeadLetterQueue:
       Type: AWS::SQS::Queue
       Properties:
