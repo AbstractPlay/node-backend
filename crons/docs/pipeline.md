@@ -112,7 +112,7 @@ Default run order matches prod schedules (minus `dumpdb`): 03:00 batch (sequenti
 
 **Do not** use `serverless invoke` for long jobs such as `records` or `summarize`: the default ~2 minute SDK read timeout **retries** and stacks duplicate Lambda executions while the first run is still going. The pipeline uses **`aws lambda invoke` with a 900s CLI read timeout** and stage profiles (`AbstractPlayProd` / `AbstractPlayDev`).
 
-Batch Lambdas use **`reservedConcurrency: 1`** in `serverless.yml` so only one execution of each function runs at a time (manual vs EventBridge vs retries). Deploy crons after changing that setting.
+Batch Lambdas use **`reservedConcurrency: 1`** in `serverless.yml` so only one execution of each function runs at a time (manual vs EventBridge vs retries). **`s3-to-sqs`** and **`sqs-to-render`** use separate caps (`s3ToSqsReservedConcurrency` **50**, `sqsToRenderReservedConcurrency` **40**) so thumbnail S3 uploads cannot fan out hundreds of parallel Lambdas. Deploy crons after changing those settings.
 
 ## Failure and timing
 
