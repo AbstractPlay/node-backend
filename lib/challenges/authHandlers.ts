@@ -3,6 +3,7 @@ import { gameinfo, GameFactory } from '@abstractplay/gameslib';
 import { v4 as uuid } from 'uuid';
 import { ddbDocClient } from '../ddb.js';
 import { sesClient } from '../api/clients.js';
+import { sendOutboundSes } from '../sesOutbound.js';
 import { headers, formatReturnError, logGetItemError } from '../api/http.js';
 import type { User } from '../api/types.js';
 import {
@@ -465,8 +466,8 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
     }
     if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
       if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges)) {
-        const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), body);
-        work.push(sesClient.send(comm));
+        const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeSubject"), body, { userId: player.id });
+        work.push(sendOutboundSes(sesClient, comm));
       } else {
         console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
       }
@@ -525,8 +526,8 @@ export async function revokeChallenge(userid: any, pars: { id: string; metaGame:
         }
         if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
           if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges)) {
-            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), body);
-            work.push(sesClient.send(comm));
+            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), body, { userId: player.id });
+            work.push(sendOutboundSes(sesClient, comm));
           } else {
             console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
           }
@@ -569,8 +570,8 @@ export async function revokeChallenge(userid: any, pars: { id: string; metaGame:
         }
         if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
           if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges)) {
-            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), body);
-            work.push(sesClient.send(comm));
+            const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRevokedSubject"), body, { userId: player.id });
+            work.push(sendOutboundSes(sesClient, comm));
           } else {
             console.log(`Player ${player.name} (${player.id}) has elected to not receive challenge notifications.`);
           }
@@ -657,8 +658,8 @@ export async function respondedChallenge(userid: string, pars: { response: boole
           if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
             if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.gameStart)) {
               const ebody = body + " " + i18n.t("GameLink", { metaGame: metaGame, gameId: email.gameId });
-              const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), ebody);
-              work.push(sesClient.send(comm));
+              const comm = createSendEmailCommand(player.email, player.name, i18n.t("GameStartedSubject"), ebody, { userId: player.id });
+              work.push(sendOutboundSes(sesClient, comm));
             } else {
               console.log(`Player ${player.name} (${player.id}) has elected to not receive game start notifications.`);
             }
@@ -726,11 +727,12 @@ export async function respondedChallenge(userid: string, pars: { response: boole
           }
           if (challenger.email) {
             if ((challenger.settings?.all?.notifications === undefined) || (challenger.settings.all.notifications.challenges)) {
-              work.push(sesClient.send(createSendEmailCommand(
+              work.push(sendOutboundSes(sesClient, createSendEmailCommand(
                 challenger.email,
                 challenger.name,
                 i18n.t("ChallengeSlotOpenedSubject"),
                 body,
+                { userId: challengerId },
               )));
             }
           }
@@ -799,8 +801,8 @@ export async function respondedChallenge(userid: string, pars: { response: boole
           }
           if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
             if ((player.settings?.all?.notifications === undefined) || (player.settings.all.notifications.challenges)) {
-              const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), body);
-              work.push(sesClient.send(comm));
+              const comm = createSendEmailCommand(player.email, player.name, i18n.t("ChallengeRejectedSubject"), body, { userId: player.id });
+              work.push(sendOutboundSes(sesClient, comm));
             }
           }
           work.push(sendUserPush({

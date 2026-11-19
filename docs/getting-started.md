@@ -51,6 +51,7 @@ Lambda env vars are set in [`serverless.yml`](../serverless.yml). Secrets are in
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web push |
 | `OPENSSH_PRIVATE_KEY` | Some maintenance/crypto paths |
 | `TEST_BOT_CLIENT_ID` / `TEST_BOT_CLIENT_SECRET` | Dev reference bot (dev only) |
+| `EMAIL_UNSUBSCRIBE_SECRET` | HMAC for one-click email notification unsubscribe links (API + crons) |
 
 Do not commit secret values. Names only are listed here.
 

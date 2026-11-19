@@ -11,6 +11,7 @@ import {
 import { v4 as uuid } from 'uuid';
 import { ddbDocClient } from '../ddb.js';
 import { sesClient } from '../api/clients.js';
+import { sendOutboundSes } from '../sesOutbound.js';
 import {
   headers,
   formatReturnError,
@@ -635,8 +636,8 @@ export async function endTournament(tournament: Tournament) {
               const emailBody = buildTournamentEndEmailBody(messageCtx);
               const pushBody = buildTournamentEndPushBody(messageCtx);
               if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
-                const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName, }), emailBody);
-                work.push(sesClient.send(comm));
+                const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName, }), emailBody, { userId: player.id });
+                work.push(sendOutboundSes(sesClient, comm));
               }
               work.push(sendUserPush({
                 userId: player.id,
