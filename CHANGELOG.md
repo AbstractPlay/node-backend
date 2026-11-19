@@ -34,6 +34,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Fixed
 
+- **Ops:** Prod deploy IAM for WAF — `GitHubActionsWafDeployPolicy` on `serverless-GitHub-actions` in API stack (`DependsOn` before `RestApiWebAcl`; fixes 2026-11-19 `wafv2:TagResource` failure).
 - **Ops scripts (DynamoDB):** shared `scripts/lib/ddb-query-partition.mjs`; GAME/USER backfills and reports use partition `Query` instead of full-table `Scan` (tumbleweed fog, tablero/chameleon/orb/guerrilla stacks, completed-game index tooling, vacation USER discover, arena index backfill, meta-game count admin discover, dashboard user maintenance, USER ratings strip in realtime purge).
 - **Tumbleweed (fog) backfill:** `npm run backfill-tumbleweed-fog` queries the `GAME` partition (`metaGame=tumbleweed`) instead of scanning the whole table; `--game-id` loads via `GetItem`. Uses `lib/tumbleweedFogRepair.ts` (EOG replay) until the pinned `@abstractplay/gameslib` CI build matches gameslib `tumbleweed-fog-repair`.
 - **Abandoned account deletion:** Cognito delete locates the subscriber with `ListUsers` on `sub` (player uuid), then `AdminDeleteUser` with the pool sign-in username; DDB display names are not used.
