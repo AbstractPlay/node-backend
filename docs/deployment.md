@@ -109,7 +109,7 @@ Default action is **allow**; only the rate rule blocks. Complements prod stage t
 
 Expect **~$8?10/mo** at current prod request volume (ACL + rule + request metering). Watch **AWS/WAFV2** `BlockedRequests` and API Gateway **403** alongside existing **429** from stage throttle.
 
-**Deploy IAM:** WAF is created by CloudFormation using the **CI IAM user** (`serverless-GitHub-actions`), not the Lambda execution role in `provider.iam.role`. The API stack defines `GitHubActionsWafDeployPolicy` (prod only) ? an `AWS::IAM::Policy` on that user for regional WAFv2 including tagging. `RestApiWebAcl` `DependsOn` that policy so permissions exist before the ACL is created. If the first prod deploy fails on `iam:PutUserPolicy`, attach the same WAF actions to the user once in the console, then retry.
+**Deploy IAM:** WAF is created by CloudFormation using the **CI IAM user** (`serverless-GitHub-actions`), not the Lambda execution role in `provider.iam.role`. Attach the account managed policy **`AbstractPlay-WAFHandling`** to that user in IAM (regional WAFv2 including tags). Do not model deploy-user IAM in the API CloudFormation stack ? CI cannot `iam:PutUserPolicy` on itself ([failed deploy 44604408924](https://github.com/AbstractPlay/node-backend/actions/runs/44604408924)).
 
 ## gameProjector stream (automatic in CI)
 

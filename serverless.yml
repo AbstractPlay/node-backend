@@ -760,41 +760,10 @@ resources:
         SourceArn:
           Fn::Sub: arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/abstractplay-arena-${self:provider.stage}/*
 
-    # Deploy principal (serverless-GitHub-actions) needs WAFv2 for RestApiWebAcl; provider.iam.role is the Lambda role only.
-    GitHubActionsWafDeployPolicy:
-      Type: AWS::IAM::Policy
-      Condition: IsProdStage
-      Properties:
-        PolicyName: abstract-play-github-actions-waf
-        Users:
-          - serverless-GitHub-actions
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-            - Sid: Wafv2RegionalForRestApi
-              Effect: Allow
-              Action:
-                - wafv2:CreateWebACL
-                - wafv2:UpdateWebACL
-                - wafv2:DeleteWebACL
-                - wafv2:GetWebACL
-                - wafv2:ListWebACLs
-                - wafv2:AssociateWebACL
-                - wafv2:DisassociateWebACL
-                - wafv2:GetWebACLForResource
-                - wafv2:ListResourcesForWebACL
-                - wafv2:ListTagsForResource
-                - wafv2:TagResource
-                - wafv2:UntagResource
-              Resource:
-                - Fn::Sub: arn:aws:wafv2:${AWS::Region}:${AWS::AccountId}:regional/webacl/*
-                - Fn::Sub: arn:aws:wafv2:${AWS::Region}:${AWS::AccountId}:regional/webacl/*/*
-
+    # WAF deploy: CI user serverless-GitHub-actions needs IAM managed policy AbstractPlay-WAFHandling (not CFN).
     RestApiWebAcl:
       Type: AWS::WAFv2::WebACL
       Condition: IsProdStage
-      DependsOn:
-        - GitHubActionsWafDeployPolicy
       Properties:
         Name: ${self:service}-${self:provider.stage}-rest-waf
         Scope: REGIONAL
