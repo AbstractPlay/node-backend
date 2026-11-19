@@ -36,6 +36,8 @@ import { listArenaTimeControlsPublic } from '../../lib/arena/listTimeControlsPub
 import { listArenaTablesPublic } from '../../lib/arena/arenaTableHandlers.js';
 import { remindUsernameOpen } from '../../lib/auth/remindUsername.js';
 import { unsubscribeEmailOpen } from '../../lib/auth/unsubscribeEmail.js';
+import { rateLimitExceededResponse } from '../../lib/api/rateLimitResponse.js';
+import { enforcePublicReadRateLimit } from '../../lib/rateLimit/publicReadLimits.js';
 
 export const publicRoutes: Record<string, PublicRouteHandler> = {
   user_names: (pars) => userNames(pars),
@@ -86,6 +88,17 @@ export async function runPublicQuery(
       }),
       headers,
     };
+  }
+  const rate = await enforcePublicReadRateLimit(queryName, pars);
+  if (!rate.allowed) {
+    console.warn(JSON.stringify({
+      evt: 'public_query_rate_limited',
+      query: queryName,
+      scope: rate.scope,
+      window: rate.window,
+      clientIp: typeof pars?._clientIp === 'string' ? pars._clientIp : undefined,
+    }));
+    return rateLimitExceededResponse();
   }
   const result = await handler(pars);
   return result ?? {

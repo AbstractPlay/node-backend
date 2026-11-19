@@ -130,6 +130,12 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `ANNOUNCEMENT`, sk: `REACTION#<emoji>#<userId>` � per-reaction rows (Phase 4)
   - Attachments: S3 bucket `ap-announcements-attachments-<stage>`
 
+- **Public read rate limits** — ephemeral counters for `query` per-route throttles (no GSI)
+  - pk: `RATELIMIT#public#<scope>#<hashedIp>` (`scope` e.g. `user_names`, `user_names_all`, `get_public_exploration`)
+  - sk: UTC window bucket (`minute` …`Z`, `hour` `YYYY-MM-DDTHH`, `day` `YYYY-MM-DD`)
+  - fields: `c` (count), `expiresAt` (TTL seconds — table TTL attribute)
+  - one conditional `UpdateItem` per window per allowed request; excluded from live product reads
+
 ## Game lists
 
 - **Current games by player** � per-player active game summaries (stream-maintained; Phase 3 reads from here)
