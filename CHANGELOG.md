@@ -16,6 +16,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Chameleon EOG backfill:** `npm run backfill-chameleon-eog` (`--scope completed`, `--dry-run` / `--apply`) patches terminal `eog.reason` on stored stacks when it disagrees with gameslib `expectedEogOutcome`; logs changed game ids and on `--apply` refreshes `COMPLETEDGAMES*` via `refreshCompletedGameIndexes` (no hydrate-time repair).
 - **Organized events:** `event_close` notifies registered players with in-app `eventEnd` notifications and optional email/push (winners and link to `https://play.abstractplay.com/event/{eventId}`); user prefs `eventEnd` / `settings.all.notifications.eventEnd`.
 - **Email notifications:** signed footer link on game/ops SES mail plus public `unsubscribe_email` and `GET`/`POST` `/unsubscribe-email` (RFC 8058 `List-Unsubscribe` / one-click POST) — no login turns off all email notification prefs; `EMAIL_UNSUBSCRIBE_SECRET` on API and crons; crons import `RestApiBaseUrl` for header URLs.
+- **Public API:** per-IP rate limits on open reads `user_names`, `get_public_exploration`, `recent_completed_games`, `standing_challenges`, `all_standing_challenges` (429 before handler; DynamoDB `RATELIMIT#public#*` counters in main table).
 
 ### Changed
 
