@@ -82,6 +82,16 @@ Per-stage settings live in `serverless.yml` under `custom.stageConfig`:
 
 Table name: `abstract-play-${stage}`.
 
+## REST API stage throttle (prod)
+
+Prod **stage-wide** rate limiting (`/*/*`) is **not** part of the CloudFormation template Serverless generates (same pattern as Cognito pool trigger merges). Limits are declared in [`serverless.yml`](../serverless.yml) under `custom.apiGatewayStageThrottle` and applied after each API deploy.
+
+**CI (prod):** [`.github/workflows/deploy-prod.js.yml`](../.github/workflows/deploy-prod.js.yml) runs `npm run apply-api-gateway-stage-throttle -- --stage prod` immediately after `scripts/serverless-deploy.sh prod`.
+
+**Manual (optional):** `npm run apply-api-gateway-stage-throttle -- --stage prod [--dry-run]`
+
+Dev has no throttle config (script skips).
+
 ## gameProjector stream (automatic in CI)
 
 The DynamoDB table must have streams enabled **before** CloudFormation can reference `StreamArn`. The stream Lambda trigger is gated by the `enableGameProjectorStream` deploy parameter.

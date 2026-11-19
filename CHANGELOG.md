@@ -19,6 +19,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Changed
 
+- **Ops:** Prod REST API stage throttle **25 RPS / burst 75** (`/*/*`) via `npm run apply-api-gateway-stage-throttle` after API deploy (GitHub Actions prod); limits documented in `serverless.yml` `custom.apiGatewayStageThrottle`.
 - **Public API:** `report_problem` is a no-op (200 + `Reported`)—no DynamoDB `USERS` scan or admin SES mail; closes abuse/cost exposure while front-end hooks remain until analytics is redesigned.
 - **Crons:** `s3-to-sqs` `reservedConcurrency` **50** and `sqs-to-render` **40** cap thumbnail / render pipeline fan-out (S3 ObjectCreated + queue consumers).
 - **API:** `query` `reservedConcurrency` **50**, `authQuery` **75** — abuse/cost caps on public and authed RPC Lambdas.

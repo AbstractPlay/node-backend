@@ -43,6 +43,7 @@
     "apply-cognito-pool-auth-settings": "node scripts/apply-cognito-pool-auth-settings.mjs",
     "apply-cognito-custom-message-trigger": "node scripts/apply-cognito-custom-message-trigger.mjs",
     "apply-cognito-pre-signup-trigger": "node scripts/apply-cognito-pre-signup-trigger.mjs",
+    "apply-api-gateway-stage-throttle": "node scripts/apply-api-gateway-stage-throttle.mjs",
     "apply-cognito-pool-ses-email": "node scripts/apply-cognito-pool-ses-email.mjs",
     "abandoned-account-deletion": "tsx scripts/abandoned-account-deletion.mjs",
     "analyze-ladder-delta-monte-carlo": "tsx scripts/analyze-ladder-delta-monte-carlo.mjs",

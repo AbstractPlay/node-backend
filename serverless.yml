@@ -25,6 +25,13 @@ custom:
   queryReservedConcurrency: 50
   authQueryReservedConcurrency: 75
 
+  # REST API stage throttle (*/*). Not in CloudFormation — applied post-deploy via
+  # npm run apply-api-gateway-stage-throttle (CI). Prod Nov 2026: ~2 RPS p99; ~15 RPS peak hour.
+  apiGatewayStageThrottle:
+    prod:
+      rateLimit: 25
+      burstLimit: 75
+
   testBotHttpEvents:
     dev:
       - http:
