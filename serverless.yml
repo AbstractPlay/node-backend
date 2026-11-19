@@ -887,6 +887,14 @@ functions:
     logRetentionInDays: 30
     # Pool trigger wired via npm run apply-cognito-custom-message-trigger (Serverless cognitoUserPool+existing fails on our pools).
 
+  cognitoPreSignUp:
+    handler: api/cognitoPreSignUp.handler
+    memorySize: 128
+    timeout: 10
+    description: Cognito Pre sign-up — throwaway blocklist, honeypot, confirm email, timing, duplicate email
+    logRetentionInDays: 30
+    # Pool trigger wired via npm run apply-cognito-pre-signup-trigger (merge LambdaConfig with Custom message).
+
   gameProjector:
     handler: utils/game-projector.handler
     description: DynamoDB stream shadow projector for CURRENTGAMES#, COMPLETEDGAMES#, and sharded METAGAMES# counts

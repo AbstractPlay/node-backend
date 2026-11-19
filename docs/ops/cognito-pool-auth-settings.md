@@ -40,6 +40,20 @@ The apply script sets **`AutoVerifiedAttributes: email`** when the pool has none
 
 Prod: repeat with `--stage prod` after dev Gates B–D are validated. `PLAY_BASE_URL` is set per stage in `serverless.yml` from `siteHost`.
 
+## Pre sign-up Lambda (signup hardening)
+
+Public registration uses **`cognitoPreSignUp`** (`api/cognitoPreSignUp.ts`, `lib/cognito/preSignUp.ts`): throwaway-domain blocklist (with major-provider allowlist), required register **`clientMetadata`** (`website` honeypot, `emailConfirm`, `formStartedAt` soft timing), duplicate-email lookup, reserved login names. Admin-created users bypass honeypot / confirm / timing.
+
+**Deploy and wire (coordinate with front register UI):**
+
+1. Deploy **front** and **API** so register sends full `clientMetadata`.
+2. `serverless deploy --stage dev` (creates/updates `cognitoPreSignUp`).
+3. `npm run apply-cognito-pre-signup-trigger -- --stage dev --dry-run`, then without `--dry-run`.
+
+**Manual checks (dev):** Proton/Gmail signup works; `mailinator.com` blocked; mismatched confirm email blocked; honeypot filled blocked.
+
+Prod: repeat with `--stage prod` after dev sign-off. Re-running **`apply-cognito-custom-message-trigger`** or **`apply-cognito-pre-signup-trigger`** must preserve the other trigger ARN in `LambdaConfig` (each script merges with existing config).
+
 ## Auth email From (SES, not Cognito default)
 
 Sign-up, reset, and attribute-verify mail uses the **Custom message** Lambda for HTML; the **From** address comes from the user pool **Email configuration**. Default Cognito mail shows `no-reply@verificationemail.com`. To match transactional mail (`noreply@abstractplay.com` from **`lib/sesFromAddress.ts`**, sent via the verified **`abstractplay.com`** SES domain identity):
