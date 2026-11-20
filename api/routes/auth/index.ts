@@ -18,6 +18,8 @@ import { notificationsAuthRoutes } from './notifications.js';
 import { playgroundAuthRoutes } from './playground.js';
 import { profileAuthRoutes } from './profile.js';
 import { socialAuthRoutes } from './social.js';
+import { rateLimitExceededResponse } from '../../../lib/api/rateLimitResponse.js';
+import { enforceAuthWriteRateLimit } from '../../../lib/rateLimit/authWriteLimits.js';
 import { meDeprecatedResponse } from './shared.js';
 
 export const authRoutes: Record<string, import('../../../lib/api/routeTypes.js').AuthRouteHandler> = {
@@ -55,6 +57,17 @@ export async function runAuthQuery(
       }),
       headers,
     };
+  }
+  const rate = await enforceAuthWriteRateLimit(claims.sub, queryName);
+  if (!rate.allowed) {
+    console.warn(JSON.stringify({
+      evt: 'auth_query_rate_limited',
+      query: queryName,
+      scope: rate.scope,
+      window: rate.window,
+      sub: claims.sub,
+    }));
+    return rateLimitExceededResponse();
   }
   const result = await handler(claims, pars);
   return result ?? {

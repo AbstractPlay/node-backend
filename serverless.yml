@@ -879,6 +879,7 @@ functions:
     reservedConcurrency: ${self:custom.authQueryReservedConcurrency.${self:provider.stage}}
     description: Abstract Play queries that need authorization.
     logRetentionInDays: 14
+    # Per-user write caps: AUTH_WRITE_RATE_LIMITS=0 to disable (fail-open on DDB errors). See lib/rateLimit/authWriteLimits.ts
     environment:
       ARENA_FLAG_WORKER_ARN:
         Fn::GetAtt:

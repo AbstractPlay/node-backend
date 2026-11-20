@@ -121,7 +121,11 @@ Per-route, per-IP caps on selected open queries run inside **`runPublicQuery`** 
 | Stage throttle | Whole API stage |
 | **Public read limits** | `user_names`, `get_public_exploration`, `recent_completed_games`, `standing_challenges`, `all_standing_challenges` |
 
-Limits and window sizes are defined in [`lib/rateLimit/publicReadLimits.ts`](../lib/rateLimit/publicReadLimits.ts). Dev multiplies prod caps by **10**; set env **`PUBLIC_READ_RATE_LIMITS=0`** on the `query` Lambda to disable (fail-open on DynamoDB errors). CloudWatch: structured `public_query_rate_limited` / `public_read_rate_limit_fail_open` on deny or DDB blip.
+Limits and window sizes are defined in [`lib/rateLimit/publicReadLimits.ts`](../lib/rateLimit/publicReadLimits.ts). Dev multiplies prod caps by **10**; set env **`PUBLIC_READ_RATE_LIMITS=0`** on the `query` Lambda to disable (fail-open on DynamoDB errors). CloudWatch: structured `public_query_rate_limited` / `rate_limit_fail_open` (`layer: public`) on deny or DDB blip.
+
+## Auth write rate limits (`authQuery` Lambda)
+
+Per-user (Cognito `sub`) caps on authenticated **writes** run in **`runAuthQuery`** before handlers (DynamoDB `RATELIMIT#auth#*` counters). Tiered scopes ? `auth_write_move`, `auth_write_exploration`, `auth_write_create`, `auth_write_comment`, plus **`auth_write_global`** backstop ? with read/admin exempt lists in [`lib/rateLimit/authWriteLimits.ts`](../lib/rateLimit/authWriteLimits.ts). Returns **429** with the same JSON as public reads. Dev multiplies prod caps by **10**; set **`AUTH_WRITE_RATE_LIMITS=0`** on `authQuery` to disable. CloudWatch: `auth_query_rate_limited` on deny; `rate_limit_fail_open` with `layer: auth` on DDB errors.
 
 ## WebSocket `$connect` auth and rate limits
 
