@@ -21,13 +21,16 @@ custom:
     prod: true
     dev: false
 
-  # Concurrent execution caps (abuse / cost). Empirical prod 30d peaks: query ~13, authQuery ~19.
+  # Concurrent execution caps (abuse / cost). Empirical prod 30d peaks: query ~13, authQuery ~19, botQuery ~1.
   queryReservedConcurrency:
     prod: 50
     dev: 10
   authQueryReservedConcurrency:
     prod: 75
     dev: 15
+  botQueryReservedConcurrency:
+    prod: 10
+    dev: 5
 
   # REST API stage throttle (*/*). Not in CloudFormation — applied post-deploy via
   # npm run apply-api-gateway-stage-throttle (CI). Prod Nov 2026: ~2 RPS p99; ~15 RPS peak hour.
@@ -349,6 +352,10 @@ resources:
       Fn::And:
         - Condition: OpsAlertsEnabled
         - Condition: IsProdStage
+    PublicReadRateLimitOpsAlertsEnabled:
+      Fn::And:
+        - Condition: OpsAlertsEnabled
+        - Condition: IsProdStage
 
   Resources:
     # One table design
@@ -655,6 +662,39 @@ resources:
         OKActions:
           - !Ref OpsAlertsTopic
 
+    PublicQueryRateLimitedMetricFilter:
+      Type: AWS::Logs::MetricFilter
+      Condition: PublicReadRateLimitOpsAlertsEnabled
+      Properties:
+        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-query
+        FilterPattern: '{ $.evt = "public_query_rate_limited" }'
+        MetricTransformations:
+          - MetricName: PublicQueryRateLimited
+            MetricNamespace: AbstractPlay/RateLimits
+            MetricValue: '1'
+            DefaultValue: 0
+
+    PublicQueryRateLimitedAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: PublicReadRateLimitOpsAlertsEnabled
+      Properties:
+        AlarmName: abstractplay-public-query-rate-limited-${self:provider.stage}
+        AlarmDescription: >-
+          Sustained public read rate-limit denies (429 before handlers).
+          Empirical prod Nov 2026: max 13 per 5m (deploy check); tune threshold after soak.
+        Namespace: AbstractPlay/RateLimits
+        MetricName: PublicQueryRateLimited
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 30
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - !Ref OpsAlertsTopic
+        OKActions:
+          - !Ref OpsAlertsTopic
+
     GameProjectorDLQPolicy:
       Type: AWS::SQS::QueuePolicy
       Condition: GameProjectorDLQEnabled
@@ -904,6 +944,7 @@ functions:
   botQuery:
     handler: api/botQuery.botQuery
     memorySize: 1024
+    reservedConcurrency: ${self:custom.botQueryReservedConcurrency.${self:provider.stage}}
     description: Abstract Play queries for bots.
     logRetentionInDays: 30
     events:
