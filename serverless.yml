@@ -996,10 +996,10 @@ functions:
     logRetentionInDays: 30
 
   # websocket functions
-  # wsAuthorizer:
-  #   name: wsAuthorizer
-  #   handler: api/sockets/wsAuthorizer.wsAuthorizer
-  #   logRetentionInDays: 7
+  wsAuthorizer:
+    handler: api/sockets/wsAuthorizer.wsAuthorizer
+    logRetentionInDays: 7
+    timeout: 10
 
   connect:
     handler: api/sockets/connectHandler.handler
@@ -1008,9 +1008,10 @@ functions:
     events:
       - websocket:
           route: $connect
-          # authorizer:
-          #   name: wsAuthorizer
-          #   identitySource: route.request.header.Sec-WebSocket-Protocol
+          authorizer:
+            name: wsAuthorizer
+            identitySource:
+              - route.request.querystring.token
 
   disconnect:
     handler: api/sockets/disconnectHandler.handler
