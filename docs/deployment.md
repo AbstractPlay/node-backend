@@ -91,7 +91,7 @@ Table name: `abstract-play-${stage}`.
 | **prod** | 25 | 75 |
 | **dev** | 2 | 6 |
 
-Dev also uses lower Lambda caps: `query` reserved concurrency **10**, `authQuery` **15** (prod **50** / **75**).
+Dev also uses lower Lambda caps: `query` reserved concurrency **10**, `authQuery` **15**, `botQuery` **5** (prod **50** / **75** / **10**).
 
 **CI:** [deploy-prod](../.github/workflows/deploy-prod.js.yml) and [deploy-dev](../.github/workflows/deploy-dev.js.yml) each run `npm run apply-api-gateway-stage-throttle -- --stage <stage>` immediately after the API stack deploy.
 
@@ -121,7 +121,7 @@ Per-route, per-IP caps on selected open queries run inside **`runPublicQuery`** 
 | Stage throttle | Whole API stage |
 | **Public read limits** | `user_names`, `get_public_exploration`, `recent_completed_games`, `standing_challenges`, `all_standing_challenges` |
 
-Limits and window sizes are defined in [`lib/rateLimit/publicReadLimits.ts`](../lib/rateLimit/publicReadLimits.ts). Dev multiplies prod caps by **10**; set env **`PUBLIC_READ_RATE_LIMITS=0`** on the `query` Lambda to disable (fail-open on DynamoDB errors). CloudWatch: structured `public_query_rate_limited` / `rate_limit_fail_open` (`layer: public`) on deny or DDB blip.
+Limits and window sizes are defined in [`lib/rateLimit/publicReadLimits.ts`](../lib/rateLimit/publicReadLimits.ts). Dev multiplies prod caps by **10**; set env **`PUBLIC_READ_RATE_LIMITS=0`** on the `query` Lambda to disable (fail-open on DynamoDB errors). CloudWatch: structured `public_query_rate_limited` / `rate_limit_fail_open` (`layer: public`) on deny or DDB blip. **Prod ops alarm** (when `OPS_ALERT_EMAIL` is set): `abstractplay-public-query-rate-limited-prod` fires on **? 30** denies in **5 minutes** (`AbstractPlay/RateLimits` metric from a log metric filter on the `query` log group).
 
 ## Auth write rate limits (`authQuery` Lambda)
 
@@ -156,13 +156,15 @@ Once a stage has a stream, always deploy with `true` (or use the script) so Clou
 
 ## Ops alerts (email)
 
-When `OPS_ALERT_EMAIL` is set at deploy time, CloudFormation creates an SNS topic (`abstractplay-ops-alerts-${stage}`) and wires **gameProjector** alarms to it (prod only; dev does not create the projector DLQ or DLQ alarm):
+When `OPS_ALERT_EMAIL` is set at deploy time, CloudFormation creates an SNS topic (`abstractplay-ops-alerts-${stage}`) and wires the alarms below to it (some are prod-only; dev does not create the projector DLQ or DLQ alarm):
 
 | Alarm | Signal |
 |-------|--------|
 | `abstractplay-game-projector-errors-${stage}` | Lambda `Errors` = 1 in 1 minute (catches init crashes) |
 | `abstractplay-game-projector-dlq-${stage}` | DLQ depth = 1 message (**prod** only) |
 | `abstractplay-game-projector-iterator-age-${stage}` | Stream `IteratorAge` > 5 minutes for 10 minutes |
+| `abstractplay-public-query-rate-limited-prod` | **Prod only:** at least **30** `public_query_rate_limited` log lines in 5 minutes (sustained throttling / scraper) |
+| `abstractplay-ses-bounce-rate-prod` / `abstractplay-ses-complaint-rate-prod` | SES reputation thresholds |
 
 **First deploy:** SNS sends a subscription confirmation email � you must click **Confirm subscription** once or alarms will not arrive.
 
