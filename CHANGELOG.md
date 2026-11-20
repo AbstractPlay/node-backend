@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Dated `[1.0.0-ci]` sections are batched **one block per calendar month** (header date is the last update that month); append new bullets under the current month’s section rather than adding a second November/October header. Entries below are grouped by theme; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-11-19
+## [1.0.0-ci] - 2026-11-20
 
 ### Added
 
@@ -17,6 +17,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Organized events:** `event_close` notifies registered players with in-app `eventEnd` notifications and optional email/push (winners and link to `https://play.abstractplay.com/event/{eventId}`); user prefs `eventEnd` / `settings.all.notifications.eventEnd`.
 - **Email notifications:** signed footer link on game/ops SES mail plus public `unsubscribe_email` and `GET`/`POST` `/unsubscribe-email` (RFC 8058 `List-Unsubscribe` / one-click POST) — no login turns off all email notification prefs; `EMAIL_UNSUBSCRIBE_SECRET` on API and crons; crons import `RestApiBaseUrl` for header URLs.
 - **Public API:** per-IP rate limits on open reads `user_names`, `get_public_exploration`, `recent_completed_games`, `standing_challenges`, `all_standing_challenges` (429 before handler; DynamoDB `RATELIMIT#public#*` counters in main table).
+- **WebSockets:** `$connect` REQUEST authorizer (`wsAuthorizer`) requires Cognito ID JWT in `?token=`; per-IP connect caps **12 / 80 / 300** per minute/hour/day (`RATELIMIT#ws#ws_connect#*`); front must append token on WebSocket URL (coordinated deploy).
 
 ### Changed
 
