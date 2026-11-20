@@ -997,7 +997,7 @@ functions:
 
   # websocket functions
   wsAuthorizer:
-    handler: api/sockets/wsAuthorizer.wsAuthorizer
+    handler: api/sockets/wsAuthorizer.handler
     logRetentionInDays: 7
     timeout: 10
 

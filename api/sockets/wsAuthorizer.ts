@@ -161,6 +161,9 @@ export async function handleWsAuthorizer(
   return allowPolicy(methodArn, sub);
 }
 
-export const wsAuthorizer = async (event: WebSocketAuthorizerEvent) => {
+export const handler = async (event: WebSocketAuthorizerEvent) => {
   return handleWsAuthorizer(event);
 };
+
+/** Serverless may reference either export name. */
+export const wsAuthorizer = handler;
