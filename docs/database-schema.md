@@ -136,6 +136,10 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - fields: `c` (count), `expiresAt` (TTL seconds — table TTL attribute)
   - one conditional `UpdateItem` per window per allowed request; excluded from live product reads
 
+- **WebSocket connect rate limits** — per-IP counters at `$connect` authorizer (no GSI)
+  - pk: `RATELIMIT#ws#ws_connect#<hashedIp>`
+  - sk / fields: same window + `c` + `expiresAt` pattern as public read limits
+
 ## Game lists
 
 - **Current games by player** � per-player active game summaries (stream-maintained; Phase 3 reads from here)

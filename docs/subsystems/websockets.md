@@ -6,9 +6,9 @@ Real-time updates (game moves, presence) use API Gateway WebSockets plus SQS-bac
 
 ## Connection flow
 
-1. Client opens WebSocket to the stage API (`wss://…/{stage}`).
-2. **`$connect`** — [`connectHandler`](../../api/sockets/connectHandler.ts) is a no-op; connections are registered on subscribe.
-3. **`subscribe`** — [`authHandler`](../../api/sockets/authHandler.ts) validates the JWT, stores the connection under `wsConnections` (optionally including `watchingGames` from a `games: [{ meta, id }]` array in the same message), sends a direct **presence snapshot** to that connection, and enqueues a debounced join event (skipped for `invisible: true`).
+1. Client opens WebSocket to the stage API with Cognito **ID token** in the query string: `wss://…/{stage}?token=<jwt>` (front encodes with `encodeURIComponent`). Anonymous handshakes are **denied** at the authorizer.
+2. **`$connect`** — [`wsAuthorizer`](../../api/sockets/wsAuthorizer.ts) validates `token`, enforces per-IP **`ws_connect`** DynamoDB rate limits ([`wsConnectLimits.ts`](../../lib/rateLimit/wsConnectLimits.ts); prod **12 / 80 / 300** per minute/hour/day), then allows the handshake. [`connectHandler`](../../api/sockets/connectHandler.ts) is still a no-op success; connections are registered on subscribe.
+3. **`subscribe`** — [`authHandler`](../../api/sockets/authHandler.ts) validates the JWT again from the message body, stores the connection under `wsConnections` (optionally including `watchingGames` from a `games: [{ meta, id }]` array in the same message), sends a direct **presence snapshot** to that connection, and enqueues a debounced join event (skipped for `invisible: true`).
 4. **`watchGames`** — [`watchGamesHandler`](../../api/sockets/watchGamesHandler.ts) replaces the connection's `watchingGames` set from `{ games: [{ meta, id }] }`. Used for incremental updates after subscribe (e.g. navigation, dashboard changes).
 5. **`watchTournaments`** — [`watchTournamentsHandler`](../../api/sockets/watchTournamentsHandler.ts) replaces `watchingTournaments` from `{ tournaments: [<tournamentid>, …] }` (tournament detail page).
 6. **`syncPresence`** — [`syncPresenceHandler`](../../api/sockets/syncPresenceHandler.ts) responds with a fresh presence snapshot (no seq increment).

@@ -123,6 +123,12 @@ Per-route, per-IP caps on selected open queries run inside **`runPublicQuery`** 
 
 Limits and window sizes are defined in [`lib/rateLimit/publicReadLimits.ts`](../lib/rateLimit/publicReadLimits.ts). Dev multiplies prod caps by **10**; set env **`PUBLIC_READ_RATE_LIMITS=0`** on the `query` Lambda to disable (fail-open on DynamoDB errors). CloudWatch: structured `public_query_rate_limited` / `public_read_rate_limit_fail_open` on deny or DDB blip.
 
+## WebSocket `$connect` auth and rate limits
+
+**REQUEST authorizer** [`wsAuthorizer`](../api/sockets/wsAuthorizer.ts) on route `$connect` requires `?token=` (Cognito ID JWT). Per-IP caps use DynamoDB `RATELIMIT#ws#ws_connect#*` ([`wsConnectLimits.ts`](../lib/rateLimit/wsConnectLimits.ts)): prod **12 / 80 / 300** (minute/hour/day); dev **×10**. Disable caps with **`WS_CONNECT_RATE_LIMITS=0`**. WebSocket access logging stays **off** so tokens do not appear in API logs.
+
+**Release:** deploy **API** and **front** together ? [`MyWebSocket.js`](https://github.com/AbstractPlay/front/blob/develop/src/components/MyWebSocket.js) appends `?token=` to `WS_ENDPOINT`. Without the front change, authorized users cannot connect after the authorizer ships.
+
 ## gameProjector stream (automatic in CI)
 
 The DynamoDB table must have streams enabled **before** CloudFormation can reference `StreamArn`. The stream Lambda trigger is gated by the `enableGameProjectorStream` deploy parameter.
