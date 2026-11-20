@@ -19,6 +19,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Public API:** per-IP rate limits on open reads `user_names`, `get_public_exploration`, `recent_completed_games`, `standing_challenges`, `all_standing_challenges` (429 before handler; DynamoDB `RATELIMIT#public#*` counters in main table).
 - **WebSockets:** `$connect` REQUEST authorizer (`wsAuthorizer`) requires Cognito ID JWT in `?token=`; per-IP connect caps **12 / 80 / 300** per minute/hour/day (`RATELIMIT#ws#ws_connect#*`); front must append token on WebSocket URL (coordinated deploy).
 - **Auth API:** per-user write rate limits on `authQuery` (tiered scopes + global backstop; `RATELIMIT#auth#*`; 429 before handler); disable with `AUTH_WRITE_RATE_LIMITS=0`.
+- **Ops:** CloudWatch metric filter + alarm on sustained **`public_query_rate_limited`** denies (prod; ≥ **30** / 5 minutes → ops SNS).
 
 ### Changed
 
@@ -29,7 +30,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Ops:** Prod regional **WAFv2** on REST API stage — per-IP rate block **2000 req / 5 min** (`RestApiWebAcl` in API stack; prod only).
 - **Public API:** `report_problem` is a no-op (200 + `Reported`)—no DynamoDB `USERS` scan or admin SES mail; closes abuse/cost exposure while front-end hooks remain until analytics is redesigned.
 - **Crons:** `s3-to-sqs` `reservedConcurrency` **50** and `sqs-to-render` **40** cap thumbnail / render pipeline fan-out (S3 ObjectCreated + queue consumers).
-- **API:** `query` `reservedConcurrency` **50**, `authQuery` **75** — abuse/cost caps on public and authed RPC Lambdas.
+- **API:** `query` `reservedConcurrency` **50**, `authQuery` **75**, `botQuery` **10** (dev **5**) — abuse/cost caps on public, authed, and bot RPC Lambdas.
 - **Ops:** CloudWatch SES **`Reputation.BounceRate`** / **`Reputation.ComplaintRate`** alarms (prod API stack); removed duplicate thumbnail **`RenderFailure`** alarm (covered by `sqs-to-render` errors).
 - **Cognito (signup):** **`cognitoPreSignUp`** Pre sign-up Lambda — throwaway-domain denylist, honeypot / confirm-email / timing via `clientMetadata`, duplicate email, reserved login names; wire with `npm run apply-cognito-pre-signup-trigger` after deploy (with matching front register).
 - **Cognito (ops):** `npm run apply-cognito-pool-auth-settings` — HTML message templates on prod/dev pools (verify link, password-reset code, admin invite); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/). Email sign-in alias remains unavailable until a **new pool** (AWS locks `AliasAttributes` after creation). **`apply-cognito-pool-ses-email`** sets auth-mail From via SES; **`lib/sesFromAddress.ts`** + **`lib/createSendEmailCommand.ts`** are the single From for Cognito + API/crons mail (`noreply@abstractplay.com`).
