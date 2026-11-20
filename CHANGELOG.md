@@ -18,6 +18,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Email notifications:** signed footer link on game/ops SES mail plus public `unsubscribe_email` and `GET`/`POST` `/unsubscribe-email` (RFC 8058 `List-Unsubscribe` / one-click POST) — no login turns off all email notification prefs; `EMAIL_UNSUBSCRIBE_SECRET` on API and crons; crons import `RestApiBaseUrl` for header URLs.
 - **Public API:** per-IP rate limits on open reads `user_names`, `get_public_exploration`, `recent_completed_games`, `standing_challenges`, `all_standing_challenges` (429 before handler; DynamoDB `RATELIMIT#public#*` counters in main table).
 - **WebSockets:** `$connect` REQUEST authorizer (`wsAuthorizer`) requires Cognito ID JWT in `?token=`; per-IP connect caps **12 / 80 / 300** per minute/hour/day (`RATELIMIT#ws#ws_connect#*`); front must append token on WebSocket URL (coordinated deploy).
+- **Auth API:** per-user write rate limits on `authQuery` (tiered scopes + global backstop; `RATELIMIT#auth#*`; 429 before handler); disable with `AUTH_WRITE_RATE_LIMITS=0`.
 
 ### Changed
 

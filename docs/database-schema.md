@@ -140,6 +140,10 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
   - pk: `RATELIMIT#ws#ws_connect#<hashedIp>`
   - sk / fields: same window + `c` + `expiresAt` pattern as public read limits
 
+- **Auth write rate limits** — per-user (`sub`) counters at `authQuery` (no GSI)
+  - pk: `RATELIMIT#auth#<scope>#<hashedSub>` (`scope` e.g. `auth_write_global`, `auth_write_move`, `auth_write_exploration`)
+  - sk / fields: same window + `c` + `expiresAt` pattern as public read limits
+
 ## Game lists
 
 - **Current games by player** � per-player active game summaries (stream-maintained; Phase 3 reads from here)

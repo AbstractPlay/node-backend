@@ -36,6 +36,8 @@ export type ConsumeFixedWindowOpts = {
   sk: string;
   limit: number;
   expiresAtSec: number;
+  /** CloudWatch `rate_limit_fail_open.layer` when set */
+  layer?: string;
 };
 
 export type ConsumeFixedWindowResult =
@@ -77,7 +79,8 @@ export async function consumeFixedWindowLimit(
       return { allowed: false, reason: 'limit' };
     }
     console.warn(JSON.stringify({
-      evt: 'public_read_rate_limit_fail_open',
+      evt: 'rate_limit_fail_open',
+      layer: opts.layer ?? 'public',
       pk: opts.pk,
       sk: opts.sk,
       message: err instanceof Error ? err.message : String(err),
