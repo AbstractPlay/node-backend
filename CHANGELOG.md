@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Dated `[1.0.0-ci]` sections are batched **one block per calendar month** (header date is the last update that month); append new bullets under the current month’s section rather than adding a second November/October header. Entries below are grouped by theme; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-11-20
+## [1.0.0-ci] - 2026-11-22
 
 ### Added
 
@@ -40,6 +40,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 
 ### Fixed
 
+- **Feedback:** `feedback_mine` with `kind` queries `USER#` rows by `POST#{kind}#` / `VOTED#{kind}#` / `WATCH#{kind}#` prefix instead of paging mixed kinds and filtering in memory (empty bug list when many feature/wishlist submissions sort above bugs).
 - **Ops:** Prod WAF deploy IAM — `AbstractPlay-WAFHandling` managed policy on `serverless-GitHub-actions` (not CloudFormation; CI cannot `iam:PutUserPolicy`). Removed `GitHubActionsWafDeployPolicy` from API stack after prod deploy failure run 44604408924.
 - **Ops scripts (DynamoDB):** shared `scripts/lib/ddb-query-partition.mjs`; GAME/USER backfills and reports use partition `Query` instead of full-table `Scan` (tumbleweed fog, tablero/chameleon/orb/guerrilla stacks, completed-game index tooling, vacation USER discover, arena index backfill, meta-game count admin discover, dashboard user maintenance, USER ratings strip in realtime purge).
 - **Tumbleweed (fog) backfill:** `npm run backfill-tumbleweed-fog` queries the `GAME` partition (`metaGame=tumbleweed`) instead of scanning the whole table; `--game-id` loads via `GetItem`. Uses `lib/tumbleweedFogRepair.ts` (EOG replay) until the pinned `@abstractplay/gameslib` CI build matches gameslib `tumbleweed-fog-repair`.
