@@ -34,14 +34,15 @@ custom:
 
   # REST API stage throttle (*/*). Not in CloudFormation — applied post-deploy via
   # npm run apply-api-gateway-stage-throttle (CI). Prod Nov 2026: ~2 RPS p99; ~15 RPS peak hour.
-  # Dev Nov 2026: ~100 req/day typical; spike days ~1.2k — keep edge far below prod.
+  # Dev: same edge caps as prod so move-tree exploration (bursty get_exploration) is not 429'd;
+  # dev cost/abuse still bounded by lower query/authQuery reserved concurrency.
   apiGatewayStageThrottle:
     prod:
       rateLimit: 25
       burstLimit: 75
     dev:
-      rateLimit: 2
-      burstLimit: 6
+      rateLimit: 25
+      burstLimit: 75
 
   # Prod-only REST WAF (resources.RestApiWebAcl): per-IP rate 2000 requests / 5 minutes.
 
