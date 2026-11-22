@@ -1183,6 +1183,41 @@ test('feedbackMine watched scope lists subscribed posts', async () => {
   }
 });
 
+test('feedbackMine kind filter queries DynamoDB by kind prefix', async () => {
+  const store: Store = new Map();
+  const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
+  let bugId: string | undefined;
+  for (let i = 0; i < 3; i += 1) {
+    const createResult = await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+      kind: 'bug',
+      title: `Bug ${i}`,
+      body: 'Body',
+    });
+    assert.equal(createResult.ok, true);
+    if (createResult.ok) {
+      bugId = createResult.data.id;
+    }
+  }
+  for (let i = 0; i < 30; i += 1) {
+    await feedbackCreate(client, TABLE, mockS3, USER_ID, {
+      kind: 'feature',
+      title: `Feature ${i}`,
+      body: 'Body',
+    });
+  }
+  const bugMine = await feedbackMine(client, TABLE, USER_ID, {
+    kind: 'bug',
+    scope: 'submitted',
+    limit: 100,
+  });
+  assert.equal(bugMine.ok, true);
+  if (bugMine.ok) {
+    assert.equal(bugMine.data.items.length, 3);
+    assert.ok(bugMine.data.items.some((item) => item.id === bugId));
+    assert.ok(bugMine.data.items.every((item) => item.kind === 'bug'));
+  }
+});
+
 test('syncFeedbackNewNotifyIndex and notify opt-in recipient', async () => {
   const store: Store = new Map();
   const client = createMockDocClient(store) as unknown as DynamoDBDocumentClient;
