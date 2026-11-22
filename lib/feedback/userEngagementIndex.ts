@@ -17,6 +17,15 @@ export function userMineSkPrefixForScope(scope: FeedbackMineScope): string {
   return 'POST#';
 }
 
+/** USER# sort-key prefix for feedback_mine; narrows DynamoDB query when kind is set. */
+export function userMineSkPrefixForScopeAndKind(
+  scope: FeedbackMineScope,
+  kind?: FeedbackKind,
+): string {
+  const base = userMineSkPrefixForScope(scope);
+  return kind ? `${base}${kind}#` : base;
+}
+
 export function buildUserVotedIndexItem(
   userId: string,
   kind: FeedbackKind,

@@ -53,7 +53,7 @@ import {
 import {
   buildUserVotedIndexItem,
   buildUserWatchIndexItem,
-  userMineSkPrefixForScope,
+  userMineSkPrefixForScopeAndKind,
 } from './userEngagementIndex.js';
 import {
   assertStagingKeysOwned,
@@ -2044,7 +2044,7 @@ export async function feedbackMine(
   const feedbackTable = getFeedbackTableName(tableName);
   const { kind, scope, limit, cursor } = validated.data;
   const pk = `${USER_PK_PREFIX}${userId}`;
-  const skPrefix = userMineSkPrefixForScope(scope);
+  const skPrefix = userMineSkPrefixForScopeAndKind(scope, kind);
 
   const result = await client.send(new QueryCommand({
     TableName: feedbackTable,
@@ -2058,11 +2058,7 @@ export async function feedbackMine(
     ExclusiveStartKey: cursor ? JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) : undefined,
   }));
 
-  let indexItems = (result.Items ?? []);
-  if (kind) {
-    indexItems = indexItems.filter((item) => item.kind === kind);
-  }
-  indexItems = indexItems.slice(0, limit);
+  const indexItems = (result.Items ?? []).slice(0, limit);
 
   const items: FeedbackMineListItem[] = [];
   for (const indexItem of indexItems) {
