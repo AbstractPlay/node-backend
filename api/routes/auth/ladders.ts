@@ -1,6 +1,7 @@
 import type { AuthRouteHandler } from '../../../lib/api/routeTypes.js';
 import {
   handleGetLadder,
+  handleGetLadderActivity,
   handleJoinLadder,
   handleJoinLadderPool,
   handleLeaveLadder,
@@ -17,6 +18,7 @@ export const laddersAuthRoutes: Record<string, AuthRouteHandler> = {
   join_ladder: bindAuth(handleJoinLadder),
   leave_ladder: bindAuth(handleLeaveLadder),
   get_ladder: bindAuth((userid, pars) => handleGetLadder(pars, userid)),
+  get_ladder_activity: bindAuth((_userid, pars) => handleGetLadderActivity(pars)),
   join_ladder_pool: bindAuth(handleJoinLadderPool),
   leave_ladder_pool: bindAuth(handleLeaveLadderPool),
   new_ladder_challenge: bindAuth(handleNewLadderChallenge),

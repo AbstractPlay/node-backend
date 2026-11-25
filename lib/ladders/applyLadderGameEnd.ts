@@ -2,7 +2,12 @@ import { GetCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { ddbDocClient } from '../ddb.js';
 import { computeLadderPointDeltas } from './delta.js';
 import { computePaceMultiplier } from './paceMultiplier.js';
-import { getLadderRecord } from './ladderStore.js';
+import { getLadderRecord, queryLadderPlayers } from './ladderStore.js';
+import {
+  buildLadderOutcomeSnapshot,
+  ladderGameSnapshotUpdateFragments,
+  type BuildLadderOutcomeSnapshotInput,
+} from './outcomeSnapshot.js';
 import { ladderGameSk, ladderPlayerSk } from './keys.js';
 import type { LadderGameRecord, LadderTuning } from './types.js';
 import { enqueueLadderPointsChangeNotifications } from '../notifications.js';
@@ -16,7 +21,8 @@ export type LadderFinishedGame = {
   metaGame: string;
   variants?: string[];
   winner?: number[];
-  players: { id: string }[];
+  players: { id: string; name?: string }[];
+  state?: string;
   rated?: boolean;
   gameStarted?: number;
   gameEnded?: number;
@@ -56,6 +62,7 @@ export async function applyLadderGameEnd(game: LadderFinishedGame): Promise<void
     return;
   }
   const tuning: LadderTuning = ladder.tuning;
+  const ladderMembers = await queryLadderPlayers(game.ladderId);
 
   const p0 = game.players[0]!.id;
   const p1 = game.players[1]!.id;
@@ -95,14 +102,6 @@ export async function applyLadderGameEnd(game: LadderFinishedGame): Promise<void
       loserPointsAfter: number;
     }
     | undefined;
-  const activityUpdate = {
-    TableName: TABLE(),
-    Key: { pk: 'LADDERGAME', sk: ladderGameSk(game.ladderId, game.id) },
-    UpdateExpression: 'SET settled = :t, settledAt = :now',
-    ConditionExpression: 'attribute_not_exists(settled) OR settled = :f',
-    ExpressionAttributeValues: { ':t': true, ':now': now, ':f': false },
-  };
-
   if (game.winner.length === 1) {
     const winnerIndex = game.winner[0]! - 1;
     const loserIndex = winnerIndex === 0 ? 1 : 0;
@@ -170,6 +169,43 @@ export async function applyLadderGameEnd(game: LadderFinishedGame): Promise<void
       });
     }
   }
+
+  const snapshotInput: BuildLadderOutcomeSnapshotInput = {
+    players: [
+      { id: p0, name: game.players[0]?.name },
+      { id: p1, name: game.players[1]?.name },
+    ],
+    winner: game.winner,
+    metaGame: game.metaGame,
+    state: game.state,
+    ladderPlayers: ladderMembers,
+    ...(pointsNotify !== undefined
+      ? {
+        winnerPointsBefore: pointsNotify.winnerPointsBefore,
+        loserPointsBefore: pointsNotify.loserPointsBefore,
+        winnerGain: pointsNotify.winnerPointsAfter - pointsNotify.winnerPointsBefore,
+        loserLoss: pointsNotify.loserPointsBefore - pointsNotify.loserPointsAfter,
+      }
+      : {}),
+  };
+  const snapshot = buildLadderOutcomeSnapshot(snapshotInput);
+  const snapFragments = ladderGameSnapshotUpdateFragments(snapshot);
+  const lgValues: Record<string, unknown> = { ':t': true, ':now': now, ':f': false };
+  const lgNames: Record<string, string> = {};
+  let lgUpdateExpression = 'SET settled = :t, settledAt = :now';
+  if (snapFragments.setClauses.length > 0) {
+    lgUpdateExpression += `, ${snapFragments.setClauses.join(', ')}`;
+    Object.assign(lgNames, snapFragments.expressionAttributeNames);
+    Object.assign(lgValues, snapFragments.expressionAttributeValues);
+  }
+  const activityUpdate = {
+    TableName: TABLE(),
+    Key: { pk: 'LADDERGAME', sk: ladderGameSk(game.ladderId, game.id) },
+    UpdateExpression: lgUpdateExpression,
+    ConditionExpression: 'attribute_not_exists(settled) OR settled = :f',
+    ExpressionAttributeValues: lgValues,
+    ...(Object.keys(lgNames).length > 0 ? { ExpressionAttributeNames: lgNames } : {}),
+  };
 
   transactItems.push({ Update: activityUpdate });
 

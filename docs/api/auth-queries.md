@@ -186,6 +186,7 @@ Player-created continuous delta ladders (one canonical ladder per meta + variant
 | `join_ladder` | Join or rejoin (`left` keeps prior points) | `ladderId` |
 | `leave_ladder` | Soft leave (blocked while `activeLadderGameCount > 0`) | `ladderId` |
 | `get_ladder` | Leaderboard, **`comments`**, **`matchmaking`** (reach band, `inReachOpponentCount`, `nearestAnywayCandidate`, `poolWaiterCount`, `viewerInPool` when viewer is active), board rows include **`withinReach`** for viewer; plus auth **`viewer`** | `ladderId` |
+| `get_ladder_activity` | Active ladder games (`toCurrentSummary` rows) plus last 30d settled outcomes from `LADDERGAME` snapshots (`snapshotComplete: false` when pre-backfill); public `query` + auth | `ladderId` |
 | `join_ladder_pool` | Queue for in-reach pairing (tournament clocks; may start a game immediately) | `ladderId` |
 | `leave_ladder_pool` | Leave queue | `ladderId` |
 | `new_ladder_challenge` | Direct 2P rated challenge (`opponentId` or `nearestAnyway: true` when empty in-reach band) | `ladderId`, optional `opponentId`, `nearestAnyway`, `comment` |
