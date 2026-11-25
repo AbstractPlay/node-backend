@@ -111,6 +111,10 @@
     "src": "For more details, including a game record you can archive, please visit https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}.",
     "out": "Per maggiori dettagli, inclusa una trascrizione della partita che puoi archiviare, visita https://play.abstractplay.com/move/{{metaGame}}/1/{{gameID}}."
   },
+  "GameOverPushBody": {
+    "src": "Your {{- metaGame}} game ended.",
+    "out": "La tua partita a {{- metaGame}} è terminata."
+  },
   "GameOverResult_draw": {
     "src": "It was a draw.",
     "out": "È stato un pareggio."
@@ -306,6 +310,14 @@
   "YourMoveBody": {
     "src": "It is now your move in a game of {{- metaGame}}. Please visit https://play.abstractplay.com/ for more details.",
     "out": "Tocca a te muovere in una partita a {{- metaGame}}. Visita https://play.abstractplay.com/ per maggiori dettagli."
+  },
+  "YourMovePushBody": {
+    "src": "Your turn in {{- metaGame}} vs {{opponentName}} (move {{moveNumber}}).",
+    "out": "È il tuo turno in {{- metaGame}} contro {{opponentName}} (mossa {{moveNumber}})."
+  },
+  "YourMovePushBodyNoOpponent": {
+    "src": "Your turn in {{- metaGame}} (move {{moveNumber}}).",
+    "out": "È il tuo turno in {{- metaGame}} (mossa {{moveNumber}})."
   },
   "YourMoveSubject": {
     "src": "AbstractPlay: your move",

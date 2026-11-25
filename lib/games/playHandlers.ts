@@ -82,7 +82,14 @@ import { notifyRegisteredBotsTurn } from '../bots/notifyTurn.js';
 import { realPingBot } from '../bots/realPingBot.js';
 import { getPlayers } from '../players/getPlayers.js';
 import { timeloss } from './timeloss.js';
-import { sendUserPush } from '../push/sendUserPush.js';
+import { sendUserPushIfEnabled } from '../push/sendUserPush.js';
+import {
+  buildGameOverPushBody,
+  buildYourTurnPushBody,
+  opponentNameForPlayer,
+  pushCollapseKeyForGame,
+} from '../push/pushMessages.js';
+import { snapshotToMove, toMoveSeatChanged } from './toMoveSeat.js';
 import {
   createNotification,
   enqueueCompletedGameChatNotifications,
@@ -456,6 +463,7 @@ export async function submitMove(userid: string, pars: {
       variants: game.variants,
       numplayers: game.numPlayers,
     });
+    const prevToMove = snapshotToMove(game.toMove);
     const sessionFlags = effectiveFlags(engine, game.metaGame, game.variants);
     const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
     const moveNow = Date.now();
@@ -673,7 +681,12 @@ export async function submitMove(userid: string, pars: {
     if (simultaneous)
       game.partialMove = game.players.map((p: User, i: number) => (p.id === userid ? game.partialMove!.split(',')[i] : '')).join(',');
 
-    list.push(sendSubmittedMoveEmails(game, players.filter(p => !p.isBot) as unknown as FullUser[], simultaneous));
+    list.push(sendSubmittedMoveEmails(
+      game,
+      players.filter(p => !p.isBot) as unknown as FullUser[],
+      simultaneous,
+      prevToMove,
+    ));
     console.log("Scheduled emails");
 
     await realPingBot(game.metaGame, game.id, game);
@@ -751,10 +764,21 @@ async function tournamentUpdates(game: FullGame, players: FullUser[], timeout: n
   );
 }
 
-async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], simultaneous: any) {
+async function sendSubmittedMoveEmails(
+  game: FullGame,
+  players0: FullUser[],
+  simultaneous: any,
+  prevToMove: string | boolean[],
+) {
   await initi18n('en');
   const work: Promise<any>[] = [];
   if (game.toMove !== '') {
+    if (!toMoveSeatChanged(prevToMove, game.toMove)) {
+      console.log(
+        `Skipping your-turn push for game ${game.id}: toMove seat unchanged (${JSON.stringify(prevToMove)} → ${JSON.stringify(game.toMove)})`,
+      );
+      return Promise.all(work);
+    }
     let playerIds: any[] = [];
     if (!simultaneous) {
       playerIds.push(game.players[parseInt(game.toMove as string)].id);
@@ -763,18 +787,27 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
       playerIds = game.players.map(p => p.id);
     }
     const players = players0.filter(p => playerIds.includes(p.id));
+    const namedPlayers = game.players.map((p) => ({ id: p.id, name: p.name }));
     // Realtime YourTurn notifications are only sent by push (not for solo games — always your turn)
     if (game.numPlayers !== 1) {
       for (const player of players) {
         await changeLanguageForPlayer(player);
         const metaGame = localizedGameName(game.metaGame);
-        work.push(sendUserPush({
+        const opponentName = opponentNameForPlayer(namedPlayers, player.id);
+        const pushBody = buildYourTurnPushBody(
+          i18n.t.bind(i18n),
+          metaGame,
+          opponentName,
+          game.numMoves ?? 0,
+        );
+        work.push(sendUserPushIfEnabled({
           userId: player.id,
           topic: "yourturn",
           title: i18n.t("PUSH.titles.yourturn"),
-          body: i18n.t("YourMoveBody", { metaGame }),
+          body: pushBody,
           url: `/move/${game.metaGame}/0/${game.id}`,
-        }));
+          collapseKey: pushCollapseKeyForGame('yourturn', game.id),
+        }, player.settings));
       }
     }
   } else {
@@ -824,14 +857,24 @@ async function sendSubmittedMoveEmails(game: FullGame, players0: FullUser[], sim
       } else {
         console.log(`No verified email address found for ${player.name} (${player.id})`);
       }
-      // push notifications are sent no matter what
-      work.push(sendUserPush({
+      let scoresLine: string | undefined;
+      if (scores !== undefined && scores.length > 0) {
+        scoresLine = String(i18n.t("GameOverScores", { scores: formatNotificationScores(scores) }));
+      }
+      const pushBody = buildGameOverPushBody(
+        i18n.t.bind(i18n),
+        metaGame,
+        result as 'win' | 'lose' | 'draw',
+        scoresLine,
+      );
+      work.push(sendUserPushIfEnabled({
         userId: player.id,
         topic: "ended",
         title: i18n.t("PUSH.titles.ended"),
-        body: body.join(" "),
+        body: pushBody,
         url: `/move/${game.metaGame}/1/${game.id}`,
-      }));
+        collapseKey: pushCollapseKeyForGame('ended', game.id),
+      }, player.settings));
     }
   }
   return Promise.all(work);
@@ -1057,6 +1100,7 @@ export async function invokePie(userid: string, pars: { id: string, metaGame: st
       }
 
       const lastMoveTime = (new Date(engine.stack[engine.stack.length - 1]._timestamp)).getTime();
+      const prevToMove = snapshotToMove(game.toMove);
 
       const player = game.players.find(p => p.id === userid);
       if (!player) {
@@ -1149,7 +1193,12 @@ export async function invokePie(userid: string, pars: { id: string, metaGame: st
       const thisPlayer = players.find(p => p.id === userid)!;
       list.push(submitComment("", { id: game.id, metaGame: pars.metaGame, comment: `${thisPlayer.name} elected to switch seats. As a result, the game record for ply 1 has been retroactively changed to look as if ${thisPlayer.name} made that move.`, moveNumber: 2 }));
 
-      list.push(sendSubmittedMoveEmails(game, players.filter(p => p.email) as FullUser[], false));
+      list.push(sendSubmittedMoveEmails(
+        game,
+        players.filter(p => p.email) as FullUser[],
+        false,
+        prevToMove,
+      ));
       console.log("Scheduled emails");
       await Promise.all(list);
       console.log("All updates complete");

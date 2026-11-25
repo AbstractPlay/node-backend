@@ -9,6 +9,7 @@ import {
   wantsInAppNotification,
   type InAppNotificationUserSettings,
 } from './inAppNotificationPrefs.js';
+import { pushNotificationsEnabled } from '@backend/lib/push/pushNotificationPrefs.js';
 import { sendPush } from './pushSubscriptions.js';
 import type { ChallengePlayer, RevokeChallengeRecord } from './revokeChallenge.js';
 
@@ -140,13 +141,15 @@ export async function notifyChallengeRevokedAcceptors(
       ));
     }
 
-    await sendPush(client, tableName, {
-      userId: player.id,
-      topic: 'challenges',
-      title: i18n.t('PUSH.titles.revoked'),
-      body: localizedBody,
-      url: '/',
-    });
+    if (pushNotificationsEnabled(player.settings, 'challenges')) {
+      await sendPush(client, tableName, {
+        userId: player.id,
+        topic: 'challenges',
+        title: i18n.t('PUSH.titles.revoked'),
+        body: localizedBody,
+        url: `/games/${challenge.metaGame}`,
+      });
+    }
 
     if (!standing) {
       await createChallengeRevokedNotification(client, tableName, player.id, {

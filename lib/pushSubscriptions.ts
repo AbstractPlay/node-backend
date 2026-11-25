@@ -18,12 +18,18 @@ export type PushCredentials = {
   updatedAt?: string;
 };
 
+import type { PushNotificationKey } from './push/pushNotificationPrefs.js';
+
 export type PushOptions = {
   userId: string;
   title: string;
   body: string;
   topic: 'yourturn' | 'ended' | 'started' | 'challenges' | 'test' | 'tournament' | 'event' | 'announcements';
   url?: string;
+  /** When set, overrides topic mapping in `sendUserPushIfEnabled`. */
+  prefKey?: PushNotificationKey;
+  /** In-page toast dedupe when a tab is focused (`react-toastify` toastId). */
+  collapseKey?: string;
 };
 
 const PUSH_PK = 'PUSH';
@@ -151,7 +157,7 @@ export async function sendPushToSubscriptions(
     subject = 'https://play.dev.abstractplay.com';
   }
 
-  const { body, title, topic, url } = opts;
+  const { body, title, topic, url, collapseKey } = opts;
   const options: RequestOptions = {
     vapidDetails: {
       subject,
@@ -161,7 +167,13 @@ export async function sendPushToSubscriptions(
     // @ts-ignore web-push topic option
     topic,
   };
-  const payload = JSON.stringify({ title, body, url, topic });
+  const payload = JSON.stringify({
+    title,
+    body,
+    url,
+    topic,
+    ...(collapseKey !== undefined ? { collapseKey } : {}),
+  });
 
   await Promise.allSettled(
     subscriptions.map(async (sub) => {
