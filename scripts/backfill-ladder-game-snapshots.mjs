@@ -81,12 +81,20 @@ async function queryAll(client, tableName, pk, skPrefix) {
   return items;
 }
 
+/** In-progress games use `#0#`; completed (settled ladder) rows use `#1#`. */
 async function loadGame(client, tableName, metaGame, gameId) {
-  const row = await client.send(new GetCommand({
+  const active = await client.send(new GetCommand({
     TableName: tableName,
     Key: { pk: 'GAME', sk: `${metaGame}#0#${gameId}` },
   }));
-  return row.Item;
+  if (active.Item) {
+    return active.Item;
+  }
+  const completed = await client.send(new GetCommand({
+    TableName: tableName,
+    Key: { pk: 'GAME', sk: `${metaGame}#1#${gameId}` },
+  }));
+  return completed.Item;
 }
 
 function pointsAtSettlement(seeds, tuning, priorGames) {
@@ -226,6 +234,10 @@ async function main() {
         }
       }
 
+      const ladderPlayersAtSettlement = ladderPlayerRecords.map((p) => ({
+        ...p,
+        points: pointMap.get(p.userid) ?? p.points,
+      }));
       const snapshot = buildLadderOutcomeSnapshot({
         players: [
           { id: players[0].id, name: players[0].name },
@@ -234,7 +246,7 @@ async function main() {
         winner: game.winner,
         metaGame,
         state: game.state,
-        ladderPlayers: ladderPlayerRecords,
+        ladderPlayers: ladderPlayersAtSettlement,
         winnerPointsBefore,
         loserPointsBefore,
         winnerGain,

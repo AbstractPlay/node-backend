@@ -10,7 +10,7 @@ import {
 import i18n from '../i18nInstance.js';
 import { getPlayers } from '../players/getPlayers.js';
 import { createNotification } from '../notifications.js';
-import { sendUserPush } from '../push/sendUserPush.js';
+import { sendUserPushIfEnabled } from '../push/sendUserPush.js';
 import { filterHumanIds } from '../participants.js';
 import {
   buildEventEndEmailBody,
@@ -78,10 +78,6 @@ export async function notifyEventClosedParticipants(
         userSettings: player.settings,
       });
 
-      if (!wantsEventEndEmail(player.settings)) {
-        return;
-      }
-
       await changeLanguageForPlayer(player);
       const messageCtx = {
         eventName: event.name,
@@ -90,25 +86,30 @@ export async function notifyEventClosedParticipants(
         winnerIds,
         winnerNames: winnerNamesAll,
       };
-      const emailBody = buildEventEndEmailBody(messageCtx);
       const pushBody = buildEventEndPushBody(messageCtx);
-      if (player.email !== undefined && player.email !== null && player.email !== '') {
-        const comm = createSendEmailCommand(
-          player.email,
-          player.name,
-          i18n.t('EventEndSubject', { eventName: event.name }),
-          emailBody,
-          { userId: player.id },
-        );
-        await sendOutboundSes(sesClient, comm);
+
+      if (wantsEventEndEmail(player.settings)) {
+        const emailBody = buildEventEndEmailBody(messageCtx);
+        if (player.email !== undefined && player.email !== null && player.email !== '') {
+          const comm = createSendEmailCommand(
+            player.email,
+            player.name,
+            i18n.t('EventEndSubject', { eventName: event.name }),
+            emailBody,
+            { userId: player.id },
+          );
+          await sendOutboundSes(sesClient, comm);
+        }
       }
-      await sendUserPush({
+
+      await sendUserPushIfEnabled({
         userId: player.id,
         topic: 'event',
         title: i18n.t('PUSH.titles.eventOver'),
         body: pushBody,
         url: `/event/${event.sk}`,
-      });
+        collapseKey: `event:${event.sk}`,
+      }, player.settings);
     })());
   }
 

@@ -36,7 +36,7 @@ import {
 } from './matchLegs.js';
 import { getPlayers } from '../players/getPlayers.js';
 import { createNotification } from '../notifications.js';
-import { sendUserPush } from '../push/sendUserPush.js';
+import { sendUserPushIfEnabled } from '../push/sendUserPush.js';
 import {
   applyDivisionTiebreaks,
   computeDivisionStandings,
@@ -617,36 +617,37 @@ export async function endTournament(tournament: Tournament) {
             }, {
               userSettings: player.settings,
             }));
-            console.log(`Determining whether to send tournamentEnd email to the following player:\n${JSON.stringify(player)}`);
+            await changeLanguageForPlayer(player);
+            const metaGameName = localizedGameName(tournament.metaGame);
+            const messageCtx = {
+              metaGameName,
+              metaGameUid: tournament.metaGame,
+              number: tournament.number,
+              tournamentId: tournament.id,
+              variants,
+              recipientUserId: player.id,
+              standings,
+              nextSignup: nextSignupByPlayerId?.get(player.id),
+            };
+            const pushBody = buildTournamentEndPushBody(messageCtx);
             // eslint-disable-next-line no-prototype-builtins
             if ((player.settings?.all?.notifications === undefined) || (!player.settings.all.notifications.hasOwnProperty("tournamentEnd")) || (player.settings.all.notifications.tournamentEnd)) {
-              console.log("Sending email");
-              await changeLanguageForPlayer(player);
-              const metaGameName = localizedGameName(tournament.metaGame);
-              const messageCtx = {
-                metaGameName,
-                metaGameUid: tournament.metaGame,
-                number: tournament.number,
-                tournamentId: tournament.id,
-                variants,
-                recipientUserId: player.id,
-                standings,
-                nextSignup: nextSignupByPlayerId?.get(player.id),
-              };
+              console.log(`Sending tournament end email to ${player.id}`);
               const emailBody = buildTournamentEndEmailBody(messageCtx);
-              const pushBody = buildTournamentEndPushBody(messageCtx);
               if ((player.email !== undefined) && (player.email !== null) && (player.email !== "")) {
                 const comm = createSendEmailCommand(player.email, player.name, i18n.t("TournamentEndSubject", { "metaGame": metaGameName, }), emailBody, { userId: player.id });
                 work.push(sendOutboundSes(sesClient, comm));
               }
-              work.push(sendUserPush({
-                userId: player.id,
-                topic: "tournament",
-                title: i18n.t("PUSH.titles.tournamentOver"),
-                body: pushBody,
-                url: `/tournament/${tournament.id}`,
-              }));
             }
+            work.push(sendUserPushIfEnabled({
+              userId: player.id,
+              topic: "tournament",
+              title: i18n.t("PUSH.titles.tournamentOver"),
+              body: pushBody,
+              url: `/tournament/${tournament.id}`,
+              prefKey: 'tournamentEnd',
+              collapseKey: `tournament:${tournament.id}`,
+            }, player.settings));
           }
         }
       }
