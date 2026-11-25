@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GetCommand,
   PutCommand,
+  QueryCommand,
   TransactWriteCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
@@ -36,13 +37,27 @@ const ENDED = 1_700_000_000_000;
 type TxUpdate = {
   Key?: { pk?: string; sk?: string };
   UpdateExpression?: string;
-  ExpressionAttributeValues?: Record<string, number>;
+  ExpressionAttributeNames?: Record<string, string>;
+  ExpressionAttributeValues?: Record<string, unknown>;
 };
+
+function ladderGameUpdate(transact: TransactWriteCommand): TxUpdate | undefined {
+  for (const item of transact.input.TransactItems ?? []) {
+    if (!('Update' in item)) {
+      continue;
+    }
+    const u = item.Update as TxUpdate;
+    if (u.Key?.pk === 'LADDERGAME') {
+      return u;
+    }
+  }
+  return undefined;
+}
 
 function playerUpdateValues(
   transact: TransactWriteCommand,
   playerSk: string,
-): Record<string, number> | undefined {
+): Record<string, unknown> | undefined {
   for (const item of transact.input.TransactItems ?? []) {
     if (!('Update' in item)) {
       continue;
@@ -87,6 +102,14 @@ function installDdbRouter(players: Record<string, PlayerState>, ladderStatus: 'a
         };
       }
       return {};
+    }
+    if (command instanceof QueryCommand) {
+      const pk = command.input.ExpressionAttributeValues?.[':pk'];
+      if (pk === 'LADDERPLAYER') {
+        return {
+          Items: Object.entries(players).map(([userid, row]) => ladderPlayerFixture(userid, LADDER_ID, row)),
+        };
+      }
     }
     if (command instanceof TransactWriteCommand) {
       transactCalls += 1;
@@ -141,6 +164,10 @@ describe('applyLadderGameEnd integration (mocked DDB)', () => {
     const loserVals = playerUpdateValues(transact, ladderPlayerSk(LADDER_ID, U2));
     expect(winnerVals?.[':p']).toBe(1000 + expected.winnerGain);
     expect(loserVals?.[':p']).toBe(1050 - expected.loserLoss);
+    const lgUpdate = ladderGameUpdate(transact);
+    expect(lgUpdate?.UpdateExpression).toMatch(/#outcome = :outcome/);
+    expect(lgUpdate?.ExpressionAttributeValues?.[':outcome']).toBe('win');
+    expect(lgUpdate?.ExpressionAttributeValues?.[':upset']).toBe(true);
     expect(enqueueLadderPointsChangeNotifications).toHaveBeenCalledTimes(1);
     expect(enqueueLadderPointsChangeNotifications).toHaveBeenCalledWith(
       expect.anything(),

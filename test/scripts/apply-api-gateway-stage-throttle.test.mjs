@@ -22,8 +22,8 @@ test('patches dev stage limits', async () => {
   assert.equal(calls.length, 2);
   const update = calls.find((cmd) => cmd.input?.patchOperations);
   assert.deepEqual(update.input.patchOperations, [
-    { op: 'replace', path: '/*/*/throttling/rateLimit', value: '2' },
-    { op: 'replace', path: '/*/*/throttling/burstLimit', value: '6' },
+    { op: 'replace', path: '/*/*/throttling/rateLimit', value: '25' },
+    { op: 'replace', path: '/*/*/throttling/burstLimit', value: '75' },
   ]);
 });
 

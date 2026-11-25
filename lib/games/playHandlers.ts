@@ -612,6 +612,7 @@ export async function submitMove(userid: string, pars: {
           variants: game.variants,
           winner: game.winner,
           players: game.players,
+          state: game.state,
           rated: game.rated,
           gameStarted: game.gameStarted,
           gameEnded: game.gameEnded,

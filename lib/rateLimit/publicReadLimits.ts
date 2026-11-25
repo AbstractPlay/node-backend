@@ -17,6 +17,7 @@ export const PUBLIC_READ_RATE_LIMITED_QUERIES = [
   'recent_completed_games',
   'standing_challenges',
   'all_standing_challenges',
+  'get_ladder_activity',
 ] as const;
 
 type FixedWindowLimits = Partial<Record<RateLimitWindow, number>>;
@@ -28,6 +29,7 @@ const PROD_LIMITS: Record<string, FixedWindowLimits> = {
   recent_completed_games: { minute: 15, hour: 90, day: 400 },
   standing_challenges: { minute: 20, hour: 120, day: 500 },
   all_standing_challenges: { minute: 15, hour: 90, day: 400 },
+  get_ladder_activity: { minute: 15, hour: 90, day: 400 },
 };
 
 const WINDOW_ORDER: RateLimitWindow[] = ['minute', 'hour', 'day'];

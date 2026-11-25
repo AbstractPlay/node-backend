@@ -7,10 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0.0-beta`. CI publishes tarballs as `1.0.0-ci-<GitHub Actions run id>.0` (see `.github/workflows/deploy-dev.js.yml` and `deploy-prod.js.yml`). Prod runs **two** Serverless stacks from this repo — API/WebSocket (`abstract-play`) then scheduled jobs (`abstract-play-backend-crons` under `crons/`). Dated `[1.0.0-ci]` sections are batched **one block per calendar month** (header date is the last update that month); append new bullets under the current month’s section rather than adding a second November/October header. Entries below are grouped by theme; the exact CI build is whichever workflow run last deployed the stage you use.
 
-## [1.0.0-ci] - 2026-11-22
+## [1.0.0-ci] - 2026-11-25
 
 ### Added
 
+- **Ladders:** `get_ladder_activity` (public + auth, rate-limited) — one `LADDERGAME` query per ladder; active games via `GAME` BatchGet; 30-day outcome log from settlement snapshots on link rows; `npm run backfill-ladder-game-snapshots` for legacy settled links.
 - **Managed auth (API):** `cognitoCustomMessage` Lambda + `apply-cognito-custom-message-trigger` (play `/account/*` emails including settings **`/account/confirm-email`**, pool ops including `AutoVerifiedAttributes` and `{####}` on code pools), and public **`remind_username`** (rate-limited login-name reminder email); see [Cognito pool auth settings](/backend/ops/cognito-pool-auth-settings/).
 - **Ops:** `npm run audit-cognito-without-ddb` and `npm run purge-cognito-without-ddb` — find Cognito subs with no `USER` row (ION dump + live confirm), then on-demand Cognito delete with default `--dry-run` and per-user live re-check.
 - **Chameleon EOG backfill:** `npm run backfill-chameleon-eog` (`--scope completed`, `--dry-run` / `--apply`) patches terminal `eog.reason` on stored stacks when it disagrees with gameslib `expectedEogOutcome`; logs changed game ids and on `--apply` refreshes `COMPLETEDGAMES*` via `refreshCompletedGameIndexes` (no hydrate-time repair).
@@ -26,7 +27,7 @@ Since the `1.0.0-beta` release, the version in `package.json` has stayed at `1.0
 - **Ops:** CloudWatch log retention — `query` **7** days, `authQuery` **14** days (`serverless.yml`; applies per stage on API deploy).
 - **Ops:** Slim RPC access logs — `query` logs structured `public_query` line (no full API GW event; dev-only `pars` verbose); `authQuery` logs `auth_query` with `sub` + `requestId`.
 - **Ops:** Prod REST API stage throttle **25 RPS / burst 75** (`/*/*`) via `npm run apply-api-gateway-stage-throttle` after API deploy (GitHub Actions prod); limits documented in `serverless.yml` `custom.apiGatewayStageThrottle`.
-- **Ops:** Dev REST API stage throttle **2 RPS / burst 6**; dev `query` / `authQuery` reserved concurrency **10** / **15** (CI apply after dev API deploy).
+- **Ops:** Dev REST API stage throttle **25 RPS / burst 75** (aligned with prod; fixes bursty live `get_exploration` hitting API Gateway 429); dev `query` / `authQuery` reserved concurrency **10** / **15** (CI apply after dev API deploy).
 - **Ops:** Prod regional **WAFv2** on REST API stage — per-IP rate block **2000 req / 5 min** (`RestApiWebAcl` in API stack; prod only).
 - **Public API:** `report_problem` is a no-op (200 + `Reported`)—no DynamoDB `USERS` scan or admin SES mail; closes abuse/cost exposure while front-end hooks remain until analytics is redesigned.
 - **Crons:** `s3-to-sqs` `reservedConcurrency` **50** and `sqs-to-render` **40** cap thumbnail / render pipeline fan-out (S3 ObjectCreated + queue consumers).

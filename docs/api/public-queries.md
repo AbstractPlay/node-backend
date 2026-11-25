@@ -48,8 +48,9 @@ Logged-in clients should use the auth `standing_challenges` or `all_standing_cha
 |-------|---------|------------|
 | `get_ladders` | List player-created ladders | optional `metaGame`, `status` (`forming` \| `active` \| `suspended`) |
 | `get_ladder` | Leaderboard (`board` = active members), ladder metadata, computed `displayName` | `ladderId` |
+| `get_ladder_activity` | Active ladder games plus last 30 days of settled outcomes (from `LADDERGAME` snapshots) | `ladderId` |
 
-Authenticated clients may call auth `get_ladder` for the same ladder with a **`viewer`** block (membership and points when not on the public board).
+Authenticated clients may call auth `get_ladder` for the same ladder with a **`viewer`** block (membership and points when not on the public board). `get_ladder_activity` is the same on public `query` and auth (rate-limited on public reads).
 
 ## Events
 

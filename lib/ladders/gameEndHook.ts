@@ -7,7 +7,8 @@ type GameSlice = {
   metaGame: string;
   variants?: string[];
   winner?: number[];
-  players: { id: string }[];
+  players: { id: string; name?: string }[];
+  state?: string;
   rated?: boolean;
   gameStarted?: number;
   gameEnded?: number;
@@ -25,6 +26,7 @@ export function ladderGameEndFromFullGame(game: GameSlice): LadderFinishedGame |
     variants: game.variants,
     winner: game.winner,
     players: game.players,
+    state: game.state,
     rated: game.rated,
     gameStarted: game.gameStarted,
     gameEnded: game.gameEnded,

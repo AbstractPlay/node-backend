@@ -26,8 +26,8 @@ const STAGE_THROTTLE = {
   },
   dev: {
     restApiName: 'dev-abstract-play',
-    rateLimit: 2,
-    burstLimit: 6,
+    rateLimit: 25,
+    burstLimit: 75,
   },
 };
 
