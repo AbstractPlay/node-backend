@@ -1,4 +1,4 @@
-/** Game/ops notification email prefs (keep in sync with front notificationPrefs.js). */
+/** Game/ops notification email prefs (keep in sync with front notificationPrefs.js). Push uses the same keys under `settings.all.pushNotifications`. */
 export const EMAIL_NOTIFICATION_KEYS = [
   'challenges',
   'gameStart',

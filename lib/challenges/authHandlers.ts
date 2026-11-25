@@ -57,7 +57,7 @@ import {
   validateStartPositionChallengeShape,
   validateStartPositionForIssue,
 } from './startPosition.js';
-import { sendUserPush } from '../push/sendUserPush.js';
+import { sendUserPushIfEnabled } from '../push/sendUserPush.js';
 import {
   createNotification,
   enqueueGameStartNotifications,
@@ -475,13 +475,13 @@ async function sendChallengedEmail(challengerName: string, opponents: User[], me
       console.log(`No verified email address found for ${player.name} (${player.id})`);
     }
     // push notifications are sent no matter what
-    work.push(sendUserPush({
+    work.push(sendUserPushIfEnabled({
       userId: player.id,
       topic: "challenges",
       title: i18n.t("PUSH.titles.challenged"),
       body: body,
-      url: "/",
-    }));
+      url: `/games/${metaGameUid}`,
+    }, player.settings));
   }
   return Promise.all(work);
 }
@@ -535,13 +535,13 @@ export async function revokeChallenge(userid: any, pars: { id: string; metaGame:
           console.log(`No verified email address found for ${player.name} (${player.id})`);
         }
         // push notifications are sent no matter what
-        work.push(sendUserPush({
+        work.push(sendUserPushIfEnabled({
           userId: player.id,
           topic: "challenges",
           title: i18n.t("PUSH.titles.revoked"),
           body: body,
-          url: "/",
-        }));
+          url: `/games/${challenge.metaGame}`,
+        }, player.settings));
         if (!pars.standing && revokerName !== undefined) {
           work.push(createNotification(ddbDocClient, tableName, player.id, {
             type: 'challengeRevoked',
@@ -579,13 +579,13 @@ export async function revokeChallenge(userid: any, pars: { id: string; metaGame:
           console.log(`No verified email address found for ${player.name} (${player.id})`);
         }
         // push notifications are sent no matter what
-        work.push(sendUserPush({
+        work.push(sendUserPushIfEnabled({
           userId: player.id,
           topic: "challenges",
           title: i18n.t("PUSH.titles.revoked"),
           body: body,
-          url: "/",
-        }));
+          url: `/games/${challenge.metaGame}`,
+        }, player.settings));
         if (!pars.standing && revokerName !== undefined) {
           work.push(createNotification(ddbDocClient, tableName, player.id, {
             type: 'challengeRevoked',
@@ -667,13 +667,15 @@ export async function respondedChallenge(userid: string, pars: { response: boole
             console.log(`No verified email address found for ${player.name} (${player.id})`);
           }
           // push notifications are sent no matter what
-          work.push(sendUserPush({
+          work.push(sendUserPushIfEnabled({
             userId: player.id,
             topic: "started",
             title: i18n.t("PUSH.titles.started"),
             body,
-            url: "/",
-          }));
+            url: `/move/${metaGame}/0/${email.gameId}`,
+            collapseKey: `started:${email.gameId}`,
+            prefKey: 'gameStart',
+          }, player.settings));
         }
       } catch (err) {
         logGetItemError(err);
@@ -736,13 +738,13 @@ export async function respondedChallenge(userid: string, pars: { response: boole
               )));
             }
           }
-          work.push(sendUserPush({
+          work.push(sendUserPushIfEnabled({
             userId: challengerId,
             topic: "challenges",
             title: i18n.t("PUSH.titles.slotOpened"),
             body,
-            url: "/",
-          }));
+            url: `/games/${challenge.metaGame}`,
+          }, challenger.settings));
           work.push(createNotification(ddbDocClient, tableName, challengerId, {
             type: 'challengeSlotOpened',
             challengeId: pars.id,
@@ -769,13 +771,13 @@ export async function respondedChallenge(userid: string, pars: { response: boole
           if (comment !== ".") {
             body += " " + i18n.t("ChallengeResponseComment", { comment });
           }
-          work.push(sendUserPush({
+          work.push(sendUserPushIfEnabled({
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.participantLeft"),
             body,
-            url: "/",
-          }));
+            url: `/games/${challenge.metaGame}`,
+          }, player.settings));
           if (!standing) {
             work.push(createNotification(ddbDocClient, tableName, player.id, {
               type: 'challengeParticipantLeft',
@@ -805,13 +807,13 @@ export async function respondedChallenge(userid: string, pars: { response: boole
               work.push(sendOutboundSes(sesClient, comm));
             }
           }
-          work.push(sendUserPush({
+          work.push(sendUserPushIfEnabled({
             userId: player.id,
             topic: "challenges",
             title: i18n.t("PUSH.titles.declined"),
             body: body,
-            url: "/",
-          }));
+            url: `/games/${challenge.metaGame}`,
+          }, player.settings));
           if (!standing) {
             work.push(createNotification(ddbDocClient, tableName, player.id, {
               type: 'challengeDeclined',

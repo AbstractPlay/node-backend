@@ -21,6 +21,7 @@ export type PushOptions = {
   body: string;
   topic: 'yourturn' | 'ended' | 'started' | 'challenges' | 'test' | 'tournament';
   url?: string;
+  collapseKey?: string;
 };
 
 const PUSH_PK = 'PUSH';
@@ -105,7 +106,7 @@ export async function sendPushToSubscriptions(
     subject = 'https://play.dev.abstractplay.com';
   }
 
-  const { body, title, topic, url } = opts;
+  const { body, title, topic, url, collapseKey } = opts;
   const options: RequestOptions = {
     vapidDetails: {
       subject,
@@ -115,7 +116,13 @@ export async function sendPushToSubscriptions(
     // @ts-expect-error web-push topic option
     topic,
   };
-  const payload = JSON.stringify({ title, body, url, topic });
+  const payload = JSON.stringify({
+    title,
+    body,
+    url,
+    topic,
+    ...(collapseKey !== undefined ? { collapseKey } : {}),
+  });
 
   await Promise.allSettled(
     subscriptions.map(async (sub) => {

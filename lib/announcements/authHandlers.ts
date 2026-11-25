@@ -6,7 +6,7 @@ import { feedbackErrorResponse } from '../api/feedbackHttp.js';
 import { changeLanguageForPlayer, createSendEmailCommand } from '../api/i18n.js';
 import { sendOutboundSes } from '../sesOutbound.js';
 import { logGetItemError } from '../api/http.js';
-import { sendUserPush } from '../push/sendUserPush.js';
+import { sendUserPushIfEnabled, type PushSettingsArg } from '../push/sendUserPush.js';
 import { announcementsSiteUrl } from './siteUrl.js';
 import { fanOutAnnouncementPublished } from './publishNotify.js';
 import {
@@ -167,13 +167,14 @@ async function notifyAnnouncementPublishedUsers(record: { id: string; title: str
         emailed = true;
       }
       try {
-        await sendUserPush({
+        await sendUserPushIfEnabled({
           userId: user.id,
           topic: 'announcements',
           title: i18n.t('PUSH.titles.announcement'),
           body: record.title,
           url: `/news/${record.id}`,
-        });
+          collapseKey: `announcements:${record.id}`,
+        }, user.settings as PushSettingsArg);
         pushed = true;
       } catch (pushErr) {
         logGetItemError(pushErr);

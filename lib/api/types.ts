@@ -12,6 +12,16 @@ export type UserSettings = {
       tournamentEnd: boolean;
       eventEnd: boolean;
     };
+    pushNotifications?: {
+      gameStart: boolean;
+      gameEnd: boolean;
+      challenges: boolean;
+      yourturn: boolean;
+      tournamentStart: boolean;
+      tournamentEnd: boolean;
+      eventEnd: boolean;
+      announcements: boolean;
+    };
     inAppNotifications?: {
       challenges: boolean;
       gameStart: boolean;

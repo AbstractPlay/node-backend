@@ -10,7 +10,7 @@ Transactional email is sent via AWS SES for:
 - Game start and game end (with expanded end-game details)
 - Tournament start, end, and removal
 
-Users can disable most email categories in `settings.all.notifications`; push notifications for challenges and tournaments follow the same preference flags where applicable (challenge/game push still sends regardless of email toggles for challenges).
+Users can disable most email categories in `settings.all.notifications`. Web push uses a separate opt-out map `settings.all.pushNotifications` (same keys as email; announcements default off). Sends go through `sendUserPushIfEnabled` in `lib/push/sendUserPush.ts`.
 
 Language follows the recipient's `language` field (`locales/*/apback.json` for email template strings). Game titles in `{{metaGame}}` interpolation use `apgames:names.{uid}` from gameslib locale bundles loaded in `initi18n` (`localizedGameName()` in `lib/gameDisplayName.ts`). If the user's language is not yet registered in i18next, notification copy falls back to English while the stored preference is kept unchanged.
 
@@ -36,7 +36,9 @@ Implementation: [`utils/yourturn.ts`](../../utils/yourturn.ts) (deployed as `cro
 
 Push messages use topics such as `challenges` and game-related channels. See [`lib/push/sendUserPush.ts`](../../lib/push/sendUserPush.ts).
 
-Realtime `yourturn` push is sent after each move when it becomes a player's turn. Solo games (`numPlayers === 1`) are skipped — the player is always on move.
+Realtime `yourturn` push is sent when a move changes **which seat** is on the clock (`toMoveSeatChanged` in `lib/games/toMoveSeat.ts`). Solo games (`numPlayers === 1`) are skipped — the player is always on move.
+
+When the user has a focused play tab, the service worker delivers push via `postMessage` and the SPA shows a `react-toastify` toast keyed by `collapseKey` in the payload (typically `{topic}:{gameId}`) so repeated your-turn events for one game replace a single toast instead of stacking.
 
 ## In-app dashboard feed
 
