@@ -282,6 +282,8 @@ Most access patterns use `Query` on `pk` with optional `begins_with` on `sk`. Se
 - **Ladder game link**
   - pk: `LADDERGAME`
   - sk: `<ladderId>#<gameid>`
+  - `settled`, `settledAt` after decisive end
+  - **Outcome snapshot** (written at settlement; used by `get_ladder_activity` — no `GAME` replay on read): `outcome` (`win` \| `draw`), `playerIds`, `playerNames`, `winnerSeat`, `winnerId`, `loserId`, decisive `winnerPointsBefore` / `loserPointsBefore` / `winnerGain` / `loserLoss`, `upset`, rank before/after for winner and loser, optional `gameEndKind`
 
 - **Pool waiters**
   - pk: `LADDERPOOL`

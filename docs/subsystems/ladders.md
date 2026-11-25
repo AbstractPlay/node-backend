@@ -37,8 +37,9 @@ See [Database schema](/backend/database-schema/) (Ladders section). Main familie
 1. **Create** — auth `new_ladder` creates `forming` ladder and joins creator. Duplicate series returns **409** with `existingLadderId`.
 2. **Join / leave** — `join_ladder` / `leave_ladder`. Rejoin after `left` keeps prior points. Leave blocked while `activeLadderGameCount > 0`.
 3. **Play** — `join_ladder_pool`, `new_ladder_challenge` + `respond_ladder_challenge`, or pool pairing creates rated games via `createLadderGame`.
-4. **Settle** — On win/loss/draw end, `runLadderGameEndHook` updates points (draw: no Δ), decrements active counts, enqueues `ladderPointsChange` when Δ ≠ 0.
-5. **Decay** — Daily `ladder-decay` cron applies inactivity decay and `ladderDecay` notifications on **`active`** ladders only (not `forming` or `suspended`, where matchmaking is closed).
+4. **Settle** — On win/loss/draw end, `runLadderGameEndHook` updates points (draw: no Δ), decrements active counts, writes an **outcome snapshot** on the `LADDERGAME` row, and enqueues `ladderPointsChange` when Δ ≠ 0.
+5. **Activity** — `get_ladder_activity` (public + auth) queries all `LADDERGAME` links for a board, BatchGets live `GAME` rows for unsettled links, and returns last **30 days** of settled snapshots (cap 500). Run `npm run backfill-ladder-game-snapshots` for rows settled before snapshot writes shipped.
+6. **Decay** — Daily `ladder-decay` cron applies inactivity decay and `ladderDecay` notifications on **`active`** ladders only (not `forming` or `suspended`, where matchmaking is closed).
 
 ## Point deltas
 

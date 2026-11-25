@@ -74,6 +74,9 @@ export type LadderPlayerRecord = {
   startingLadderStatus: LadderStatus;
 };
 
+import type { GameEndKind } from '../gameEndMeta.js';
+import type { LadderGameSnapshotAttrs } from './outcomeSnapshot.js';
+
 export type LadderGameRecord = {
   pk: 'LADDERGAME';
   sk: string;
@@ -81,7 +84,9 @@ export type LadderGameRecord = {
   gameId: string;
   settled?: boolean;
   settledAt?: number;
-};
+} & Partial<LadderGameSnapshotAttrs>;
+
+export type { GameEndKind };
 
 export type LadderBoardEntry = {
   userid: string;

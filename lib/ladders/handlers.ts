@@ -20,6 +20,7 @@ import {
 } from './eligibility.js';
 import { isPointsWithinReach, challengeReachBounds } from './reach.js';
 import { ddbDocClient } from '../ddb.js';
+import { getLadderActivityData } from './activity.js';
 
 function jsonOk(body: unknown): LambdaHttpResponse {
   return {
@@ -176,6 +177,19 @@ export async function handleGetLadder(
     comments,
     matchmaking,
   });
+}
+
+export async function handleGetLadderActivity(
+  pars: { ladderId?: string },
+): Promise<LambdaHttpResponse> {
+  if (pars.ladderId === undefined) {
+    return formatReturnError('ladderId is required');
+  }
+  const activity = await getLadderActivityData(pars.ladderId);
+  if (activity === undefined) {
+    return formatReturnError(`Ladder ${pars.ladderId} not found`);
+  }
+  return jsonOk(activity);
 }
 
 export async function handleGetLadders(

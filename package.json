@@ -68,6 +68,7 @@
     "update-meta-game-counts": "tsx scripts/update-meta-game-counts.mjs",
     "backfill-tournament-by-user": "tsx scripts/backfill-tournament-by-user.mjs",
     "backfill-ladder-by-user": "tsx scripts/backfill-ladder-by-user.mjs",
+    "backfill-ladder-game-snapshots": "tsx scripts/backfill-ladder-game-snapshots.mjs",
     "backfill-ladder-join-seeds": "tsx scripts/backfill-ladder-join-seeds.ts",
     "replay-ladder-member": "tsx scripts/replay-ladder-member.mjs",
     "reconcile-ladder-active-counts": "tsx scripts/reconcile-ladder-active-counts.ts",
