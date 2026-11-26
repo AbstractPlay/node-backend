@@ -43,7 +43,7 @@ Or point at a packed tarball from a gameslib checkout.
 
 ## Environment variables
 
-Lambda env vars are set in [`serverless.yml`](../serverless.yml). Secrets are injected in CI from GitHub Actions secrets:
+Lambda env vars are set in [`serverless.yml`](../serverless.yml). For local runs that import `lib/` (ops scripts calling `submitMove`, etc.), mirror prod env from sibling **`../apsecrets.yml`** — same keys referenced as `file(../apsecrets.yml):…` in `serverless.yml` (never commit that file). CI injects the same names from GitHub Actions secrets:
 
 | Variable | Purpose |
 |----------|---------|
