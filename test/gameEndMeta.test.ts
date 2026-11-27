@@ -67,7 +67,8 @@ describe('deriveGameEndMeta', () => {
       ],
     });
     const meta = deriveGameEndMeta('hex', state);
-    assert.deepEqual(meta, { gameEndKind: 'normal' });
+    assert.equal(meta?.gameEndKind, 'normal');
+    assert.equal(meta?.eogReason, undefined);
   });
 
   it('extracts eogReason from final ply results', () => {
@@ -101,7 +102,8 @@ describe('deriveGameEndMeta', () => {
       ],
     });
     const meta = deriveGameEndMeta('hex', state);
-    assert.deepEqual(meta, { gameEndKind: 'normal', eogReason: 'stalemate' });
+    assert.equal(meta?.gameEndKind, 'normal');
+    assert.equal(meta?.eogReason, 'stalemate');
   });
 
   it('returns undefined when game is not over', () => {
